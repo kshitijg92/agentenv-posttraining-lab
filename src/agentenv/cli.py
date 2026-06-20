@@ -5,6 +5,7 @@ from rich.console import Console
 
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.orchestrators.eval_run import EvalRun, run_eval_config
+from agentenv.replay.runner import run_replay
 from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_paths
 
 
@@ -63,6 +64,20 @@ def run_eval(
         f"{status_counts}"
     )
     console.print(f"wrote {eval_run.out_dir / 'run_manifest.json'}")
+
+
+@app.command("replay")
+def replay_run(
+    source_run_dir: Path = typer.Argument(..., help="Eval run directory to replay."),
+    out: Path = typer.Option(..., "--out", help="Directory for replay artifacts."),
+) -> None:
+    replay = run_replay(source_run_dir, out)
+    style = "green" if replay.status == "PASS" else "red"
+    console.print(
+        f"[{style}]{replay.status}[/{style}] "
+        f"attempts={len(replay.comparisons)}"
+    )
+    console.print(f"wrote {replay.out_dir / 'replay_result.json'}")
 
 
 def _status_counts(eval_run: EvalRun) -> dict[str, int]:

@@ -153,3 +153,83 @@ attempt_runner.py
 
 This avoids making `attempt.py` depend on artifact writing while also keeping
 `attempt_io.py` from owning execution.
+
+### Replay Python Slice
+
+Before implementing replay, I clarified the design:
+
+- Replay consumes an eval run artifact directory, not an eval config.
+- Replay should reject replay artifacts as input.
+- Top-level replay statuses are `PASS`, `MISMATCH`, and `REPLAY_ERROR`.
+- Per-attempt comparisons check:
+  - `status`
+  - `public_status`
+  - `hidden_status`
+  - `error_class`
+  - `final_diff_hash`
+- Replay writes fresh attempt artifacts so mismatches are auditable.
+
+The first Python-only replay module now lives in:
+
+```text
+src/agentenv/replay/runner.py
+```
+
+It writes:
+
+```text
+replay_manifest.json
+replay_result.json
+replay_results.jsonl
+trace.jsonl
+attempts/
+```
+
+The first example replay was generated at:
+
+```text
+experiments/replays/control_policies_oracle/
+```
+
+Result:
+
+```text
+PASS
+```
+
+The important boundary is that `replay_results.jsonl` is not the process trace.
+It is the per-attempt comparison record. The replay process trace is
+`trace.jsonl`.
+
+I initially wrote source and replay attempt artifact directories as identical
+relative paths, which was confusing when reading `replay_results.jsonl` alone.
+The comparison records now include both:
+
+```text
+*_artifact_ref
+  relative path inside the source or replay bundle
+
+*_artifact_path
+  absolute local path for direct inspection
+```
+
+The replay attempt directory still mirrors the source attempt directory under a
+different root. This keeps source/replay pairing obvious without adding extra
+suffixes to attempt directory names.
+
+### Replay CLI
+
+Added a thin CLI wrapper around the Python replay function:
+
+```bash
+uv run agentenv replay experiments/runs/control_policies_oracle --out experiments/replays/control_policies_oracle
+```
+
+The CLI does not implement replay logic. It calls `run_replay(...)`, prints the
+top-level replay status, and points to `replay_result.json`.
+
+Example result:
+
+```text
+PASS attempts=1
+```
