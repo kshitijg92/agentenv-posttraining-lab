@@ -1,4 +1,4 @@
-# Week 1 Thought Journey
+# Week 1 Implementation Notes
 
 ## Why I Am Writing This
 
@@ -7,7 +7,7 @@ I am not just trying to create files. I am trying to understand the shape of a t
 The core loop I am building toward is:
 
 ```text
-task design -> agent-visible workspace -> submitted patch -> grader -> trace -> failure analysis
+task design -> agent-visible workspace -> submitted patch -> orchestrator -> scorer -> trace -> failure analysis
 ```
 
 For Week 1, the smallest useful version of that loop is one local Python repo-patch task with public tests, hidden tests, oracle and bad controls, and enough output to debug what happened.
@@ -29,7 +29,7 @@ task -> solver/agent -> scorer
 My local mapping is:
 
 ```text
-task.yaml + workspace_seed -> submitted patch -> public and hidden pytest grader
+task.yaml + workspace_seed -> submitted patch -> public checks and hidden pytest scorer
 ```
 
 This means I should avoid thinking of the eval as one undifferentiated script. Even if the implementation is small, I want separate concepts for:
@@ -59,11 +59,11 @@ My local mapping is:
 task_card.md        human task explanation
 task.yaml           machine-readable eval manifest
 workspace_seed/     agent-visible starting repo
-hidden_tests/       private grader tests
+hidden_tests/       private scorer tests
 controls/           oracle and known-bad patches
 ```
 
-The concrete gotcha I learned here is that `hidden_tests/` must not be inside `workspace_seed/`. If hidden tests are copied into the agent workspace, I have leaked the private verifier.
+The concrete gotcha I learned here is that `hidden_tests/` must not be inside `workspace_seed/`. If hidden tests are present during the agent workspace phase, I have leaked the private verifier.
 
 ### METR Task Standard
 
@@ -81,14 +81,14 @@ agent-visible:
   workspace_seed/
   public tests
 
-private grader-side:
+private eval-side:
   hidden_tests/
   controls/
   scoring contract
   leakage canary
 ```
 
-I am also using controls to test whether the task and grader are calibrated. This is not a claim that controls come only from METR; it is a general eval practice that fits the same mindset: before trusting scores, I need evidence that the measurement setup accepts known-good behavior and rejects known-bad behavior.
+I am also using controls to test whether the task and eval harness are calibrated. This is not a claim that controls come only from METR; it is a general eval practice that fits the same mindset: before trusting scores, I need evidence that the measurement setup accepts known-good behavior and rejects known-bad behavior.
 
 ### SWE-bench
 
@@ -103,18 +103,18 @@ My local mapping is:
 ```text
 task.yaml id             toy_python_fix_001
 submission              controls/*.patch for now
-patch application        future agentenv grade step
+patch application        agentenv attempt run step
 tests                   public pytest, then hidden pytest
 result artifacts         attempt.json, trace.jsonl, stdout, stderr, final.diff
 ```
 
-This makes the task concrete: the object being graded is not an essay or a chat response, but a patch applied to a clean workspace.
+This makes the task concrete: the object being scored is not an essay or a chat response, but a patch applied to a clean workspace.
 
 ## Decisions Made So Far
 
 ### I Am Starting With A Task Card
 
-I wrote `task_card.md` before implementing the grader.
+I wrote `task_card.md` before implementing the orchestrator/scorer path.
 
 This forced me to answer:
 
@@ -124,7 +124,7 @@ This forced me to answer:
 - what the controls should prove,
 - what the task does not measure.
 
-This was useful because vague task design would later become vague grader behavior.
+This was useful because vague task design would later become vague scoring behavior.
 
 ### The Task Is About `normalize_ratio`
 
@@ -190,7 +190,7 @@ The important implementation boundary is:
 hidden_tests/ is outside workspace_seed/
 ```
 
-The grader should only introduce hidden tests after a patch has already been applied.
+The hidden scorer should only run hidden tests after a patch has already been applied.
 
 ### Controls Test The Eval, Not The Agent
 
@@ -221,9 +221,9 @@ controls:
 
 This is better than an anonymous list because `noop` and `public_only` test different failure modes. The schema should require both for this task family.
 
-The oracle proves the grader can accept a correct solution.
+The oracle proves the eval harness can accept a correct solution.
 
-The bad controls prove the grader can reject incorrect or incomplete solutions.
+The bad controls prove the eval harness can reject incorrect or incomplete solutions.
 
 The public-only bad patch currently uses a plausible semantic error: it computes `abs(numerator / denominator)`. This passes the visible positive-ratio test but fails hidden sign tests.
 
@@ -231,7 +231,7 @@ The public-only bad patch currently uses a plausible semantic error: it computes
 
 I created `task.yaml` as the machine-readable manifest for the eval framework.
 
-It includes private grader-side fields:
+It includes private eval-side fields:
 
 - hidden validator paths,
 - control patch paths,
@@ -246,7 +246,7 @@ Therefore, the full `task.yaml` should not be handed to the agent. The agent can
 - allowed tools,
 - public check command if desired.
 
-The private fields stay inside the grader/eval framework.
+The private fields stay inside the eval framework.
 
 ### The Leakage Canary Is A Tripwire
 
@@ -271,9 +271,9 @@ It means I should capture enough evidence to reconstruct an attempt:
 - stdout,
 - stderr,
 - final diff,
-- grade result.
+- attempt result.
 
-This is why the planned grader outputs include:
+This is why the planned run outputs include:
 
 ```text
 attempt.json
@@ -288,9 +288,9 @@ run_manifest.json
 
 I clarified an important naming distinction.
 
-The component that prepares a clean workspace, applies a submitted patch, runs public checks, invokes hidden scoring, and writes traces is not just a grader. It is an orchestrator or eval harness.
+The component that prepares a clean workspace, applies a submitted patch, runs public checks, invokes hidden scoring, and writes traces is an orchestrator or eval harness.
 
-The grader/scorer should be narrower:
+The scorer should be narrower:
 
 ```text
 given a patched workspace, run hidden validators and produce a score/status
@@ -303,7 +303,7 @@ load manifest
 prepare agent-visible workspace
 apply submitted patch
 run public checks
-invoke hidden grader/scorer
+invoke hidden scorer
 write trace and attempt artifacts
 ```
 
@@ -398,18 +398,20 @@ I added `src/agentenv/scorers/pytest_hidden.py` as the first hidden scorer.
 
 This layer receives an already-patched workspace. It does not prepare the environment, apply patches, run public checks, or orchestrate a full attempt.
 
-For Week 1, the scorer copies hidden tests into the workspace only at scoring time and then runs:
+For Week 1, the scorer runs private pytest tests from the task pack against the already-patched workspace:
 
 ```text
-uv run pytest hidden_tests
+uv run pytest -c <workspace>/pyproject.toml --rootdir <workspace> <task>/hidden_tests
 ```
 
-This preserves the important phase boundary:
+This preserves the important phase boundary without mutating the submitted workspace:
 
 ```text
 hidden tests absent during patch/submission phase
-hidden tests available during scoring phase
+hidden tests read only by the scorer during scoring phase
 ```
+
+I hit one useful architecture bug here. When hidden tests live outside the workspace, pytest may discover the lab repo's config instead of the submitted workspace config. The fix is to pass the workspace config explicitly with `-c <workspace>/pyproject.toml` and set `--rootdir <workspace>`.
 
 The hidden scorer now distinguishes the controls:
 
@@ -452,7 +454,7 @@ It records:
 - final diff hash,
 - orchestrator version.
 
-I am intentionally using statuses such as `ORCHESTRATOR_ERROR` and `SCORER_ERROR` instead of overloading the word "grader".
+I am intentionally using statuses such as `ORCHESTRATOR_ERROR` and `SCORER_ERROR` so lifecycle failures and scoring failures do not get collapsed into one ambiguous bucket.
 
 I renamed the model from `PatchAttemptResult` to `AttemptResult` because the result shape is generic: task id, attempt id, statuses, timing, and error class. The function `run_patch_attempt` remains patch-specific because this Week 1 domain still evaluates submitted patch files.
 
@@ -572,7 +574,7 @@ public_check
 hidden_score
 ```
 
-`final.diff` records the diff between the original `workspace_seed/` and the patched workspace. I capture it immediately after patch application, before public checks and hidden scoring. This avoids including pytest cache files or grader-introduced `hidden_tests/` in the submitted-code diff.
+`final.diff` records the diff between the original `workspace_seed/` and the patched workspace. I capture it immediately after patch application, before public checks and hidden scoring. This avoids including pytest cache files or any scorer-side files in the submitted-code diff.
 
 The current expected control behavior is:
 
@@ -658,7 +660,7 @@ workspace_seed/
   for the agent or patch author
 
 hidden_tests/ and controls/
-  for the grader and task audit
+  for the scorer and task audit
 ```
 
 Keeping these audiences separate is the main lesson of Week 1 so far.
@@ -705,10 +707,10 @@ uv run agentenv tasks validate data/task_packs/repo_patch_python_v0/tasks/toy_py
 
 The CLI is intentionally thin. It does not contain validation logic; it calls the existing manifest loading and path-validation functions.
 
-This makes validation usable as an operator command before the grader exists.
+This makes validation usable as an operator command before the full attempt orchestrator exists.
 
 ## Next Learning Step
 
 The next step is not to add more tasks.
 
-The next step is to implement the first version of `agentenv grade`, which will copy the seed workspace, apply one submitted patch, run public checks, then run hidden validators.
+The first version of `agentenv attempt run` now copies the seed workspace, applies one submitted patch, runs public checks, runs hidden validators, and writes the attempt artifact bundle.

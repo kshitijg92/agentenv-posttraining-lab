@@ -70,6 +70,17 @@ class AttemptRun:
         return [command.result for command in self.commands]
 
 
+@dataclass(frozen=True)
+class AttemptContext:
+    run_id: str
+    task_id: str
+    task_manifest_path: Path
+    attempt_id: str
+    submission_path: Path
+    started_at: str
+    started_timer: float
+
+
 def run_patch_attempt(
     task_manifest_path: Path,
     submission_path: Path,
@@ -80,8 +91,15 @@ def run_patch_attempt(
     started_at = _utc_now()
     started_timer = perf_counter()
     manifest = load_task_manifest(task_manifest_path)
-    run_id = f"run_{uuid4().hex}"
-    attempt_id = f"attempt_{uuid4().hex}"
+    context = AttemptContext(
+        run_id=f"run_{uuid4().hex}",
+        task_id=manifest.id,
+        task_manifest_path=task_manifest_path,
+        attempt_id=f"attempt_{uuid4().hex}",
+        submission_path=submission_path,
+        started_at=started_at,
+        started_timer=started_timer,
+    )
     commands: list[AttemptCommand] = []
     final_diff = ""
     final_diff_hash: str | None = None
@@ -111,23 +129,15 @@ def run_patch_attempt(
         )
         final_diff_hash = hash_diff(final_diff)
         if patch_result.returncode != 0:
-            return _attempt_run(
+            return _finish_attempt(
+                context=context,
                 commands=commands,
                 final_diff=final_diff,
-                result=_attempt_result(
-                    run_id=run_id,
-                    task_id=manifest.id,
-                    task_manifest_path=task_manifest_path,
-                    attempt_id=attempt_id,
-                    submission_path=submission_path,
-                    status="PATCH_APPLY_ERROR",
-                    public_status="NOT_RUN",
-                    hidden_status="NOT_RUN",
-                    error_class="PatchApplyError",
-                    started_at=started_at,
-                    started_timer=started_timer,
-                    final_diff_hash=final_diff_hash,
-                ),
+                status="PATCH_APPLY_ERROR",
+                public_status="NOT_RUN",
+                hidden_status="NOT_RUN",
+                error_class="PatchApplyError",
+                final_diff_hash=final_diff_hash,
             )
 
         public_results = run_public_checks(
@@ -144,23 +154,15 @@ def run_patch_attempt(
             for index, public_result in enumerate(public_results)
         )
         if not all(result.returncode == 0 for result in public_results):
-            return _attempt_run(
+            return _finish_attempt(
+                context=context,
                 commands=commands,
                 final_diff=final_diff,
-                result=_attempt_result(
-                    run_id=run_id,
-                    task_id=manifest.id,
-                    task_manifest_path=task_manifest_path,
-                    attempt_id=attempt_id,
-                    submission_path=submission_path,
-                    status="PUBLIC_TEST_FAIL",
-                    public_status="FAIL",
-                    hidden_status="NOT_RUN",
-                    error_class="PublicCheckFailed",
-                    started_at=started_at,
-                    started_timer=started_timer,
-                    final_diff_hash=final_diff_hash,
-                ),
+                status="PUBLIC_TEST_FAIL",
+                public_status="FAIL",
+                hidden_status="NOT_RUN",
+                error_class="PublicCheckFailed",
+                final_diff_hash=final_diff_hash,
             )
 
         hidden_results = run_hidden_pytest_validators(
@@ -178,105 +180,69 @@ def run_patch_attempt(
             for hidden_result in hidden_results
         )
         if not all(result.passed for result in hidden_results):
-            return _attempt_run(
+            return _finish_attempt(
+                context=context,
                 commands=commands,
                 final_diff=final_diff,
-                result=_attempt_result(
-                    run_id=run_id,
-                    task_id=manifest.id,
-                    task_manifest_path=task_manifest_path,
-                    attempt_id=attempt_id,
-                    submission_path=submission_path,
-                    status="HIDDEN_TEST_FAIL",
-                    public_status="PASS",
-                    hidden_status="FAIL",
-                    error_class="HiddenCheckFailed",
-                    started_at=started_at,
-                    started_timer=started_timer,
-                    final_diff_hash=final_diff_hash,
-                ),
+                status="HIDDEN_TEST_FAIL",
+                public_status="PASS",
+                hidden_status="FAIL",
+                error_class="HiddenCheckFailed",
+                final_diff_hash=final_diff_hash,
             )
 
-        return _attempt_run(
+        return _finish_attempt(
+            context=context,
             commands=commands,
             final_diff=final_diff,
-            result=_attempt_result(
-                run_id=run_id,
-                task_id=manifest.id,
-                task_manifest_path=task_manifest_path,
-                attempt_id=attempt_id,
-                submission_path=submission_path,
-                status="PASS",
-                public_status="PASS",
-                hidden_status="PASS",
-                error_class=None,
-                started_at=started_at,
-                started_timer=started_timer,
-                final_diff_hash=final_diff_hash,
-            ),
+            status="PASS",
+            public_status="PASS",
+            hidden_status="PASS",
+            error_class=None,
+            final_diff_hash=final_diff_hash,
         )
     except TimeoutExpired:
-        return _attempt_run(
+        return _finish_attempt(
+            context=context,
             commands=commands,
             final_diff=final_diff,
-            result=_attempt_result(
-                run_id=run_id,
-                task_id=manifest.id,
-                task_manifest_path=task_manifest_path,
-                attempt_id=attempt_id,
-                submission_path=submission_path,
-                status="TIMEOUT",
-                public_status="NOT_RUN",
-                hidden_status="NOT_RUN",
-                error_class="TimeoutExpired",
-                started_at=started_at,
-                started_timer=started_timer,
-                final_diff_hash=final_diff_hash,
-            ),
+            status="TIMEOUT",
+            public_status="NOT_RUN",
+            hidden_status="NOT_RUN",
+            error_class="TimeoutExpired",
+            final_diff_hash=final_diff_hash,
         )
 
 
-def _attempt_result(
+def _finish_attempt(
     *,
-    run_id: str,
-    task_id: str,
-    task_manifest_path: Path,
-    attempt_id: str,
-    submission_path: Path,
+    context: AttemptContext,
+    commands: list[AttemptCommand],
+    final_diff: str,
     status: AttemptStatus,
     public_status: CheckStatus,
     hidden_status: CheckStatus,
     error_class: str | None,
-    started_at: str,
-    started_timer: float,
     final_diff_hash: str | None,
-) -> AttemptResult:
+) -> AttemptRun:
     ended_at = _utc_now()
-    duration_ms = int((perf_counter() - started_timer) * 1000)
-    return AttemptResult(
-        run_id=run_id,
-        task_id=task_id,
-        task_manifest_path=str(task_manifest_path),
-        attempt_id=attempt_id,
-        submission_path=str(submission_path),
+    duration_ms = int((perf_counter() - context.started_timer) * 1000)
+    result = AttemptResult(
+        run_id=context.run_id,
+        task_id=context.task_id,
+        task_manifest_path=str(context.task_manifest_path),
+        attempt_id=context.attempt_id,
+        submission_path=str(context.submission_path),
         status=status,
         public_status=public_status,
         hidden_status=hidden_status,
         error_class=error_class,
-        started_at=started_at,
+        started_at=context.started_at,
         ended_at=ended_at,
         duration_ms=duration_ms,
         final_diff_hash=final_diff_hash,
         orchestrator_version=ORCHESTRATOR_VERSION,
     )
-
-
-def _attempt_run(
-    *,
-    result: AttemptResult,
-    commands: list[AttemptCommand],
-    final_diff: str,
-) -> AttemptRun:
     return AttemptRun(result=result, commands=commands, final_diff=final_diff)
 
 

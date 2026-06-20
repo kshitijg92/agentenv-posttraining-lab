@@ -11,7 +11,7 @@ The goal is not to build a full benchmark yet. The goal is to understand the min
 - public checks,
 - hidden validators,
 - oracle and bad controls,
-- grading output,
+- attempt/scoring output,
 - traceability.
 
 By the end of the week, I want one task where an oracle patch passes, a no-op patch fails, and a public-only patch can pass visible checks while failing hidden validation.
@@ -34,7 +34,7 @@ What I am looking for:
 
 Design implication for this repo:
 
-My Week 1 loop should keep task loading, patch application, and grading as separate concepts, even if the implementation is tiny.
+My Week 1 loop should keep task loading, patch application, orchestration, and scoring as separate concepts, even if the implementation is tiny.
 
 ### Harbor / Terminal-Bench
 
@@ -51,7 +51,7 @@ What I am looking for:
 
 Design implication for this repo:
 
-My hidden tests should not be in `workspace_seed`. The grader should only introduce them after the patch phase.
+My hidden tests should not be in `workspace_seed`. The hidden scorer should only run them after the patch phase.
 
 ### METR Task Standard
 
@@ -66,7 +66,7 @@ What I am looking for:
 
 Design implication for this repo:
 
-The task manifest can be small, but it should be explicit about limits, hidden validators, controls, and what the grader is allowed to inspect.
+The task manifest can be small, but it should be explicit about limits, hidden validators, controls, and what private eval-side data the orchestrator/scorer is allowed to inspect.
 
 ### SWE-bench
 
@@ -81,7 +81,7 @@ What I am looking for:
 
 Design implication for this repo:
 
-My `agentenv grade` command should distinguish patch apply errors, public test failures, hidden test failures, timeouts, and grader errors instead of collapsing everything into pass/fail.
+My `agentenv attempt run` command should distinguish patch apply errors, public test failures, hidden test failures, timeouts, orchestrator errors, and scorer errors instead of collapsing everything into pass/fail.
 
 ## Questions To Answer After Reading
 
@@ -94,8 +94,8 @@ My `agentenv grade` command should distinguish patch apply errors, public test f
 
 ## Self-Deception Traps
 
-- If the oracle passes but there are no known-bad controls, I have not tested the grader.
+- If the oracle passes but there are no known-bad controls, I have not tested the eval harness.
 - If the public-only patch fails public tests, it is not a useful public-only control.
 - If hidden tests are present in `workspace_seed`, the task does not test hidden validation discipline.
-- If all failures are reported as `FAIL`, I will not know whether I built a task failure, grader failure, environment failure, or patch failure.
+- If all failures are reported as `FAIL`, I will not know whether I built a task failure, scorer failure, orchestrator failure, environment failure, or patch failure.
 - If I add multiple tasks before one task is audited, I am scaling uncertainty instead of learning the loop.

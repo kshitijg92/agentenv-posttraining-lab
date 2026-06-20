@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-o8gdezn7/workspace
+rootdir: /tmp/agentenv-toy_python_fix_001-rr8f1qyb/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,11 +10,11 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-o8gdezn7/workspace
+rootdir: /tmp/agentenv-toy_python_fix_001-rr8f1qyb/workspace
 configfile: pyproject.toml
 collected 7 items
 
-hidden_tests/test_behavior.py ..FF...                                    [100%]
+test_behavior.py ..FF...                                                 [100%]
 
 =================================== FAILURES ===================================
 ______________ test_negative_denominator_matches_python_division _______________
@@ -40,7 +40,7 @@ E         Expected: -2.0 ± 2.0e-06
 
 /home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/hidden_tests/test_behavior.py:20: AssertionError
 =========================== short test summary info ============================
-FAILED hidden_tests/test_behavior.py::test_negative_denominator_matches_python_division
-FAILED hidden_tests/test_behavior.py::test_negative_numerator_matches_python_division
+FAILED test_behavior.py::test_negative_denominator_matches_python_division - ...
+FAILED test_behavior.py::test_negative_numerator_matches_python_division - as...
 ========================= 2 failed, 5 passed in 0.02s ==========================
 

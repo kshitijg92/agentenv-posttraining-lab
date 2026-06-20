@@ -22,5 +22,5 @@ controls:
     noop: controls/bad_noop.patch
     public_only: controls/bad_public_only.patch
 replay:
-  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "grade"]
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
 leakage_canary: "CANARY_TOY_PY_FIX_001_PRIVATE"

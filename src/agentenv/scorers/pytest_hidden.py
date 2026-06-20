@@ -1,4 +1,3 @@
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,14 +19,17 @@ def run_hidden_pytest_validator(
     timeout_seconds: int,
 ) -> HiddenScoreResult:
     source = (task_dir / validator.path).resolve()
-    target = (workspace / validator.path).resolve()
-
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(source, target)
-
     command_result = run_process(
-        ["uv", "run", "pytest", validator.path],
+        [
+            "uv",
+            "run",
+            "pytest",
+            "-c",
+            str(workspace / "pyproject.toml"),
+            "--rootdir",
+            str(workspace),
+            str(source),
+        ],
         cwd=workspace,
         timeout_seconds=timeout_seconds,
     )

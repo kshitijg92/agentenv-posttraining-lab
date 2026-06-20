@@ -61,7 +61,7 @@ hidden_tests/
 controls/
 ```
 
-The hidden tests are introduced only after the submitted patch has been applied.
+The hidden tests are run only after the submitted patch has been applied.
 
 This matters because the task is supposed to test whether a patch satisfies the intended behavior, not whether the agent can read the private validator.
 
@@ -127,13 +127,14 @@ The task passes only if:
 - public checks pass,
 - hidden validators pass.
 
-The grader should distinguish at least these outcomes:
+The orchestrator/scorer should distinguish at least these outcomes:
 
 - patch application error,
 - public test failure,
 - hidden test failure,
 - timeout,
-- grader error,
+- orchestrator error,
+- scorer error,
 - pass.
 
 ## What This Task Measures

@@ -10,7 +10,7 @@ TOY_TASK_MANIFEST = Path(
 )
 
 
-def test_patch_attempt_result_schema() -> None:
+def test_attempt_result_schema() -> None:
     result = AttemptResult(
         run_id="run_001",
         task_id="toy_python_fix_001",

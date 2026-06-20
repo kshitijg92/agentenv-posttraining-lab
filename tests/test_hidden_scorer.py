@@ -48,3 +48,4 @@ def test_hidden_scorer_distinguishes_controls(
     assert patch_result.returncode == 0
     assert hidden_results
     assert all(result.passed for result in hidden_results) is expected_passed
+    assert not (workspace.path / "hidden_tests").exists()
