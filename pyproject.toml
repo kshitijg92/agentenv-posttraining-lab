@@ -28,6 +28,10 @@ module-name = "agentenv"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.pyright]
+include = ["src", "tests"]
+exclude = ["data", "experiments"]
+
 [dependency-groups]
 dev = [
     "pyright>=1.1.410",

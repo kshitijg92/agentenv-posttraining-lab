@@ -1,0 +1,21 @@
+name: control_policies
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - toy_python_fix_001
+split: practice
+attempts: 1
+policies:
+  oracle:
+    type: control_patch
+    control: oracle
+  bad-noop:
+    type: control_patch
+    control: bad.noop
+  bad-public-only:
+    type: control_patch
+    control: bad.public_only
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

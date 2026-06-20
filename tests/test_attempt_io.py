@@ -3,6 +3,7 @@ from pathlib import Path
 
 from agentenv.orchestrators.attempt import run_patch_attempt
 from agentenv.orchestrators.attempt_io import write_attempt_artifacts
+from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.runners.diff_runner import hash_diff
 
 
@@ -63,3 +64,19 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
         for event in trace_events
         if event["event"] == "command_finished"
     ] == ["patch_apply", "public_check", "hidden_score"]
+
+
+def test_run_and_persist_patch_attempt_to_dir(tmp_path: Path) -> None:
+    attempt_run = run_and_persist_patch_attempt_to_dir(
+        TOY_TASK_MANIFEST,
+        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        tmp_path / "out",
+    )
+
+    attempt_data = json.loads((tmp_path / "out/attempt.json").read_text())
+
+    assert attempt_run.result.status == "PASS"
+    assert attempt_data["status"] == "PASS"
+    assert (tmp_path / "out/run_manifest.json").is_file()
+    assert (tmp_path / "out/trace.jsonl").is_file()
+    assert (tmp_path / "out/final.diff").is_file()
