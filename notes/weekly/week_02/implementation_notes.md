@@ -233,3 +233,25 @@ Example result:
 ```text
 PASS attempts=1
 ```
+
+### Eval Report
+
+Added artifact-driven Markdown reporting:
+
+```bash
+uv run agentenv report experiments/runs/control_policies_oracle --out experiments/reports/control_policies_oracle.md
+```
+
+The report command inspects the artifact manifest version instead of requiring
+the caller to choose a report mode. It currently renders `eval_run_v0` artifacts
+and recognizes `replay_v0` artifacts as not implemented yet.
+
+The first eval report includes:
+
+- run details,
+- status counts,
+- one per-attempt table.
+
+The report reads the eval `run_manifest.json` for run-level fields and each
+nested `attempt.json` for per-attempt `error_class` and final status details.
+Attempt artifact paths in the table are relative refs.
