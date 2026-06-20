@@ -1,0 +1,26 @@
+id: toy_python_fix_001
+domain: repo_patch_python
+split: practice
+instruction: "Fix normalize_ratio so it returns numerator / denominator as a float for int and float inputs, and raises ValueError when denominator is zero."
+workspace_seed: workspace_seed
+allowed_tools: ["shell", "edit", "pytest"]
+public_checks:
+  - command: "uv run pytest tests/test_public.py"
+hidden_validators:
+  - id: behavior_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 10
+  network: "off"
+controls:
+  oracle: controls/oracle.patch
+  bad:
+    noop: controls/bad_noop.patch
+    public_only: controls/bad_public_only.patch
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "grade"]
+leakage_canary: "CANARY_TOY_PY_FIX_001_PRIVATE"

@@ -1,0 +1,20 @@
+# Local reference material
+references/
+AGENTS.md
+
+# Local environments and editor state
+.venv/
+.vscode/
+.agents/
+
+# Python/test/tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pyright/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

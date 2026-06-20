@@ -1,0 +1,55 @@
+import difflib
+from pathlib import Path
+
+import xxhash
+
+
+IGNORED_DIR_NAMES = {"__pycache__", ".pytest_cache", ".ruff_cache", ".git"}
+IGNORED_SUFFIXES = {".pyc", ".pyo"}
+
+
+def render_directory_diff(before_dir: Path, after_dir: Path) -> str:
+    relative_files = sorted(_relative_files(before_dir) | _relative_files(after_dir))
+    diff_chunks: list[str] = []
+
+    for relative_file in relative_files:
+        before_path = before_dir / relative_file
+        after_path = after_dir / relative_file
+        before_lines = _read_lines(before_path) if before_path.exists() else []
+        after_lines = _read_lines(after_path) if after_path.exists() else []
+
+        if before_lines == after_lines:
+            continue
+
+        diff_chunks.extend(
+            difflib.unified_diff(
+                before_lines,
+                after_lines,
+                fromfile=f"a/{relative_file.as_posix()}",
+                tofile=f"b/{relative_file.as_posix()}",
+            )
+        )
+
+    return "".join(diff_chunks)
+
+
+def hash_diff(diff: str) -> str:
+    return f"xxh64:{xxhash.xxh64_hexdigest(diff.encode())}"
+
+
+def _relative_files(root: Path) -> set[Path]:
+    return {
+        path.relative_to(root)
+        for path in root.rglob("*")
+        if path.is_file() and not _is_ignored_path(path.relative_to(root))
+    }
+
+
+def _read_lines(path: Path) -> list[str]:
+    return path.read_text().splitlines(keepends=True)
+
+
+def _is_ignored_path(path: Path) -> bool:
+    return any(part in IGNORED_DIR_NAMES for part in path.parts) or (
+        path.suffix in IGNORED_SUFFIXES
+    )
