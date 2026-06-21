@@ -4,9 +4,9 @@
   "attempts": [
     {
       "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
-      "attempt_id": "attempt_5e1bbd46002b4c4c94baed6ef5c579f7",
+      "attempt_id": "attempt_c738776ee51e40eda66f31af0d44548d",
       "attempt_index": 0,
-      "attempt_run_id": "run_384fd84efaa343e0b1fe23dfbc38fdac",
+      "attempt_run_id": "run_b91a98bf85f8479d85686e2c1aa82c16",
       "final_diff_hash": "xxh64:e3fc746d6fe0786c",
       "hidden_status": "PASS",
       "public_status": "PASS",
@@ -17,8 +17,8 @@
   "config_hash": "xxh64:e759f761673d72cf",
   "config_name": "control_policies",
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/control_policies.yaml",
-  "created_at": "2026-06-20T21:29:11.648607Z",
-  "eval_run_id": "eval_7e332c6b32bc4ccfb83278725fdb0539",
+  "created_at": "2026-06-21T02:46:35.092752Z",
+  "eval_run_id": "eval_ee818f2307b44652a10e1070179dc933",
   "policy": "oracle",
   "split": "practice",
   "status_counts": {

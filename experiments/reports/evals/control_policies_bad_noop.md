@@ -4,7 +4,7 @@
 
 - Artifact directory: experiments/runs/control_policies_bad_noop
 - Eval manifest: run_manifest.json
-- Eval run id: eval_ba3ae91b25cf4107a411f14da087961f
+- Eval run id: eval_c8d428c828fe4313a65d6426c9e02e1b
 - Config name: control_policies
 - Config path: configs/eval/control_policies.yaml
 - Config hash: xxh64:e759f761673d72cf

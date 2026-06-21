@@ -5,6 +5,7 @@ from agentenv.orchestrators.attempt import run_patch_attempt
 from agentenv.orchestrators.attempt_io import write_attempt_artifacts
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.runners.diff_runner import hash_diff
+from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
 
 TOY_TASK_MANIFEST = Path(
@@ -50,19 +51,26 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
     assert "raise ValueError" in final_diff
     assert attempt_data["final_diff_hash"] == hash_diff(final_diff)
 
-    trace_events = [
-        json.loads(line) for line in artifact_paths.trace_jsonl.read_text().splitlines()
-    ]
-    assert trace_events[0]["event"] == "attempt_started"
-    assert trace_events[0]["task_manifest_path"] == attempt_data["task_manifest_path"]
-    assert trace_events[-1]["event"] == "attempt_finished"
-    assert trace_events[-1]["status"] == "PASS"
-    assert trace_events[-1]["final_diff_ref"] == "final.diff"
-    assert trace_events[-1]["final_diff_hash"] == attempt_data["final_diff_hash"]
+    validate_trace_file(artifact_paths.trace_jsonl)
+    trace_events = load_trace_events(artifact_paths.trace_jsonl)
+    assert trace_events[0].event_type == "attempt_started"
+    assert trace_events[0].provenance_config["attempt_id"] == attempt_data["attempt_id"]
+    assert trace_events[0].input_payload is not None
+    assert (
+        trace_events[0].input_payload["task_manifest_path"]
+        == attempt_data["task_manifest_path"]
+    )
+    assert trace_events[-1].event_type == "attempt_finished"
+    assert trace_events[-1].output_payload is not None
+    assert trace_events[-1].output_payload["status"] == "PASS"
+    assert trace_events[-1].payload_refs == {"final_diff": "final.diff"}
+    assert trace_events[-1].payload_hashes == {
+        "final_diff": attempt_data["final_diff_hash"]
+    }
     assert [
-        event["phase"]
+        event.provenance_config["phase"]
         for event in trace_events
-        if event["event"] == "command_finished"
+        if event.event_type == "command_finished"
     ] == ["patch_apply", "public_check", "hidden_score"]
 
 

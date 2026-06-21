@@ -4,7 +4,7 @@
 
 - Artifact directory: experiments/runs/control_policies_bad_public_only
 - Eval manifest: run_manifest.json
-- Eval run id: eval_dda1c4a29a1b4122af2cfa728f0a9040
+- Eval run id: eval_869cd2a7e21a4de9975beedc467a4d3c
 - Config name: control_policies
 - Config path: configs/eval/control_policies.yaml
 - Config hash: xxh64:e759f761673d72cf

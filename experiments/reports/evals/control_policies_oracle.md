@@ -4,7 +4,7 @@
 
 - Artifact directory: experiments/runs/control_policies_oracle
 - Eval manifest: run_manifest.json
-- Eval run id: eval_7e332c6b32bc4ccfb83278725fdb0539
+- Eval run id: eval_ee818f2307b44652a10e1070179dc933
 - Config name: control_policies
 - Config path: configs/eval/control_policies.yaml
 - Config hash: xxh64:e759f761673d72cf

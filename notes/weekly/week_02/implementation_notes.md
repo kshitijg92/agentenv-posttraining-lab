@@ -287,3 +287,140 @@ The example replay report is:
 ```text
 experiments/reports/replays/control_policies_oracle.md
 ```
+
+### Trace Schema
+
+Wrote the target trace schema doc:
+
+```text
+docs/trace_schema.md
+```
+
+Then added schema and validation code without changing existing trace producers:
+
+```text
+src/agentenv/tracing/schema.py
+src/agentenv/tracing/validate.py
+tests/test_trace_schema.py
+```
+
+The target trace event schema is `trace_v0`.
+
+Required fields:
+
+- `schema_version`
+- `event_index`
+- `timestamp_utc`
+- `event_type`
+- `provenance_config`
+
+Optional fields:
+
+- `input_payload`
+- `output_payload`
+- `payload_refs`
+- `payload_hashes`
+
+The validator can load a `trace.jsonl`, validate each event shape, and check
+that event indices are sequential.
+
+### Replay Trace Migration
+
+Updated replay trace emission to use the `trace_v0` event envelope.
+
+Replay trace events now include:
+
+- `schema_version`
+- `event_index`
+- `timestamp_utc`
+- `event_type`
+- `provenance_config`
+- optional `input_payload`
+- optional `output_payload`
+- optional `payload_refs`
+
+For replay traces, `provenance_config` always includes `replay_id` and includes
+`source_eval_run_id` once the source eval manifest has been loaded. Task-specific
+events also include task and attempt ids.
+
+Regenerated replay artifacts for:
+
+```text
+experiments/replays/control_policies_oracle
+experiments/replays/control_policies_bad_noop
+experiments/replays/control_policies_bad_public_only
+```
+
+Then regenerated the replay reports under:
+
+```text
+experiments/reports/replays/
+```
+
+### Attempt Trace Migration
+
+Updated attempt artifact traces to use the same `trace_v0` envelope.
+
+Attempt traces now emit:
+
+- `attempt_started`
+- one `command_finished` event per command
+- `attempt_finished`
+
+Each event includes:
+
+- `schema_version`
+- `event_index`
+- `timestamp_utc`
+- `event_type`
+- `provenance_config`
+
+Command events summarize stdout/stderr with byte counts and artifact refs rather
+than inlining raw output. The final attempt event includes the final diff ref
+and final diff hash.
+
+Regenerated:
+
+```text
+experiments/runs/week01_oracle
+experiments/runs/week01_bad_noop
+experiments/runs/week01_bad_public_only
+experiments/runs/control_policies_oracle
+experiments/runs/control_policies_bad_noop
+experiments/runs/control_policies_bad_public_only
+experiments/replays/control_policies_oracle
+experiments/replays/control_policies_bad_noop
+experiments/replays/control_policies_bad_public_only
+```
+
+Regenerated eval and replay reports under:
+
+```text
+experiments/reports/evals/
+experiments/reports/replays/
+```
+
+All `trace.jsonl` files under `experiments/` validate against `trace_v0`.
+
+### Trace Event Type Tightening
+
+Changed trace event validation so `event_type` is not a free-form string.
+
+The schema now defines an explicit event-type list for currently emitted events:
+
+```text
+attempt_started
+command_finished
+attempt_finished
+replay_started
+source_run_manifest_loaded
+source_attempt_loaded
+fresh_attempt_started
+fresh_attempt_finished
+comparison_recorded
+replay_finished
+replay_error
+```
+
+This prevents typos from silently becoming valid trace events. New event types
+should be added deliberately as new producers are implemented.

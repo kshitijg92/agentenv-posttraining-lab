@@ -4,9 +4,9 @@
 
 - Artifact directory: experiments/replays/control_policies_oracle
 - Replay manifest: replay_manifest.json
-- Replay id: replay_6b88ec8eb3b24b94a2ff660ed0baabb9
+- Replay id: replay_5b8aaa08e96c44479e5b4a1ae03ea0a3
 - Source run directory: experiments/runs/control_policies_oracle
-- Source eval run id: eval_7e332c6b32bc4ccfb83278725fdb0539
+- Source eval run id: eval_ee818f2307b44652a10e1070179dc933
 - Source artifact version: eval_run_v0
 
 ## Replay Result

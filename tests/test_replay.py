@@ -3,6 +3,7 @@ from pathlib import Path
 
 from agentenv.orchestrators.eval_run import run_eval_config
 from agentenv.replay.runner import run_replay
+from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
 
 CONTROL_EVAL_CONFIG = Path("configs/eval/control_policies.yaml")
@@ -61,6 +62,15 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
         tmp_path
         / "replay_run/attempts/toy_python_fix_001__attempt_001/attempt.json"
     ).is_file()
+    validate_trace_file(tmp_path / "replay_run/trace.jsonl")
+    trace_events = load_trace_events(tmp_path / "replay_run/trace.jsonl")
+    assert trace_events[0].schema_version == "trace_v0"
+    assert trace_events[0].event_type == "replay_started"
+    assert trace_events[0].provenance_config["replay_id"] == replay_run.replay_id
+    assert (
+        trace_events[1].provenance_config["source_eval_run_id"]
+        == source_run.eval_run_id
+    )
 
 
 def test_run_replay_rejects_replay_artifact_input(tmp_path: Path) -> None:

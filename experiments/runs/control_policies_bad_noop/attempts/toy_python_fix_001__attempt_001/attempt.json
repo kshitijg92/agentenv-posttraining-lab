@@ -1,16 +1,16 @@
 {
-  "run_id": "run_38a3a4084ada455f99259610858647f4",
+  "run_id": "run_44d5a7447d19452cb8ee4c2a255d696a",
   "task_id": "toy_python_fix_001",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
-  "attempt_id": "attempt_09a1ab1705c54bae807b32b6b649a4e0",
+  "attempt_id": "attempt_ccea02ebb4ed4e80b6b3fc8ed68ca269",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/bad_noop.patch",
   "status": "HIDDEN_TEST_FAIL",
   "public_status": "PASS",
   "hidden_status": "FAIL",
   "error_class": "HiddenCheckFailed",
-  "started_at": "2026-06-20T21:29:28.381247Z",
-  "ended_at": "2026-06-20T21:29:28.721983Z",
-  "duration_ms": 340,
+  "started_at": "2026-06-21T02:46:35.103336Z",
+  "ended_at": "2026-06-21T02:46:35.443115Z",
+  "duration_ms": 339,
   "final_diff_hash": "xxh64:ef46db3751d8e999",
   "orchestrator_version": "attempt_v0"
 }
