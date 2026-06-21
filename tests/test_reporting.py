@@ -33,15 +33,27 @@ def test_write_eval_markdown_report(tmp_path: Path) -> None:
     ) in report
 
 
-def test_replay_report_artifact_is_recognized_but_not_implemented(
-    tmp_path: Path,
-) -> None:
+def test_write_replay_markdown_report(tmp_path: Path) -> None:
     run_eval_config(CONTROL_EVAL_CONFIG, "oracle", tmp_path / "eval_run")
     run_replay(tmp_path / "eval_run", tmp_path / "replay_run")
 
-    try:
-        write_markdown_report(tmp_path / "replay_run", tmp_path / "reports/replay.md")
-    except NotImplementedError as exc:
-        assert str(exc) == "Replay reports are not implemented yet"
-    else:
-        raise AssertionError("Expected replay report to be recognized but unsupported")
+    report_path = write_markdown_report(
+        tmp_path / "replay_run",
+        tmp_path / "reports/replay.md",
+    )
+    report = report_path.read_text()
+
+    assert report_path == tmp_path / "reports/replay.md"
+    assert "# Replay Report" in report
+    assert "## Replay Details" in report
+    assert "## Replay Result" in report
+    assert "## Attempt Comparisons" in report
+    assert "- Source run directory:" in report
+    assert "- Status: PASS" in report
+    assert "- Attempt count: 1" in report
+    assert "- Matched attempts: 1" in report
+    assert (
+        "| toy_python_fix_001 | match | match | match | match | match | match | "
+        "attempts/toy_python_fix_001__attempt_001 | "
+        "attempts/toy_python_fix_001__attempt_001 |"
+    ) in report

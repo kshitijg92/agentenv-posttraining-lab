@@ -255,3 +255,35 @@ The first eval report includes:
 The report reads the eval `run_manifest.json` for run-level fields and each
 nested `attempt.json` for per-attempt `error_class` and final status details.
 Attempt artifact paths in the table are relative refs.
+
+### Replay Report
+
+Added replay Markdown reporting through the same artifact-driven command:
+
+```bash
+uv run agentenv report experiments/replays/control_policies_oracle --out experiments/reports/replays/control_policies_oracle.md
+```
+
+Replay reports read:
+
+```text
+replay_manifest.json
+replay_result.json
+replay_results.jsonl
+```
+
+The first replay report includes:
+
+- replay details,
+- replay result summary,
+- one per-attempt comparison table.
+
+Per-field comparison booleans are rendered as `match` or `mismatch` instead of
+raw JSON booleans. The table uses relative attempt artifact refs because the
+source and replay roots are already shown in the report details.
+
+The example replay report is:
+
+```text
+experiments/reports/replays/control_policies_oracle.md
+```
