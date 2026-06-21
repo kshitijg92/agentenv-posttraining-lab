@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agentenv.orchestrators.attempt import AttemptResult, AttemptRun
-from agentenv.tracing.schema import TRACE_SCHEMA_VERSION
+from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
 TraceEvent = dict[str, object]
@@ -133,7 +133,7 @@ def _trace_jsonl(attempt_run: AttemptRun) -> str:
 def _append_trace(
     events: list[TraceEvent],
     provenance_config: dict[str, object],
-    event_type: str,
+    event_type: TraceEventType,
     *,
     timestamp_utc: str | None = None,
     input_payload: dict[str, object] | None = None,

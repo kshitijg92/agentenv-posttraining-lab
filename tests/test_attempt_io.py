@@ -5,6 +5,7 @@ from agentenv.orchestrators.attempt import run_patch_attempt
 from agentenv.orchestrators.attempt_io import write_attempt_artifacts
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.runners.diff_runner import hash_diff
+from agentenv.tracing.schema import AttemptTraceProvenance
 from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
 
@@ -54,7 +55,9 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
     validate_trace_file(artifact_paths.trace_jsonl)
     trace_events = load_trace_events(artifact_paths.trace_jsonl)
     assert trace_events[0].event_type == "attempt_started"
-    assert trace_events[0].provenance_config["attempt_id"] == attempt_data["attempt_id"]
+    first_provenance = trace_events[0].provenance_config
+    assert isinstance(first_provenance, AttemptTraceProvenance)
+    assert first_provenance.attempt_id == attempt_data["attempt_id"]
     assert trace_events[0].input_payload is not None
     assert (
         trace_events[0].input_payload["task_manifest_path"]
@@ -67,11 +70,13 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
     assert trace_events[-1].payload_hashes == {
         "final_diff": attempt_data["final_diff_hash"]
     }
-    assert [
-        event.provenance_config["phase"]
-        for event in trace_events
-        if event.event_type == "command_finished"
-    ] == ["patch_apply", "public_check", "hidden_score"]
+    command_phases: list[str | None] = []
+    for event in trace_events:
+        if event.event_type == "command_finished":
+            provenance = event.provenance_config
+            assert isinstance(provenance, AttemptTraceProvenance)
+            command_phases.append(provenance.phase)
+    assert command_phases == ["patch_apply", "public_check", "hidden_score"]
 
 
 def test_run_and_persist_patch_attempt_to_dir(tmp_path: Path) -> None:

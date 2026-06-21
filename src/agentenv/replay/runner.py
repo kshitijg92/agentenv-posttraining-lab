@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from agentenv.orchestrators.attempt import AttemptResult
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
-from agentenv.tracing.schema import TRACE_SCHEMA_VERSION
+from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
 REPLAY_ARTIFACT_VERSION = "replay_v0"
@@ -404,7 +404,7 @@ def _required_str(data: dict[str, object], key: str) -> str:
 def _append_trace(
     trace_events: list[dict[str, object]],
     provenance_config: dict[str, object],
-    event_type: str,
+    event_type: TraceEventType,
     *,
     input_payload: dict[str, object] | None = None,
     output_payload: dict[str, object] | None = None,

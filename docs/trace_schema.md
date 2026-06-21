@@ -45,8 +45,10 @@ Required fields:
   "schema_version": "trace_v0",
   "event_index": 0,
   "timestamp_utc": "2026-06-20T00:00:00Z",
-  "event_type": "example_event",
-  "provenance_config": {}
+  "event_type": "replay_started",
+  "provenance_config": {
+    "replay_id": "replay_..."
+  }
 }
 ```
 
@@ -117,17 +119,44 @@ should be represented as explicit event types rather than as a generic
 
 Structured provenance for the event.
 
-This field carries the relevant identifiers for the event type. It is flexible
-because different events have different provenance.
+This field carries the relevant identifiers for the event type. It is typed per
+event family, so unknown keys and mismatched event/provenance families should
+fail validation.
 
-Examples:
+Attempt event provenance supports:
 
 ```json
 {
-  "eval_run_id": "eval_...",
-  "task_id": "toy_python_fix_001",
+  "run_id": "run_...",
   "attempt_id": "attempt_...",
-  "config_hash": "xxh64:..."
+  "task_id": "toy_python_fix_001",
+  "phase": "public_check",
+  "name": "pytest_public"
+}
+```
+
+`run_id`, `attempt_id`, and `task_id` are required for attempt events.
+`command_finished` also requires `phase` and `name`.
+
+Replay event provenance supports:
+
+```json
+{
+  "replay_id": "replay_...",
+  "source_eval_run_id": "eval_...",
+  "task_id": "toy_python_fix_001",
+  "source_attempt_id": "attempt_...",
+  "replay_attempt_id": "attempt_..."
+}
+```
+
+`replay_id` is required for replay events. Source-manifest and attempt-specific
+replay events require the source eval, task, and attempt ids needed to audit the
+event.
+
+```json
+{
+  "replay_id": "replay_..."
 }
 ```
 
@@ -135,7 +164,8 @@ Examples:
 {
   "replay_id": "replay_...",
   "source_eval_run_id": "eval_...",
-  "task_id": "toy_python_fix_001"
+  "task_id": "toy_python_fix_001",
+  "source_attempt_id": "attempt_..."
 }
 ```
 

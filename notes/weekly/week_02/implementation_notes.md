@@ -424,3 +424,22 @@ replay_error
 
 This prevents typos from silently becoming valid trace events. New event types
 should be added deliberately as new producers are implemented.
+
+### Trace Provenance Typing
+
+Tightened `provenance_config` so it is no longer an arbitrary dictionary.
+
+The schema now validates provenance explicitly per event family:
+
+- attempt events use `AttemptTraceProvenance`
+- replay events use `ReplayTraceProvenance`
+
+This keeps the serialized trace field stable while making the validator reject
+unknown provenance keys and wrong event/provenance combinations. It also lets
+tests and future code access provenance as typed fields rather than unchecked
+dictionary keys.
+
+The main design reason is auditability: a trace should make it clear which run,
+attempt, replay, task, and source artifact caused an event. If those identifiers
+are misspelled or attached to the wrong event family, the trace is less useful
+for debugging replay mismatches or leakage incidents.
