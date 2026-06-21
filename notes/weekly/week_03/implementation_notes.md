@@ -113,29 +113,41 @@ specific exception handling and tests.
 
 ### Decision
 
-Detect one concrete invalid shortcut this week: a submitted patch that modifies
-public tests under `tests/`.
+Detect invalid or hostile submissions before applying the patch.
 
 ### Reasoning
 
 Changing public tests is a scoring-contract violation, not merely a wrong
-solution. There is no point in running public checks after the patch has changed
-the checks themselves. The attempt should stop immediately after patch
-application and record a terminal `INVALID_SHORTCUT` status.
+solution. There is no point in applying the patch or running public checks once
+the raw submission shows it is trying to modify the checks themselves.
 
 This keeps `HIDDEN_TEST_FAIL` for patches that leave the public checks intact
 but fail hidden behavior.
 
+References to private eval assets are more serious than public-test tampering,
+so `HIDDEN_VALIDATOR_ACCESS_ATTEMPT` takes precedence over `INVALID_SHORTCUT`.
+
 ### Shipped
 
 - Added `INVALID_SHORTCUT` to `AttemptStatus`.
-- Added a post-patch, pre-public-check detector for changed files under
+- Added `HIDDEN_VALIDATOR_ACCESS_ATTEMPT` to `AttemptStatus`.
+- Added a pre-apply detector for changed files under
   `tests/`.
-- Added a focused test that modifies `tests/test_public.py` and verifies that
-  only the patch-apply phase runs.
+- Added a pre-apply detector for submitted patch text that references
+  `hidden_tests`, the task leakage canary, or hidden validator paths.
+- Added focused tests that verify these statuses are produced before patch
+  application, including precedence when both conditions are present.
+
+### Limitation
+
+Attempt artifacts currently record `submission_path`; they do not snapshot the
+submitted patch contents. This is consistent with the current replay model,
+which also depends on task-pack paths such as `task.yaml`, `workspace_seed/`,
+hidden validators, and control patches remaining stable. Full content
+snapshotting or content-addressed task assets belongs in a later reproducibility
+checkpoint.
 
 ### Next Small Step
 
-Decide whether `HIDDEN_VALIDATOR_ACCESS_ATTEMPT` should initially inspect only
-submitted patch text, or whether it should also inspect command traces and final
-diffs.
+Start the scorer-audit fixture shape now that the terminal status vocabulary has
+the first Week 3-specific statuses.

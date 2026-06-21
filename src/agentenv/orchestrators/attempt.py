@@ -15,6 +15,7 @@ from agentenv.runners.diff_runner import hash_diff, render_directory_diff
 from agentenv.runners.patch_runner import apply_patch_file
 from agentenv.runners.public_check_runner import run_public_checks
 from agentenv.scorers.pytest_hidden import run_hidden_pytest_validators
+from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
 
@@ -26,6 +27,7 @@ AttemptStatus = Literal[
     "PUBLIC_TEST_FAIL",
     "HIDDEN_TEST_FAIL",
     "INVALID_SHORTCUT",
+    "HIDDEN_VALIDATOR_ACCESS_ATTEMPT",
     "ORCHESTRATOR_ERROR",
     "TIMEOUT",
 ]
@@ -119,6 +121,31 @@ def run_patch_attempt(
             task_manifest_path,
             workspace_parent=workspace_parent,
         )
+        submission_text = submission_path.read_text()
+
+        if _references_hidden_validator_assets(submission_text, manifest):
+            return _finish_attempt(
+                context=context,
+                commands=commands,
+                final_diff=final_diff,
+                status="HIDDEN_VALIDATOR_ACCESS_ATTEMPT",
+                public_status="NOT_RUN",
+                hidden_status="NOT_RUN",
+                error_class="HiddenValidatorReference",
+                final_diff_hash=final_diff_hash,
+            )
+
+        if _modifies_public_tests(submission_text):
+            return _finish_attempt(
+                context=context,
+                commands=commands,
+                final_diff=final_diff,
+                status="INVALID_SHORTCUT",
+                public_status="NOT_RUN",
+                hidden_status="NOT_RUN",
+                error_class="PublicTestModified",
+                final_diff_hash=final_diff_hash,
+            )
 
         patch_result = apply_patch_file(
             workspace.path,
@@ -146,18 +173,6 @@ def run_patch_attempt(
                 public_status="NOT_RUN",
                 hidden_status="NOT_RUN",
                 error_class="PatchApplyError",
-                final_diff_hash=final_diff_hash,
-            )
-
-        if _modifies_public_tests(final_diff):
-            return _finish_attempt(
-                context=context,
-                commands=commands,
-                final_diff=final_diff,
-                status="INVALID_SHORTCUT",
-                public_status="NOT_RUN",
-                hidden_status="NOT_RUN",
-                error_class="PublicTestModified",
                 final_diff_hash=final_diff_hash,
             )
 
@@ -305,6 +320,17 @@ def _modifies_public_tests(diff: str) -> bool:
         if Path(path).parts[:1] == ("tests",):
             return True
     return False
+
+
+def _references_hidden_validator_assets(
+    submission_text: str,
+    manifest: TaskManifest,
+) -> bool:
+    hidden_markers = ["hidden_tests", manifest.leakage_canary]
+    hidden_markers.extend(
+        hidden_validator.path for hidden_validator in manifest.hidden_validators
+    )
+    return any(marker in submission_text for marker in hidden_markers if marker)
 
 
 def _utc_now() -> str:

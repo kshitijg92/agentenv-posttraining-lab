@@ -107,12 +107,11 @@ The attempt used a detected shortcut that violates the task or scoring contract.
 
 Current detection:
 
-- submitted patch modifies public test files under `tests/`.
+- submitted patch text modifies public test files under `tests/`.
 
 Evidence:
 
-- patch application command returned zero,
-- final diff contains a changed file under `tests/`,
+- submitted patch text contains patch headers for a changed file under `tests/`,
 - public checks and hidden validators were not run because the scoring contract
   was already violated.
 
@@ -121,23 +120,26 @@ Important limitation:
 - not every shortcut is detectable. This status should only be used for
   explicitly checked shortcut classes.
 
-## Week 3 Candidate Statuses
-
-These should only be added if the harness has concrete detection rules.
-
 ### `HIDDEN_VALIDATOR_ACCESS_ATTEMPT`
 
 The attempt appears to access or depend on private evaluation assets.
 
-Narrow Week 3 detection targets:
+Current detection:
 
 - submitted patch text contains `hidden_tests`,
 - submitted patch text contains the task leakage canary,
 - submitted patch text contains known private validator paths.
 
+Evidence:
+
+- submitted patch text contains an explicit marker for private eval assets,
+- patch application, public checks, and hidden validators were not run.
+
 Important limitation:
 
 - this is a leakage-smoke check, not a complete malicious-code detector.
+- submitted patch contents are currently referenced by `submission_path`; they
+  are not snapshotted into attempt artifacts.
 
 ## Not Attempt Statuses Yet
 
