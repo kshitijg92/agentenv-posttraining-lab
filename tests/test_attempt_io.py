@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+import pytest
+
+import agentenv.orchestrators.attempt as attempt_module
 from agentenv.orchestrators.attempt import run_patch_attempt
 from agentenv.orchestrators.attempt_io import write_attempt_artifacts
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
@@ -29,6 +32,7 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
     assert artifact_paths.attempt_json == tmp_path / "out/attempt.json"
     assert artifact_paths.stdout_txt == tmp_path / "out/stdout.txt"
     assert artifact_paths.stderr_txt == tmp_path / "out/stderr.txt"
+    assert artifact_paths.error_txt == tmp_path / "out/error.txt"
     assert artifact_paths.trace_jsonl == tmp_path / "out/trace.jsonl"
     assert artifact_paths.final_diff == tmp_path / "out/final.diff"
     assert attempt_data["task_id"] == "toy_python_fix_001"
@@ -44,9 +48,11 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
         "attempt": "attempt.json",
         "stdout": "stdout.txt",
         "stderr": "stderr.txt",
+        "error": "error.txt",
         "trace": "trace.jsonl",
         "final_diff": "final.diff",
     }
+    assert artifact_paths.error_txt.read_text() == ""
     assert "passed" in artifact_paths.stdout_txt.read_text()
     final_diff = artifact_paths.final_diff.read_text()
     assert "raise ValueError" in final_diff
@@ -77,6 +83,42 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
             assert isinstance(provenance, AttemptTraceProvenance)
             command_phases.append(provenance.phase)
     assert command_phases == ["patch_apply", "public_check", "hidden_score"]
+
+
+def test_write_attempt_artifacts_preserves_orchestrator_error_details(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_workspace_error(*args: object, **kwargs: object) -> None:
+        raise ValueError("synthetic workspace failure")
+
+    monkeypatch.setattr(
+        attempt_module,
+        "prepare_agent_workspace",
+        raise_workspace_error,
+    )
+
+    attempt_run = run_patch_attempt(
+        TOY_TASK_MANIFEST,
+        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        workspace_parent=tmp_path / "workspace_parent",
+    )
+
+    artifact_paths = write_attempt_artifacts(attempt_run, tmp_path / "out")
+    error_text = artifact_paths.error_txt.read_text()
+
+    assert attempt_run.result.status == "ORCHESTRATOR_ERROR"
+    assert "Error class: ValueError" in error_text
+    assert "Message: synthetic workspace failure" in error_text
+    assert "Traceback:" in error_text
+    assert "raise_workspace_error" in error_text
+
+    trace_events = load_trace_events(artifact_paths.trace_jsonl)
+    assert trace_events[-1].event_type == "attempt_finished"
+    assert trace_events[-1].payload_refs == {
+        "error": "error.txt",
+        "final_diff": "final.diff",
+    }
 
 
 def test_run_and_persist_patch_attempt_to_dir(tmp_path: Path) -> None:

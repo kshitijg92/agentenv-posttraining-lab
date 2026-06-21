@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+import agentenv.orchestrators.attempt as attempt_module
 from agentenv.orchestrators.attempt import AttemptResult, run_patch_attempt
 
 
@@ -69,3 +70,32 @@ def test_run_patch_attempt_distinguishes_controls(
         assert attempt_run.final_diff == ""
     else:
         assert "src/mathlib.py" in attempt_run.final_diff
+
+
+def test_run_patch_attempt_surfaces_unexpected_exception_as_orchestrator_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_workspace_error(*args: object, **kwargs: object) -> None:
+        raise ValueError("synthetic workspace failure")
+
+    monkeypatch.setattr(
+        attempt_module,
+        "prepare_agent_workspace",
+        raise_workspace_error,
+    )
+
+    attempt_run = run_patch_attempt(
+        TOY_TASK_MANIFEST,
+        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        workspace_parent=tmp_path,
+    )
+
+    assert attempt_run.result.status == "ORCHESTRATOR_ERROR"
+    assert attempt_run.result.public_status == "NOT_RUN"
+    assert attempt_run.result.hidden_status == "NOT_RUN"
+    assert attempt_run.result.error_class == "ValueError"
+    assert attempt_run.error_details is not None
+    assert attempt_run.error_details.message == "synthetic workspace failure"
+    assert "raise_workspace_error" in attempt_run.error_details.traceback
+    assert attempt_run.commands == []

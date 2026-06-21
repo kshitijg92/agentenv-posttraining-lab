@@ -1,3 +1,4 @@
+import traceback
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,10 +65,18 @@ class AttemptRun:
     result: AttemptResult
     commands: list[AttemptCommand]
     final_diff: str
+    error_details: "AttemptErrorDetails | None" = None
 
     @property
     def command_results(self) -> list[CommandResult]:
         return [command.result for command in self.commands]
+
+
+@dataclass(frozen=True)
+class AttemptErrorDetails:
+    error_class: str
+    message: str
+    traceback: str
 
 
 @dataclass(frozen=True)
@@ -212,6 +221,18 @@ def run_patch_attempt(
             error_class="TimeoutExpired",
             final_diff_hash=final_diff_hash,
         )
+    except Exception as exc:
+        return _finish_attempt(
+            context=context,
+            commands=commands,
+            final_diff=final_diff,
+            status="ORCHESTRATOR_ERROR",
+            public_status="NOT_RUN",
+            hidden_status="NOT_RUN",
+            error_class=type(exc).__name__,
+            final_diff_hash=final_diff_hash,
+            error_details=_exception_details(exc),
+        )
 
 
 def _finish_attempt(
@@ -224,6 +245,7 @@ def _finish_attempt(
     hidden_status: CheckStatus,
     error_class: str | None,
     final_diff_hash: str | None,
+    error_details: AttemptErrorDetails | None = None,
 ) -> AttemptRun:
     ended_at = _utc_now()
     duration_ms = int((perf_counter() - context.started_timer) * 1000)
@@ -243,7 +265,20 @@ def _finish_attempt(
         final_diff_hash=final_diff_hash,
         orchestrator_version=ORCHESTRATOR_VERSION,
     )
-    return AttemptRun(result=result, commands=commands, final_diff=final_diff)
+    return AttemptRun(
+        result=result,
+        commands=commands,
+        final_diff=final_diff,
+        error_details=error_details,
+    )
+
+
+def _exception_details(exc: Exception) -> AttemptErrorDetails:
+    return AttemptErrorDetails(
+        error_class=type(exc).__name__,
+        message=str(exc),
+        traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+    )
 
 
 def _utc_now() -> str:

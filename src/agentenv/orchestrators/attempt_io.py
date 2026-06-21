@@ -17,6 +17,7 @@ class AttemptArtifactPaths:
     attempt_json: Path
     stdout_txt: Path
     stderr_txt: Path
+    error_txt: Path
     trace_jsonl: Path
     final_diff: Path
 
@@ -36,6 +37,7 @@ def write_attempt_artifacts(
     attempt_path = write_attempt_result(attempt_run.result, out_dir)
     stdout_path = out_dir / "stdout.txt"
     stderr_path = out_dir / "stderr.txt"
+    error_path = out_dir / "error.txt"
     trace_path = out_dir / "trace.jsonl"
     final_diff_path = out_dir / "final.diff"
 
@@ -45,6 +47,7 @@ def write_attempt_artifacts(
     stderr_path.write_text(
         _join_streams(result.stderr for result in attempt_run.command_results)
     )
+    error_path.write_text(_error_text(attempt_run))
     trace_path.write_text(_trace_jsonl(attempt_run))
     final_diff_path.write_text(attempt_run.final_diff)
     run_manifest_path.write_text(
@@ -61,6 +64,7 @@ def write_attempt_artifacts(
         attempt_json=attempt_path,
         stdout_txt=stdout_path,
         stderr_txt=stderr_path,
+        error_txt=error_path,
         trace_jsonl=trace_path,
         final_diff=final_diff_path,
     )
@@ -71,6 +75,19 @@ def _join_streams(streams: Iterable[str]) -> str:
     if not chunks:
         return ""
     return "\n".join(chunks) + "\n"
+
+
+def _error_text(attempt_run: AttemptRun) -> str:
+    if attempt_run.error_details is None:
+        return ""
+
+    return (
+        f"Error class: {attempt_run.error_details.error_class}\n"
+        f"Message: {attempt_run.error_details.message}\n"
+        "\n"
+        "Traceback:\n"
+        f"{attempt_run.error_details.traceback}"
+    )
 
 
 def _trace_jsonl(attempt_run: AttemptRun) -> str:
@@ -107,6 +124,10 @@ def _trace_jsonl(attempt_run: AttemptRun) -> str:
             payload_refs={"stdout": "stdout.txt", "stderr": "stderr.txt"},
         )
 
+    payload_refs = {"final_diff": "final.diff"}
+    if attempt_run.error_details is not None:
+        payload_refs["error"] = "error.txt"
+
     _append_trace(
         events,
         base_provenance,
@@ -120,7 +141,7 @@ def _trace_jsonl(attempt_run: AttemptRun) -> str:
             "duration_ms": attempt_run.result.duration_ms,
             "final_diff_hash": attempt_run.result.final_diff_hash,
         },
-        payload_refs={"final_diff": "final.diff"},
+        payload_refs=payload_refs,
         payload_hashes=(
             {"final_diff": attempt_run.result.final_diff_hash}
             if attempt_run.result.final_diff_hash is not None
@@ -181,6 +202,7 @@ def _run_manifest(attempt_run: AttemptRun) -> dict[str, object]:
             "attempt": "attempt.json",
             "stdout": "stdout.txt",
             "stderr": "stderr.txt",
+            "error": "error.txt",
             "trace": "trace.jsonl",
             "final_diff": "final.diff",
         },

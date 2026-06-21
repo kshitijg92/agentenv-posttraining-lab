@@ -261,9 +261,14 @@ Examples:
 {
   "stdout": "stdout.txt",
   "stderr": "stderr.txt",
-  "final_diff": "final.diff"
+  "final_diff": "final.diff",
+  "error": "error.txt"
 }
 ```
+
+`error` is present for attempt events only when the attempt has persisted harness
+exception details. Normal successful attempts write an empty `error.txt` artifact
+but do not need to reference it from the terminal trace event.
 
 ### `payload_hashes`
 
