@@ -4,9 +4,9 @@
 
 - Artifact directory: experiments/replays/control_policies_bad_public_only
 - Replay manifest: replay_manifest.json
-- Replay id: replay_9cbefa0f6e47476fad862df9df393490
+- Replay id: replay_09180420209f4ca3b7bb0efd9e599836
 - Source run directory: experiments/runs/control_policies_bad_public_only
-- Source eval run id: eval_869cd2a7e21a4de9975beedc467a4d3c
+- Source eval run id: eval_e48f2ecd8b74459c8f724d2a2c9a3453
 - Source artifact version: eval_run_v0
 
 ## Replay Result

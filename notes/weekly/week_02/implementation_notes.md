@@ -443,3 +443,32 @@ The main design reason is auditability: a trace should make it clear which run,
 attempt, replay, task, and source artifact caused an event. If those identifiers
 are misspelled or attached to the wrong event family, the trace is less useful
 for debugging replay mismatches or leakage incidents.
+
+### Eval Run Trace
+
+Added a top-level `trace.jsonl` for eval runs.
+
+The eval trace is intentionally orchestration-level evidence. It records:
+
+- `eval_started`
+- `eval_task_started`
+- `eval_attempt_started`
+- `eval_attempt_finished`
+- `eval_task_finished`
+- `eval_finished`
+
+The detailed command lifecycle remains in each nested attempt trace. The eval
+trace references those attempt artifacts instead of copying their stdout,
+stderr, diff, or command events.
+
+Eval trace provenance uses `EvalTraceProvenance` with required:
+
+- `eval_run_id`
+- `config_hash`
+- `config_name`
+
+Task and attempt lifecycle events add `policy`, `task_id`, `task_index`,
+`attempt_index`, and the attempt runner's `attempt_id` once it exists.
+
+The eval `run_manifest.json` now lists the top-level trace under its
+`artifacts` section.

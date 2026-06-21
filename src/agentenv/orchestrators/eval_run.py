@@ -15,9 +15,11 @@ from agentenv.evals.resolve import (
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.attempt import AttemptResult
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
+from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
 EVAL_RUN_ARTIFACT_VERSION = "eval_run_v0"
+TraceEvent = dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,7 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     selected_policy = select_policy(config, policy)
+    config_hash = _hash_file(config_path)
     eval_run_id = f"eval_{uuid4().hex}"
     created_at = _utc_now()
 
@@ -53,44 +56,155 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     attempts_dir = out_dir / "attempts"
     attempts_dir.mkdir(parents=True, exist_ok=True)
 
+    resolved_tasks = resolve_eval_tasks(config, config_path)
+    trace_events: list[TraceEvent] = []
+    base_provenance = _eval_provenance(
+        eval_run_id,
+        config_hash,
+        config.name,
+        policy=policy,
+    )
+    _append_trace(
+        trace_events,
+        base_provenance,
+        "eval_started",
+        input_payload={
+            "config_path": str(config_path),
+            "policy": policy,
+            "split": config.split,
+            "task_count": len(resolved_tasks),
+            "attempts_per_task": config.attempts,
+        },
+    )
+
     attempt_records: list[EvalAttemptRecord] = []
-    for task in resolve_eval_tasks(config, config_path):
+    for task_index, task in enumerate(resolved_tasks):
+        task_provenance = _eval_provenance(
+            eval_run_id,
+            config_hash,
+            config.name,
+            policy=policy,
+            task_id=task.task_id,
+            task_index=task_index,
+        )
+        _append_trace(
+            trace_events,
+            task_provenance,
+            "eval_task_started",
+            input_payload={
+                "task_manifest_path": str(task.manifest_path),
+            },
+        )
         submission_path = control_patch_path(
             task.manifest_path.parent,
             task.manifest,
             selected_policy.control,
         )
+        task_attempt_records: list[EvalAttemptRecord] = []
 
         for attempt_index in range(config.attempts):
             attempt_dir = (
                 attempts_dir / f"{task.task_id}__attempt_{attempt_index + 1:03d}"
+            )
+            attempt_provenance = _eval_provenance(
+                eval_run_id,
+                config_hash,
+                config.name,
+                policy=policy,
+                task_id=task.task_id,
+                task_index=task_index,
+                attempt_index=attempt_index,
+            )
+            artifact_dir_ref = str(attempt_dir.relative_to(out_dir))
+            _append_trace(
+                trace_events,
+                attempt_provenance,
+                "eval_attempt_started",
+                input_payload={
+                    "attempt_artifact_dir": artifact_dir_ref,
+                    "submission_path": str(submission_path),
+                },
             )
             attempt_run = run_and_persist_patch_attempt_to_dir(
                 task.manifest_path,
                 submission_path,
                 attempt_dir,
             )
-            attempt_records.append(
-                EvalAttemptRecord(
-                    task_id=task.task_id,
-                    attempt_index=attempt_index,
-                    attempt_dir=attempt_dir,
-                    result=attempt_run.result,
-                )
+            attempt_record = EvalAttemptRecord(
+                task_id=task.task_id,
+                attempt_index=attempt_index,
+                attempt_dir=attempt_dir,
+                result=attempt_run.result,
             )
+            attempt_records.append(attempt_record)
+            task_attempt_records.append(attempt_record)
+            _append_trace(
+                trace_events,
+                _eval_provenance(
+                    eval_run_id,
+                    config_hash,
+                    config.name,
+                    policy=policy,
+                    task_id=task.task_id,
+                    task_index=task_index,
+                    attempt_index=attempt_index,
+                    attempt_id=attempt_run.result.attempt_id,
+                ),
+                "eval_attempt_finished",
+                output_payload={
+                    "status": attempt_run.result.status,
+                    "public_status": attempt_run.result.public_status,
+                    "hidden_status": attempt_run.result.hidden_status,
+                    "error_class": attempt_run.result.error_class,
+                    "final_diff_hash": attempt_run.result.final_diff_hash,
+                },
+                payload_refs={
+                    "attempt": f"{artifact_dir_ref}/attempt.json",
+                    "attempt_trace": f"{artifact_dir_ref}/trace.jsonl",
+                },
+            )
+
+        _append_trace(
+            trace_events,
+            task_provenance,
+            "eval_task_finished",
+            output_payload={
+                "attempt_count": len(task_attempt_records),
+                "status_counts": _status_counts(task_attempt_records),
+            },
+        )
 
     eval_run = EvalRun(
         eval_run_id=eval_run_id,
         config=config,
         config_path=config_path,
-        config_hash=_hash_file(config_path),
+        config_hash=config_hash,
         policy=policy,
         out_dir=out_dir,
         created_at=created_at,
         attempts=attempt_records,
     )
+    _append_trace(
+        trace_events,
+        base_provenance,
+        "eval_finished",
+        output_payload={
+            "attempt_count": len(eval_run.attempts),
+            "status_counts": _status_counts(eval_run.attempts),
+        },
+        payload_refs={"run_manifest": "run_manifest.json"},
+    )
+    _write_eval_trace(eval_run, trace_events)
     _write_eval_run_manifest(eval_run)
     return eval_run
+
+
+def _write_eval_trace(eval_run: EvalRun, trace_events: list[TraceEvent]) -> Path:
+    trace_path = eval_run.out_dir / "trace.jsonl"
+    trace_path.write_text(
+        "".join(json.dumps(event, sort_keys=True) + "\n" for event in trace_events)
+    )
+    return trace_path
 
 
 def _write_eval_run_manifest(eval_run: EvalRun) -> Path:
@@ -107,12 +221,6 @@ def _write_eval_run_manifest(eval_run: EvalRun) -> Path:
 
 
 def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
-    status_counts: dict[str, int] = {}
-    for attempt in eval_run.attempts:
-        status_counts[attempt.result.status] = (
-            status_counts.get(attempt.result.status, 0) + 1
-        )
-
     return {
         "artifact_version": EVAL_RUN_ARTIFACT_VERSION,
         "eval_run_id": eval_run.eval_run_id,
@@ -124,7 +232,11 @@ def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
         "split": eval_run.config.split,
         "policy": eval_run.policy,
         "attempt_count": len(eval_run.attempts),
-        "status_counts": status_counts,
+        "status_counts": _status_counts(eval_run.attempts),
+        "artifacts": {
+            "trace": "trace.jsonl",
+            "attempts": "attempts",
+        },
         "attempts": [
             {
                 "task_id": attempt.task_id,
@@ -140,6 +252,72 @@ def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
             for attempt in eval_run.attempts
         ],
     }
+
+
+def _status_counts(attempts: list[EvalAttemptRecord]) -> dict[str, int]:
+    status_counts: dict[str, int] = {}
+    for attempt in attempts:
+        status_counts[attempt.result.status] = (
+            status_counts.get(attempt.result.status, 0) + 1
+        )
+    return status_counts
+
+
+def _append_trace(
+    trace_events: list[TraceEvent],
+    provenance_config: dict[str, object],
+    event_type: TraceEventType,
+    *,
+    input_payload: dict[str, object] | None = None,
+    output_payload: dict[str, object] | None = None,
+    payload_refs: dict[str, str] | None = None,
+    payload_hashes: dict[str, str] | None = None,
+) -> None:
+    event: TraceEvent = {
+        "schema_version": TRACE_SCHEMA_VERSION,
+        "event_index": len(trace_events),
+        "timestamp_utc": _utc_now(),
+        "event_type": event_type,
+        "provenance_config": provenance_config,
+    }
+    if input_payload is not None:
+        event["input_payload"] = input_payload
+    if output_payload is not None:
+        event["output_payload"] = output_payload
+    if payload_refs is not None:
+        event["payload_refs"] = payload_refs
+    if payload_hashes is not None:
+        event["payload_hashes"] = payload_hashes
+    trace_events.append(event)
+
+
+def _eval_provenance(
+    eval_run_id: str,
+    config_hash: str,
+    config_name: str,
+    *,
+    policy: str | None = None,
+    task_id: str | None = None,
+    task_index: int | None = None,
+    attempt_index: int | None = None,
+    attempt_id: str | None = None,
+) -> dict[str, object]:
+    provenance: dict[str, object] = {
+        "eval_run_id": eval_run_id,
+        "config_hash": config_hash,
+        "config_name": config_name,
+    }
+    if policy is not None:
+        provenance["policy"] = policy
+    if task_id is not None:
+        provenance["task_id"] = task_id
+    if task_index is not None:
+        provenance["task_index"] = task_index
+    if attempt_index is not None:
+        provenance["attempt_index"] = attempt_index
+    if attempt_id is not None:
+        provenance["attempt_id"] = attempt_id
+    return provenance
 
 
 def _hash_file(path: Path) -> str:

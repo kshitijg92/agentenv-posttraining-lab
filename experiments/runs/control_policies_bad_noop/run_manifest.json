@@ -1,12 +1,16 @@
 {
   "artifact_version": "eval_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "trace": "trace.jsonl"
+  },
   "attempt_count": 1,
   "attempts": [
     {
       "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
-      "attempt_id": "attempt_ccea02ebb4ed4e80b6b3fc8ed68ca269",
+      "attempt_id": "attempt_9b7934098e854eacb6ecfee0bf528050",
       "attempt_index": 0,
-      "attempt_run_id": "run_44d5a7447d19452cb8ee4c2a255d696a",
+      "attempt_run_id": "run_0c33f669bc8243b59310ca47eff5c75b",
       "final_diff_hash": "xxh64:ef46db3751d8e999",
       "hidden_status": "FAIL",
       "public_status": "PASS",
@@ -17,8 +21,8 @@
   "config_hash": "xxh64:e759f761673d72cf",
   "config_name": "control_policies",
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/control_policies.yaml",
-  "created_at": "2026-06-21T02:46:35.102113Z",
-  "eval_run_id": "eval_c8d428c828fe4313a65d6426c9e02e1b",
+  "created_at": "2026-06-21T03:32:15.043487Z",
+  "eval_run_id": "eval_8b876ff5e921436c8fb2a8d657377d9b",
   "policy": "bad-noop",
   "split": "practice",
   "status_counts": {

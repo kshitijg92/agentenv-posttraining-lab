@@ -101,6 +101,12 @@ Current event types:
 attempt_started
 command_finished
 attempt_finished
+eval_started
+eval_task_started
+eval_attempt_started
+eval_attempt_finished
+eval_task_finished
+eval_finished
 replay_started
 source_run_manifest_loaded
 source_attempt_loaded
@@ -137,6 +143,26 @@ Attempt event provenance supports:
 
 `run_id`, `attempt_id`, and `task_id` are required for attempt events.
 `command_finished` also requires `phase` and `name`.
+
+Eval event provenance supports:
+
+```json
+{
+  "eval_run_id": "eval_...",
+  "config_hash": "xxh64:...",
+  "config_name": "control_policies",
+  "policy": "oracle",
+  "task_id": "toy_python_fix_001",
+  "task_index": 0,
+  "attempt_index": 0,
+  "attempt_id": "attempt_..."
+}
+```
+
+`eval_run_id`, `config_hash`, and `config_name` are required for eval events.
+Task lifecycle events also require `policy`, `task_id`, and `task_index`.
+`eval_attempt_started` requires `attempt_index`; `eval_attempt_finished` also
+requires the attempt runner's `attempt_id`.
 
 Replay event provenance supports:
 

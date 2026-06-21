@@ -9,6 +9,14 @@ AttemptTraceEventType = Literal[
     "command_finished",
     "attempt_finished",
 ]
+EvalTraceEventType = Literal[
+    "eval_started",
+    "eval_task_started",
+    "eval_attempt_started",
+    "eval_attempt_finished",
+    "eval_task_finished",
+    "eval_finished",
+]
 ReplayTraceEventType = Literal[
     "replay_started",
     "source_run_manifest_loaded",
@@ -19,13 +27,23 @@ ReplayTraceEventType = Literal[
     "replay_finished",
     "replay_error",
 ]
-TraceEventType = AttemptTraceEventType | ReplayTraceEventType
+TraceEventType = AttemptTraceEventType | EvalTraceEventType | ReplayTraceEventType
 
 ATTEMPT_TRACE_EVENT_TYPES = frozenset(
     {
         "attempt_started",
         "command_finished",
         "attempt_finished",
+    }
+)
+EVAL_TRACE_EVENT_TYPES = frozenset(
+    {
+        "eval_started",
+        "eval_task_started",
+        "eval_attempt_started",
+        "eval_attempt_finished",
+        "eval_task_finished",
+        "eval_finished",
     }
 )
 REPLAY_TRACE_EVENT_TYPES = frozenset(
@@ -52,6 +70,19 @@ class AttemptTraceProvenance(BaseModel):
     name: str | None = Field(default=None, min_length=1)
 
 
+class EvalTraceProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    eval_run_id: str = Field(min_length=1)
+    config_hash: str = Field(min_length=1)
+    config_name: str = Field(min_length=1)
+    policy: str | None = Field(default=None, min_length=1)
+    task_id: str | None = Field(default=None, min_length=1)
+    task_index: int | None = Field(default=None, ge=0)
+    attempt_index: int | None = Field(default=None, ge=0)
+    attempt_id: str | None = Field(default=None, min_length=1)
+
+
 class ReplayTraceProvenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -62,7 +93,7 @@ class ReplayTraceProvenance(BaseModel):
     replay_attempt_id: str | None = Field(default=None, min_length=1)
 
 
-TraceProvenance = AttemptTraceProvenance | ReplayTraceProvenance
+TraceProvenance = AttemptTraceProvenance | EvalTraceProvenance | ReplayTraceProvenance
 
 
 class TraceEvent(BaseModel):
@@ -86,6 +117,12 @@ class TraceEvent(BaseModel):
             _validate_attempt_event_provenance(self.event_type, self.provenance_config)
             return self
 
+        if self.event_type in EVAL_TRACE_EVENT_TYPES:
+            if not isinstance(self.provenance_config, EvalTraceProvenance):
+                raise ValueError(f"{self.event_type} requires eval trace provenance")
+            _validate_eval_event_provenance(self.event_type, self.provenance_config)
+            return self
+
         if self.event_type in REPLAY_TRACE_EVENT_TYPES:
             if not isinstance(self.provenance_config, ReplayTraceProvenance):
                 raise ValueError(f"{self.event_type} requires replay trace provenance")
@@ -101,6 +138,30 @@ def _validate_attempt_event_provenance(
 ) -> None:
     if event_type == "command_finished":
         _require_provenance_fields(event_type, provenance, ("phase", "name"))
+
+
+def _validate_eval_event_provenance(
+    event_type: TraceEventType,
+    provenance: EvalTraceProvenance,
+) -> None:
+    if event_type in {"eval_task_started", "eval_task_finished"}:
+        _require_provenance_fields(
+            event_type,
+            provenance,
+            ("policy", "task_id", "task_index"),
+        )
+    if event_type == "eval_attempt_started":
+        _require_provenance_fields(
+            event_type,
+            provenance,
+            ("policy", "task_id", "task_index", "attempt_index"),
+        )
+    if event_type == "eval_attempt_finished":
+        _require_provenance_fields(
+            event_type,
+            provenance,
+            ("policy", "task_id", "task_index", "attempt_index", "attempt_id"),
+        )
 
 
 def _validate_replay_event_provenance(

@@ -4,9 +4,9 @@
 
 - Artifact directory: experiments/replays/control_policies_bad_noop
 - Replay manifest: replay_manifest.json
-- Replay id: replay_ddc6b76773e2498b896caf3dfd6173c1
+- Replay id: replay_c2cde744fbf54e00b6542bccac6c9d19
 - Source run directory: experiments/runs/control_policies_bad_noop
-- Source eval run id: eval_c8d428c828fe4313a65d6426c9e02e1b
+- Source eval run id: eval_8b876ff5e921436c8fb2a8d657377d9b
 - Source artifact version: eval_run_v0
 
 ## Replay Result

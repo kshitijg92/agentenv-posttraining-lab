@@ -3,6 +3,8 @@ from pathlib import Path
 
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.eval_run import run_eval_config
+from agentenv.tracing.schema import EvalTraceProvenance
+from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
 
 CONTROL_EVAL_CONFIG = Path("configs/eval/control_policies.yaml")
@@ -38,12 +40,47 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert run_manifest["policy"] == "oracle"
     assert run_manifest["attempt_count"] == 1
     assert run_manifest["status_counts"] == {"PASS": 1}
+    assert run_manifest["artifacts"] == {
+        "attempts": "attempts",
+        "trace": "trace.jsonl",
+    }
     assert run_manifest["attempts"][0]["task_id"] == "toy_python_fix_001"
     assert run_manifest["attempts"][0]["status"] == "PASS"
+    validate_trace_file(tmp_path / "eval/trace.jsonl")
+    trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
+    assert [event.event_type for event in trace_events] == [
+        "eval_started",
+        "eval_task_started",
+        "eval_attempt_started",
+        "eval_attempt_finished",
+        "eval_task_finished",
+        "eval_finished",
+    ]
+    first_provenance = trace_events[0].provenance_config
+    assert isinstance(first_provenance, EvalTraceProvenance)
+    assert first_provenance.eval_run_id == eval_run.eval_run_id
+    assert first_provenance.config_name == "control_policies"
+    assert first_provenance.policy == "oracle"
+    attempt_finished_provenance = trace_events[3].provenance_config
+    assert isinstance(attempt_finished_provenance, EvalTraceProvenance)
+    assert attempt_finished_provenance.task_id == "toy_python_fix_001"
+    assert attempt_finished_provenance.task_index == 0
+    assert attempt_finished_provenance.attempt_index == 0
+    assert (
+        attempt_finished_provenance.attempt_id
+        == run_manifest["attempts"][0]["attempt_id"]
+    )
+    assert trace_events[3].output_payload is not None
+    assert trace_events[3].output_payload["status"] == "PASS"
+    assert trace_events[3].payload_refs == {
+        "attempt": "attempts/toy_python_fix_001__attempt_001/attempt.json",
+        "attempt_trace": "attempts/toy_python_fix_001__attempt_001/trace.jsonl",
+    }
     assert (tmp_path / "eval/attempts/toy_python_fix_001__attempt_001").is_dir()
     assert (
         tmp_path / "eval/attempts/toy_python_fix_001__attempt_001/attempt.json"
     ).is_file()
+    assert (tmp_path / "eval/trace.jsonl").is_file()
 
 
 def test_run_eval_config_distinguishes_bad_noop(tmp_path: Path) -> None:

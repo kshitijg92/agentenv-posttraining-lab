@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from agentenv.tracing.schema import (
     TRACE_SCHEMA_VERSION,
     AttemptTraceProvenance,
+    EvalTraceProvenance,
     ReplayTraceProvenance,
     TraceEvent,
 )
@@ -56,6 +57,29 @@ def test_trace_event_schema_accepts_optional_payloads() -> None:
     assert event.payload_hashes == {"stdout": "xxh64:abc123"}
     assert isinstance(event.provenance_config, AttemptTraceProvenance)
     assert event.provenance_config.phase == "public_check"
+
+
+def test_trace_event_schema_accepts_eval_event() -> None:
+    event = TraceEvent(
+        schema_version=TRACE_SCHEMA_VERSION,
+        event_index=1,
+        timestamp_utc="2026-06-20T00:00:01Z",
+        event_type="eval_attempt_finished",
+        provenance_config=EvalTraceProvenance(
+            eval_run_id="eval_001",
+            config_hash="xxh64:abc123",
+            config_name="control_policies",
+            policy="oracle",
+            task_id="toy_python_fix_001",
+            task_index=0,
+            attempt_index=0,
+            attempt_id="attempt_001",
+        ),
+        output_payload={"status": "PASS"},
+    )
+
+    assert isinstance(event.provenance_config, EvalTraceProvenance)
+    assert event.provenance_config.policy == "oracle"
 
 
 def test_trace_event_rejects_unknown_schema_version() -> None:
@@ -160,6 +184,21 @@ def test_trace_event_rejects_wrong_provenance_family() -> None:
         )
 
 
+def test_eval_event_rejects_wrong_provenance_family() -> None:
+    with pytest.raises(ValidationError, match="requires eval trace provenance"):
+        TraceEvent.model_validate(
+            {
+                "schema_version": TRACE_SCHEMA_VERSION,
+                "event_index": 0,
+                "timestamp_utc": "2026-06-20T00:00:00Z",
+                "event_type": "eval_started",
+                "provenance_config": {
+                    "replay_id": "replay_001",
+                },
+            }
+        )
+
+
 def test_command_finished_requires_command_provenance() -> None:
     with pytest.raises(
         ValidationError,
@@ -175,6 +214,30 @@ def test_command_finished_requires_command_provenance() -> None:
                     "run_id": "run_001",
                     "attempt_id": "attempt_001",
                     "task_id": "task_001",
+                },
+            }
+        )
+
+
+def test_eval_attempt_finished_requires_attempt_id() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="eval_attempt_finished provenance is missing required field",
+    ):
+        TraceEvent.model_validate(
+            {
+                "schema_version": TRACE_SCHEMA_VERSION,
+                "event_index": 0,
+                "timestamp_utc": "2026-06-20T00:00:00Z",
+                "event_type": "eval_attempt_finished",
+                "provenance_config": {
+                    "eval_run_id": "eval_001",
+                    "config_hash": "xxh64:abc123",
+                    "config_name": "control_policies",
+                    "policy": "oracle",
+                    "task_id": "toy_python_fix_001",
+                    "task_index": 0,
+                    "attempt_index": 0,
                 },
             }
         )
