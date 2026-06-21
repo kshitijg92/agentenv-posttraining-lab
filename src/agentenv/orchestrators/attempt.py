@@ -25,8 +25,8 @@ AttemptStatus = Literal[
     "PATCH_APPLY_ERROR",
     "PUBLIC_TEST_FAIL",
     "HIDDEN_TEST_FAIL",
+    "INVALID_SHORTCUT",
     "ORCHESTRATOR_ERROR",
-    "SCORER_ERROR",
     "TIMEOUT",
 ]
 
@@ -146,6 +146,18 @@ def run_patch_attempt(
                 public_status="NOT_RUN",
                 hidden_status="NOT_RUN",
                 error_class="PatchApplyError",
+                final_diff_hash=final_diff_hash,
+            )
+
+        if _modifies_public_tests(final_diff):
+            return _finish_attempt(
+                context=context,
+                commands=commands,
+                final_diff=final_diff,
+                status="INVALID_SHORTCUT",
+                public_status="NOT_RUN",
+                hidden_status="NOT_RUN",
+                error_class="PublicTestModified",
                 final_diff_hash=final_diff_hash,
             )
 
@@ -279,6 +291,20 @@ def _exception_details(exc: Exception) -> AttemptErrorDetails:
         message=str(exc),
         traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
     )
+
+
+def _modifies_public_tests(diff: str) -> bool:
+    for line in diff.splitlines():
+        if not line.startswith(("--- ", "+++ ")):
+            continue
+        path = line[4:]
+        if path == "/dev/null":
+            continue
+        if path.startswith(("a/", "b/")):
+            path = path[2:]
+        if Path(path).parts[:1] == ("tests",):
+            return True
+    return False
 
 
 def _utc_now() -> str:

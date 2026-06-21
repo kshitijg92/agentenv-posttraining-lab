@@ -99,3 +99,35 @@ def test_run_patch_attempt_surfaces_unexpected_exception_as_orchestrator_error(
     assert attempt_run.error_details.message == "synthetic workspace failure"
     assert "raise_workspace_error" in attempt_run.error_details.traceback
     assert attempt_run.commands == []
+
+
+def test_run_patch_attempt_rejects_patch_that_modifies_public_tests(
+    tmp_path: Path,
+) -> None:
+    patch_path = tmp_path / "modify_public_test.patch"
+    patch_path.write_text(
+        """diff --git a/tests/test_public.py b/tests/test_public.py
+--- a/tests/test_public.py
++++ b/tests/test_public.py
+@@ -2,4 +2,4 @@ from mathlib import normalize_ratio
+ 
+ 
+ def test_simple_positive_ratio() -> None:
+-    assert normalize_ratio(6, 3) == 2.0
++    assert normalize_ratio(6, 3) == 99.0
+"""
+    )
+
+    attempt_run = run_patch_attempt(
+        TOY_TASK_MANIFEST,
+        patch_path,
+        workspace_parent=tmp_path / "workspace_parent",
+    )
+
+    assert attempt_run.result.status == "INVALID_SHORTCUT"
+    assert attempt_run.result.public_status == "NOT_RUN"
+    assert attempt_run.result.hidden_status == "NOT_RUN"
+    assert attempt_run.result.error_class == "PublicTestModified"
+    assert attempt_run.result.final_diff_hash is not None
+    assert "tests/test_public.py" in attempt_run.final_diff
+    assert [command.phase for command in attempt_run.commands] == ["patch_apply"]

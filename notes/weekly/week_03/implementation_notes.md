@@ -90,7 +90,52 @@ harness failure without rerunning:
 
 The normal success path still writes `error.txt`, but it is empty.
 
+### Decision
+
+Remove `SCORER_ERROR` from the active `AttemptStatus` vocabulary for now.
+
+### Reasoning
+
+The code did not produce `SCORER_ERROR`. Hidden-test assertion failures were
+already represented by `HIDDEN_TEST_FAIL`, while exceptions raised around the
+hidden scorer would now be caught as `ORCHESTRATOR_ERROR`.
+
+Keeping an unused `SCORER_ERROR` would imply a scorer infrastructure boundary
+that the harness does not actually distinguish. If we later split scorer errors
+from public-check errors and other harness failures, that should come with
+specific exception handling and tests.
+
+### Shipped
+
+- Removed `SCORER_ERROR` from `AttemptStatus`.
+- Updated `docs/attempt_status_taxonomy.md` to say scorer infrastructure
+  failures currently fall under `ORCHESTRATOR_ERROR`.
+
+### Decision
+
+Detect one concrete invalid shortcut this week: a submitted patch that modifies
+public tests under `tests/`.
+
+### Reasoning
+
+Changing public tests is a scoring-contract violation, not merely a wrong
+solution. There is no point in running public checks after the patch has changed
+the checks themselves. The attempt should stop immediately after patch
+application and record a terminal `INVALID_SHORTCUT` status.
+
+This keeps `HIDDEN_TEST_FAIL` for patches that leave the public checks intact
+but fail hidden behavior.
+
+### Shipped
+
+- Added `INVALID_SHORTCUT` to `AttemptStatus`.
+- Added a post-patch, pre-public-check detector for changed files under
+  `tests/`.
+- Added a focused test that modifies `tests/test_public.py` and verifies that
+  only the patch-apply phase runs.
+
 ### Next Small Step
 
-Decide the narrow detection rule for `INVALID_SHORTCUT` before adding it to the
-runtime status set.
+Decide whether `HIDDEN_VALIDATOR_ACCESS_ATTEMPT` should initially inspect only
+submitted patch text, or whether it should also inspect command traces and final
+diffs.

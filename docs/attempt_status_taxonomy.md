@@ -82,23 +82,6 @@ The status remains `TIMEOUT` for now rather than `SANDBOX_TIMEOUT`, because the
 current local runner is not yet a full sandbox abstraction. Sandbox-specific
 details can be recorded in artifacts or later status refinements.
 
-### `SCORER_ERROR`
-
-The hidden scorer could not produce a trustworthy score because of scorer-side
-failure rather than task-solution failure.
-
-Evidence:
-
-- hidden validation could not be invoked,
-- hidden validator assets were missing or malformed,
-- scorer execution crashed in a way that is not attributable to the submitted
-  patch's behavior.
-
-Current limitation:
-
-- this status exists in the schema but is not yet strongly distinguished from
-  other runtime failures in all paths.
-
 ### `ORCHESTRATOR_ERROR`
 
 The attempt lifecycle failed outside patch behavior, public checks, or hidden
@@ -118,22 +101,29 @@ Current limitation:
 - this status exists in the schema but is not yet strongly distinguished from
   all runner failures.
 
-## Week 3 Candidate Statuses
-
-These should only be added if the harness has concrete detection rules.
-
 ### `INVALID_SHORTCUT`
 
 The attempt used a detected shortcut that violates the task or scoring contract.
 
-Narrow Week 3 detection target:
+Current detection:
 
 - submitted patch modifies public test files under `tests/`.
+
+Evidence:
+
+- patch application command returned zero,
+- final diff contains a changed file under `tests/`,
+- public checks and hidden validators were not run because the scoring contract
+  was already violated.
 
 Important limitation:
 
 - not every shortcut is detectable. This status should only be used for
   explicitly checked shortcut classes.
+
+## Week 3 Candidate Statuses
+
+These should only be added if the harness has concrete detection rules.
 
 ### `HIDDEN_VALIDATOR_ACCESS_ATTEMPT`
 
@@ -169,6 +159,9 @@ flake risks, but real flake detection belongs to the later eval-quality gate.
   audit evidence.
 - Public-test success is not task success.
 - Hidden-validation failure is not automatically scorer failure.
-- Scorer or orchestrator failures should not be counted as model failures.
+- Harness failures should not be counted as model failures.
+- Scorer infrastructure failures are currently classified as
+  `ORCHESTRATOR_ERROR`. The repo should add a separate scorer error status only
+  if it also defines and tests a real scorer error boundary.
 - Richer statuses should not be added just because they are useful for reports;
   they need detection evidence.
