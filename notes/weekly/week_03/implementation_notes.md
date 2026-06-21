@@ -151,3 +151,122 @@ checkpoint.
 
 Start the scorer-audit fixture shape now that the terminal status vocabulary has
 the first Week 3-specific statuses.
+
+### Decision
+
+Store scorer-audit cases under `data/harness_audit/scorer_cases/`, not
+`tests/fixtures/`.
+
+### Reasoning
+
+These cases are audit inputs for the measurement harness, not pytest fixtures in
+the usual sense. Python tests should live under `tests/`; operator-facing audit
+case data should live under `data/`.
+
+The audit case shape should be consistent across oracle, bad, malformed,
+shortcut, and leakage probes. Each case should run one submitted patch against
+one task manifest and assert all three status fields.
+
+### Case Shape
+
+```yaml
+id: correct_oracle
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+submission: submission.patch
+expected_attempt_status: PASS
+expected_public_status: PASS
+expected_hidden_status: PASS
+purpose: "Known-correct patch should pass public checks and hidden validators."
+```
+
+### Shipped
+
+- Added `data/harness_audit/scorer_cases/correct_oracle/case.yaml`.
+- Added `data/harness_audit/scorer_cases/correct_oracle/submission.patch`.
+- Added `data/harness_audit/scorer_cases/correct_oracle/notes.md`.
+
+### Ran
+
+```bash
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml --submission data/harness_audit/scorer_cases/correct_oracle/submission.patch --out /tmp/agentenv-correct-oracle-audit-smoke
+```
+
+### Result
+
+The first audit case produced:
+
+```text
+attempt_status: PASS
+public_status: PASS
+hidden_status: PASS
+```
+
+### Next Small Step
+
+Create the next negative scorer-audit case, likely `wrong_noop`, using the same
+case shape.
+
+### Decision
+
+Build the smallest scorer-audit runner before adding more cases.
+
+### Reasoning
+
+Once one case shape exists, plumbing should come before case expansion. More
+cases are easier to validate when there is already a command that runs cases,
+persists attempt artifacts, and reports expected-vs-actual status comparisons.
+
+This audit is not an eval run. It does not need an eval-style run manifest or
+top-level trace yet. The source of truth for each audit case is the persisted
+attempt artifact bundle plus the audit JSONL comparison record.
+
+### Output Shape
+
+```text
+experiments/harness_audit/scorer_audit/
+  scorer_audit.md
+  scorer_audit_results.jsonl
+  attempts/
+    <case_id>/
+      attempt.json
+      run_manifest.json
+      stdout.txt
+      stderr.txt
+      error.txt
+      trace.jsonl
+      final.diff
+```
+
+### Shipped
+
+- Added `src/agentenv/scorers/audit.py`.
+- Added `agentenv scorers audit --cases <case-dir> --out <out-dir>`.
+- Added `tests/scorers/test_audit.py`.
+- Generated `experiments/harness_audit/scorer_audit/` from the
+  `correct_oracle` case.
+
+### Ran
+
+```bash
+uv run pytest tests/scorers/test_audit.py
+uv run agentenv scorers audit --cases data/harness_audit/scorer_cases --out experiments/harness_audit/scorer_audit
+uv run pytest
+uv run ruff check .
+```
+
+### Result
+
+- Scorer audit completed with `cases=1 failed=0`.
+- `correct_oracle` matched expected attempt, public, and hidden statuses.
+- Full `pytest` passed.
+- Ruff passed.
+
+### Self-Deception Trap
+
+Do not call this an eval result. It is harness calibration evidence: it checks
+whether known cases are classified the way the scoring contract says they should
+be classified.
+
+### Next Small Step
+
+Add negative scorer-audit cases now that the runner can execute and report them.

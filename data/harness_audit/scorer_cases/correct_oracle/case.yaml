@@ -1,0 +1,7 @@
+id: correct_oracle
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+submission: submission.patch
+expected_attempt_status: PASS
+expected_public_status: PASS
+expected_hidden_status: PASS
+purpose: "Known-correct patch should pass public checks and hidden validators."

@@ -39,13 +39,15 @@ trust gaps remained:
 Code and config:
 
 ```text
+data/harness_audit/scorer_cases/
 src/agentenv/scorers/audit.py
 src/agentenv/sandbox/docker_env.py
 configs/sandbox/docker_none.yaml
-tests/fixtures/scorer_cases/
-tests/scorers/test_audit.py
 tests/sandbox/test_invariants.py
 ```
+
+`tests/scorers/test_audit.py` should be created when the audit runner code
+exists. Do not create a test file before there is audit code to exercise.
 
 CLI surface:
 
@@ -58,7 +60,7 @@ agentenv sandbox smoke --config <config.yaml> --task <task.yaml>
 Docs and notes:
 
 ```text
-docs/scorer_failure_taxonomy.md
+docs/attempt_status_taxonomy.md
 docs/sandbox_invariants_v0.md
 notes/failures/scorer_false_positive_001.md
 notes/weekly/week_03/implementation_notes.md
@@ -69,7 +71,7 @@ Generated evidence:
 
 ```text
 experiments/runs/week03_controls/
-experiments/reports/week03_scorer_audit.md
+experiments/harness_audit/scorer_audit/
 ```
 
 ## Execution Plan
@@ -82,8 +84,8 @@ experiments/reports/week03_scorer_audit.md
    evidence.
 
 2. Build the scorer-audit fixture shape.
-   Each case should have `case.yaml`, `submission.patch`, expected status, and
-   short notes.
+   Each case under `data/harness_audit/scorer_cases/` should have `case.yaml`,
+   `submission.patch`, expected status, and short notes.
 
 3. Implement scorer audit.
    The audit should run each fixture through the existing attempt path, compare

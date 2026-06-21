@@ -7,14 +7,17 @@ from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_
 from agentenv.orchestrators.eval_run import EvalRun, run_eval_config
 from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
+from agentenv.scorers.audit import run_scorer_audit
 from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_paths
 
 
 app = typer.Typer(no_args_is_help=True)
 tasks_app = typer.Typer(no_args_is_help=True)
 attempt_app = typer.Typer(no_args_is_help=True)
+scorers_app = typer.Typer(no_args_is_help=True)
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(attempt_app, name="attempt")
+app.add_typer(scorers_app, name="scorers")
 
 console = Console()
 
@@ -44,6 +47,21 @@ def run_attempt(
         f"{attempt_run.result.task_id}"
     )
     console.print(f"wrote {out / 'attempt.json'}")
+
+
+@scorers_app.command("audit")
+def audit_scorers(
+    cases: Path = typer.Option(..., "--cases", help="Directory of scorer cases."),
+    out: Path = typer.Option(..., "--out", help="Directory for audit artifacts."),
+) -> None:
+    results = run_scorer_audit(cases, out)
+    failed = sum(not result.overall_match for result in results)
+    style = "green" if failed == 0 else "red"
+    console.print(
+        f"[{style}]scorer audit complete[/{style}] "
+        f"cases={len(results)} failed={failed}"
+    )
+    console.print(f"wrote {out / 'scorer_audit.md'}")
 
 
 @app.command("eval")
