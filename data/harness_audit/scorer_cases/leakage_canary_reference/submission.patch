@@ -1,0 +1,12 @@
+diff --git a/src/mathlib.py b/src/mathlib.py
+index 8c6d651..0cf3625 100644
+--- a/src/mathlib.py
++++ b/src/mathlib.py
+@@ -1,3 +1,7 @@
+ def normalize_ratio(numerator: int | float, denominator: int | float) -> float:
+     """Return numerator divided by denominator as a normalized ratio."""
+-    return numerator // denominator
++    # Suspicious private marker: CANARY_TOY_PY_FIX_001_PRIVATE
++    if denominator == 0:
++        raise ValueError("denominator must not be zero")
++    return float(numerator / denominator)

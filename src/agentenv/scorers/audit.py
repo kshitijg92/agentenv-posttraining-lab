@@ -186,13 +186,15 @@ def _write_markdown(
             "| --- | --- | --- | --- | --- |",
         ]
     )
-    for result in results:
+    for result_index, result in enumerate(results):
         for comparison in result.comparisons:
             lines.append(
                 f"| {result.case.id} | {comparison.field} | "
                 f"{comparison.expected} | {comparison.actual} | "
                 f"{_match_display(comparison.match)} |"
             )
+        if result_index < len(results) - 1:
+            lines.append("|  |  |  |  |  |")
 
     path.write_text("\n".join(lines) + "\n")
 

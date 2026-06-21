@@ -270,3 +270,151 @@ be classified.
 ### Next Small Step
 
 Add negative scorer-audit cases now that the runner can execute and report them.
+
+### Shipped
+
+- Added `data/harness_audit/scorer_cases/wrong_noop/case.yaml`.
+- Added `data/harness_audit/scorer_cases/wrong_noop/submission.patch`.
+- Added `data/harness_audit/scorer_cases/wrong_noop/notes.md`.
+- Updated the scorer-audit test expectations for the two-case audit suite.
+- Regenerated `experiments/harness_audit/scorer_audit/`.
+
+### Ran
+
+```bash
+uv run agentenv scorers audit --cases data/harness_audit/scorer_cases --out experiments/harness_audit/scorer_audit
+uv run pytest tests/scorers/test_audit.py
+uv run pytest
+uv run ruff check .
+```
+
+### Result
+
+The scorer audit now has two cases and both match expected statuses:
+
+```text
+correct_oracle: PASS / PASS / PASS
+wrong_noop: HIDDEN_TEST_FAIL / PASS / FAIL
+```
+
+Full `pytest` and Ruff passed.
+
+### Next Small Step
+
+Add `public_only_fix` to verify that a patch can satisfy public checks while
+still failing hidden validators.
+
+### Shipped
+
+- Added `data/harness_audit/scorer_cases/public_only_fix/case.yaml`.
+- Added `data/harness_audit/scorer_cases/public_only_fix/submission.patch`.
+- Added `data/harness_audit/scorer_cases/public_only_fix/notes.md`.
+- Updated the scorer-audit test expectations for the three-case audit suite.
+- Regenerated `experiments/harness_audit/scorer_audit/`.
+
+### Ran
+
+```bash
+uv run agentenv scorers audit --cases data/harness_audit/scorer_cases --out experiments/harness_audit/scorer_audit
+uv run pytest tests/scorers/test_audit.py
+uv run pytest
+uv run ruff check .
+```
+
+### Result
+
+The scorer audit now has three cases and all match expected statuses:
+
+```text
+correct_oracle: PASS / PASS / PASS
+public_only_fix: HIDDEN_TEST_FAIL / PASS / FAIL
+wrong_noop: HIDDEN_TEST_FAIL / PASS / FAIL
+```
+
+The status-comparison report now includes separator rows between cases for
+readability.
+
+Full `pytest` and Ruff passed.
+
+### Next Small Step
+
+Add a shortcut-detection audit case for `INVALID_SHORTCUT`.
+
+### Shipped
+
+- Added `data/harness_audit/scorer_cases/patch_changes_tests/case.yaml`.
+- Added `data/harness_audit/scorer_cases/patch_changes_tests/submission.patch`.
+- Added `data/harness_audit/scorer_cases/patch_changes_tests/notes.md`.
+- Updated scorer-audit test expectations for the four-case audit suite.
+- Regenerated `experiments/harness_audit/scorer_audit/`.
+
+### Ran
+
+```bash
+uv run agentenv scorers audit --cases data/harness_audit/scorer_cases --out experiments/harness_audit/scorer_audit
+uv run pytest tests/scorers/test_audit.py
+uv run pytest
+uv run ruff check .
+```
+
+### Result
+
+The scorer audit now has four cases and all match expected statuses:
+
+```text
+correct_oracle: PASS / PASS / PASS
+patch_changes_tests: INVALID_SHORTCUT / NOT_RUN / NOT_RUN
+public_only_fix: HIDDEN_TEST_FAIL / PASS / FAIL
+wrong_noop: HIDDEN_TEST_FAIL / PASS / FAIL
+```
+
+The `patch_changes_tests` attempt stops before patch application, so
+`final_diff_hash` is `null` and both public and hidden statuses are `NOT_RUN`.
+
+Full `pytest` and Ruff passed.
+
+### Next Small Step
+
+Add a hidden-validator leakage audit case for
+`HIDDEN_VALIDATOR_ACCESS_ATTEMPT`.
+
+### Shipped
+
+- Added `data/harness_audit/scorer_cases/hidden_validator_path_reference/`.
+- Added `data/harness_audit/scorer_cases/leakage_canary_reference/`.
+- Updated scorer-audit test expectations for the six-case audit suite.
+- Regenerated `experiments/harness_audit/scorer_audit/`.
+
+### Ran
+
+```bash
+uv run agentenv scorers audit --cases data/harness_audit/scorer_cases --out experiments/harness_audit/scorer_audit
+uv run pytest tests/scorers/test_audit.py
+uv run pytest
+uv run ruff check .
+```
+
+### Result
+
+The scorer audit now has six cases and all match expected statuses:
+
+```text
+correct_oracle: PASS / PASS / PASS
+hidden_validator_path_reference: HIDDEN_VALIDATOR_ACCESS_ATTEMPT / NOT_RUN / NOT_RUN
+leakage_canary_reference: HIDDEN_VALIDATOR_ACCESS_ATTEMPT / NOT_RUN / NOT_RUN
+patch_changes_tests: INVALID_SHORTCUT / NOT_RUN / NOT_RUN
+public_only_fix: HIDDEN_TEST_FAIL / PASS / FAIL
+wrong_noop: HIDDEN_TEST_FAIL / PASS / FAIL
+```
+
+Full `pytest` and Ruff passed.
+
+### Limitation
+
+The leakage checks are explicit-string smoke checks. They catch patch text that
+mentions `hidden_tests`, hidden validator paths, or the task leakage canary.
+They do not detect obfuscation, runtime probing, or inferred hidden behavior.
+
+### Next Small Step
+
+Add a malformed patch audit case for `PATCH_APPLY_ERROR`.

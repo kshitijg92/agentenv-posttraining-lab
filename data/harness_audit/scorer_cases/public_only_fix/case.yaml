@@ -1,0 +1,7 @@
+id: public_only_fix
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+submission: submission.patch
+expected_attempt_status: HIDDEN_TEST_FAIL
+expected_public_status: PASS
+expected_hidden_status: FAIL
+purpose: "Public-only patch should pass public checks but fail hidden validators."
