@@ -1,0 +1,12 @@
+{
+  "limitation": "The effective task manifest is materialized in a temporary task directory for execution. This file records the supported override only; it is not a replay manifest.",
+  "overrides": {
+    "limits": {
+      "timeout_seconds": {
+        "from": 120,
+        "to": 1
+      }
+    }
+  },
+  "source_task_manifest": "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
+}

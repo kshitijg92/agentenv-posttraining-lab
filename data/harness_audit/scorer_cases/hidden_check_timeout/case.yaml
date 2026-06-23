@@ -1,0 +1,10 @@
+id: hidden_check_timeout
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+submission: submission.patch
+expected_attempt_status: TIMEOUT
+expected_public_status: PASS
+expected_hidden_status: FAIL
+purpose: "Patch that passes public checks but hangs during hidden validation should time out with phase-specific status."
+manifest_overrides:
+  limits:
+    timeout_seconds: 1

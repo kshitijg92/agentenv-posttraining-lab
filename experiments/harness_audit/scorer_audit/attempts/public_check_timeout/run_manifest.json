@@ -1,0 +1,18 @@
+{
+  "artifact_version": "run_artifacts_v0",
+  "artifacts": {
+    "attempt": "attempt.json",
+    "error": "error.txt",
+    "final_diff": "final.diff",
+    "stderr": "stderr.txt",
+    "stdout": "stdout.txt",
+    "trace": "trace.jsonl"
+  },
+  "attempt_id": "attempt_9e14ee2f55634907b2b2391a5413098c",
+  "orchestrator_version": "attempt_v0",
+  "run_id": "run_1edfa426a1da4da08a2ce3f14f237d6b",
+  "status": "TIMEOUT",
+  "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/harness_audit/scorer_cases/public_check_timeout/submission.patch",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/tmp/agentenv-audit-public_check_timeout-fagw8h1p/task.yaml"
+}

@@ -1,7 +1,9 @@
 import json
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +13,18 @@ from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_
 
 
 StatusField = Literal["attempt_status", "public_status", "hidden_status"]
+
+
+class ManifestLimitOverrides(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeout_seconds: int = Field(gt=0)
+
+
+class ManifestOverrides(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    limits: ManifestLimitOverrides
 
 
 class ScorerAuditCase(BaseModel):
@@ -23,6 +37,7 @@ class ScorerAuditCase(BaseModel):
     expected_public_status: CheckStatus
     expected_hidden_status: CheckStatus
     purpose: str = Field(min_length=1)
+    manifest_overrides: ManifestOverrides | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +58,7 @@ class ScorerAuditResult:
     attempt_artifact_dir: Path
     attempt_result: AttemptResult
     comparisons: tuple[StatusComparison, ...]
+    manifest_override_record: dict[str, object] | None = None
 
     @property
     def overall_match(self) -> bool:
@@ -60,8 +76,14 @@ def run_scorer_audit(case_root: Path, out_dir: Path) -> list[ScorerAuditResult]:
     for case_dir in _case_dirs(case_root):
         case = load_scorer_audit_case(case_dir / "case.yaml")
         attempt_artifact_dir = attempts_dir / case.id
+        task_manifest_path = _resolve_repo_relative_path(case.task_manifest)
+        effective_task_manifest_path = _materialize_effective_manifest(
+            case,
+            task_manifest_path,
+            attempt_artifact_dir,
+        )
         attempt_run = run_and_persist_patch_attempt_to_dir(
-            _resolve_repo_relative_path(case.task_manifest),
+            effective_task_manifest_path,
             (case_dir / case.submission).resolve(),
             attempt_artifact_dir,
         )
@@ -72,6 +94,10 @@ def run_scorer_audit(case_root: Path, out_dir: Path) -> list[ScorerAuditResult]:
                 attempt_artifact_dir=attempt_artifact_dir,
                 attempt_result=attempt_run.result,
                 comparisons=_comparisons(case, attempt_run.result),
+                manifest_override_record=_manifest_override_record(
+                    case,
+                    task_manifest_path,
+                ),
             )
         )
 
@@ -100,6 +126,118 @@ def _resolve_repo_relative_path(path_text: str) -> Path:
     if path.is_absolute():
         return path
     return path.resolve()
+
+
+def _materialize_effective_manifest(
+    case: ScorerAuditCase,
+    task_manifest_path: Path,
+    attempt_artifact_dir: Path,
+) -> Path:
+    if case.manifest_overrides is None:
+        return task_manifest_path
+
+    source_task_dir = task_manifest_path.parent.resolve()
+    temp_task_dir = Path(tempfile.mkdtemp(prefix=f"agentenv-audit-{case.id}-"))
+    shutil.copytree(source_task_dir, temp_task_dir, dirs_exist_ok=True)
+    effective_manifest_path = temp_task_dir / task_manifest_path.name
+    raw_manifest = _load_yaml_mapping(effective_manifest_path)
+    _apply_nested_overrides(raw_manifest, _manifest_override_data(case))
+    effective_manifest_path.write_text(yaml.safe_dump(raw_manifest, sort_keys=False))
+
+    override_record = _manifest_override_record(
+        case,
+        task_manifest_path,
+    )
+    if override_record is not None:
+        attempt_artifact_dir.mkdir(parents=True, exist_ok=True)
+        (attempt_artifact_dir / "manifest_override.json").write_text(
+            json.dumps(override_record, indent=2, sort_keys=True) + "\n"
+        )
+    return effective_manifest_path
+
+
+def _manifest_override_record(
+    case: ScorerAuditCase,
+    task_manifest_path: Path,
+) -> dict[str, object] | None:
+    if case.manifest_overrides is None:
+        return None
+
+    raw_manifest = _load_yaml_mapping(task_manifest_path)
+
+    return {
+        "source_task_manifest": case.task_manifest,
+        "overrides": _nested_override_diff(
+            raw_manifest,
+            _manifest_override_data(case),
+            task_manifest_path,
+        ),
+        "limitation": (
+            "The effective task manifest is materialized in a temporary task "
+            "directory for execution. This file records the supported override "
+            "only; it is not a replay manifest."
+        ),
+    }
+
+
+def _manifest_override_data(case: ScorerAuditCase) -> dict[str, Any]:
+    if case.manifest_overrides is None:
+        return {}
+    return case.manifest_overrides.model_dump(exclude_none=True)
+
+
+def _load_yaml_mapping(path: Path) -> dict[str, Any]:
+    raw = yaml.safe_load(path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError(f"Expected task manifest object at {path}")
+    return raw
+
+
+def _apply_nested_overrides(
+    target: dict[str, Any],
+    overrides: dict[str, Any],
+    path: tuple[str, ...] = (),
+) -> None:
+    for key, override_value in overrides.items():
+        current_path = (*path, key)
+        if isinstance(override_value, dict):
+            target_value = target.get(key)
+            if not isinstance(target_value, dict):
+                dotted_path = ".".join(current_path)
+                raise ValueError(f"Expected manifest object at {dotted_path}")
+            _apply_nested_overrides(target_value, override_value, current_path)
+        else:
+            target[key] = override_value
+
+
+def _nested_override_diff(
+    source: dict[str, Any],
+    overrides: dict[str, Any],
+    source_path: Path,
+    path: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    diff: dict[str, Any] = {}
+    for key, override_value in overrides.items():
+        current_path = (*path, key)
+        source_value = source.get(key)
+        if isinstance(override_value, dict):
+            if not isinstance(source_value, dict):
+                dotted_path = ".".join(current_path)
+                raise ValueError(
+                    f"Expected manifest object at {dotted_path} in {source_path}"
+                )
+            diff[key] = _nested_override_diff(
+                source_value,
+                override_value,
+                source_path,
+                current_path,
+            )
+        else:
+            diff[key] = {
+                "from": source_value,
+                "to": override_value,
+            }
+    return diff
 
 
 def _comparisons(
@@ -146,6 +284,7 @@ def _json_record(result: ScorerAuditResult, out_dir: Path) -> dict[str, object]:
         "attempt_id": result.attempt_result.attempt_id,
         "error_class": result.attempt_result.error_class,
         "overall_match": result.overall_match,
+        "manifest_override": result.manifest_override_record,
         "comparisons": [
             {
                 "field": comparison.field,

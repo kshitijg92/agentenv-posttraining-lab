@@ -462,3 +462,247 @@ Running `uv` inside the managed sandbox hit the known cache-write issue under
 
 Decide whether to add timeout coverage to the scorer audit now or defer it to
 sandbox/runtime invariants.
+
+### Decision
+
+Add timeout coverage to the scorer audit and make timeout statuses
+phase-specific.
+
+### Reasoning
+
+Timeout handling is partly runtime behavior, but it affects trust in the eval
+harness. A bad submission should not hang the audit or eval path indefinitely,
+and the user should be able to tell which phase timed out without inspecting the
+full trace first.
+
+The terminal `AttemptStatus` remains `TIMEOUT`, while `public_status`,
+`hidden_status`, and `error_class` identify the phase:
+
+```text
+patch apply timeout: TIMEOUT / NOT_RUN / NOT_RUN / PatchApplyTimeout
+public check timeout: TIMEOUT / FAIL / NOT_RUN / PublicCheckTimeout
+hidden validation timeout: TIMEOUT / PASS / FAIL / HiddenValidationTimeout
+```
+
+### Decision
+
+Support a narrow scorer-audit manifest override for
+`manifest_overrides.limits.timeout_seconds`.
+
+### Reasoning
+
+The core `run_patch_attempt(...)` API should remain tight: it consumes a task
+manifest and a submission patch. Other task-manifest parameters are not passed
+as generic function arguments, so timeout should not become a generic attempt
+parameter either.
+
+For the timeout audit case, the audit runner materializes a temporary task
+directory with only `limits.timeout_seconds` changed. It records the narrow
+override evidence as `manifest_override.json` beside the attempt artifacts.
+
+This proves the audit case did not change task semantics to get the timeout
+result. It does not make the audit attempt replayable through `agentenv replay`.
+
+### Shipped
+
+- Added phase-aware timeout status handling in `run_patch_attempt(...)`.
+- Added focused timeout phase tests for patch apply, public checks, and hidden
+  validation.
+- Added `manifest_overrides.limits.timeout_seconds` to scorer-audit case schema.
+- Added `data/harness_audit/scorer_cases/public_check_timeout/`.
+- Regenerated `experiments/harness_audit/scorer_audit/`.
+
+### Ran
+
+```bash
+uv run agentenv scorers audit --cases data/harness_audit/scorer_cases --out experiments/harness_audit/scorer_audit
+uv run pytest tests/scorers/test_audit.py tests/test_attempt.py
+uv run ruff check src/agentenv/scorers/audit.py src/agentenv/orchestrators/attempt.py tests/scorers/test_audit.py tests/test_attempt.py
+uv run pytest
+uv run ruff check .
+uv run pyright
+```
+
+### Result
+
+The scorer audit now has nine cases and all match expected statuses:
+
+```text
+correct_oracle: PASS / PASS / PASS
+hidden_validator_path_reference: HIDDEN_VALIDATOR_ACCESS_ATTEMPT / NOT_RUN / NOT_RUN
+leakage_canary_reference: HIDDEN_VALIDATOR_ACCESS_ATTEMPT / NOT_RUN / NOT_RUN
+malformed_patch_syntax: PATCH_APPLY_ERROR / NOT_RUN / NOT_RUN
+nonexistent_source_patch: PATCH_APPLY_ERROR / NOT_RUN / NOT_RUN
+patch_changes_tests: INVALID_SHORTCUT / NOT_RUN / NOT_RUN
+public_only_fix: HIDDEN_TEST_FAIL / PASS / FAIL
+public_check_timeout: TIMEOUT / FAIL / NOT_RUN
+wrong_noop: HIDDEN_TEST_FAIL / PASS / FAIL
+```
+
+Focused tests and Ruff passed. Full validation also passed:
+
+```text
+pytest: 52 passed
+ruff: all checks passed
+pyright: 0 errors
+```
+
+### Limitation
+
+Scorer-audit artifacts are regenerable from case definitions, but they are not
+currently replayable through `agentenv replay`. The timeout case records
+`manifest_override.json` as evidence of the only supported override; the
+effective manifest used for execution is a temporary audit-runner detail.
+
+### Next Small Step
+
+Run full validation and then decide whether the scorer-audit suite is sufficient
+for Week 3, or whether to add an explicit `PUBLIC_TEST_FAIL` case.
+
+### Decision
+
+Make scorer-audit manifest override application and diff recording generic over
+the validated `ManifestOverrides` model.
+
+### Reasoning
+
+The allowlist should live in the Pydantic schema, not in duplicated
+timeout-specific branches. The audit runner can then mechanically apply whatever
+nested override shape the schema accepts and record the same shape as nested
+`from`/`to` evidence.
+
+This keeps the current override surface narrow:
+
+```yaml
+manifest_overrides:
+  limits:
+    timeout_seconds: 1
+```
+
+But if another override is deliberately added later, the code path should not
+need another hardcoded `limits.timeout_seconds` branch.
+
+### Shipped
+
+- Replaced timeout-specific manifest override application with recursive nested
+  override application.
+- Replaced flat `limits.timeout_seconds` audit evidence with nested JSON:
+
+```json
+{
+  "limits": {
+    "timeout_seconds": {
+      "from": 120,
+      "to": 1
+    }
+  }
+}
+```
+
+- Regenerated `experiments/harness_audit/scorer_audit/`.
+
+### Ran
+
+```bash
+uv run pytest tests/scorers/test_audit.py
+uv run ruff check src/agentenv/scorers/audit.py tests/scorers/test_audit.py
+uv run agentenv scorers audit --cases data/harness_audit/scorer_cases --out experiments/harness_audit/scorer_audit
+uv run pytest tests/scorers/test_audit.py tests/test_attempt.py
+uv run pyright
+uv run pytest
+uv run ruff check .
+```
+
+### Result
+
+- Focused scorer-audit tests passed.
+- The nine-case scorer audit completed with `failed=0`.
+- Focused attempt/audit tests passed.
+- Pyright passed with `0 errors`.
+- Full `pytest` passed with `52 passed`.
+- Full Ruff passed.
+
+### Self-Deception Trap
+
+The recursive override helper is not the permission boundary. It must only be
+fed data that has already passed the strict `ManifestOverrides` schema.
+
+### Follow-Up
+
+The first scorer-audit test was too broad. It mostly proved that the audit
+runner could execute cases and that actual statuses matched the expectations in
+`case.yaml`. That is useful integration coverage, but it did not unit-test the
+manifest override contract itself.
+
+Added focused tests for:
+
+- accepting the only currently supported override:
+  `manifest_overrides.limits.timeout_seconds`;
+- rejecting unsupported top-level override fields;
+- rejecting unsupported nested `limits` fields;
+- rejecting invalid timeout values such as `0`;
+- mechanically applying nested overrides and recording nested `from`/`to`
+  evidence.
+
+### Ran
+
+```bash
+uv run pytest tests/scorers/test_audit.py
+uv run ruff check tests/scorers/test_audit.py
+uv run pyright tests/scorers/test_audit.py
+```
+
+### Result
+
+- `tests/scorers/test_audit.py`: `8 passed`.
+- Ruff passed for the audit test file.
+- Pyright passed for the audit test file.
+
+### Self-Deception Trap
+
+Do not confuse case-level expected statuses with unit tests of the audit code.
+The case YAMLs define expected outcomes; separate tests still need to prove that
+the runner enforces its own permission and artifact contracts.
+
+### Follow-Up
+
+Rename the ambiguous timeout audit case and add hidden-validation timeout
+coverage.
+
+### Reasoning
+
+The previous `timeout_patch` name made it sound like patch application timed
+out, but the submitted patch actually applied and then made the public check
+hang. The case ID should name the phase being audited.
+
+The phase-status convention remains:
+
+```text
+public check timeout: TIMEOUT / FAIL / NOT_RUN / PublicCheckTimeout
+hidden check timeout: TIMEOUT / PASS / FAIL / HiddenValidationTimeout
+```
+
+The phase that times out is marked `FAIL`; phases after it are marked
+`NOT_RUN`.
+
+### Shipped
+
+- Renamed `timeout_patch` to `public_check_timeout`.
+- Added `hidden_check_timeout`, which passes the public check input and then
+  hangs when hidden validators exercise other behavior.
+- Regenerated `experiments/harness_audit/scorer_audit/`; the audit now has ten
+  cases and all match expected statuses.
+
+### Limitation
+
+`patch_apply` timeout is still covered by focused unit tests in
+`tests/test_attempt.py`, but not by a scorer-audit data case. A real
+scorer-audit case would need a deterministic way to make `git apply` exceed the
+timeout. A huge static patch is a poor audit artifact because it is
+machine-speed dependent and bloats the case data.
+
+### Next Design Question
+
+Should patch-apply timeout stay as unit-level orchestrator coverage, or should
+the audit runner grow an explicit fault-injection case type for harness-phase
+timeouts?

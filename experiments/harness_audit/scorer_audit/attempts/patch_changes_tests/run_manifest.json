@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_5210c3467e3744aea04e3e966db5c9bb",
+  "attempt_id": "attempt_ff48be57f5634fdfbb1979845bb1a570",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_60c0aab5ca374ca2b7e00ba8f830d9a2",
+  "run_id": "run_4d3366d6daca4123a4cafd07f4d3ffa1",
   "status": "INVALID_SHORTCUT",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/harness_audit/scorer_cases/patch_changes_tests/submission.patch",
   "task_id": "toy_python_fix_001",

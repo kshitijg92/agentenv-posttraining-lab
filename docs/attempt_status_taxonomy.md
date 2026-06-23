@@ -82,6 +82,21 @@ The status remains `TIMEOUT` for now rather than `SANDBOX_TIMEOUT`, because the
 current local runner is not yet a full sandbox abstraction. Sandbox-specific
 details can be recorded in artifacts or later status refinements.
 
+Phase-specific status contract:
+
+- patch-apply timeout:
+  - `public_status: NOT_RUN`
+  - `hidden_status: NOT_RUN`
+  - `error_class: PatchApplyTimeout`
+- public-check timeout:
+  - `public_status: FAIL`
+  - `hidden_status: NOT_RUN`
+  - `error_class: PublicCheckTimeout`
+- hidden-validation timeout:
+  - `public_status: PASS`
+  - `hidden_status: FAIL`
+  - `error_class: HiddenValidationTimeout`
+
 ### `ORCHESTRATOR_ERROR`
 
 The attempt lifecycle failed outside patch behavior, public checks, or hidden
