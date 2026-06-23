@@ -40,6 +40,8 @@ class DockerSmokeResult:
     config_path: Path
     out_dir: Path
     config: DockerSmokeConfig
+    image_digest: str | None
+    image_digest_error: str | None
     probes: tuple[DockerProbeResult, ...]
 
 
@@ -58,11 +60,14 @@ def run_docker_smoke(config_path: Path, out_dir: Path) -> DockerSmokeResult:
 
     startup = _run_probe("startup", config, config.startup_command)
     network_probe = _run_probe("network_probe", config, config.network_probe_command)
+    image_digest, image_digest_error = _inspect_image_digest(config)
     result = DockerSmokeResult(
         status=_smoke_status(startup, network_probe),
         config_path=config_path,
         out_dir=out_dir,
         config=config,
+        image_digest=image_digest,
+        image_digest_error=image_digest_error,
         probes=(startup, network_probe),
     )
     _write_json(result)
@@ -121,6 +126,46 @@ def _run_probe(
     )
 
 
+def _inspect_image_digest(config: DockerSmokeConfig) -> tuple[str | None, str | None]:
+    docker_command = [
+        "docker",
+        "image",
+        "inspect",
+        config.image,
+        "--format",
+        "{{json .RepoDigests}}",
+    ]
+    try:
+        completed = subprocess.run(
+            docker_command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=config.timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return None, f"Timed out after {config.timeout_seconds}s"
+    except FileNotFoundError as exc:
+        return None, str(exc)
+
+    if completed.returncode != 0:
+        error = completed.stderr.strip() or completed.stdout.strip()
+        return None, error or f"docker image inspect exited {completed.returncode}"
+
+    try:
+        repo_digests = json.loads(completed.stdout.strip() or "[]")
+    except json.JSONDecodeError as exc:
+        return None, f"Could not parse RepoDigests JSON: {exc}"
+
+    if not isinstance(repo_digests, list):
+        return None, "RepoDigests was not a JSON list"
+
+    digests = [digest for digest in repo_digests if isinstance(digest, str)]
+    if not digests:
+        return None, None
+    return digests[0], None
+
+
 def _smoke_status(
     startup: DockerProbeResult,
     network_probe: DockerProbeResult,
@@ -153,6 +198,7 @@ def _write_markdown(result: DockerSmokeResult) -> Path:
         f"- Status: {result.status}",
         f"- Config: {result.config_path}",
         f"- Image: {result.config.image}",
+        f"- Image digest: {result.image_digest or 'unavailable'}",
         f"- Network: {result.config.network}",
         "",
         "## Probes",
@@ -184,6 +230,8 @@ def _result_json(result: DockerSmokeResult) -> dict[str, object]:
         "status": result.status,
         "config_path": str(result.config_path),
         "image": result.config.image,
+        "image_digest": result.image_digest,
+        "image_digest_error": result.image_digest_error,
         "network": result.config.network,
         "timeout_seconds": result.config.timeout_seconds,
         "artifacts": {

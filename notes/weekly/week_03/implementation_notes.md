@@ -1131,8 +1131,10 @@ network_probe: returncode 1 under --network none
 status: PASS
 ```
 
-Docker pulled `busybox:1.36` during the smoke run. The pull output recorded the
-image digest in `docker_smoke_result.json` probe stderr.
+Docker pulled `busybox:1.36` during the smoke run. The initial implementation
+only captured digest evidence incidentally in Docker pull stderr; the smoke
+result now records the image repo digest as a structured `image_digest` field
+when Docker exposes one.
 
 ### Limitation
 
@@ -1140,3 +1142,63 @@ This is a smoke check only. It proves the local Docker path can run a container
 with network disabled for this probe. It does not prove production-grade
 sandboxing, syscall isolation, filesystem mount policy, resource limits, or
 protection against hostile code.
+
+## 2026-06-23
+
+### Closeout Audit
+
+Week 3 is complete against the measurement-trust goal.
+
+The completed artifacts are:
+
+```text
+docs/attempt_status_taxonomy.md
+docs/sandbox_invariants_v0.md
+src/agentenv/scorers/audit.py
+src/agentenv/orchestrators/controls_run.py
+src/agentenv/sandbox/docker_smoke.py
+configs/sandbox/docker_none.yaml
+tests/scorers/test_audit.py
+tests/sandbox/test_invariants.py
+tests/sandbox/test_docker_smoke.py
+experiments/harness_audit/scorer_audit/
+experiments/runs/control_calibration/
+experiments/sandbox/docker_smoke/
+notes/weekly/week_03/learnings.md
+```
+
+The scorer audit currently has 11 cases and all expected-vs-actual status
+comparisons pass. Repeated control calibration runs all controls three times and
+matches the expected `attempt_status`, `public_status`, and `hidden_status`
+tuples.
+
+### Intentional Deviations
+
+- The initial plan mentioned `docker_env.py`; the implemented file is
+  `docker_smoke.py` because the current code is a smoke check, not a general
+  Docker execution environment.
+- Patch-apply timeout is covered by focused tests instead of a scorer-audit data
+  case. A deterministic real patch-apply timeout case would be brittle or
+  artificially huge.
+- `notes/failures/scorer_false_positive_001.md` was not created because the
+  current scorer audit did not expose a false positive. Creating a fake failure
+  note would make the notes less honest.
+- Docker smoke verifies startup and `--network none`, but it does not yet mount
+  and run task workspaces or provide a production sandbox claim.
+
+### CLI Usability
+
+Added `src/agentenv/README.md` with copy-paste examples for the current CLI:
+
+```text
+tasks validate
+attempt run
+eval
+replay
+report
+scorers audit
+controls run
+sandbox smoke
+repo checks
+trace validation
+```

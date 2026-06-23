@@ -145,6 +145,7 @@ The smoke check verifies:
 Docker can run the configured image
 --network none is applied
 a network probe fails under --network none
+the image repo digest is recorded as structured `image_digest` when available
 ```
 
 The current result passed:

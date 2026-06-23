@@ -1,3 +1,4 @@
+import json
 import subprocess
 from pathlib import Path
 
@@ -20,6 +21,13 @@ def test_run_docker_smoke_writes_result_and_report(
         timeout: int,
     ) -> subprocess.CompletedProcess[str]:
         commands.append(command)
+        if command[:3] == ["docker", "image", "inspect"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                '["busybox@sha256:0123456789abcdef"]\n',
+                "",
+            )
         if command[-1] == "echo docker_smoke_ok":
             return subprocess.CompletedProcess(command, 0, "docker_smoke_ok\n", "")
         return subprocess.CompletedProcess(command, 1, "", "bad address\n")
@@ -45,13 +53,18 @@ network_probe_command:
     result = run_docker_smoke(config_path, tmp_path / "out")
 
     assert result.status == "PASS"
+    assert result.image_digest == "busybox@sha256:0123456789abcdef"
     assert all(
         command[:5] == ["docker", "run", "--rm", "--network", "none"]
         for command in commands
+        if command[:3] != ["docker", "image", "inspect"]
     )
-    assert (tmp_path / "out/docker_smoke_result.json").is_file()
+    result_json = json.loads((tmp_path / "out/docker_smoke_result.json").read_text())
+    assert result_json["image_digest"] == "busybox@sha256:0123456789abcdef"
+    assert result_json["image_digest_error"] is None
     report = (tmp_path / "out/docker_smoke.md").read_text()
     assert "# Docker Smoke" in report
+    assert "- Image digest: busybox@sha256:0123456789abcdef" in report
     assert "| startup | returncode == 0 | 0 | False | PASS |" in report
     assert (
         "| network_probe | returncode != 0 under --network none | "
