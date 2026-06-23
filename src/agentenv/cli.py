@@ -4,6 +4,7 @@ import typer
 from rich.console import Console
 
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
+from agentenv.orchestrators.controls_run import run_controls
 from agentenv.orchestrators.eval_run import EvalRun, run_eval_config
 from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
@@ -14,9 +15,11 @@ from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_p
 app = typer.Typer(no_args_is_help=True)
 tasks_app = typer.Typer(no_args_is_help=True)
 attempt_app = typer.Typer(no_args_is_help=True)
+controls_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(attempt_app, name="attempt")
+app.add_typer(controls_app, name="controls")
 app.add_typer(scorers_app, name="scorers")
 
 console = Console()
@@ -62,6 +65,22 @@ def audit_scorers(
         f"cases={len(results)} failed={failed}"
     )
     console.print(f"wrote {out / 'scorer_audit.md'}")
+
+
+@controls_app.command("run")
+def run_control_calibration(
+    task_pack: Path = typer.Option(..., "--task-pack", help="Path to task pack."),
+    repeats: int = typer.Option(3, "--repeats", help="Attempts per control."),
+    out: Path = typer.Option(..., "--out", help="Directory for control artifacts."),
+) -> None:
+    control_run = run_controls(task_pack, repeats, out)
+    failed = sum(not attempt.match for attempt in control_run.attempts)
+    style = "green" if failed == 0 else "red"
+    console.print(
+        f"[{style}]controls complete[/{style}] "
+        f"attempts={len(control_run.attempts)} failed={failed}"
+    )
+    console.print(f"wrote {control_run.out_dir / 'control_report.md'}")
 
 
 @app.command("eval")

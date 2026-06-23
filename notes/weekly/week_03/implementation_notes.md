@@ -761,3 +761,65 @@ new invariant.
 
 No case data was added for those two manual suggestions. The empty directories
 created during exploration were removed.
+
+### Decision
+
+Implement `agentenv controls run` as an orchestrator module:
+`src/agentenv/orchestrators/controls_run.py`.
+
+### Reasoning
+
+Control calibration is not a new task schema or scorer. It coordinates the
+same pieces as `eval_run.py`: task-pack discovery, manifest controls, repeated
+attempt execution, artifact persistence, and run-level reporting. Keeping it in
+`orchestrators/` makes that boundary explicit.
+
+Expected outcomes are inferred from control names for now:
+
+```text
+oracle: PASS / PASS / PASS
+bad.noop: HIDDEN_TEST_FAIL / PASS / FAIL
+bad.public_only: HIDDEN_TEST_FAIL / PASS / FAIL
+```
+
+### Shipped
+
+- Added `src/agentenv/orchestrators/controls_run.py`.
+- Added `agentenv controls run --task-pack <path> --repeats <n> --out <dir>`.
+- Added `tests/test_controls_run.py`.
+- Generated `experiments/runs/control_calibration/` with repo-agnostic naming.
+
+### Output Shape
+
+```text
+experiments/runs/control_calibration/
+  control_report.md
+  control_results.jsonl
+  control_run_manifest.json
+  attempts/
+    <task_id>__<control>__repeat_<nnn>/
+```
+
+### Result
+
+Running the current task pack with three repeats produced nine attempts and no
+expectation mismatches:
+
+```text
+oracle: 3/3 attempt_status: PASS; public_status: PASS; hidden_status: PASS
+bad.noop: 3/3 attempt_status: HIDDEN_TEST_FAIL; public_status: PASS; hidden_status: FAIL
+bad.public_only: 3/3 attempt_status: HIDDEN_TEST_FAIL; public_status: PASS; hidden_status: FAIL
+```
+
+### Boundary
+
+`eval run` records policy outcomes. `controls run` is stronger: it compares
+known controls against inferred expectations and treats mismatches as harness
+calibration failures.
+
+### Report Readability
+
+The Markdown report labels status triples explicitly as `attempt_status`,
+`public_status`, and `hidden_status`. A compact display like
+`HIDDEN_TEST_FAIL / PASS / FAIL` was too easy to misread because `PASS` and
+`FAIL` appear in multiple fields.

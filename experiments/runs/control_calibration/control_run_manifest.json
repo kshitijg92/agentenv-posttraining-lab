@@ -1,0 +1,196 @@
+{
+  "artifact_version": "control_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "report": "control_report.md",
+    "results": "control_results.jsonl"
+  },
+  "attempt_count": 9,
+  "attempts": [
+    {
+      "actual": {
+        "attempt_status": "PASS",
+        "error_class": null,
+        "hidden_status": "PASS",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__oracle__repeat_001",
+      "attempt_id": "attempt_a2ac8160e6f84d22bb57a6b2f65e46f1",
+      "control": "oracle",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "PASS",
+        "hidden_status": "PASS",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 0,
+      "task_id": "toy_python_fix_001"
+    },
+    {
+      "actual": {
+        "attempt_status": "PASS",
+        "error_class": null,
+        "hidden_status": "PASS",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__oracle__repeat_002",
+      "attempt_id": "attempt_e78da133779a4052913da07c02c40eb1",
+      "control": "oracle",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "PASS",
+        "hidden_status": "PASS",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 1,
+      "task_id": "toy_python_fix_001"
+    },
+    {
+      "actual": {
+        "attempt_status": "PASS",
+        "error_class": null,
+        "hidden_status": "PASS",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__oracle__repeat_003",
+      "attempt_id": "attempt_232b842c482c4297ae7a66ddb291f5bf",
+      "control": "oracle",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "PASS",
+        "hidden_status": "PASS",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 2,
+      "task_id": "toy_python_fix_001"
+    },
+    {
+      "actual": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "error_class": "HiddenCheckFailed",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__bad_noop__repeat_001",
+      "attempt_id": "attempt_e888e51f1d3c4d5aa03ae66590b908da",
+      "control": "bad.noop",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 0,
+      "task_id": "toy_python_fix_001"
+    },
+    {
+      "actual": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "error_class": "HiddenCheckFailed",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__bad_noop__repeat_002",
+      "attempt_id": "attempt_c8d81f3bc68243579afdc824da1705eb",
+      "control": "bad.noop",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 1,
+      "task_id": "toy_python_fix_001"
+    },
+    {
+      "actual": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "error_class": "HiddenCheckFailed",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__bad_noop__repeat_003",
+      "attempt_id": "attempt_8c68f29621554f468b3f23c4c0b8a57a",
+      "control": "bad.noop",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 2,
+      "task_id": "toy_python_fix_001"
+    },
+    {
+      "actual": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "error_class": "HiddenCheckFailed",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__bad_public_only__repeat_001",
+      "attempt_id": "attempt_92277e13126a45ed9b6251f098dd27d6",
+      "control": "bad.public_only",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 0,
+      "task_id": "toy_python_fix_001"
+    },
+    {
+      "actual": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "error_class": "HiddenCheckFailed",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__bad_public_only__repeat_002",
+      "attempt_id": "attempt_322d70edfd804e3b86302b837ee40d50",
+      "control": "bad.public_only",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 1,
+      "task_id": "toy_python_fix_001"
+    },
+    {
+      "actual": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "error_class": "HiddenCheckFailed",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "attempt_artifact_dir": "attempts/toy_python_fix_001__bad_public_only__repeat_003",
+      "attempt_id": "attempt_ac0422b93d8647738dd7a52c8e8e98d3",
+      "control": "bad.public_only",
+      "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+      "expected": {
+        "attempt_status": "HIDDEN_TEST_FAIL",
+        "hidden_status": "FAIL",
+        "public_status": "PASS"
+      },
+      "match": true,
+      "repeat_index": 2,
+      "task_id": "toy_python_fix_001"
+    }
+  ],
+  "control_run_id": "controls_3132efc9b4024407b614da152cf463e2",
+  "created_at": "2026-06-23T04:28:48.931169Z",
+  "overall_match": true,
+  "repeats": 3,
+  "task_pack_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0"
+}
