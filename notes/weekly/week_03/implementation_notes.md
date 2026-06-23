@@ -823,3 +823,262 @@ The Markdown report labels status triples explicitly as `attempt_status`,
 `public_status`, and `hidden_status`. A compact display like
 `HIDDEN_TEST_FAIL / PASS / FAIL` was too easy to misread because `PASS` and
 `FAIL` appear in multiple fields.
+
+### Decision
+
+Start sandbox invariant documentation with the hidden-validator visibility
+boundary.
+
+### Reasoning
+
+The first local sandbox invariant should be precise and testable:
+
+```text
+Hidden validators must exist in the task package, but must not be present inside
+the prepared agent workspace.
+```
+
+This is the core measurement boundary. If the agent-visible workspace contains
+hidden validators, hidden scoring is no longer hidden.
+
+### Shipped
+
+- Added `docs/sandbox_invariants_v0.md`.
+
+### Limitation
+
+This document currently describes the local workspace model only. It does not
+claim Docker isolation, network isolation, or hostile-code containment.
+
+### Shipped
+
+- Added `tests/sandbox/test_invariants.py` with a focused test for the first
+  sandbox invariant.
+
+### Result
+
+The test asserts both sides of the boundary:
+
+- manifest-declared hidden validator paths exist in the task package;
+- the same paths are absent from the prepared agent workspace.
+
+### Ran
+
+```bash
+uv run pytest tests/sandbox/test_invariants.py tests/test_local_repo_env.py
+uv run ruff check tests/sandbox/test_invariants.py
+uv run pyright tests/sandbox/test_invariants.py
+```
+
+### Decision
+
+Add the same local workspace visibility invariant for control patches.
+
+### Reasoning
+
+Control patches are the same class of private calibration asset as hidden
+validators. They must exist in the task package but remain absent from the
+prepared agent workspace.
+
+The test should derive paths from the manifest, not hardcode the current toy
+task layout. That keeps the invariant attached to the task contract:
+
+```text
+manifest.controls.oracle
+manifest.controls.bad.noop
+manifest.controls.bad.public_only
+```
+
+### Shipped
+
+- Added `Invariant 2: Control Patches Are Not Agent-Visible` to
+  `docs/sandbox_invariants_v0.md`.
+- Added
+  `tests/sandbox/test_invariants.py::test_control_patches_are_not_present_in_prepared_agent_workspace`.
+
+### Ran
+
+```bash
+uv run pytest tests/sandbox/test_invariants.py tests/test_local_repo_env.py
+uv run ruff check tests/sandbox/test_invariants.py
+uv run pyright tests/sandbox/test_invariants.py
+```
+
+### Result
+
+The focused sandbox checks now cover hidden validators and control patches as
+agent-invisible task-package assets.
+
+### Decision
+
+Add a workspace freshness invariant.
+
+### Reasoning
+
+Repeated evals and control runs are only trustworthy if every attempt starts
+from a fresh copy of `workspace_seed`.
+
+The invariant is:
+
+```text
+Each attempt must start from a fresh copy of workspace_seed.
+Mutating one prepared workspace must not mutate workspace_seed or any later
+prepared workspace.
+```
+
+### Shipped
+
+- Added `Invariant 3: Each Attempt Starts From A Fresh Workspace Seed Copy` to
+  `docs/sandbox_invariants_v0.md`.
+- Added
+  `tests/sandbox/test_invariants.py::test_mutating_one_prepared_workspace_does_not_mutate_seed_or_later_workspace`.
+
+### Ran
+
+```bash
+uv run pytest tests/sandbox/test_invariants.py tests/test_local_repo_env.py
+uv run ruff check tests/sandbox/test_invariants.py
+uv run pyright tests/sandbox/test_invariants.py
+```
+
+### Result
+
+The test mutates one prepared workspace, then verifies that the task
+`workspace_seed` and a later prepared workspace still contain the original file
+contents and do not inherit an attempt-local file.
+
+### Decision
+
+Add a leakage-canary visibility invariant across workspace files and attempt
+artifacts.
+
+### Reasoning
+
+The task leakage canary is a private marker. It should stay in task metadata and
+must not appear in files available in the prepared workspace or in persisted
+attempt evidence.
+
+The invariant scans both surfaces:
+
+- prepared workspace file contents;
+- every generated file under the persisted attempt artifact directory.
+
+### Shipped
+
+- Added `Invariant 4: Leakage Canary Is Not Agent-Visible` to
+  `docs/sandbox_invariants_v0.md`.
+- Added
+  `tests/sandbox/test_invariants.py::test_leakage_canary_is_absent_from_workspace_and_attempt_artifacts`.
+
+### Ran
+
+```bash
+uv run pytest tests/sandbox/test_invariants.py tests/test_local_repo_env.py
+uv run ruff check tests/sandbox/test_invariants.py
+uv run pyright tests/sandbox/test_invariants.py
+```
+
+### Result
+
+The focused sandbox checks now verify that the canary is absent from the
+prepared workspace and from every generated file under the attempt artifact
+directory.
+
+### Decision
+
+Add a task-manifest visibility invariant.
+
+### Reasoning
+
+`task.yaml` is a harness contract, not an agent input. It contains private
+measurement metadata such as hidden-validator paths, control patch paths, and
+the leakage canary.
+
+The important distinction is:
+
+```text
+allowed: artifact records task_manifest_path for provenance
+not allowed: prepared workspace or attempt artifacts embed task.yaml contents
+```
+
+### Shipped
+
+- Added `Invariant 5: Task Manifest Contents Are Not Agent-Visible` to
+  `docs/sandbox_invariants_v0.md`.
+- Added
+  `tests/sandbox/test_invariants.py::test_task_manifest_contents_are_absent_from_workspace_and_attempt_artifacts`.
+
+### Ran
+
+```bash
+uv run pytest tests/sandbox/test_invariants.py tests/test_local_repo_env.py
+uv run ruff check tests/sandbox/test_invariants.py
+uv run pyright tests/sandbox/test_invariants.py
+```
+
+### Result
+
+The test verifies `task.yaml` is absent from the prepared workspace and that
+manifest-only markers such as `hidden_validators:`, `controls:`, and
+`leakage_canary:` are absent from every generated file under the attempt
+artifact directory.
+
+### Test Refinement
+
+The first version hardcoded the standard artifact file list. That was too weak
+for an invariant test because adding a new artifact could create a leak without
+the test noticing. The scanner now walks all files under the generated attempt
+artifact directory and checks bytes instead of assuming text-only files.
+
+### Decision
+
+Add a repeatability invariant for deterministic control runs.
+
+### Reasoning
+
+Workspace freshness proves one prepared workspace does not mutate the seed or a
+later prepared workspace. Repeatability is a separate trust boundary: repeated
+attempts of the same deterministic control should produce stable observable
+results.
+
+The invariant applies to all manifest-defined controls, not only the oracle.
+
+Stable fields:
+
+```text
+attempt_status
+public_status
+hidden_status
+final_diff_hash
+```
+
+Expected-to-vary fields:
+
+```text
+attempt_id
+run_id
+timestamps
+durations
+temporary paths
+artifact directories
+```
+
+### Shipped
+
+- Added `Invariant 6: Deterministic Control Repeats Are Stable` to
+  `docs/sandbox_invariants_v0.md`.
+- Added
+  `tests/sandbox/test_invariants.py::test_repeated_control_runs_produce_stable_statuses_and_final_diff_hashes`.
+
+### Ran
+
+```bash
+uv run pytest tests/sandbox/test_invariants.py tests/test_controls_run.py
+uv run ruff check tests/sandbox/test_invariants.py
+uv run pyright tests/sandbox/test_invariants.py
+```
+
+### Result
+
+The test runs every current control twice and verifies that each `(task_id,
+control)` group has one stable status/diff tuple.
