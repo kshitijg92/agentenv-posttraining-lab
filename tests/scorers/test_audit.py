@@ -31,6 +31,16 @@ EXPECTED_COMPARISONS = {
         ("public_status", "NOT_RUN", "NOT_RUN", True),
         ("hidden_status", "NOT_RUN", "NOT_RUN", True),
     ],
+    "malformed_patch_syntax": [
+        ("attempt_status", "PATCH_APPLY_ERROR", "PATCH_APPLY_ERROR", True),
+        ("public_status", "NOT_RUN", "NOT_RUN", True),
+        ("hidden_status", "NOT_RUN", "NOT_RUN", True),
+    ],
+    "nonexistent_source_patch": [
+        ("attempt_status", "PATCH_APPLY_ERROR", "PATCH_APPLY_ERROR", True),
+        ("public_status", "NOT_RUN", "NOT_RUN", True),
+        ("hidden_status", "NOT_RUN", "NOT_RUN", True),
+    ],
     "patch_changes_tests": [
         ("attempt_status", "INVALID_SHORTCUT", "INVALID_SHORTCUT", True),
         ("public_status", "NOT_RUN", "NOT_RUN", True),
@@ -113,6 +123,14 @@ def test_run_scorer_audit_writes_jsonl_markdown_and_attempt_artifacts(
         "| leakage_canary_reference | attempt_status | "
         "HIDDEN_VALIDATOR_ACCESS_ATTEMPT | "
         "HIDDEN_VALIDATOR_ACCESS_ATTEMPT | PASS |"
+    ) in markdown
+    assert (
+        "| malformed_patch_syntax | attempt_status | PATCH_APPLY_ERROR | "
+        "PATCH_APPLY_ERROR | PASS |"
+    ) in markdown
+    assert (
+        "| nonexistent_source_patch | attempt_status | PATCH_APPLY_ERROR | "
+        "PATCH_APPLY_ERROR | PASS |"
     ) in markdown
     assert "| patch_changes_tests | PASS | attempts/patch_changes_tests |" in markdown
     assert (

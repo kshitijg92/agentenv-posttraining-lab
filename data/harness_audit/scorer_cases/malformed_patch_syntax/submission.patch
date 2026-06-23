@@ -1,0 +1,8 @@
+diff --git a/src/mathlib.py b/src/mathlib.py
+--- a/src/mathlib.py
++++ b/src/mathlib.py
+@@ this is not a valid unified diff hunk
+ def normalize_ratio(numerator: int | float, denominator: int | float) -> float:
+     """Return numerator divided by denominator as a normalized ratio."""
+-    return numerator // denominator
++    return float(numerator / denominator)

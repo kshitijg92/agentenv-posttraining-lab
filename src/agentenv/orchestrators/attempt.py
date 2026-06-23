@@ -34,6 +34,7 @@ AttemptStatus = Literal[
 
 CheckStatus = Literal["PASS", "FAIL", "NOT_RUN"]
 CommandPhase = Literal["patch_apply", "public_check", "hidden_score"]
+AttemptExecutionPhase = Literal["setup"] | CommandPhase
 
 
 class AttemptResult(BaseModel):
@@ -114,6 +115,7 @@ def run_patch_attempt(
     commands: list[AttemptCommand] = []
     final_diff = ""
     final_diff_hash: str | None = None
+    execution_phase: AttemptExecutionPhase = "setup"
 
     try:
         workspace = prepare_agent_workspace(
@@ -147,6 +149,7 @@ def run_patch_attempt(
                 final_diff_hash=final_diff_hash,
             )
 
+        execution_phase = "patch_apply"
         patch_result = apply_patch_file(
             workspace.path,
             submission_path,
@@ -176,6 +179,7 @@ def run_patch_attempt(
                 final_diff_hash=final_diff_hash,
             )
 
+        execution_phase = "public_check"
         public_results = run_public_checks(
             workspace.path,
             manifest.public_checks,
@@ -201,6 +205,7 @@ def run_patch_attempt(
                 final_diff_hash=final_diff_hash,
             )
 
+        execution_phase = "hidden_score"
         hidden_results = run_hidden_pytest_validators(
             workspace.path,
             workspace.task_dir,
@@ -227,6 +232,7 @@ def run_patch_attempt(
                 final_diff_hash=final_diff_hash,
             )
 
+        execution_phase = "setup"
         return _finish_attempt(
             context=context,
             commands=commands,
@@ -238,14 +244,15 @@ def run_patch_attempt(
             final_diff_hash=final_diff_hash,
         )
     except TimeoutExpired:
+        public_status, hidden_status, error_class = _timeout_status(execution_phase)
         return _finish_attempt(
             context=context,
             commands=commands,
             final_diff=final_diff,
             status="TIMEOUT",
-            public_status="NOT_RUN",
-            hidden_status="NOT_RUN",
-            error_class="TimeoutExpired",
+            public_status=public_status,
+            hidden_status=hidden_status,
+            error_class=error_class,
             final_diff_hash=final_diff_hash,
         )
     except Exception as exc:
@@ -306,6 +313,18 @@ def _exception_details(exc: Exception) -> AttemptErrorDetails:
         message=str(exc),
         traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
     )
+
+
+def _timeout_status(
+    phase: AttemptExecutionPhase,
+) -> tuple[CheckStatus, CheckStatus, str]:
+    if phase == "patch_apply":
+        return "NOT_RUN", "NOT_RUN", "PatchApplyTimeout"
+    if phase == "public_check":
+        return "FAIL", "NOT_RUN", "PublicCheckTimeout"
+    if phase == "hidden_score":
+        return "PASS", "FAIL", "HiddenValidationTimeout"
+    return "NOT_RUN", "NOT_RUN", "SetupTimeout"
 
 
 def _modifies_public_tests(diff: str) -> bool:

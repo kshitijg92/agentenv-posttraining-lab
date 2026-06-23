@@ -1,0 +1,7 @@
+id: nonexistent_source_patch
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+submission: submission.patch
+expected_attempt_status: PATCH_APPLY_ERROR
+expected_public_status: NOT_RUN
+expected_hidden_status: NOT_RUN
+purpose: "Patch targeting a nonexistent existing source file should fail during patch application."

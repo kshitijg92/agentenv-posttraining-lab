@@ -418,3 +418,47 @@ They do not detect obfuscation, runtime probing, or inferred hidden behavior.
 ### Next Small Step
 
 Add a malformed patch audit case for `PATCH_APPLY_ERROR`.
+
+### Shipped
+
+- Added `data/harness_audit/scorer_cases/malformed_patch_syntax/`.
+- Added `data/harness_audit/scorer_cases/nonexistent_source_patch/`.
+- Updated scorer-audit test expectations for the eight-case audit suite.
+- Regenerated `experiments/harness_audit/scorer_audit/`.
+
+### Ran
+
+```bash
+uv run agentenv scorers audit --cases data/harness_audit/scorer_cases --out experiments/harness_audit/scorer_audit
+uv run pytest tests/scorers/test_audit.py
+uv run pytest
+uv run ruff check .
+```
+
+### Result
+
+The scorer audit now has eight cases and all match expected statuses:
+
+```text
+correct_oracle: PASS / PASS / PASS
+hidden_validator_path_reference: HIDDEN_VALIDATOR_ACCESS_ATTEMPT / NOT_RUN / NOT_RUN
+leakage_canary_reference: HIDDEN_VALIDATOR_ACCESS_ATTEMPT / NOT_RUN / NOT_RUN
+malformed_patch_syntax: PATCH_APPLY_ERROR / NOT_RUN / NOT_RUN
+nonexistent_source_patch: PATCH_APPLY_ERROR / NOT_RUN / NOT_RUN
+patch_changes_tests: INVALID_SHORTCUT / NOT_RUN / NOT_RUN
+public_only_fix: HIDDEN_TEST_FAIL / PASS / FAIL
+wrong_noop: HIDDEN_TEST_FAIL / PASS / FAIL
+```
+
+Full `pytest` and Ruff passed.
+
+### Failure Or Surprise
+
+Running `uv` inside the managed sandbox hit the known cache-write issue under
+`/home/kshitij/.cache/uv`. The command succeeded after using the approved
+`uv run` escalation rule.
+
+### Next Small Step
+
+Decide whether to add timeout coverage to the scorer audit now or defer it to
+sandbox/runtime invariants.

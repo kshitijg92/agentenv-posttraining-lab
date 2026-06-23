@@ -1,9 +1,11 @@
 from pathlib import Path
+from subprocess import TimeoutExpired
 
 import pytest
 
 import agentenv.orchestrators.attempt as attempt_module
 from agentenv.orchestrators.attempt import AttemptResult, run_patch_attempt
+from agentenv.runners.command_runner import CommandResult
 
 
 TOY_TASK_MANIFEST = Path(
@@ -207,3 +209,83 @@ def test_hidden_validator_reference_takes_precedence_over_public_test_edit(
     assert attempt_run.result.error_class == "HiddenValidatorReference"
     assert attempt_run.final_diff == ""
     assert attempt_run.commands == []
+
+
+def test_run_patch_attempt_reports_patch_apply_timeout_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_timeout(*args: object, **kwargs: object) -> None:
+        raise TimeoutExpired(cmd="git apply", timeout=1)
+
+    monkeypatch.setattr(attempt_module, "apply_patch_file", raise_timeout)
+
+    attempt_run = run_patch_attempt(
+        TOY_TASK_MANIFEST,
+        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        workspace_parent=tmp_path,
+    )
+
+    assert attempt_run.result.status == "TIMEOUT"
+    assert attempt_run.result.public_status == "NOT_RUN"
+    assert attempt_run.result.hidden_status == "NOT_RUN"
+    assert attempt_run.result.error_class == "PatchApplyTimeout"
+    assert attempt_run.commands == []
+
+
+def test_run_patch_attempt_reports_public_check_timeout_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_timeout(*args: object, **kwargs: object) -> None:
+        raise TimeoutExpired(cmd="pytest public", timeout=1)
+
+    monkeypatch.setattr(attempt_module, "run_public_checks", raise_timeout)
+
+    attempt_run = run_patch_attempt(
+        TOY_TASK_MANIFEST,
+        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        workspace_parent=tmp_path,
+    )
+
+    assert attempt_run.result.status == "TIMEOUT"
+    assert attempt_run.result.public_status == "FAIL"
+    assert attempt_run.result.hidden_status == "NOT_RUN"
+    assert attempt_run.result.error_class == "PublicCheckTimeout"
+    assert [command.phase for command in attempt_run.commands] == ["patch_apply"]
+
+
+def test_run_patch_attempt_reports_hidden_validation_timeout_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def public_check_passes(*args: object, **kwargs: object) -> list[CommandResult]:
+        return [
+            CommandResult(
+                command=["pytest", "public"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+        ]
+
+    def raise_timeout(*args: object, **kwargs: object) -> None:
+        raise TimeoutExpired(cmd="pytest hidden", timeout=1)
+
+    monkeypatch.setattr(attempt_module, "run_public_checks", public_check_passes)
+    monkeypatch.setattr(attempt_module, "run_hidden_pytest_validators", raise_timeout)
+
+    attempt_run = run_patch_attempt(
+        TOY_TASK_MANIFEST,
+        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        workspace_parent=tmp_path,
+    )
+
+    assert attempt_run.result.status == "TIMEOUT"
+    assert attempt_run.result.public_status == "PASS"
+    assert attempt_run.result.hidden_status == "FAIL"
+    assert attempt_run.result.error_class == "HiddenValidationTimeout"
+    assert [command.phase for command in attempt_run.commands] == [
+        "patch_apply",
+        "public_check",
+    ]
