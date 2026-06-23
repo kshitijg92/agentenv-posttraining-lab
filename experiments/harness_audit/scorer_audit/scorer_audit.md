@@ -13,6 +13,7 @@
 | patch_changes_tests | PASS | attempts/patch_changes_tests |
 | public_check_timeout | PASS | attempts/public_check_timeout |
 | public_only_fix | PASS | attempts/public_only_fix |
+| public_test_fail | PASS | attempts/public_test_fail |
 | wrong_noop | PASS | attempts/wrong_noop |
 
 ## Status Comparisons
@@ -54,6 +55,10 @@
 | public_only_fix | attempt_status | HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |
 | public_only_fix | public_status | PASS | PASS | PASS |
 | public_only_fix | hidden_status | FAIL | FAIL | PASS |
+|  |  |  |  |  |
+| public_test_fail | attempt_status | PUBLIC_TEST_FAIL | PUBLIC_TEST_FAIL | PASS |
+| public_test_fail | public_status | FAIL | FAIL | PASS |
+| public_test_fail | hidden_status | NOT_RUN | NOT_RUN | PASS |
 |  |  |  |  |  |
 | wrong_noop | attempt_status | HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |
 | wrong_noop | public_status | PASS | PASS | PASS |

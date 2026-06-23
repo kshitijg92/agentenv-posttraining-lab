@@ -1,16 +1,16 @@
 {
-  "run_id": "run_1edfa426a1da4da08a2ce3f14f237d6b",
+  "run_id": "run_566ddb6d83a34a249c8bca1c35964bb9",
   "task_id": "toy_python_fix_001",
-  "task_manifest_path": "/tmp/agentenv-audit-public_check_timeout-fagw8h1p/task.yaml",
-  "attempt_id": "attempt_9e14ee2f55634907b2b2391a5413098c",
+  "task_manifest_path": "/tmp/agentenv-audit-public_check_timeout-kx7ydhgd/task.yaml",
+  "attempt_id": "attempt_1af044e275084bc0ba1c45a62267523c",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/harness_audit/scorer_cases/public_check_timeout/submission.patch",
   "status": "TIMEOUT",
   "public_status": "FAIL",
   "hidden_status": "NOT_RUN",
   "error_class": "PublicCheckTimeout",
-  "started_at": "2026-06-23T02:17:43.142174Z",
-  "ended_at": "2026-06-23T02:17:44.152752Z",
-  "duration_ms": 1010,
+  "started_at": "2026-06-23T02:26:38.342993Z",
+  "ended_at": "2026-06-23T02:26:39.354434Z",
+  "duration_ms": 1011,
   "final_diff_hash": "xxh64:c29f9e4539d47ff3",
   "orchestrator_version": "attempt_v0"
 }

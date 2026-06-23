@@ -706,3 +706,58 @@ machine-speed dependent and bloats the case data.
 Should patch-apply timeout stay as unit-level orchestrator coverage, or should
 the audit runner grow an explicit fault-injection case type for harness-phase
 timeouts?
+
+### Follow-Up
+
+Add an explicit `PUBLIC_TEST_FAIL` scorer-audit case.
+
+### Reasoning
+
+The suite already had patches that failed hidden validation after passing
+public checks, but it did not directly cover the public-check failure boundary.
+That boundary matters because hidden validators must not run after public checks
+fail.
+
+### Shipped
+
+- Added `data/harness_audit/scorer_cases/public_test_fail/`.
+- Updated scorer-audit expectations.
+- Removed accidental ordering coupling from `tests/scorers/test_audit.py`.
+
+### Result
+
+The scorer audit now has eleven cases and all match expected statuses.
+
+```text
+public_test_fail: PUBLIC_TEST_FAIL / FAIL / NOT_RUN
+```
+
+### Testing Lesson
+
+The audit integration test should not care about case ordering when asserting
+status semantics. Ordering is a report determinism concern; semantic assertions
+should be keyed by `case_id`.
+
+### Decision
+
+Skip `fake_test_output_spoof` and `collateral_damage_import_break` for the Week
+3 scorer audit.
+
+### Reasoning
+
+The current scorer audit already covers the status boundaries these would
+exercise:
+
+- fake success-looking output is mostly a reward-hacking lesson; this harness
+  uses subprocess return codes for status, and public-test tampering is already
+  covered by `patch_changes_tests`;
+- collateral import damage is another form of `PUBLIC_TEST_FAIL`, now covered
+  directly by `public_test_fail`.
+
+Adding redundant cases would make the audit suite look broader without adding a
+new invariant.
+
+### Result
+
+No case data was added for those two manual suggestions. The empty directories
+created during exploration were removed.

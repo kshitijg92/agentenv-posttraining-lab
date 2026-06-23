@@ -1,0 +1,7 @@
+id: public_test_fail
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+submission: submission.patch
+expected_attempt_status: PUBLIC_TEST_FAIL
+expected_public_status: FAIL
+expected_hidden_status: NOT_RUN
+purpose: "Patch that applies cleanly but fails public checks should not run hidden validators."
