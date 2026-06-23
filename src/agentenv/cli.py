@@ -8,6 +8,7 @@ from agentenv.orchestrators.controls_run import run_controls
 from agentenv.orchestrators.eval_run import EvalRun, run_eval_config
 from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
+from agentenv.sandbox.docker_smoke import run_docker_smoke
 from agentenv.scorers.audit import run_scorer_audit
 from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_paths
 
@@ -16,10 +17,12 @@ app = typer.Typer(no_args_is_help=True)
 tasks_app = typer.Typer(no_args_is_help=True)
 attempt_app = typer.Typer(no_args_is_help=True)
 controls_app = typer.Typer(no_args_is_help=True)
+sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(attempt_app, name="attempt")
 app.add_typer(controls_app, name="controls")
+app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
 
 console = Console()
@@ -81,6 +84,17 @@ def run_control_calibration(
         f"attempts={len(control_run.attempts)} failed={failed}"
     )
     console.print(f"wrote {control_run.out_dir / 'control_report.md'}")
+
+
+@sandbox_app.command("smoke")
+def smoke_sandbox(
+    config: Path = typer.Option(..., "--config", help="Path to sandbox config YAML."),
+    out: Path = typer.Option(..., "--out", help="Directory for smoke artifacts."),
+) -> None:
+    result = run_docker_smoke(config, out)
+    style = "green" if result.status == "PASS" else "red"
+    console.print(f"[{style}]docker smoke {result.status}[/{style}]")
+    console.print(f"wrote {result.out_dir / 'docker_smoke.md'}")
 
 
 @app.command("eval")

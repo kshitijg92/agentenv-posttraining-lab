@@ -1,0 +1,53 @@
+{
+  "artifacts": {
+    "report": "docker_smoke.md",
+    "result": "docker_smoke_result.json"
+  },
+  "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/sandbox/docker_none.yaml",
+  "image": "busybox:1.36",
+  "network": "none",
+  "probes": [
+    {
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "busybox:1.36",
+        "sh",
+        "-c",
+        "echo docker_smoke_ok"
+      ],
+      "error": null,
+      "match": true,
+      "name": "startup",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "docker_smoke_ok\n",
+      "timed_out": false
+    },
+    {
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "busybox:1.36",
+        "sh",
+        "-c",
+        "wget -q -T 2 -O - https://example.com"
+      ],
+      "error": null,
+      "match": true,
+      "name": "network_probe",
+      "returncode": 1,
+      "stderr": "wget: bad address 'example.com'\n",
+      "stdout": "",
+      "timed_out": false
+    }
+  ],
+  "status": "PASS",
+  "timeout_seconds": 15
+}

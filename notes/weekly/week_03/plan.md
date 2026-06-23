@@ -41,7 +41,7 @@ Code and config:
 ```text
 data/harness_audit/scorer_cases/
 src/agentenv/scorers/audit.py
-src/agentenv/sandbox/docker_env.py
+src/agentenv/sandbox/docker_smoke.py
 configs/sandbox/docker_none.yaml
 tests/sandbox/test_invariants.py
 ```

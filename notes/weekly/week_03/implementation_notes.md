@@ -1082,3 +1082,61 @@ uv run pyright tests/sandbox/test_invariants.py
 
 The test runs every current control twice and verifies that each `(task_id,
 control)` group has one stable status/diff tuple.
+
+### Decision
+
+Add the first Docker smoke path with network disabled.
+
+### Reasoning
+
+Docker smoke should start as environment calibration, not a claim of secure
+hostile-code containment. The first useful check is small:
+
+```text
+Can the harness run a command inside Docker with --network none, and does a
+network probe fail under that setting?
+```
+
+The smoke runner uses two probes:
+
+- startup probe: `echo docker_smoke_ok` should return `0`;
+- network probe: `wget ... https://example.com` should return non-zero under
+  `--network none`.
+
+### Shipped
+
+- Added `configs/sandbox/docker_none.yaml`.
+- Added `src/agentenv/sandbox/docker_smoke.py`.
+- Added `agentenv sandbox smoke --config <config> --out <dir>`.
+- Added `tests/sandbox/test_docker_smoke.py` with a mocked Docker subprocess
+  path.
+- Generated `experiments/sandbox/docker_smoke/`.
+
+### Ran
+
+```bash
+uv run pytest tests/sandbox/test_docker_smoke.py
+uv run ruff check src/agentenv/sandbox/docker_smoke.py src/agentenv/cli.py tests/sandbox/test_docker_smoke.py
+uv run pyright src/agentenv/sandbox/docker_smoke.py tests/sandbox/test_docker_smoke.py
+uv run agentenv sandbox smoke --config configs/sandbox/docker_none.yaml --out experiments/sandbox/docker_smoke
+```
+
+### Result
+
+The real Docker smoke passed:
+
+```text
+startup: returncode 0
+network_probe: returncode 1 under --network none
+status: PASS
+```
+
+Docker pulled `busybox:1.36` during the smoke run. The pull output recorded the
+image digest in `docker_smoke_result.json` probe stderr.
+
+### Limitation
+
+This is a smoke check only. It proves the local Docker path can run a container
+with network disabled for this probe. It does not prove production-grade
+sandboxing, syscall isolation, filesystem mount policy, resource limits, or
+protection against hostile code.

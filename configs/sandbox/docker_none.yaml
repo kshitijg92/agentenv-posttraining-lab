@@ -1,0 +1,11 @@
+image: busybox:1.36
+network: none
+timeout_seconds: 15
+startup_command:
+  - sh
+  - -c
+  - echo docker_smoke_ok
+network_probe_command:
+  - sh
+  - -c
+  - wget -q -T 2 -O - https://example.com
