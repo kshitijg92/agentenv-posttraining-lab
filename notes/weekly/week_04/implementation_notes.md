@@ -750,3 +750,87 @@ trace validation: 16 trace files
 Create the dev-baseline report. `agentenv report compare` does not exist yet,
 so either add the smallest compare path or write the report directly from the
 generated manifests without overstating automation.
+
+### Decision
+
+Add a first-class full eval config mode before building the consolidated
+dev-baseline report.
+
+### Reasoning
+
+The current eval command ran one selected policy from a config. That was enough
+for early control calibration, but a baseline report is naturally about the
+whole policy set defined by one eval config:
+
+```text
+dev_baseline x {noop, public-tests-only, oracle}
+```
+
+The clean next abstraction is a parent eval-matrix artifact, not a loose report
+over manually grouped run directories.
+
+### Shipped
+
+- Added `run_eval_config_all_policies(...)`.
+- Added `uv run agentenv eval --config <config> --all-policies --out <dir>`.
+- Added `eval_matrix_v0` parent manifests at:
+
+```text
+<out>/eval_matrix_manifest.json
+<out>/policies/<policy>/run_manifest.json
+```
+
+The existing `--policy` mode still writes a single `eval_run_v0` artifact.
+
+### Ran
+
+```bash
+uv run pytest tests/test_eval_run.py
+uv run ruff check src/agentenv/orchestrators/eval_run.py src/agentenv/cli.py tests/test_eval_run.py
+uv run pyright src/agentenv/orchestrators/eval_run.py src/agentenv/cli.py tests/test_eval_run.py
+uv run agentenv eval --config configs/eval/dev_baseline.yaml --all-policies --out /tmp/agentenv-dev-baseline-matrix
+uv run pytest
+uv run ruff check .
+uv run pyright
+```
+
+### Result
+
+Full eval config mode passed:
+
+```text
+temporary dev_baseline matrix: policies=3 attempts=9 HIDDEN_TEST_FAIL=6 PASS=3
+focused eval tests: 5 passed
+pytest: 73 passed
+ruff: all checks passed
+pyright: 0 errors
+```
+
+### Next Small Step
+
+Generate the durable dev-baseline matrix artifact, then teach reporting to read
+`eval_matrix_v0` and produce `experiments/reports/dev_baseline.md`.
+
+### Ran
+
+```bash
+uv run agentenv eval --config configs/eval/dev_baseline.yaml --all-policies --out experiments/runs/dev_baseline
+uv run python -c 'from pathlib import Path; from agentenv.tracing.validate import validate_trace_file; paths=sorted(Path("experiments/runs/dev_baseline").rglob("trace.jsonl")); [validate_trace_file(path) for path in paths]; print(f"validated {len(paths)} trace files")'
+```
+
+### Result
+
+Durable dev-baseline matrix generation passed:
+
+```text
+policies=3
+attempts=9
+status_counts: HIDDEN_TEST_FAIL=6, PASS=3
+trace validation: 12 trace files
+artifact: experiments/runs/dev_baseline/eval_matrix_manifest.json
+```
+
+### Next Small Step
+
+Teach reporting to read `eval_matrix_v0` and produce
+`experiments/reports/dev_baseline.md`.

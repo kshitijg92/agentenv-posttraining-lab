@@ -19,6 +19,7 @@ from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
 EVAL_RUN_ARTIFACT_VERSION = "eval_run_v0"
+EVAL_MATRIX_ARTIFACT_VERSION = "eval_matrix_v0"
 TraceEvent = dict[str, object]
 
 
@@ -40,6 +41,17 @@ class EvalRun:
     out_dir: Path
     created_at: str
     attempts: list[EvalAttemptRecord]
+
+
+@dataclass(frozen=True)
+class EvalMatrixRun:
+    eval_matrix_id: str
+    config: EvalConfig
+    config_path: Path
+    config_hash: str
+    out_dir: Path
+    created_at: str
+    policy_runs: list[EvalRun]
 
 
 def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
@@ -199,6 +211,36 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     return eval_run
 
 
+def run_eval_config_all_policies(config_path: Path, out_dir: Path) -> EvalMatrixRun:
+    config_path = config_path.resolve()
+    out_dir = out_dir.resolve()
+    config = load_eval_config(config_path)
+    validate_eval_config_paths(config, config_path)
+    config_hash = _hash_file(config_path)
+    eval_matrix_id = f"eval_matrix_{uuid4().hex}"
+    created_at = _utc_now()
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policies_dir = out_dir / "policies"
+    policies_dir.mkdir(parents=True, exist_ok=True)
+
+    policy_runs = [
+        run_eval_config(config_path, policy, policies_dir / policy)
+        for policy in config.policies
+    ]
+    eval_matrix = EvalMatrixRun(
+        eval_matrix_id=eval_matrix_id,
+        config=config,
+        config_path=config_path,
+        config_hash=config_hash,
+        out_dir=out_dir,
+        created_at=created_at,
+        policy_runs=policy_runs,
+    )
+    _write_eval_matrix_manifest(eval_matrix)
+    return eval_matrix
+
+
 def _write_eval_trace(eval_run: EvalRun, trace_events: list[TraceEvent]) -> Path:
     trace_path = eval_run.out_dir / "trace.jsonl"
     trace_path.write_text(
@@ -212,6 +254,19 @@ def _write_eval_run_manifest(eval_run: EvalRun) -> Path:
     manifest_path.write_text(
         json.dumps(
             _eval_run_manifest(eval_run),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    return manifest_path
+
+
+def _write_eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> Path:
+    manifest_path = eval_matrix.out_dir / "eval_matrix_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            _eval_matrix_manifest(eval_matrix),
             indent=2,
             sort_keys=True,
         )
@@ -254,12 +309,59 @@ def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
     }
 
 
+def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
+    policy_attempt_counts = {
+        policy_run.policy: len(policy_run.attempts)
+        for policy_run in eval_matrix.policy_runs
+    }
+    return {
+        "artifact_version": EVAL_MATRIX_ARTIFACT_VERSION,
+        "eval_matrix_id": eval_matrix.eval_matrix_id,
+        "created_at": eval_matrix.created_at,
+        "config_path": str(eval_matrix.config_path),
+        "config_hash": eval_matrix.config_hash,
+        "config_name": eval_matrix.config.name,
+        "task_pack": eval_matrix.config.task_pack,
+        "split": eval_matrix.config.split,
+        "tasks": eval_matrix.config.tasks,
+        "policy_count": len(eval_matrix.policy_runs),
+        "attempt_count": sum(policy_attempt_counts.values()),
+        "status_counts": _matrix_status_counts(eval_matrix.policy_runs),
+        "artifacts": {
+            "policies": "policies",
+        },
+        "policy_runs": [
+            {
+                "policy": policy_run.policy,
+                "eval_run_id": policy_run.eval_run_id,
+                "artifact_dir": str(policy_run.out_dir.relative_to(eval_matrix.out_dir)),
+                "run_manifest": str(
+                    (policy_run.out_dir / "run_manifest.json").relative_to(
+                        eval_matrix.out_dir
+                    )
+                ),
+                "attempt_count": len(policy_run.attempts),
+                "status_counts": _status_counts(policy_run.attempts),
+            }
+            for policy_run in eval_matrix.policy_runs
+        ],
+    }
+
+
 def _status_counts(attempts: list[EvalAttemptRecord]) -> dict[str, int]:
     status_counts: dict[str, int] = {}
     for attempt in attempts:
         status_counts[attempt.result.status] = (
             status_counts.get(attempt.result.status, 0) + 1
         )
+    return status_counts
+
+
+def _matrix_status_counts(policy_runs: list[EvalRun]) -> dict[str, int]:
+    status_counts: dict[str, int] = {}
+    for policy_run in policy_runs:
+        for status, count in _status_counts(policy_run.attempts).items():
+            status_counts[status] = status_counts.get(status, 0) + count
     return status_counts
 
 

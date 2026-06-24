@@ -2,7 +2,10 @@ import json
 from pathlib import Path
 
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
-from agentenv.orchestrators.eval_run import run_eval_config
+from agentenv.orchestrators.eval_run import (
+    run_eval_config,
+    run_eval_config_all_policies,
+)
 from agentenv.tracing.schema import EvalTraceProvenance
 from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
@@ -91,3 +94,62 @@ def test_run_eval_config_distinguishes_bad_noop(tmp_path: Path) -> None:
     assert result.status == "HIDDEN_TEST_FAIL"
     assert result.public_status == "PASS"
     assert result.hidden_status == "FAIL"
+
+
+def test_run_eval_config_all_policies_writes_matrix_manifest(
+    tmp_path: Path,
+) -> None:
+    eval_matrix = run_eval_config_all_policies(
+        CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+    )
+
+    matrix_manifest_path = tmp_path / "eval_matrix/eval_matrix_manifest.json"
+    matrix_manifest = json.loads(matrix_manifest_path.read_text())
+
+    assert eval_matrix.config.name == "control_policies"
+    assert [run.policy for run in eval_matrix.policy_runs] == [
+        "oracle",
+        "bad-noop",
+        "bad-public-only",
+    ]
+    assert matrix_manifest["artifact_version"] == "eval_matrix_v0"
+    assert matrix_manifest["config_name"] == "control_policies"
+    assert matrix_manifest["policy_count"] == 3
+    assert matrix_manifest["attempt_count"] == 3
+    assert matrix_manifest["status_counts"] == {
+        "HIDDEN_TEST_FAIL": 2,
+        "PASS": 1,
+    }
+    assert matrix_manifest["artifacts"] == {"policies": "policies"}
+    assert matrix_manifest["policy_runs"] == [
+        {
+            "policy": "oracle",
+            "eval_run_id": eval_matrix.policy_runs[0].eval_run_id,
+            "artifact_dir": "policies/oracle",
+            "run_manifest": "policies/oracle/run_manifest.json",
+            "attempt_count": 1,
+            "status_counts": {"PASS": 1},
+        },
+        {
+            "policy": "bad-noop",
+            "eval_run_id": eval_matrix.policy_runs[1].eval_run_id,
+            "artifact_dir": "policies/bad-noop",
+            "run_manifest": "policies/bad-noop/run_manifest.json",
+            "attempt_count": 1,
+            "status_counts": {"HIDDEN_TEST_FAIL": 1},
+        },
+        {
+            "policy": "bad-public-only",
+            "eval_run_id": eval_matrix.policy_runs[2].eval_run_id,
+            "artifact_dir": "policies/bad-public-only",
+            "run_manifest": "policies/bad-public-only/run_manifest.json",
+            "attempt_count": 1,
+            "status_counts": {"HIDDEN_TEST_FAIL": 1},
+        },
+    ]
+    assert (tmp_path / "eval_matrix/policies/oracle/run_manifest.json").is_file()
+    assert (tmp_path / "eval_matrix/policies/bad-noop/run_manifest.json").is_file()
+    assert (
+        tmp_path / "eval_matrix/policies/bad-public-only/run_manifest.json"
+    ).is_file()

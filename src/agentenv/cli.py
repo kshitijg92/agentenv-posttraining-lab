@@ -5,7 +5,12 @@ from rich.console import Console
 
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.orchestrators.controls_run import run_controls
-from agentenv.orchestrators.eval_run import EvalRun, run_eval_config
+from agentenv.orchestrators.eval_run import (
+    EvalMatrixRun,
+    EvalRun,
+    run_eval_config,
+    run_eval_config_all_policies,
+)
 from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
 from agentenv.sandbox.docker_smoke import run_docker_smoke
@@ -112,9 +117,40 @@ def smoke_sandbox(
 @app.command("eval")
 def run_eval(
     config: Path = typer.Option(..., "--config", help="Path to eval config YAML."),
-    policy: str = typer.Option(..., "--policy", help="Policy name from the config."),
+    policy: str | None = typer.Option(
+        None,
+        "--policy",
+        help="Policy name from the config.",
+    ),
+    all_policies: bool = typer.Option(
+        False,
+        "--all-policies",
+        help="Run every policy defined by the config.",
+    ),
     out: Path = typer.Option(..., "--out", help="Directory for eval artifacts."),
 ) -> None:
+    if all_policies:
+        if policy is not None:
+            raise typer.BadParameter("--all-policies cannot be combined with --policy")
+        eval_matrix = run_eval_config_all_policies(config, out)
+        status_counts = ", ".join(
+            f"{status}={count}"
+            for status, count in sorted(
+                _matrix_status_counts(eval_matrix).items(),
+            )
+        )
+        console.print(
+            f"[green]eval complete[/green] {eval_matrix.config.name} "
+            f"policies={len(eval_matrix.policy_runs)} "
+            f"attempts={sum(len(run.attempts) for run in eval_matrix.policy_runs)} "
+            f"{status_counts}"
+        )
+        console.print(f"wrote {eval_matrix.out_dir / 'eval_matrix_manifest.json'}")
+        return
+
+    if policy is None:
+        raise typer.BadParameter("Provide --policy or --all-policies")
+
     eval_run = run_eval_config(config, policy, out)
     status_counts = ", ".join(
         f"{status}={count}"
@@ -157,4 +193,12 @@ def _status_counts(eval_run: EvalRun) -> dict[str, int]:
     counts: dict[str, int] = {}
     for attempt in eval_run.attempts:
         counts[attempt.result.status] = counts.get(attempt.result.status, 0) + 1
+    return counts
+
+
+def _matrix_status_counts(eval_matrix: EvalMatrixRun) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for eval_run in eval_matrix.policy_runs:
+        for status, count in _status_counts(eval_run).items():
+            counts[status] = counts.get(status, 0) + count
     return counts
