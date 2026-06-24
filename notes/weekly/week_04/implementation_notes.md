@@ -1050,3 +1050,71 @@ pyright: 0 errors
 
 Close remaining Week 4 limitations and learnings. Hidden-validator file hashes
 and structured task exclusions remain explicit report limitations.
+
+### Closeout Docs
+
+Removed the transitional root-level report:
+
+```text
+experiments/reports/dev_baseline.md
+```
+
+The canonical report path is:
+
+```text
+experiments/reports/eval_matrices/dev_baseline.md
+```
+
+### Shipped
+
+- Added `docs/task_design_note_v0.md`.
+- Added `notes/weekly/week_04/learnings.md`.
+
+### Result
+
+The task design note records:
+
+```text
+construct validity
+what the suite measures
+what it does not measure
+control expectations
+current weaknesses
+non-claims
+```
+
+The Week 4 learnings record:
+
+```text
+task difficulty should come from behavioral contracts
+hidden validators should verify visible semantics
+controls are calibration evidence
+replay is part of measurement trust
+eval matrices are the right reporting unit for policy sets
+```
+
+### Next Small Step
+
+Run final Week 4 verification.
+
+### Ran
+
+```bash
+uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
+uv run pytest
+uv run ruff check .
+uv run pyright
+uv run python -c 'from pathlib import Path; from agentenv.tracing.validate import validate_trace_file; paths=sorted(Path("experiments/runs/dev_baseline").rglob("trace.jsonl")); [validate_trace_file(path) for path in paths]; print(f"validated {len(paths)} trace files")'
+```
+
+### Result
+
+Final Week 4 verification passed:
+
+```text
+task pack validation: valid repo_patch_python_v0 tasks=4
+pytest: 75 passed
+ruff: all checks passed
+pyright: 0 errors
+dev_baseline trace validation: 24 trace files
+```
