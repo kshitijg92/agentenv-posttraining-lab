@@ -142,5 +142,4 @@ Good follow-ups, but not blockers for Week 4 closeout:
 - capture hidden-validator file hashes in `eval_matrix_v0`,
 - represent task exclusions as structured report data,
 - define model-agent replay semantics separately from patch-control replay,
-- decide whether the transitional root-level report path should stay deleted
-  permanently.
+- preserve the artifact-type report convention for future eval matrix reports.
