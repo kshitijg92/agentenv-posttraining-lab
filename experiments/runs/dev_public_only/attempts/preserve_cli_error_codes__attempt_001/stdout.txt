@@ -1,0 +1,130 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-preserve_cli_error_codes-2oycyp1b/workspace
+configfile: pyproject.toml
+collected 1 item
+
+tests/test_public.py .                                                   [100%]
+
+============================== 1 passed in 0.03s ===============================
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-preserve_cli_error_codes-2oycyp1b/workspace
+configfile: pyproject.toml
+collected 8 items
+
+test_cli_behavior.py FFFFFF..                                            [100%]
+
+=================================== FAILURES ===================================
+________________ test_missing_file_exits_with_missing_file_code ________________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-523/test_missing_file_exits_with_m0')
+
+    def test_missing_file_exits_with_missing_file_code(tmp_path: Path) -> None:
+        missing_path = tmp_path / "missing.jsonl"
+    
+        result = _run_cli(str(missing_path))
+    
+>       assert result.returncode == 3
+E       assert 1 == 3
+E        +  where 1 = CompletedProcess(args=['/tmp/agentenv-preserve_cli_error_codes-2oycyp1b/workspace/.venv/bin/python', '-m', 'validate_r...rno 2] No such file or directory: '/tmp/pytest-of-kshitij/pytest-523/test_missing_file_exits_with_m0/missing.jsonl'\n").returncode
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py:13: AssertionError
+______________ test_malformed_jsonl_exits_with_invalid_input_code ______________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-523/test_malformed_jsonl_exits_wit0')
+
+    def test_malformed_jsonl_exits_with_invalid_input_code(tmp_path: Path) -> None:
+        input_path = tmp_path / "records.jsonl"
+        input_path.write_text('{"id": "r1", "status": "ok"}\n{"id":\n')
+    
+        result = _run_cli(str(input_path))
+    
+>       assert result.returncode == 4
+E       AssertionError: assert 1 == 4
+E        +  where 1 = CompletedProcess(args=['/tmp/agentenv-preserve_cli_error_codes-2oycyp1b/workspace/.venv/bin/python', '-m', 'validate_r...jsonl_exits_wit0/records.jsonl'], returncode=1, stdout='', stderr='error: Expecting value: line 1 column 7 (char 6)\n').returncode
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py:23: AssertionError
+__________ test_missing_required_field_exits_with_invalid_input_code ___________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-523/test_missing_required_field_ex0')
+
+    def test_missing_required_field_exits_with_invalid_input_code(
+        tmp_path: Path,
+    ) -> None:
+        input_path = tmp_path / "records.jsonl"
+        input_path.write_text('{"id": "r1", "status": "ok"}\n{"id": "r2"}\n')
+    
+        result = _run_cli(str(input_path))
+    
+>       assert result.returncode == 4
+E       assert 1 == 4
+E        +  where 1 = CompletedProcess(args=['/tmp/agentenv-preserve_cli_error_codes-2oycyp1b/workspace/.venv/bin/python', '-m', 'validate_r...shitij/pytest-523/test_missing_required_field_ex0/records.jsonl'], returncode=1, stdout='', stderr="error: 'status'\n").returncode
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py:35: AssertionError
+___________ test_non_object_json_line_exits_with_invalid_input_code ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-523/test_non_object_json_line_exit0')
+
+    def test_non_object_json_line_exits_with_invalid_input_code(
+        tmp_path: Path,
+    ) -> None:
+        input_path = tmp_path / "records.jsonl"
+        input_path.write_text('{"id": "r1", "status": "ok"}\n["not", "object"]\n')
+    
+        result = _run_cli(str(input_path))
+    
+>       assert result.returncode == 4
+E       AssertionError: assert 1 == 4
+E        +  where 1 = CompletedProcess(args=['/tmp/agentenv-preserve_cli_error_codes-2oycyp1b/workspace/.venv/bin/python', '-m', 'validate_r...ine_exit0/records.jsonl'], returncode=1, stdout='', stderr='error: list indices must be integers or slices, not str\n').returncode
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py:47: AssertionError
+_____________ test_non_string_field_exits_with_invalid_input_code ______________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-523/test_non_string_field_exits_wi0')
+
+    def test_non_string_field_exits_with_invalid_input_code(tmp_path: Path) -> None:
+        input_path = tmp_path / "records.jsonl"
+        input_path.write_text('{"id": "r1", "status": "ok"}\n{"id": 2, "status": "ok"}\n')
+    
+        result = _run_cli(str(input_path))
+    
+>       assert result.returncode == 4
+E       assert 0 == 4
+E        +  where 0 = CompletedProcess(args=['/tmp/agentenv-preserve_cli_error_codes-2oycyp1b/workspace/.venv/bin/python', '-m', 'validate_r...t-of-kshitij/pytest-523/test_non_string_field_exits_wi0/records.jsonl'], returncode=0, stdout='{"ok": 2}\n', stderr='').returncode
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py:57: AssertionError
+_______________ test_duplicate_id_exits_with_invalid_input_code ________________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-523/test_duplicate_id_exits_with_i0')
+
+    def test_duplicate_id_exits_with_invalid_input_code(tmp_path: Path) -> None:
+        input_path = tmp_path / "records.jsonl"
+        input_path.write_text(
+            "\n".join(
+                [
+                    '{"id": "r1", "status": "ok"}',
+                    '{"id": "r2", "status": "failed"}',
+                    '{"id": "r1", "status": "ok"}',
+                ]
+            )
+            + "\n"
+        )
+    
+        result = _run_cli(str(input_path))
+    
+>       assert result.returncode == 4
+E       assert 0 == 4
+E        +  where 0 = CompletedProcess(args=['/tmp/agentenv-preserve_cli_error_codes-2oycyp1b/workspace/.venv/bin/python', '-m', 'validate_r...pytest-523/test_duplicate_id_exits_with_i0/records.jsonl'], returncode=0, stdout='{"ok": 2, "failed": 1}\n', stderr='').returncode
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py:76: AssertionError
+=========================== short test summary info ============================
+FAILED test_cli_behavior.py::test_missing_file_exits_with_missing_file_code
+FAILED test_cli_behavior.py::test_malformed_jsonl_exits_with_invalid_input_code
+FAILED test_cli_behavior.py::test_missing_required_field_exits_with_invalid_input_code
+FAILED test_cli_behavior.py::test_non_object_json_line_exits_with_invalid_input_code
+FAILED test_cli_behavior.py::test_non_string_field_exits_with_invalid_input_code
+FAILED test_cli_behavior.py::test_duplicate_id_exits_with_invalid_input_code
+========================= 6 failed, 2 passed in 0.19s ==========================
+

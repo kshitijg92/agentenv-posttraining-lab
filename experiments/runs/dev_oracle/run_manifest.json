@@ -1,0 +1,54 @@
+{
+  "artifact_version": "eval_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "trace": "trace.jsonl"
+  },
+  "attempt_count": 3,
+  "attempts": [
+    {
+      "artifact_dir": "attempts/repair_jsonl_deduper__attempt_001",
+      "attempt_id": "attempt_cdc34b21355a43bd8ffc8f730e1a587a",
+      "attempt_index": 0,
+      "attempt_run_id": "run_ec87df8a115b467184b8eb8fbfa92333",
+      "final_diff_hash": "xxh64:791a044ad51af90c",
+      "hidden_status": "PASS",
+      "public_status": "PASS",
+      "status": "PASS",
+      "task_id": "repair_jsonl_deduper"
+    },
+    {
+      "artifact_dir": "attempts/preserve_cli_error_codes__attempt_001",
+      "attempt_id": "attempt_3bafa47be3724fb5996696b049bfee76",
+      "attempt_index": 0,
+      "attempt_run_id": "run_3f56e3d2ee5b411abd095b361678e968",
+      "final_diff_hash": "xxh64:3a6c137988d3cd3a",
+      "hidden_status": "PASS",
+      "public_status": "PASS",
+      "status": "PASS",
+      "task_id": "preserve_cli_error_codes"
+    },
+    {
+      "artifact_dir": "attempts/repair_config_precedence__attempt_001",
+      "attempt_id": "attempt_28135aa566cd40cbaef21d4a7b9a8f66",
+      "attempt_index": 0,
+      "attempt_run_id": "run_953f81ec68a34abb99295b81a2087d95",
+      "final_diff_hash": "xxh64:187bcea16c66ce96",
+      "hidden_status": "PASS",
+      "public_status": "PASS",
+      "status": "PASS",
+      "task_id": "repair_config_precedence"
+    }
+  ],
+  "config_hash": "xxh64:2f1db658e87d2562",
+  "config_name": "dev_baseline",
+  "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
+  "created_at": "2026-06-24T06:05:57.141547Z",
+  "eval_run_id": "eval_a3553ee9ecf34635b141ae632de2443c",
+  "policy": "oracle",
+  "split": "dev",
+  "status_counts": {
+    "PASS": 3
+  },
+  "task_pack": "data/task_packs/repo_patch_python_v0"
+}

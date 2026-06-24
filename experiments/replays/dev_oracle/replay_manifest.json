@@ -1,0 +1,14 @@
+{
+  "artifact_version": "replay_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "replay_result": "replay_result.json",
+    "replay_results": "replay_results.jsonl",
+    "trace": "trace.jsonl"
+  },
+  "created_at": "2026-06-24T06:06:12.295459Z",
+  "replay_id": "replay_0e7be9f39d5d4c44a1c780f18012e4e5",
+  "source_artifact_version": "eval_run_v0",
+  "source_eval_run_id": "eval_a3553ee9ecf34635b141ae632de2443c",
+  "source_run_dir": "/home/kshitij/agentenv-posttraining-lab/experiments/runs/dev_oracle"
+}

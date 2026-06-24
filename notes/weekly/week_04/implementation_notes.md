@@ -699,3 +699,54 @@ dev_controls trace validation: 36 trace files
 ### Next Small Step
 
 Design the dev-baseline eval config contract before creating the YAML.
+
+### Decision
+
+Keep the first dev-baseline eval config control-only.
+
+### Reasoning
+
+The existing eval config schema already supports runnable control-patch
+policies. Week 4's plan asks for three scripted policies:
+
+```text
+noop -> bad.noop
+public-tests-only -> bad.public_only
+oracle -> oracle
+```
+
+The 12-week manual lists `simple-prompt-loop` only as an optional Week 4 stretch
+and explicitly says not to block Week 4 on real LLM agent integration. The
+model/agent baseline config belongs to Week 5.
+
+### Shipped
+
+- Added `configs/eval/dev_baseline.yaml`.
+
+### Ran
+
+```bash
+uv run agentenv eval --config configs/eval/dev_baseline.yaml --policy noop --out experiments/runs/dev_noop
+uv run agentenv eval --config configs/eval/dev_baseline.yaml --policy public-tests-only --out experiments/runs/dev_public_only
+uv run agentenv eval --config configs/eval/dev_baseline.yaml --policy oracle --out experiments/runs/dev_oracle
+uv run agentenv replay experiments/runs/dev_oracle --out experiments/replays/dev_oracle
+uv run python -c 'from pathlib import Path; from agentenv.tracing.validate import validate_trace_file; paths=[]; roots=[Path("experiments/runs/dev_noop"), Path("experiments/runs/dev_public_only"), Path("experiments/runs/dev_oracle"), Path("experiments/replays/dev_oracle")]; [paths.extend(sorted(root.rglob("trace.jsonl"))) for root in roots]; [validate_trace_file(path) for path in paths]; print(f"validated {len(paths)} trace files")'
+```
+
+### Result
+
+Baseline artifact generation passed:
+
+```text
+noop: HIDDEN_TEST_FAIL=3
+public-tests-only: HIDDEN_TEST_FAIL=3
+oracle: PASS=3
+oracle replay: PASS attempts=3
+trace validation: 16 trace files
+```
+
+### Next Small Step
+
+Create the dev-baseline report. `agentenv report compare` does not exist yet,
+so either add the smallest compare path or write the report directly from the
+generated manifests without overstating automation.
