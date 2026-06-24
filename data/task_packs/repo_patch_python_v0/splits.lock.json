@@ -1,0 +1,12 @@
+{
+  "version": "splits_v0",
+  "created_at": "2026-06-24T03:55:43Z",
+  "task_pack": "repo_patch_python_v0",
+  "practice": [
+    "toy_python_fix_001"
+  ],
+  "dev": [],
+  "heldout_private": [],
+  "public_calibration": [],
+  "policy": "heldout_private is read-only and never used for training, prompt tuning, task design, or baseline iteration. Authored tasks enter dev when they are actively inspected during task design."
+}

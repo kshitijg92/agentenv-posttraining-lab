@@ -73,3 +73,41 @@ class TaskManifest(BaseModel):
     controls: ControlSpec
     replay: ReplaySpec
     leakage_canary: str = Field(min_length=1)
+
+
+class BaselinePolicySpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    practice: str = Field(min_length=1)
+    dev: str = Field(min_length=1)
+    heldout_private: str = Field(min_length=1)
+    public_calibration: str = Field(min_length=1)
+
+
+class TaskPackManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    domain: TaskDomain
+    created_at: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    scoring_contract: str = Field(min_length=1)
+    split_lock: str = Field(min_length=1)
+    tasks_dir: str = Field(min_length=1)
+    required_task_files: list[str] = Field(min_length=1)
+    baseline_policy: BaselinePolicySpec
+    provenance_policy: str = Field(min_length=1)
+
+
+class TaskSplitsLock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: str = Field(min_length=1)
+    created_at: str = Field(min_length=1)
+    task_pack: str = Field(min_length=1)
+    practice: list[str]
+    dev: list[str]
+    heldout_private: list[str]
+    public_calibration: list[str]
+    policy: str = Field(min_length=1)

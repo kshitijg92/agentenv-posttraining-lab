@@ -10,7 +10,11 @@ from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
 from agentenv.sandbox.docker_smoke import run_docker_smoke
 from agentenv.scorers.audit import run_scorer_audit
-from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_paths
+from agentenv.tasks.validate import (
+    load_task_manifest,
+    validate_task_manifest_paths,
+    validate_task_pack,
+)
 
 
 app = typer.Typer(no_args_is_help=True)
@@ -30,6 +34,14 @@ console = Console()
 
 @tasks_app.command("validate")
 def validate_task(path: Path) -> None:
+    if path.is_dir():
+        result = validate_task_pack(path)
+        console.print(
+            f"[green]valid[/green] {result.task_pack_id} "
+            f"tasks={result.task_count}"
+        )
+        return
+
     manifest = load_task_manifest(path)
     validate_task_manifest_paths(manifest, path)
     console.print(f"[green]valid[/green] {manifest.id}")

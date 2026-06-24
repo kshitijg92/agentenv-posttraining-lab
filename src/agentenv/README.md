@@ -17,7 +17,15 @@ uv run agentenv controls --help
 uv run agentenv sandbox --help
 ```
 
-## Validate A Task
+## Validate A Task Pack Or Task
+
+Task pack:
+
+```bash
+uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
+```
+
+Single task:
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml

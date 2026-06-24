@@ -1,0 +1,22 @@
+id: repo_patch_python_v0
+version: task_pack_v0
+domain: repo_patch_python
+created_at: "2026-06-24T03:55:43Z"
+description: "Small local Python repo-patch tasks with public checks, hidden pytest validators, oracle controls, and known-bad controls."
+scoring_contract: scoring_contract_v0
+split_lock: splits.lock.json
+tasks_dir: tasks
+required_task_files:
+  - task.yaml
+  - task_card.md
+  - workspace_seed
+  - hidden_tests
+  - controls/oracle.patch
+  - controls/bad_noop.patch
+  - controls/bad_public_only.patch
+baseline_policy:
+  practice: "Calibration and harness-shaping tasks."
+  dev: "Authored tasks used for baseline iteration and reporting."
+  heldout_private: "Read-only tasks, never used for training, prompt tuning, task design, or baseline iteration."
+  public_calibration: "External or public calibration tasks, empty unless explicitly added."
+provenance_policy: "Tasks must be self-authored or source-identified, and must not use employer-private, third-party-proprietary, or benchmark-heldout material."
