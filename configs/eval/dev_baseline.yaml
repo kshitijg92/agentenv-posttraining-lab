@@ -1,0 +1,23 @@
+name: dev_baseline
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_jsonl_deduper
+  - preserve_cli_error_codes
+  - repair_config_precedence
+split: dev
+attempts: 1
+policies:
+  oracle:
+    type: control_patch
+    control: oracle
+  noop:
+    type: control_patch
+    control: bad.noop
+  public-tests-only:
+    type: control_patch
+    control: bad.public_only
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

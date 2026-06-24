@@ -649,7 +649,53 @@ pyright: 0 errors
 dev_controls trace validation: 36 trace files
 ```
 
+### Review Fixes
+
+Fixed the three suite-review findings:
+
+- Added `pytest>=9.1.0` to every task seed `pyproject.toml` so public and hidden
+  pytest checks do not rely on the outer `agentenv` virtualenv.
+- Added a `preserve_cli_error_codes` hidden test for non-object JSONL lines
+  exiting `4` without a traceback.
+- Added `repair_config_precedence` hidden tests for JSON config numeric-string
+  ports and `APP_DEBUG="false"` overriding config to `False`.
+
+### Ran
+
+```bash
+env -u VIRTUAL_ENV uv run pytest tests/test_public.py
+uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/oracle.patch --out /tmp/fix_preserve_oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_noop.patch --out /tmp/fix_preserve_noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_public_only.patch --out /tmp/fix_preserve_public_only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/oracle.patch --out /tmp/fix_config_oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_noop.patch --out /tmp/fix_config_noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_public_only.patch --out /tmp/fix_config_public_only
+rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
+uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
+uv run pytest
+uv run ruff check .
+uv run pyright
+uv run python -c 'from pathlib import Path; from agentenv.tracing.validate import validate_trace_file; paths=sorted(Path("experiments/runs/dev_controls").rglob("trace.jsonl")); [validate_trace_file(path) for path in paths]; print(f"validated {len(paths)} trace files")'
+```
+
+### Result
+
+Review fixes passed:
+
+```text
+clean copied-seed public checks with VIRTUAL_ENV unset: pass
+task pack validation: valid repo_patch_python_v0 tasks=4
+preserve_cli_error_codes direct controls: PASS / HIDDEN_TEST_FAIL / HIDDEN_TEST_FAIL
+repair_config_precedence direct controls: PASS / HIDDEN_TEST_FAIL / HIDDEN_TEST_FAIL
+repeated controls: attempts=36 failed=0
+focused pytest: 9 passed
+pytest: 72 passed
+ruff: all checks passed
+pyright: 0 errors
+dev_controls trace validation: 36 trace files
+```
+
 ### Next Small Step
 
-Review the three authored `dev` tasks as a set before deciding whether the suite
-is ready for a dev-baseline config/reporting pass.
+Design the dev-baseline eval config contract before creating the YAML.
