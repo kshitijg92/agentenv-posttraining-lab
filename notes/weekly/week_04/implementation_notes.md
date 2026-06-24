@@ -525,3 +525,131 @@ generated from the seed and oracle file contents, then verified with
 
 Review task quality for the two new `dev` tasks before deciding whether to add a
 third new task or move to the dev-baseline config/reporting path.
+
+### Decision
+
+Create the third new `dev` task as `repair_config_precedence`.
+
+### Reasoning
+
+This task increases complexity without making the config surface artificially
+large. It has two source files and four public tests, but keeps the setting
+shape small:
+
+```text
+Settings(host="localhost", port=8080, debug=False)
+environment > JSON config > defaults
+env vars: APP_HOST, APP_PORT, APP_DEBUG
+debug accepts only bool, "true", or "false"
+```
+
+The useful difficulty is in the shortcuts, not in adding more fields:
+
+```text
+only APP_PORT is wired
+unknown config keys are silently ignored
+bool ports accidentally pass as ints
+debug strings are not parsed
+```
+
+Hidden validators check those visible-contract edges without requiring exact
+error-message wording.
+
+### Shipped
+
+- Added `data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/`.
+- Added `repair_config_precedence` to the `dev` split.
+- Updated task-pack control tests and manifest-count tests for four tasks.
+
+### Ran
+
+```bash
+uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/oracle.patch --out /tmp/repair_config_precedence_oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_noop.patch --out /tmp/repair_config_precedence_noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_public_only.patch --out /tmp/repair_config_precedence_public_only
+rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
+uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
+uv run pytest
+uv run ruff check .
+uv run pyright
+uv run python -c 'from pathlib import Path; from agentenv.tracing.validate import validate_trace_file; paths=sorted(Path("experiments/runs/dev_controls").rglob("trace.jsonl")); [validate_trace_file(path) for path in paths]; print(f"validated {len(paths)} trace files")'
+```
+
+### Result
+
+Calibration passed:
+
+```text
+task pack validation: valid repo_patch_python_v0 tasks=4
+oracle: PASS
+bad.noop: HIDDEN_TEST_FAIL
+bad.public_only: HIDDEN_TEST_FAIL
+repeated controls: attempts=36 failed=0
+focused pytest: 9 passed
+pytest: 72 passed
+ruff: all checks passed
+pyright: 0 errors
+dev_controls trace validation: 36 trace files
+```
+
+### Calibration Fix
+
+The first draft of `oracle.patch` passed a source-tree `git apply --check` but
+failed in the copied workspace used by the orchestrator. The fix was to
+regenerate the oracle diff from old/new temp copies and validate it against a
+copied seed workspace before rerunning direct controls.
+
+### Calibration Refinement
+
+Added a mixed hidden case for default/config/environment merging:
+
+```text
+default port remains 8080
+JSON config sets host
+APP_DEBUG sets debug
+```
+
+This catches a more realistic public-only shortcut: treating environment as an
+isolated source instead of merging it over config values. The updated
+`bad_public_only.patch` now implements most of the visible contract but drops
+config-derived values when only `APP_HOST` or `APP_DEBUG` is present. It passes
+public tests and fails hidden on exactly this mixed merge case.
+
+### Ran
+
+```bash
+uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/oracle.patch --out /tmp/repair_config_precedence_oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_public_only.patch --out /tmp/repair_config_precedence_public_only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_noop.patch --out /tmp/repair_config_precedence_noop
+rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
+uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
+uv run pytest
+uv run ruff check .
+uv run pyright
+uv run python -c 'from pathlib import Path; from agentenv.tracing.validate import validate_trace_file; paths=sorted(Path("experiments/runs/dev_controls").rglob("trace.jsonl")); [validate_trace_file(path) for path in paths]; print(f"validated {len(paths)} trace files")'
+```
+
+### Result
+
+Refined calibration passed:
+
+```text
+task pack validation: valid repo_patch_python_v0 tasks=4
+oracle: PASS
+bad.noop: HIDDEN_TEST_FAIL
+bad.public_only: HIDDEN_TEST_FAIL
+bad.public_only hidden output: 1 failed, 6 passed
+repeated controls: attempts=36 failed=0
+focused pytest: 9 passed
+pytest: 72 passed
+ruff: all checks passed
+pyright: 0 errors
+dev_controls trace validation: 36 trace files
+```
+
+### Next Small Step
+
+Review the three authored `dev` tasks as a set before deciding whether the suite
+is ready for a dev-baseline config/reporting pass.

@@ -1,0 +1,50 @@
+--- a/src/settings.py
++++ b/src/settings.py
+@@ -13,5 +13,7 @@
+ DEFAULT_SETTINGS = Settings()
+ CONFIG_KEYS = {"host", "port", "debug"}
+ ENV_TO_FIELD = {
++    "APP_HOST": "host",
+     "APP_PORT": "port",
++    "APP_DEBUG": "debug",
+ }
+--- a/src/config_loader.py
++++ b/src/config_loader.py
+@@ -39,9 +39,11 @@
+         loaded = json.loads(Path(config_path).read_text())
+         if not isinstance(loaded, dict):
+             raise ValueError("config must be a JSON object")
+-        for key, value in loaded.items():
+-            if key in CONFIG_KEYS:
+-                raw_settings[key] = value
++        unknown_keys = set(loaded) - CONFIG_KEYS
++        if unknown_keys:
++            unknown_key = sorted(unknown_keys)[0]
++            raise ValueError(f"unknown config key: {unknown_key}")
++        raw_settings.update(loaded)
+ 
+     env = os.environ if environ is None else environ
+     for env_name, field_name in ENV_TO_FIELD.items():
+@@ -62,6 +64,8 @@
+ 
+ 
+ def _parse_port(value: Any) -> int:
++    if isinstance(value, bool):
++        raise ValueError("port must be an int or numeric string")
+     if isinstance(value, int):
+         port = value
+     elif isinstance(value, str) and value.isdigit():
+@@ -75,6 +79,10 @@
+ 
+ 
+ def _parse_debug(value: Any) -> bool:
+-    if not isinstance(value, bool):
+-        raise ValueError("debug must be a boolean or true/false string")
+-    return value
++    if isinstance(value, bool):
++        return value
++    if value == "true":
++        return True
++    if value == "false":
++        return False
++    raise ValueError("debug must be a boolean or true/false string")

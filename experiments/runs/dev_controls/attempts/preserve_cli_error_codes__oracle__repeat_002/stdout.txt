@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-preserve_cli_error_codes-cmiw3j_x/workspace
+rootdir: /tmp/agentenv-preserve_cli_error_codes-sn23qnwb/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,7 +10,7 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-preserve_cli_error_codes-cmiw3j_x/workspace
+rootdir: /tmp/agentenv-preserve_cli_error_codes-sn23qnwb/workspace
 configfile: pyproject.toml
 collected 7 items
 

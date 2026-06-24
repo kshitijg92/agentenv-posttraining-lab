@@ -1,16 +1,16 @@
 {
-  "run_id": "run_ebad49db9073418ba54eaf0893cd01a2",
+  "run_id": "run_42d73d7f3e17467f9fbab310fd1d92ef",
   "task_id": "preserve_cli_error_codes",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml",
-  "attempt_id": "attempt_0801315a3076402e81eff39dd7482215",
+  "attempt_id": "attempt_9ef7bb501ccf42c7aaece9df9575d45f",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_noop.patch",
   "status": "HIDDEN_TEST_FAIL",
   "public_status": "PASS",
   "hidden_status": "FAIL",
   "error_class": "HiddenCheckFailed",
-  "started_at": "2026-06-24T05:05:41.584555Z",
-  "ended_at": "2026-06-24T05:05:42.052763Z",
-  "duration_ms": 468,
+  "started_at": "2026-06-24T05:27:49.285274Z",
+  "ended_at": "2026-06-24T05:27:49.774400Z",
+  "duration_ms": 489,
   "final_diff_hash": "xxh64:ef46db3751d8e999",
   "orchestrator_version": "attempt_v0"
 }
