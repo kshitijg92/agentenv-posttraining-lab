@@ -1,0 +1,18 @@
+{
+  "artifact_version": "run_artifacts_v0",
+  "artifacts": {
+    "attempt": "attempt.json",
+    "error": "error.txt",
+    "final_diff": "final.diff",
+    "stderr": "stderr.txt",
+    "stdout": "stdout.txt",
+    "trace": "trace.jsonl"
+  },
+  "attempt_id": "attempt_0cb36c34ee214df29622c5f89f06e8c8",
+  "orchestrator_version": "attempt_v0",
+  "run_id": "run_79de03e9aff847a9b4041899f23d7813",
+  "status": "HIDDEN_TEST_FAIL",
+  "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_public_only.patch",
+  "task_id": "repair_config_precedence",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml"
+}

@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_fc83b7d8f04e47579b1024c95a36002d",
+  "attempt_id": "attempt_de241801854e4e108e618bcdfdaf5856",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_1b26745f59e945fc8dc571bb709fe72f",
+  "run_id": "run_84087623eadb47ff86b3b103684db27f",
   "status": "HIDDEN_TEST_FAIL",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_public_only.patch",
   "task_id": "repair_jsonl_deduper",

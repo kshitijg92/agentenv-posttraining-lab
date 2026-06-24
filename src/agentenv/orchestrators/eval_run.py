@@ -15,6 +15,7 @@ from agentenv.evals.resolve import (
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.attempt import AttemptResult
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
+from agentenv.replay.runner import ReplayRun, run_replay
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
@@ -52,6 +53,14 @@ class EvalMatrixRun:
     out_dir: Path
     created_at: str
     policy_runs: list[EvalRun]
+    replay_runs: list["EvalMatrixReplayRecord"]
+
+
+@dataclass(frozen=True)
+class EvalMatrixReplayRecord:
+    policy: str
+    replay_dir: Path
+    replay_run: ReplayRun
 
 
 def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
@@ -211,7 +220,12 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     return eval_run
 
 
-def run_eval_config_all_policies(config_path: Path, out_dir: Path) -> EvalMatrixRun:
+def run_eval_config_all_policies(
+    config_path: Path,
+    out_dir: Path,
+    *,
+    replay_control_policies: bool = False,
+) -> EvalMatrixRun:
     config_path = config_path.resolve()
     out_dir = out_dir.resolve()
     config = load_eval_config(config_path)
@@ -228,6 +242,11 @@ def run_eval_config_all_policies(config_path: Path, out_dir: Path) -> EvalMatrix
         run_eval_config(config_path, policy, policies_dir / policy)
         for policy in config.policies
     ]
+    replay_runs = (
+        _replay_control_policy_runs(config, policy_runs, out_dir)
+        if replay_control_policies
+        else []
+    )
     eval_matrix = EvalMatrixRun(
         eval_matrix_id=eval_matrix_id,
         config=config,
@@ -236,9 +255,33 @@ def run_eval_config_all_policies(config_path: Path, out_dir: Path) -> EvalMatrix
         out_dir=out_dir,
         created_at=created_at,
         policy_runs=policy_runs,
+        replay_runs=replay_runs,
     )
     _write_eval_matrix_manifest(eval_matrix)
     return eval_matrix
+
+
+def _replay_control_policy_runs(
+    config: EvalConfig,
+    policy_runs: list[EvalRun],
+    out_dir: Path,
+) -> list[EvalMatrixReplayRecord]:
+    replays_dir = out_dir / "replays"
+    replay_records: list[EvalMatrixReplayRecord] = []
+    for policy_run in policy_runs:
+        policy = config.policies[policy_run.policy]
+        if policy.type != "control_patch":
+            continue
+        replay_dir = replays_dir / policy_run.policy
+        replay_run = run_replay(policy_run.out_dir, replay_dir)
+        replay_records.append(
+            EvalMatrixReplayRecord(
+                policy=policy_run.policy,
+                replay_dir=replay_dir,
+                replay_run=replay_run,
+            )
+        )
+    return replay_records
 
 
 def _write_eval_trace(eval_run: EvalRun, trace_events: list[TraceEvent]) -> Path:
@@ -314,6 +357,12 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
         policy_run.policy: len(policy_run.attempts)
         for policy_run in eval_matrix.policy_runs
     }
+    artifacts = {
+        "policies": "policies",
+    }
+    if eval_matrix.replay_runs:
+        artifacts["replays"] = "replays"
+
     return {
         "artifact_version": EVAL_MATRIX_ARTIFACT_VERSION,
         "eval_matrix_id": eval_matrix.eval_matrix_id,
@@ -327,9 +376,7 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
         "policy_count": len(eval_matrix.policy_runs),
         "attempt_count": sum(policy_attempt_counts.values()),
         "status_counts": _matrix_status_counts(eval_matrix.policy_runs),
-        "artifacts": {
-            "policies": "policies",
-        },
+        "artifacts": artifacts,
         "policy_runs": [
             {
                 "policy": policy_run.policy,
@@ -345,6 +392,42 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
             }
             for policy_run in eval_matrix.policy_runs
         ],
+        "replay_policy_scope": (
+            "control_patch" if eval_matrix.replay_runs else "not_run"
+        ),
+        "replay_runs": [
+            _eval_matrix_replay_record(eval_matrix, replay_record)
+            for replay_record in eval_matrix.replay_runs
+        ],
+    }
+
+
+def _eval_matrix_replay_record(
+    eval_matrix: EvalMatrixRun,
+    replay_record: EvalMatrixReplayRecord,
+) -> dict[str, object]:
+    matched_attempts = sum(
+        1 for comparison in replay_record.replay_run.comparisons if comparison.matched
+    )
+    attempt_count = len(replay_record.replay_run.comparisons)
+    return {
+        "policy": replay_record.policy,
+        "status": replay_record.replay_run.status,
+        "artifact_dir": str(replay_record.replay_dir.relative_to(eval_matrix.out_dir)),
+        "replay_manifest": str(
+            (replay_record.replay_dir / "replay_manifest.json").relative_to(
+                eval_matrix.out_dir
+            )
+        ),
+        "replay_result": str(
+            (replay_record.replay_dir / "replay_result.json").relative_to(
+                eval_matrix.out_dir
+            )
+        ),
+        "attempt_count": attempt_count,
+        "matched_attempts": matched_attempts,
+        "mismatched_attempts": attempt_count - matched_attempts,
+        "error_count": 1 if replay_record.replay_run.status == "REPLAY_ERROR" else 0,
     }
 
 

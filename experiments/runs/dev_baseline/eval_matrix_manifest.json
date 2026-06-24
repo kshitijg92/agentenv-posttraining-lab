@@ -1,20 +1,21 @@
 {
   "artifact_version": "eval_matrix_v0",
   "artifacts": {
-    "policies": "policies"
+    "policies": "policies",
+    "replays": "replays"
   },
   "attempt_count": 9,
   "config_hash": "xxh64:2f1db658e87d2562",
   "config_name": "dev_baseline",
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
-  "created_at": "2026-06-24T06:23:01.643205Z",
-  "eval_matrix_id": "eval_matrix_ba06149d8d1246cbae719cd392549c0d",
+  "created_at": "2026-06-24T06:49:56.589619Z",
+  "eval_matrix_id": "eval_matrix_c0af625bfc104689ad7d489a043c42f8",
   "policy_count": 3,
   "policy_runs": [
     {
       "artifact_dir": "policies/oracle",
       "attempt_count": 3,
-      "eval_run_id": "eval_e0d252aa26064ac4866b9fe7083a9947",
+      "eval_run_id": "eval_3f131881a2b24f12a984b8955a64e68b",
       "policy": "oracle",
       "run_manifest": "policies/oracle/run_manifest.json",
       "status_counts": {
@@ -24,7 +25,7 @@
     {
       "artifact_dir": "policies/noop",
       "attempt_count": 3,
-      "eval_run_id": "eval_5072c34d039e4cc28f9b8b2d47235dd2",
+      "eval_run_id": "eval_7a58b5459b5d470480bd0141869fb515",
       "policy": "noop",
       "run_manifest": "policies/noop/run_manifest.json",
       "status_counts": {
@@ -34,12 +35,48 @@
     {
       "artifact_dir": "policies/public-tests-only",
       "attempt_count": 3,
-      "eval_run_id": "eval_4d1f134b7d3341e6804d4f99ad839795",
+      "eval_run_id": "eval_68c22706e7de432abbc46c1175855220",
       "policy": "public-tests-only",
       "run_manifest": "policies/public-tests-only/run_manifest.json",
       "status_counts": {
         "HIDDEN_TEST_FAIL": 3
       }
+    }
+  ],
+  "replay_policy_scope": "control_patch",
+  "replay_runs": [
+    {
+      "artifact_dir": "replays/oracle",
+      "attempt_count": 3,
+      "error_count": 0,
+      "matched_attempts": 3,
+      "mismatched_attempts": 0,
+      "policy": "oracle",
+      "replay_manifest": "replays/oracle/replay_manifest.json",
+      "replay_result": "replays/oracle/replay_result.json",
+      "status": "PASS"
+    },
+    {
+      "artifact_dir": "replays/noop",
+      "attempt_count": 3,
+      "error_count": 0,
+      "matched_attempts": 3,
+      "mismatched_attempts": 0,
+      "policy": "noop",
+      "replay_manifest": "replays/noop/replay_manifest.json",
+      "replay_result": "replays/noop/replay_result.json",
+      "status": "PASS"
+    },
+    {
+      "artifact_dir": "replays/public-tests-only",
+      "attempt_count": 3,
+      "error_count": 0,
+      "matched_attempts": 3,
+      "mismatched_attempts": 0,
+      "policy": "public-tests-only",
+      "replay_manifest": "replays/public-tests-only/replay_manifest.json",
+      "replay_result": "replays/public-tests-only/replay_result.json",
+      "status": "PASS"
     }
   ],
   "split": "dev",

@@ -66,6 +66,7 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     run_eval_config_all_policies(
         CONTROL_EVAL_CONFIG,
         tmp_path / "eval_matrix",
+        replay_control_policies=True,
     )
 
     report_path = write_markdown_report(
@@ -83,9 +84,17 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Config name: control_policies" in report
     assert "- Task count: 1" in report
     assert "- Policy count: 3" in report
+    assert "- Replay scope: control_patch" in report
+    assert "- Replay match rate: 3/3 (100%)" in report
     assert "- Oracle pass rate: 1/1 (100%)" in report
     assert "- Known-bad final PASS rate: 0/2 (0%)" in report
     assert "- Known-bad public-pass/hidden-fail rate: 2/2 (100%)" in report
+    assert "### Replay Checks" in report
+    assert "| oracle | PASS | 1/1 (100%) | 0 | replays/oracle/replay_result.json |" in report
+    assert (
+        "| bad-public-only | PASS | 1/1 (100%) | 0 | "
+        "replays/bad-public-only/replay_result.json |"
+    ) in report
     assert (
         "| oracle | PASS | 1/1 (100%) | PASS | 1/1 (100%) | PASS | 1/1 (100%) | "
         '<span style="color: green">ON_TRACK</span> |'

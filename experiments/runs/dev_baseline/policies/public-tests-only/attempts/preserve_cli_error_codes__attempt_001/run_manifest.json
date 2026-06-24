@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_330c6e038e96436f9ec9116316a37700",
+  "attempt_id": "attempt_12a03b6fef80483ca553286d0a3c8bd8",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_47c2fe82344244bf9d9d363e6880d8a2",
+  "run_id": "run_594724f6f733425884da7245f4824a2d",
   "status": "HIDDEN_TEST_FAIL",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_public_only.patch",
   "task_id": "preserve_cli_error_codes",

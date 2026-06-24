@@ -153,3 +153,65 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     assert (
         tmp_path / "eval_matrix/policies/bad-public-only/run_manifest.json"
     ).is_file()
+    assert matrix_manifest["replay_policy_scope"] == "not_run"
+    assert matrix_manifest["replay_runs"] == []
+
+
+def test_run_eval_config_all_policies_can_replay_control_policies(
+    tmp_path: Path,
+) -> None:
+    eval_matrix = run_eval_config_all_policies(
+        CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+        replay_control_policies=True,
+    )
+
+    matrix_manifest_path = tmp_path / "eval_matrix/eval_matrix_manifest.json"
+    matrix_manifest = json.loads(matrix_manifest_path.read_text())
+
+    assert len(eval_matrix.replay_runs) == 3
+    assert matrix_manifest["artifacts"] == {
+        "policies": "policies",
+        "replays": "replays",
+    }
+    assert matrix_manifest["replay_policy_scope"] == "control_patch"
+    assert matrix_manifest["replay_runs"] == [
+        {
+            "policy": "oracle",
+            "status": "PASS",
+            "artifact_dir": "replays/oracle",
+            "replay_manifest": "replays/oracle/replay_manifest.json",
+            "replay_result": "replays/oracle/replay_result.json",
+            "attempt_count": 1,
+            "matched_attempts": 1,
+            "mismatched_attempts": 0,
+            "error_count": 0,
+        },
+        {
+            "policy": "bad-noop",
+            "status": "PASS",
+            "artifact_dir": "replays/bad-noop",
+            "replay_manifest": "replays/bad-noop/replay_manifest.json",
+            "replay_result": "replays/bad-noop/replay_result.json",
+            "attempt_count": 1,
+            "matched_attempts": 1,
+            "mismatched_attempts": 0,
+            "error_count": 0,
+        },
+        {
+            "policy": "bad-public-only",
+            "status": "PASS",
+            "artifact_dir": "replays/bad-public-only",
+            "replay_manifest": "replays/bad-public-only/replay_manifest.json",
+            "replay_result": "replays/bad-public-only/replay_result.json",
+            "attempt_count": 1,
+            "matched_attempts": 1,
+            "mismatched_attempts": 0,
+            "error_count": 0,
+        },
+    ]
+    assert (tmp_path / "eval_matrix/replays/oracle/replay_result.json").is_file()
+    assert (tmp_path / "eval_matrix/replays/bad-noop/replay_result.json").is_file()
+    assert (
+        tmp_path / "eval_matrix/replays/bad-public-only/replay_result.json"
+    ).is_file()

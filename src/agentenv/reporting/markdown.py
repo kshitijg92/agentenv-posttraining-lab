@@ -85,6 +85,7 @@ def render_eval_matrix_report(
         _matrix_policy_summary(artifact_dir, policy, run_artifact_dir, run_manifest)
         for policy, run_artifact_dir, run_manifest in policy_runs
     ]
+    replay_match_rate = _matrix_replay_match_rate(manifest)
 
     lines = [
         "# Eval Matrix Report",
@@ -106,7 +107,12 @@ def render_eval_matrix_report(
             "- Hidden-validator version/hash: not captured in eval_matrix_v0; "
             f"current substitute is config hash {_display(manifest.get('config_hash'))}"
         ),
-        "- Replay match rate: not captured in eval_matrix_v0",
+        f"- Replay scope: {_display(manifest.get('replay_policy_scope'))}",
+        (
+            f"- Replay match rate: {_rate_display(replay_match_rate)}"
+            if replay_match_rate is not None
+            else "- Replay match rate: not run"
+        ),
         "",
         "## Tasks",
         "",
@@ -159,7 +165,20 @@ def render_eval_matrix_report(
                 "- Scorer/orchestrator failure rate: "
                 f"{_rate_display(_scorer_or_orchestrator_failure_rate(policy_summaries))}"
             ),
+            (
+                f"- Replay match rate: {_rate_display(replay_match_rate)}"
+                if replay_match_rate is not None
+                else "- Replay match rate: not run"
+            ),
             "- Task exclusions: none recorded in eval_matrix_v0",
+            "",
+            "### Replay Checks",
+            "",
+        ]
+    )
+    lines.extend(_matrix_replay_rows(manifest))
+    lines.extend(
+        [
             "",
             "## Per-Task Outcomes",
             "",
@@ -417,6 +436,57 @@ def _control_expectation(policy: str) -> dict[str, str] | None:
     if policy in {"noop", "bad-noop", "public-tests-only", "bad-public-only"}:
         return {"final": "HIDDEN_TEST_FAIL", "public": "PASS", "hidden": "FAIL"}
     return None
+
+
+def _matrix_replay_rows(manifest: dict[str, object]) -> list[str]:
+    replay_runs = _matrix_replay_runs(manifest)
+    if not replay_runs:
+        return ["Replay was not run for this eval matrix."]
+
+    rows = [
+        "| policy | status | match_rate | error_count | replay_result |",
+        "| --- | --- | ---: | ---: | --- |",
+    ]
+    for replay_run in replay_runs:
+        matched_attempts = _required_int(replay_run, "matched_attempts")
+        attempt_count = _required_int(replay_run, "attempt_count")
+        rows.append(
+            f"| {_display(replay_run.get('policy'))} "
+            f"| {_display(replay_run.get('status'))} "
+            f"| {_count_rate(matched_attempts, attempt_count)} "
+            f"| {_display(replay_run.get('error_count'))} "
+            f"| {_display(replay_run.get('replay_result'))} |"
+        )
+    return rows
+
+
+def _matrix_replay_match_rate(
+    manifest: dict[str, object],
+) -> tuple[int, int] | None:
+    replay_runs = _matrix_replay_runs(manifest)
+    if not replay_runs:
+        return None
+
+    matched_attempts = 0
+    attempt_count = 0
+    for replay_run in replay_runs:
+        matched_attempts += _required_int(replay_run, "matched_attempts")
+        attempt_count += _required_int(replay_run, "attempt_count")
+    return matched_attempts, attempt_count
+
+
+def _matrix_replay_runs(manifest: dict[str, object]) -> list[dict[str, object]]:
+    raw_replay_runs = manifest.get("replay_runs")
+    if raw_replay_runs is None:
+        return []
+    if not isinstance(raw_replay_runs, list):
+        raise ValueError("Expected eval matrix replay_runs list")
+    replay_runs: list[dict[str, object]] = []
+    for raw_replay_run in raw_replay_runs:
+        if not isinstance(raw_replay_run, dict):
+            raise ValueError("Expected eval matrix replay_runs entries to be objects")
+        replay_runs.append(raw_replay_run)
+    return replay_runs
 
 
 def _field_counts(

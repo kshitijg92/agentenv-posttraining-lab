@@ -897,3 +897,156 @@ pyright: 0 errors
 Decide whether to extend `eval_matrix_v0` to include replay linkage and hidden
 validator hashes now, or record those as Week 4 limitations and close the
 remaining Week 4 notes.
+
+### Report Refinement
+
+Added a control-expectation quick-check table to the eval matrix report.
+
+### Reasoning
+
+The policy summary showed observed rates but did not encode the expected
+calibration pattern:
+
+```text
+oracle: final PASS, public PASS, hidden PASS
+noop: final HIDDEN_TEST_FAIL, public PASS, hidden FAIL
+public-tests-only: final HIDDEN_TEST_FAIL, public PASS, hidden FAIL
+```
+
+The report now makes those expectations explicit and marks each policy
+`ON_TRACK` or `OFF_TRACK`.
+
+### Report Path Decision
+
+Use artifact-type subdirectories for generated reports:
+
+```text
+experiments/reports/evals/
+experiments/reports/replays/
+experiments/reports/eval_matrices/
+```
+
+The canonical consolidated dev-baseline report is now:
+
+```text
+experiments/reports/eval_matrices/dev_baseline.md
+```
+
+The root-level `experiments/reports/dev_baseline.md` was regenerated during the
+transition but should not be treated as the preferred path going forward.
+
+### Ran
+
+```bash
+uv run pytest tests/test_reporting.py
+uv run ruff check src/agentenv/reporting/markdown.py tests/test_reporting.py
+uv run pyright src/agentenv/reporting/markdown.py tests/test_reporting.py
+uv run agentenv report experiments/runs/dev_baseline --out experiments/reports/eval_matrices/dev_baseline.md
+uv run agentenv report experiments/runs/dev_baseline --out experiments/reports/dev_baseline.md
+uv run pytest
+uv run ruff check .
+uv run pyright
+```
+
+### Result
+
+Expectation-table report refinement passed:
+
+```text
+canonical report: experiments/reports/eval_matrices/dev_baseline.md
+control expectations: oracle/noop/public-tests-only all ON_TRACK
+focused reporting tests: 3 passed
+pytest: 74 passed
+ruff: all checks passed
+pyright: 0 errors
+```
+
+### Next Small Step
+
+Either remove or ignore the transitional root-level report, then close the
+remaining Week 4 limitations and learnings.
+
+### Decision
+
+Replay all control-patch policies as part of the full eval config run.
+
+### Reasoning
+
+Replay is part of the measurement-trust story, not just a report decoration.
+The full matrix says the controls behaved correctly once; replay says the same
+recorded control attempts are reproducible.
+
+For Week 4, replay is scoped to control policies because `replay` currently
+reruns recorded patch submissions. That contract is clear for deterministic
+scripted controls:
+
+```text
+oracle
+noop
+public-tests-only
+```
+
+It should not silently claim model-agent replay semantics before the Week 5
+agent/model loop exists.
+
+### Shipped
+
+- Added `--replay-control-policies` for `agentenv eval --all-policies`.
+- Full matrix runs now write replay artifacts under:
+
+```text
+experiments/runs/dev_baseline/replays/<policy>/
+```
+
+- `eval_matrix_manifest.json` now records replay summaries:
+
+```text
+policy
+status
+attempt_count
+matched_attempts
+mismatched_attempts
+error_count
+replay_result
+```
+
+- Eval matrix reports now include:
+  - replay scope,
+  - aggregate replay match rate,
+  - per-policy replay checks.
+
+### Ran
+
+```bash
+uv run pytest tests/test_eval_run.py tests/test_reporting.py
+uv run ruff check src/agentenv/orchestrators/eval_run.py src/agentenv/cli.py src/agentenv/reporting/markdown.py tests/test_eval_run.py tests/test_reporting.py
+uv run pyright src/agentenv/orchestrators/eval_run.py src/agentenv/cli.py src/agentenv/reporting/markdown.py tests/test_eval_run.py tests/test_reporting.py
+uv run agentenv eval --config configs/eval/dev_baseline.yaml --all-policies --replay-control-policies --out experiments/runs/dev_baseline
+uv run python -c 'from pathlib import Path; from agentenv.tracing.validate import validate_trace_file; paths=sorted(Path("experiments/runs/dev_baseline").rglob("trace.jsonl")); [validate_trace_file(path) for path in paths]; print(f"validated {len(paths)} trace files")'
+uv run agentenv report experiments/runs/dev_baseline --out experiments/reports/eval_matrices/dev_baseline.md
+uv run agentenv report experiments/runs/dev_baseline --out experiments/reports/dev_baseline.md
+uv run pytest
+uv run ruff check .
+uv run pyright
+```
+
+### Result
+
+Control-policy replay integration passed:
+
+```text
+durable matrix: policies=3 attempts=9 replays=3 HIDDEN_TEST_FAIL=6 PASS=3
+replay scope: control_patch
+replay match rate: 9/9
+per-policy replay: oracle 3/3, noop 3/3, public-tests-only 3/3
+trace validation: 24 trace files
+focused tests: 9 passed
+pytest: 75 passed
+ruff: all checks passed
+pyright: 0 errors
+```
+
+### Next Small Step
+
+Close remaining Week 4 limitations and learnings. Hidden-validator file hashes
+and structured task exclusions remain explicit report limitations.

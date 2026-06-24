@@ -8,9 +8,9 @@
   "attempts": [
     {
       "artifact_dir": "attempts/repair_jsonl_deduper__attempt_001",
-      "attempt_id": "attempt_8cc3348d75fd441397c016dbf13ae44d",
+      "attempt_id": "attempt_6c47e36b39e24474b65910a7f3170e58",
       "attempt_index": 0,
-      "attempt_run_id": "run_17729b8729bc4fc4a5614f5e772ceaf9",
+      "attempt_run_id": "run_e9d1a4451f5a4892b954adb38e090051",
       "final_diff_hash": "xxh64:791a044ad51af90c",
       "hidden_status": "PASS",
       "public_status": "PASS",
@@ -19,9 +19,9 @@
     },
     {
       "artifact_dir": "attempts/preserve_cli_error_codes__attempt_001",
-      "attempt_id": "attempt_738e4f76dfa34fa4aa14184d1ae2c7e1",
+      "attempt_id": "attempt_e9689401155e4dd195d6334ed9301f73",
       "attempt_index": 0,
-      "attempt_run_id": "run_c543ee8ddf6746c99c85afd671b45ad1",
+      "attempt_run_id": "run_57e03093a1a7448595bc7e8214386658",
       "final_diff_hash": "xxh64:3a6c137988d3cd3a",
       "hidden_status": "PASS",
       "public_status": "PASS",
@@ -30,9 +30,9 @@
     },
     {
       "artifact_dir": "attempts/repair_config_precedence__attempt_001",
-      "attempt_id": "attempt_8d31e0d11d934a71a7182d49ab5e2c6b",
+      "attempt_id": "attempt_2d5f5e2046444224badb0ac5aff2a2e1",
       "attempt_index": 0,
-      "attempt_run_id": "run_60ad62757b0f4e719773a97b6d8ad448",
+      "attempt_run_id": "run_fa325990ab7a4edcabdde65a31b6156b",
       "final_diff_hash": "xxh64:187bcea16c66ce96",
       "hidden_status": "PASS",
       "public_status": "PASS",
@@ -43,8 +43,8 @@
   "config_hash": "xxh64:2f1db658e87d2562",
   "config_name": "dev_baseline",
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
-  "created_at": "2026-06-24T06:23:01.652254Z",
-  "eval_run_id": "eval_e0d252aa26064ac4866b9fe7083a9947",
+  "created_at": "2026-06-24T06:49:56.598043Z",
+  "eval_run_id": "eval_3f131881a2b24f12a984b8955a64e68b",
   "policy": "oracle",
   "split": "dev",
   "status_counts": {

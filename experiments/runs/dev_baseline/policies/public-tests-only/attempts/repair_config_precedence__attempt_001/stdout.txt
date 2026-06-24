@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-repair_config_precedence-fnrtwsj_/workspace
+rootdir: /tmp/agentenv-repair_config_precedence-442f9u8b/workspace
 configfile: pyproject.toml
 collected 4 items
 
@@ -10,7 +10,7 @@ tests/test_public.py ....                                                [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-repair_config_precedence-fnrtwsj_/workspace
+rootdir: /tmp/agentenv-repair_config_precedence-442f9u8b/workspace
 configfile: pyproject.toml
 collected 9 items
 
@@ -19,7 +19,7 @@ test_config_precedence.py .F.......                                      [100%]
 =================================== FAILURES ===================================
 ___________ test_defaults_config_and_partial_environment_are_merged ____________
 
-tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-609/test_defaults_config_and_parti0')
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-722/test_defaults_config_and_parti0')
 
     def test_defaults_config_and_partial_environment_are_merged(
         tmp_path: Path,
