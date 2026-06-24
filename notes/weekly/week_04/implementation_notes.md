@@ -834,3 +834,66 @@ artifact: experiments/runs/dev_baseline/eval_matrix_manifest.json
 
 Teach reporting to read `eval_matrix_v0` and produce
 `experiments/reports/dev_baseline.md`.
+
+### Shipped
+
+- Added `eval_matrix_v0` support to `agentenv report`.
+- Added a consolidated eval matrix report with:
+  - task count and task ids,
+  - policy summary,
+  - final/public/hidden pass rates,
+  - oracle and known-bad calibration rates,
+  - environment/harness and scorer/orchestrator failure rates,
+  - median attempt runtime,
+  - trace and attempt artifact links,
+  - explicit non-claims.
+- Added a reporting test for eval matrix artifacts.
+- Generated `experiments/reports/dev_baseline.md`.
+
+### Current Report Limitations
+
+`eval_matrix_v0` does not yet capture:
+
+```text
+hidden-validator file hashes
+oracle replay result
+task exclusions as structured data
+```
+
+The report states these limitations explicitly instead of inferring them from
+outside artifacts.
+
+### Ran
+
+```bash
+uv run pytest tests/test_reporting.py tests/test_eval_run.py
+uv run ruff check src/agentenv/reporting/markdown.py tests/test_reporting.py
+uv run pyright src/agentenv/reporting/markdown.py tests/test_reporting.py
+uv run agentenv report experiments/runs/dev_baseline --out experiments/reports/dev_baseline.md
+uv run pytest
+uv run ruff check .
+uv run pyright
+```
+
+### Result
+
+Consolidated dev-baseline report generation passed:
+
+```text
+report: experiments/reports/dev_baseline.md
+oracle pass rate: 3/3
+known-bad final PASS rate: 0/6
+known-bad public-pass/hidden-fail rate: 6/6
+environment/harness failure rate: 0/9
+scorer/orchestrator failure rate: 0/9
+focused tests: 8 passed
+pytest: 74 passed
+ruff: all checks passed
+pyright: 0 errors
+```
+
+### Next Small Step
+
+Decide whether to extend `eval_matrix_v0` to include replay linkage and hidden
+validator hashes now, or record those as Week 4 limitations and close the
+remaining Week 4 notes.
