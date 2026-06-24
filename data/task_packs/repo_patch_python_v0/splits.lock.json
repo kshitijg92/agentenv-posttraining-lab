@@ -6,7 +6,8 @@
     "toy_python_fix_001"
   ],
   "dev": [
-    "repair_jsonl_deduper"
+    "repair_jsonl_deduper",
+    "preserve_cli_error_codes"
   ],
   "heldout_private": [],
   "public_calibration": [],

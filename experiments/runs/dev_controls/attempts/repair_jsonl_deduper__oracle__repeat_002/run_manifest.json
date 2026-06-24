@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_f5a50acb970048debc33de3e268e13fe",
+  "attempt_id": "attempt_78452f4d49de4a058ff93e4b19504042",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_5facae730ea84c2e8c99934d605c5455",
+  "run_id": "run_faa54ca4908c4fb99de3d851f252068b",
   "status": "PASS",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/oracle.patch",
   "task_id": "repair_jsonl_deduper",

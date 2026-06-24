@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_ff244c0430ce448abc0bf4c77739c593",
+  "attempt_id": "attempt_2acdb18e396d43d1ad45691a0af003f9",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_ec25ce8823184a9e9d579f2549da1952",
+  "run_id": "run_6f1204eb90ec4160be8e6d21e317d658",
   "status": "HIDDEN_TEST_FAIL",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/bad_noop.patch",
   "task_id": "toy_python_fix_001",

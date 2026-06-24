@@ -1,0 +1,62 @@
+diff --git a/src/validate_records.py b/src/validate_records.py
+index b1ad899..cfc452d 100644
+--- a/src/validate_records.py
++++ b/src/validate_records.py
+@@ -1,4 +1,5 @@
+ import json
++from json import JSONDecodeError
+ import sys
+ from pathlib import Path
+ 
+@@ -17,12 +18,25 @@ def load_jsonl(path: Path) -> list[dict[str, str]]:
+     Raise FileNotFoundError when the input path does not exist.
+     Raise ValueError for malformed JSONL, invalid record schema, or duplicate ids.
+     """
+-    records = []
+-    for raw_line in path.read_text().splitlines():
++    records: list[dict[str, str]] = []
++    seen_ids: set[str] = set()
++    for line_number, raw_line in enumerate(path.read_text().splitlines(), start=1):
+         if not raw_line.strip():
+             continue
+-        record = json.loads(raw_line)
+-        records.append(record)
++        try:
++            record = json.loads(raw_line)
++        except JSONDecodeError as exc:
++            raise ValueError(f"line {line_number} is malformed JSON") from exc
++        if not isinstance(record, dict):
++            raise ValueError(f"line {line_number} must be a JSON object")
++        record_id = record.get("id")
++        status = record.get("status")
++        if not isinstance(record_id, str) or not isinstance(status, str):
++            raise ValueError(f"line {line_number} must have string id and status")
++        if record_id in seen_ids:
++            raise ValueError(f"duplicate id on line {line_number}")
++        seen_ids.add(record_id)
++        records.append({"id": record_id, "status": status})
+     return records
+ 
+ 
+@@ -44,15 +58,18 @@ def main(argv: list[str] | None = None) -> int:
+     args = sys.argv[1:] if argv is None else argv
+     if len(args) != 1:
+         print("usage: python -m validate_records INPUT.jsonl", file=sys.stderr)
+-        return 1
++        return USAGE_ERROR
+ 
+     try:
+         records = load_jsonl(Path(args[0]))
+         print(json.dumps(summarize_records(records)))
+         return SUCCESS
+-    except Exception as exc:
++    except FileNotFoundError as exc:
+         print(f"error: {exc}", file=sys.stderr)
+-        return 1
++        return MISSING_FILE
++    except ValueError as exc:
++        print(f"error: {exc}", file=sys.stderr)
++        return INVALID_INPUT
+ 
+ 
+ if __name__ == "__main__":

@@ -5,7 +5,11 @@ from agentenv.orchestrators.controls_run import expected_control_outcome, run_co
 
 
 TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
-TASK_IDS = {"repair_jsonl_deduper", "toy_python_fix_001"}
+TASK_IDS = {
+    "preserve_cli_error_codes",
+    "repair_jsonl_deduper",
+    "toy_python_fix_001",
+}
 CONTROL_NAMES = {"oracle", "bad.noop", "bad.public_only"}
 
 
@@ -109,6 +113,10 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     ) in report
     assert (
         "| repair_jsonl_deduper | oracle | 2 | 2/2 | "
+        "attempt_status: PASS; public_status: PASS; hidden_status: PASS |"
+    ) in report
+    assert (
+        "| preserve_cli_error_codes | oracle | 2 | 2/2 | "
         "attempt_status: PASS; public_status: PASS; hidden_status: PASS |"
     ) in report
 

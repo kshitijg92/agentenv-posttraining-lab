@@ -1,0 +1,12 @@
+diff --git a/src/validate_records.py b/src/validate_records.py
+--- a/src/validate_records.py
++++ b/src/validate_records.py
+@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
+     args = sys.argv[1:] if argv is None else argv
+     if len(args) != 1:
+         print("usage: python -m validate_records INPUT.jsonl", file=sys.stderr)
+-        return 1
++        return USAGE_ERROR
+ 
+     try:
+         records = load_jsonl(Path(args[0]))

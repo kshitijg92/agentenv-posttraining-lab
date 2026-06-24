@@ -442,3 +442,86 @@ ruff: all checks passed
 pyright: 0 errors
 dev_controls trace validation: 18 trace files
 ```
+
+### Decision
+
+Create the second `dev` task as `preserve_cli_error_codes`.
+
+### Reasoning
+
+This task is still single-file and local, but less function-kata-like than the
+JSONL deduper. It has a small internal call chain:
+
+```text
+load_jsonl -> summarize_records -> main
+```
+
+The visible contract lives in constants, docstrings, and the task instruction:
+
+```text
+success exits 0
+usage errors exit 2
+missing input files exit 3
+malformed JSONL, invalid record schema, or duplicate ids exit 4
+records require string id and string status
+expected user/input errors should not print tracebacks
+```
+
+Hidden validators check the visible contract without requiring exact error
+message wording or JSON key order.
+
+### Shipped
+
+- Added `data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/`.
+- Added `preserve_cli_error_codes` to the `dev` split.
+
+### Next Small Step
+
+Calibrate `preserve_cli_error_codes` with task-pack validation and the three
+control attempts.
+
+### Ran
+
+```bash
+uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/oracle.patch --out /tmp/agentenv-preserve-cli-oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_noop.patch --out /tmp/agentenv-preserve-cli-noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_public_only.patch --out /tmp/agentenv-preserve-cli-public-only
+rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
+uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
+uv run ruff check data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/workspace_seed/src/validate_records.py data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/workspace_seed/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py tests/test_controls_run.py tests/test_task_manifest.py
+uv run pytest
+uv run ruff check .
+uv run pyright
+uv run python -c 'from pathlib import Path; from agentenv.tracing.validate import validate_trace_file; paths=sorted(Path("experiments/runs/dev_controls").rglob("trace.jsonl")); [validate_trace_file(path) for path in paths]; print(f"validated {len(paths)} trace files")'
+```
+
+### Result
+
+Calibration passed:
+
+```text
+task pack validation: valid repo_patch_python_v0 tasks=3
+oracle: PASS
+bad.noop: HIDDEN_TEST_FAIL
+bad.public_only: HIDDEN_TEST_FAIL
+repeated controls: attempts=27 failed=0
+focused pytest: 9 passed
+focused ruff: all checks passed
+pytest: 72 passed
+ruff: all checks passed
+pyright: 0 errors
+dev_controls trace validation: 27 trace files
+```
+
+### Calibration Fix
+
+The first draft of `oracle.patch` had fragile hand-written hunk counts and
+produced `PATCH_APPLY_ERROR`. The patch was replaced with an exact diff
+generated from the seed and oracle file contents, then verified with
+`git apply --check` before rerunning the harness.
+
+### Next Small Step
+
+Review task quality for the two new `dev` tasks before deciding whether to add a
+third new task or move to the dev-baseline config/reporting path.

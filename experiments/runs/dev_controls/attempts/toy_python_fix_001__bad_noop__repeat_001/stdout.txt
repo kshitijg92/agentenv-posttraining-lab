@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-91l2yvbz/workspace
+rootdir: /tmp/agentenv-toy_python_fix_001-dgt3x3gr/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,7 +10,7 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-91l2yvbz/workspace
+rootdir: /tmp/agentenv-toy_python_fix_001-dgt3x3gr/workspace
 configfile: pyproject.toml
 collected 7 items
 
@@ -49,5 +49,5 @@ E         Expected: 0.5 ± 5.0e-07
 =========================== short test summary info ============================
 FAILED test_behavior.py::test_zero_denominator_raises_value_error - ZeroDivis...
 FAILED test_behavior.py::test_non_integer_ratio_preserves_precision - assert ...
-========================= 2 failed, 5 passed in 0.03s ==========================
+========================= 2 failed, 5 passed in 0.02s ==========================
 

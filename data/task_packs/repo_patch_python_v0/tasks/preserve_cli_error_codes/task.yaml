@@ -1,0 +1,26 @@
+id: preserve_cli_error_codes
+domain: repo_patch_python
+split: dev
+instruction: "Fix the validate_records CLI so it reads JSONL records with string id and status fields, rejects duplicate ids, prints JSON status counts on success, preserves the documented exit codes, and avoids tracebacks for expected user or input errors."
+workspace_seed: workspace_seed
+allowed_tools: ["shell", "edit", "pytest"]
+public_checks:
+  - command: "uv run pytest tests/test_public.py"
+hidden_validators:
+  - id: cli_behavior_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 10
+  network: "off"
+controls:
+  oracle: controls/oracle.patch
+  bad:
+    noop: controls/bad_noop.patch
+    public_only: controls/bad_public_only.patch
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_PRESERVE_CLI_ERROR_CODES_PRIVATE"

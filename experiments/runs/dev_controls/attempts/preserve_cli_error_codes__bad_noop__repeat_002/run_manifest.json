@@ -1,0 +1,18 @@
+{
+  "artifact_version": "run_artifacts_v0",
+  "artifacts": {
+    "attempt": "attempt.json",
+    "error": "error.txt",
+    "final_diff": "final.diff",
+    "stderr": "stderr.txt",
+    "stdout": "stdout.txt",
+    "trace": "trace.jsonl"
+  },
+  "attempt_id": "attempt_0801315a3076402e81eff39dd7482215",
+  "orchestrator_version": "attempt_v0",
+  "run_id": "run_ebad49db9073418ba54eaf0893cd01a2",
+  "status": "HIDDEN_TEST_FAIL",
+  "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_noop.patch",
+  "task_id": "preserve_cli_error_codes",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml"
+}
