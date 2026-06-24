@@ -1,0 +1,16 @@
+{
+  "run_id": "run_1f542a7355d74f96a1cdfa4024cd2e1e",
+  "task_id": "repair_jsonl_deduper",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml",
+  "attempt_id": "attempt_91a4a710e1d24982b637812cbc85ae05",
+  "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/oracle.patch",
+  "status": "PASS",
+  "public_status": "PASS",
+  "hidden_status": "PASS",
+  "error_class": null,
+  "started_at": "2026-06-24T04:44:46.162557Z",
+  "ended_at": "2026-06-24T04:44:46.471332Z",
+  "duration_ms": 308,
+  "final_diff_hash": "xxh64:791a044ad51af90c",
+  "orchestrator_version": "attempt_v0"
+}

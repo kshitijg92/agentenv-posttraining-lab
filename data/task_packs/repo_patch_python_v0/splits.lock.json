@@ -5,7 +5,9 @@
   "practice": [
     "toy_python_fix_001"
   ],
-  "dev": [],
+  "dev": [
+    "repair_jsonl_deduper"
+  ],
   "heldout_private": [],
   "public_calibration": [],
   "policy": "heldout_private is read-only and never used for training, prompt tuning, task design, or baseline iteration. Authored tasks enter dev when they are actively inspected during task design."
