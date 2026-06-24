@@ -1,20 +1,20 @@
 ============================= test session starts ==============================
-platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-preserve_cli_error_codes-pm9r9hv1/workspace
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-preserve_cli_error_codes-hvadpz7n/workspace
 configfile: pyproject.toml
 collected 1 item
 
 tests/test_public.py .                                                   [100%]
 
-============================== 1 passed in 0.05s ===============================
+============================== 1 passed in 0.04s ===============================
 
 ============================= test session starts ==============================
-platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-preserve_cli_error_codes-pm9r9hv1/workspace
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-preserve_cli_error_codes-hvadpz7n/workspace
 configfile: pyproject.toml
-collected 7 items
+collected 8 items
 
-test_cli_behavior.py .......                                             [100%]
+test_cli_behavior.py ........                                            [100%]
 
-============================== 7 passed in 0.17s ===============================
+============================== 8 passed in 0.17s ===============================
 

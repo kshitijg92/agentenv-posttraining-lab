@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
-platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-0xagc3bi/workspace
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-toy_python_fix_001-ui1di38q/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -9,8 +9,8 @@ tests/test_public.py .                                                   [100%]
 ============================== 1 passed in 0.00s ===============================
 
 ============================= test session starts ==============================
-platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-0xagc3bi/workspace
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-toy_python_fix_001-ui1di38q/workspace
 configfile: pyproject.toml
 collected 7 items
 
@@ -42,5 +42,5 @@ E         Expected: -2.0 ± 2.0e-06
 =========================== short test summary info ============================
 FAILED test_behavior.py::test_negative_denominator_matches_python_division - ...
 FAILED test_behavior.py::test_negative_numerator_matches_python_division - as...
-========================= 2 failed, 5 passed in 0.03s ==========================
+========================= 2 failed, 5 passed in 0.02s ==========================
 

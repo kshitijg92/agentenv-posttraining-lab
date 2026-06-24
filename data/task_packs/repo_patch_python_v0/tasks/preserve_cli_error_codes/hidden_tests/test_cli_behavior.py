@@ -36,6 +36,18 @@ def test_missing_required_field_exits_with_invalid_input_code(
     assert "Traceback" not in result.stderr
 
 
+def test_non_object_json_line_exits_with_invalid_input_code(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "records.jsonl"
+    input_path.write_text('{"id": "r1", "status": "ok"}\n["not", "object"]\n')
+
+    result = _run_cli(str(input_path))
+
+    assert result.returncode == 4
+    assert "Traceback" not in result.stderr
+
+
 def test_non_string_field_exits_with_invalid_input_code(tmp_path: Path) -> None:
     input_path = tmp_path / "records.jsonl"
     input_path.write_text('{"id": "r1", "status": "ok"}\n{"id": 2, "status": "ok"}\n')

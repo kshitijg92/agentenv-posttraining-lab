@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_0ff83f86ea4a4838ae768cd8e9dd2052",
+  "attempt_id": "attempt_91c8200889bf4b72b642cca77f4930c3",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_7bb8ba4bfb6449338721ad7ddc80f487",
+  "run_id": "run_f24d53f04169493084a747b78851500e",
   "status": "PASS",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/oracle.patch",
   "task_id": "preserve_cli_error_codes",

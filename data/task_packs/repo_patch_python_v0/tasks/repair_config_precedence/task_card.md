@@ -44,7 +44,9 @@ The hidden validator checks:
 
 - all three environment variables override config values,
 - defaults, partial JSON config, and partial environment overrides are merged,
+- JSON config `port` accepts numeric strings,
 - `debug` accepts only booleans and the exact strings `"true"` and `"false"`,
+- `APP_DEBUG="false"` overrides a config value to `False`,
 - unsupported debug strings such as `"1"` raise `ValueError`,
 - unknown JSON config keys raise `ValueError`,
 - boolean ports are rejected even though `bool` is an `int` subclass in Python,

@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
-platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-repair_jsonl_deduper-mjdpudyp/workspace
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-repair_jsonl_deduper-lh3_ru42/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -9,8 +9,8 @@ tests/test_public.py .                                                   [100%]
 ============================== 1 passed in 0.00s ===============================
 
 ============================= test session starts ==============================
-platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-repair_jsonl_deduper-mjdpudyp/workspace
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-repair_jsonl_deduper-lh3_ru42/workspace
 configfile: pyproject.toml
 collected 5 items
 

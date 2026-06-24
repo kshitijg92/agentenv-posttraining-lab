@@ -36,6 +36,15 @@ def test_defaults_config_and_partial_environment_are_merged(
     assert settings == Settings(host="file.local", port=8080, debug=True)
 
 
+def test_config_port_accepts_numeric_string(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.json"
+    config_path.write_text(json.dumps({"port": "6543"}))
+
+    settings = load_settings(config_path, environ={})
+
+    assert settings == Settings(host="localhost", port=6543, debug=False)
+
+
 def test_debug_accepts_only_true_and_false_strings(tmp_path: Path) -> None:
     true_config = tmp_path / "true.json"
     true_config.write_text(json.dumps({"debug": "true"}))
@@ -48,6 +57,15 @@ def test_debug_accepts_only_true_and_false_strings(tmp_path: Path) -> None:
     assert load_settings(false_config, environ={}).debug is False
     with pytest.raises(ValueError):
         load_settings(invalid_config, environ={})
+
+
+def test_environment_debug_false_string_overrides_config(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.json"
+    config_path.write_text(json.dumps({"debug": True}))
+
+    settings = load_settings(config_path, environ={"APP_DEBUG": "false"})
+
+    assert settings == Settings(host="localhost", port=8080, debug=False)
 
 
 def test_unknown_config_key_raises_value_error(tmp_path: Path) -> None:

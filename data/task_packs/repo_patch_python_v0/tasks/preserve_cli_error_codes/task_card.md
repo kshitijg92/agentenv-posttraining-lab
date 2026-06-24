@@ -38,7 +38,7 @@ The hidden validator checks:
 
 - missing input file exits `3`,
 - malformed JSONL exits `4`,
-- invalid record schema exits `4`,
+- invalid record schema, including non-object JSON lines, exits `4`,
 - duplicate `id` exits `4`,
 - missing CLI argument exits `2`,
 - expected user/input errors do not print tracebacks,
@@ -51,8 +51,9 @@ The hidden validator does not require exact error-message wording.
 A patch can pass the public test by preserving only the happy path and leaving
 all expected errors collapsed to exit code `1`. Hidden tests reject that.
 
-A patch can also pass the public test while ignoring `id` validation. Hidden
-tests reject missing, non-string, and duplicate ids.
+A patch can also pass the public test while ignoring record schema validation.
+Hidden tests reject non-object records, missing fields, non-string fields, and
+duplicate ids.
 
 ## Oracle Summary
 
