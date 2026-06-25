@@ -174,6 +174,21 @@ def test_tool_result_accepts_error_result_without_output() -> None:
     assert result.error_class == "PermissionDenied"
 
 
+def test_tool_result_allows_unknown_tool_name_for_error_results() -> None:
+    result = ToolResult(
+        tool_name="delete_file",
+        input_hash="xxh64:abc123",
+        status="error",
+        output=None,
+        duration_ms=2,
+        error_class="ToolNotAllowed",
+        error_message="Tool is not allowed for this task: delete_file",
+    )
+
+    assert result.tool_name == "delete_file"
+    assert result.error_class == "ToolNotAllowed"
+
+
 def test_tool_result_rejects_ok_without_output() -> None:
     with pytest.raises(ValidationError, match="ok tool results require output"):
         ToolResult(
@@ -227,6 +242,20 @@ def test_tool_result_rejects_error_without_error_class() -> None:
             input_hash="xxh64:abc123",
             status="error",
             output=None,
+            duration_ms=2,
+        )
+
+
+def test_tool_result_rejects_mismatched_success_output_type() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="output type does not match tool_name: read_file",
+    ):
+        ToolResult(
+            tool_name="read_file",
+            input_hash="xxh64:abc123",
+            status="ok",
+            output=RunTestsOutput(passed=True),
             duration_ms=2,
         )
 

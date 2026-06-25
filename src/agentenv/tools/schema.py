@@ -1,9 +1,8 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
-from pydantic import model_validator
-
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 ToolName = Literal["read_file", "write_file", "run_tests"]
 ToolResultStatus = Literal["ok", "error"]
@@ -55,7 +54,7 @@ ToolOutput = ReadFileOutput | WriteFileOutput | RunTestsOutput
 class ToolResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tool_name: ToolName
+    tool_name: str = Field(min_length=1)
     input_hash: str = Field(min_length=1)
     status: ToolResultStatus
     output: ToolOutput | None = None
@@ -73,6 +72,7 @@ class ToolResult(BaseModel):
                 raise ValueError("ok tool results require output")
             if self.error_class is not None or self.error_message is not None:
                 raise ValueError("ok tool results cannot include error fields")
+            _validate_output_matches_tool(self.tool_name, self.output)
             return self
 
         if self.output is not None:
@@ -119,7 +119,7 @@ _WRITE_FILE_ADAPTER = TypeAdapter(WriteFileInput)
 _RUN_TESTS_ADAPTER = TypeAdapter(RunTestsInput)
 
 
-def validate_tool_input(tool_name: str, arguments: dict[str, object]) -> ToolInput:
+def validate_tool_input(tool_name: str, arguments: Mapping[str, object]) -> ToolInput:
     if tool_name == "read_file":
         return _READ_FILE_ADAPTER.validate_python(arguments)
     if tool_name == "write_file":
@@ -128,3 +128,12 @@ def validate_tool_input(tool_name: str, arguments: dict[str, object]) -> ToolInp
         return _RUN_TESTS_ADAPTER.validate_python(arguments)
     raise ValueError(f"Unknown tool name: {tool_name}")
 
+
+def _validate_output_matches_tool(tool_name: str, output: ToolOutput) -> None:
+    if tool_name == "read_file" and isinstance(output, ReadFileOutput):
+        return
+    if tool_name == "write_file" and isinstance(output, WriteFileOutput):
+        return
+    if tool_name == "run_tests" and isinstance(output, RunTestsOutput):
+        return
+    raise ValueError(f"output type does not match tool_name: {tool_name}")
