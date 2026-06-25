@@ -208,3 +208,54 @@ local tool layer: workspace path containment and command execution boundaries
 ### Next Small Step
 
 Design the fake model client behavior once its fixed script is exhausted.
+
+## Fake Model Client Decision
+
+### Decision
+
+Implement a scripted fake model client. Each call to `generate(...)` returns the
+next fixed raw string as `ModelResponse.output_text`.
+
+If the agent loop calls the fake model after the script is exhausted, return:
+
+```text
+finish_reason: error
+error_class: FakeModelScriptExhausted
+output_text: ""
+```
+
+### Reasoning
+
+The fake model exists to exercise the model/agent boundary deterministically. A
+fixed script makes turn order auditable and avoids prompt-quality claims.
+
+The fake model script stores raw text, not parsed `AgentAction` objects. That
+keeps the model layer independent from the agent layer:
+
+```text
+fake model -> ModelResponse.output_text -> agent parser -> AgentAction
+```
+
+This also lets later tests intentionally script malformed JSON or schema-invalid
+JSON without changing the fake model.
+
+Script exhaustion is not a normal completion. A well-formed fake script should
+emit `final_answer` explicitly when the model is done. If the script runs out
+first, that is a fake-model configuration failure and should be visible as a
+model error.
+
+### Non-Claims
+
+- The fake model does not inspect messages intelligently.
+- The fake model does not execute tools.
+- The fake model does not parse or validate agent actions.
+- The fake model does not provide real token accounting; token fields are
+  unknown unless a future fake configuration explicitly models them.
+- The fake model does not know hidden validators, controls, or full task
+  manifests.
+- Passing through the fake model does not measure model quality.
+
+### Next Small Step
+
+Design the visible task view passed from the all-knowing eval harness to the
+restricted agent loop.
