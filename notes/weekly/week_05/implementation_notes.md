@@ -259,3 +259,189 @@ model error.
 
 Design the visible task view passed from the all-knowing eval harness to the
 restricted agent loop.
+
+## Agent Task View Decision
+
+### Decision
+
+Pass a restricted `AgentTaskView` from the eval harness to the agent loop rather
+than passing the full task manifest.
+
+```text
+task_id
+instruction
+workspace_path
+allowed_tools
+public_checks
+max_turns
+timeout_seconds
+network
+```
+
+### Reasoning
+
+The eval harness is the all-knowing side of the system. It can load the full
+task manifest, prepare the workspace, and later run hidden scoring.
+
+The agent loop is only the restricted model-environment mediator. It should
+receive visible task information and the prepared workspace path needed for tool
+execution, but it should not receive private evaluator fields.
+
+### Excluded Fields
+
+Do not include:
+
+```text
+hidden_validators
+controls
+leakage_canary
+task_manifest_path
+task_pack_path
+oracle/bad patches
+hidden test paths
+scoring/replay expectations
+```
+
+### Invariant
+
+`workspace_path` is allowed in `AgentTaskView` for execution coordination, but
+prompt rendering must not include the raw host path in messages sent to the
+model.
+
+### Next Small Step
+
+Design tool schemas separately from task visibility:
+
+```text
+AgentTaskView.allowed_tools = permission list
+tool schemas = argument contracts
+tool executor = permission checks and workspace containment
+```
+
+## Tool Definition And Schema Decision
+
+### Decision
+
+Keep v0 tool input and output schemas minimal and atomic:
+
+```text
+read_file(path)
+write_file(path, content)
+run_tests(command)
+```
+
+```text
+ReadFileOutput(content, bytes_read, truncated)
+WriteFileOutput(bytes_written)
+RunTestsOutput(passed)
+```
+
+Define tools as reusable capabilities:
+
+```text
+ToolDefinition(name, description, input_model, output_model)
+```
+
+### Reasoning
+
+Tool definitions describe what a tool is and which schemas define its input and
+output. They do not represent one concrete execution.
+
+Concrete model requests remain `ToolCallAction` objects from the agent layer:
+
+```text
+tool_name + raw arguments
+```
+
+Concrete execution records will later be represented by `ToolResult`.
+
+Tool schemas and definitions do not decide whether a tool is allowed for a task,
+whether a path is safe, or whether a command should execute.
+
+Those checks belong to the executor layer:
+
+```text
+permission check against AgentTaskView.allowed_tools
+argument validation against tool schema
+workspace path containment
+command execution boundary
+ToolResult recording
+```
+
+### Boundary
+
+Current concepts:
+
+```text
+ToolDefinition = reusable capability metadata
+ToolCallAction = one model request
+ToolInput/ToolOutput = per-tool payload schemas
+```
+
+Future concept:
+
+```text
+ToolResult = one execution record with status, timing, error, and output
+```
+
+### Non-Goals For This Checkpoint
+
+Do not add optional fields yet:
+
+```text
+max_bytes
+start_line/end_line
+append mode
+custom cwd
+timeout override
+```
+
+Those can be added only when the prompt loop exposes a real need.
+
+### Next Small Step
+
+Design `ToolResult` before implementing local tool execution.
+
+## Tool Result Decision
+
+### Decision
+
+Represent one tool execution with a common `ToolResult` envelope:
+
+```text
+tool_name
+input_hash
+status: ok | error
+output: ToolOutput | None
+stdout
+stderr
+exit_code: int | None
+duration_ms
+error_class: str | None
+error_message: str | None
+```
+
+### Reasoning
+
+Tool-specific outputs should stay small and typed. Shared execution evidence
+belongs in the common envelope.
+
+`exit_code` is nullable because `read_file` and `write_file` are not
+subprocesses. `run_tests` can set it once execution is implemented.
+
+Tracebacks are intentionally not part of `ToolResult` v0. Private tracebacks can
+be written to evaluator-side artifacts later. The result envelope should remain
+safe to render into bounded tool observations after filtering.
+
+### Invariants
+
+- `ok` results require typed `output`.
+- `ok` results cannot include error fields.
+- `error` results cannot include output.
+- `error` results require `error_class`.
+- `input_hash` is required and should later hash the validated input payload,
+  not raw model JSON.
+
+### Next Small Step
+
+Design local tool execution and permission checks against `AgentTaskView`.
