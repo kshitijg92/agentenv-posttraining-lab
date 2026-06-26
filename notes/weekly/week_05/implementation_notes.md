@@ -566,3 +566,70 @@ Full `ToolResult` objects remain evaluator-side evidence for traces/artifacts.
 
 Design the prompt-loop state machine now that model calls, action parsing, tool
 execution, and tool-observation rendering have narrow contracts.
+
+## Prompt Loop Result Schema Decision
+
+### Decision
+
+Define the prompt-loop result as a summary plus direct evidence objects:
+
+```text
+task_id
+status
+turns_executed
+duration_ms
+token_usage
+messages
+model_responses
+tool_results
+error_class
+error_message
+```
+
+### Statuses
+
+v0 terminal statuses:
+
+```text
+completed
+max_turns_exceeded
+model_error
+invalid_model_output
+terminal_tool_error
+```
+
+No separate overall loop timeout is included in v0. Per-call model timeouts are
+represented as `model_error` with the model response's error class. Tool
+timeouts are recoverable tool observations unless the loop later terminates for
+another reason.
+
+### Reasoning
+
+The result carries full `messages`, `model_responses`, and `tool_results`
+directly for now. This is simpler to unit test and preserves the data needed for
+future trajectory export. Artifact references can be added later when the prompt
+loop is integrated with eval-run persistence.
+
+The result does not include a separate `final_answer` summary field because the
+final answer action is already present in `messages` and `model_responses`.
+
+`status` and `error_class` stay separate:
+
+```text
+status = top-level terminal category
+error_class = specific diagnostic
+```
+
+### Invariants
+
+- `completed` cannot include error fields.
+- non-completed results require `error_class`.
+- `turns_executed` counts model calls, not tool calls.
+- simple `TokenUsage` aggregates prompt, completion, and total tokens, each
+  nullable when unknown. Fake model loops will usually report unknown token
+  usage.
+
+### Next Small Step
+
+Implement the minimal prompt-loop runner using the existing scripted fake model,
+agent action parser, local tool executor, and tool-message renderer.
