@@ -701,3 +701,83 @@ workspace without exposing raw host paths.
 ### Next Small Step
 
 Implement the minimal prompt-loop runner state machine.
+
+## Model Client Protocol Decision
+
+### Decision
+
+Define a minimal `ModelClient` protocol for the prompt loop:
+
+```text
+model_id: str
+generate(messages, decoding_config) -> ModelResponse
+```
+
+### Reasoning
+
+The prompt loop should depend on a model interface, not on the scripted fake
+implementation. `model_id` is exposed on the client, not only on
+`ModelResponse`, so traces can identify the attempted model even if generation
+raises later or returns an error response.
+
+The interface stays intentionally small for v0. Provider metadata, endpoint
+details, pricing, and model-family capabilities can be added only when a real
+model integration needs them.
+
+### Next Small Step
+
+Implement the prompt-loop runner against `AgentTaskView`, `ModelClient`,
+`DecodingConfig`, local tool execution, and tool-message rendering.
+
+## Prompt Loop Runner Decision
+
+### Decision
+
+Implement the v0 prompt loop as:
+
+```text
+run_prompt_loop(agent_task_view, model_client, decoding_config)
+  -> PromptLoopResult
+```
+
+The loop builds initial messages, calls `model_client.generate(...)`, records
+the `ModelResponse`, appends the assistant message containing
+`ModelResponse.output_text`, and only then checks finish reason or parses the
+output into an `AgentAction`.
+
+### Reasoning
+
+The assistant message is recorded before parsing or error handling so invalid
+JSON, schema-invalid actions, and model budget stops remain visible in the
+transcript. This keeps trace reconstruction deterministic and avoids losing the
+exact text that caused a failure.
+
+### State Machine
+
+- `final_answer` stops the loop with `completed`.
+- model `error`, `timeout`, or `max_new_tokens_reached` stops the loop with
+  `model_error` after recording the assistant output.
+- malformed JSON or schema-invalid actions stop the loop with
+  `invalid_model_output`.
+- successful tool calls execute locally, append a bounded tool message, and
+  continue.
+- recoverable tool errors (`InvalidToolInput`, `ToolExecutionError`,
+  `ToolTimeout`) are rendered back to the model and the loop continues.
+- terminal tool errors stop the loop with `terminal_tool_error` after appending
+  the tool message.
+- reaching `AgentTaskView.max_turns` without completion returns
+  `max_turns_exceeded`.
+
+### Trace Details
+
+- assistant messages use `name = model_response.model_id`.
+- the loop generates `tool_call_id` values and attaches them to the assistant
+  tool-call message and matching tool message.
+- if `generate(...)` raises before returning a `ModelResponse`, the result uses
+  `model_error` and includes `model_client.model_id` in the diagnostic.
+
+### Next Small Step
+
+Run a small end-to-end fake-agent attempt against a prepared workspace to verify
+that read/write/test/final-answer turns produce the expected final workspace and
+trace.
