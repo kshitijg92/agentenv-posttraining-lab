@@ -781,3 +781,76 @@ exact text that caused a failure.
 Run a small end-to-end fake-agent attempt against a prepared workspace to verify
 that read/write/test/final-answer turns produce the expected final workspace and
 trace.
+
+## Fake-Agent E2E Test Placement Decision
+
+### Decision
+
+Put the first fake-agent end-to-end prompt-loop proof in a separate test file:
+
+```text
+tests/agents/test_prompt_loop_e2e.py
+```
+
+### Reasoning
+
+`tests/agents/test_prompt_loop.py` already covers unit-level prompt-loop state
+machine behavior such as final-answer completion, malformed model output,
+model-generation errors, recoverable tool errors, terminal tool errors, and
+max-turn handling.
+
+The new checkpoint proves a different boundary: the scripted fake model, JSON
+action parser, local tool executor, tool-message renderer, and prompt-loop
+transcript all compose correctly across a real temporary workspace.
+
+### Invariants
+
+- the fake agent reads a source file, writes full replacement contents, runs the
+  exact allowed public-check command, and then emits `final_answer`;
+- the source file is actually changed on disk;
+- the `run_tests` result reports `RunTestsOutput(passed=True)`;
+- assistant/tool message pairs share generated `tool_call_id` values;
+- the transcript preserves the expected system/user/assistant/tool ordering;
+- raw host workspace paths do not appear in model-facing message content.
+
+### Non-Goals
+
+Do not use this checkpoint to add eval config, CLI integration, scoring, report
+generation, trace export, or real model APIs. Those remain later Week 5
+checkpoints.
+
+## Recoverable Tool-Input E2E Decision
+
+### Decision
+
+Add one end-to-end self-correction test for a valid JSON `tool_call` whose
+arguments fail tool-input validation:
+
+```json
+{"action":"tool_call","tool_name":"read_file","arguments":{}}
+```
+
+The prompt loop should render the resulting `InvalidToolInput` as a tool
+observation, continue to the next model turn, and allow the scripted fake model
+to correct the call before completing the read/write/test/final-answer path.
+
+### Reasoning
+
+This exercises a real recovery path across the model/action parser, local tool
+executor, tool-message renderer, and prompt-loop transcript.
+
+Malformed JSON or schema-invalid model output remains terminal
+`invalid_model_output` in v0. That failure happens before the model has crossed
+the action boundary, so treating it as a recoverable tool observation would
+blur protocol failure with workspace/tool failure.
+
+### Invariants
+
+- invalid tool arguments produce a `ToolResult(status="error",
+  error_class="InvalidToolInput")`;
+- the invalid-input result is rendered into a model-facing tool message;
+- the next model turn can issue a corrected `read_file` call;
+- the loop can still complete after the corrected read, write, public check,
+  and final answer;
+- malformed JSON remains covered by unit-level prompt-loop tests rather than
+  promoted to an e2e recovery path.
