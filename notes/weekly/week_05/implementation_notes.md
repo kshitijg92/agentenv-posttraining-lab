@@ -339,13 +339,22 @@ RunTestsOutput(passed)
 Define tools as reusable capabilities:
 
 ```text
-ToolDefinition(name, description, input_model, output_model)
+ToolDefinition(name, description, input_model, output_model, example_arguments)
 ```
 
 ### Reasoning
 
 Tool definitions describe what a tool is and which schemas define its input and
-output. They do not represent one concrete execution.
+output. They also carry example arguments for prompt rendering so the prompt
+builder does not hardcode per-tool invocation examples.
+
+Tool example arguments must validate against the tool's input schema.
+
+`write_file.content` means full replacement file contents, not a patch. The
+harness will later derive the submitted patch by diffing the original prepared
+workspace against the final modified workspace.
+
+Tool definitions do not represent one concrete execution.
 
 Concrete model requests remain `ToolCallAction` objects from the agent layer:
 
@@ -633,3 +642,62 @@ error_class = specific diagnostic
 
 Implement the minimal prompt-loop runner using the existing scripted fake model,
 agent action parser, local tool executor, and tool-message renderer.
+
+## Initial Prompt Message Decision
+
+### Decision
+
+Build initial prompt-loop messages with:
+
+```text
+system message = protocol, JSON action rules, and allowed tool interface
+user message = visible task instruction, public checks, workspace wording, limits
+```
+
+The model-facing content includes:
+
+```text
+task instruction
+allowed tools and descriptions
+public check commands
+max_turns
+timeout_seconds
+network
+prepared-workspace wording
+```
+
+The model-facing content excludes:
+
+```text
+raw workspace_path
+task_id
+hidden validators
+controls
+leakage canary
+task manifest path
+private scoring/replay expectations
+```
+
+### Reasoning
+
+`task_id` is useful for trace linkage and eval joins, but it does not help the
+model solve the task. It is stored in message metadata, not prompt content.
+
+The system message is dynamic for each `AgentTaskView` because allowed tools are
+part of the action interface the model must follow. It must only mention tools
+that are allowed for the current task. Tool-call examples are rendered from
+`ToolDefinition.example_arguments`, not hardcoded in the prompt builder.
+
+The system prompt explicitly says the model may only interact through
+`tool_call` or `final_answer` actions; free-form chat and markdown are invalid
+model output for v0.
+
+The system message persists at the front of the transcript and is sent on every
+model call because the prompt loop resends the full message list each turn.
+
+The user message describes files as available through tools in the prepared
+workspace without exposing raw host paths.
+
+### Next Small Step
+
+Implement the minimal prompt-loop runner state machine.

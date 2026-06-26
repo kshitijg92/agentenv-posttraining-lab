@@ -77,9 +77,28 @@ def test_tool_registry_links_names_to_input_and_output_models() -> None:
     assert TOOL_REGISTRY["run_tests"].output_model is RunTestsOutput
 
 
+def test_tool_registry_examples_validate_against_input_models() -> None:
+    for definition in TOOL_REGISTRY.values():
+        tool_input = validate_tool_input(
+            definition.name,
+            definition.example_arguments,
+        )
+
+        assert isinstance(tool_input, definition.input_model)
+
+
 def test_tool_registry_descriptions_are_non_empty() -> None:
     for definition in TOOL_REGISTRY.values():
         assert definition.description
+
+
+def test_write_file_tool_is_described_as_full_file_replacement() -> None:
+    assert "single existing file" in TOOL_REGISTRY["write_file"].description
+    assert "not a patch or diff" in TOOL_REGISTRY["write_file"].description
+    assert (
+        TOOL_REGISTRY["write_file"].example_arguments["content"]
+        == "entire replacement file contents..."
+    )
 
 
 def test_tool_output_schemas_accept_valid_outputs() -> None:

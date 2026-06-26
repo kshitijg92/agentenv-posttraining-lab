@@ -88,6 +88,7 @@ class ToolDefinition:
     description: str
     input_model: type[BaseModel]
     output_model: type[BaseModel]
+    example_arguments: Mapping[str, object]
 
 
 READ_FILE_TOOL = ToolDefinition(
@@ -95,18 +96,28 @@ READ_FILE_TOOL = ToolDefinition(
     description="Read a text file from the prepared task workspace.",
     input_model=ReadFileInput,
     output_model=ReadFileOutput,
+    example_arguments={"path": "src/file.py"},
 )
 WRITE_FILE_TOOL = ToolDefinition(
     name="write_file",
-    description="Write text content to a file in the prepared task workspace.",
+    description=(
+        "Replace the entire contents of a single existing file in the prepared "
+        "task workspace. The content argument must be the full new file text, "
+        "not a patch or diff."
+    ),
     input_model=WriteFileInput,
     output_model=WriteFileOutput,
+    example_arguments={
+        "path": "src/file.py",
+        "content": "entire replacement file contents...",
+    },
 )
 RUN_TESTS_TOOL = ToolDefinition(
     name="run_tests",
     description="Run a test command in the prepared task workspace.",
     input_model=RunTestsInput,
     output_model=RunTestsOutput,
+    example_arguments={"command": "uv run pytest tests/test_public.py"},
 )
 TOOL_REGISTRY: dict[ToolName, ToolDefinition] = {
     "read_file": READ_FILE_TOOL,
