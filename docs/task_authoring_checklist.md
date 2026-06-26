@@ -9,7 +9,7 @@ Each task directory must contain:
 ```text
 task.yaml
 task_card.md
-workspace_seed/
+seed_workspace/
 hidden_tests/
 controls/oracle.patch
 controls/bad_noop.patch
@@ -77,7 +77,7 @@ The split must match `splits.lock.json` once the split lock exists.
 - Hidden validators fail under the no-op bad patch.
 - Hidden validators fail under the public-only bad patch.
 - Hidden validators are deterministic.
-- Hidden validators live outside `workspace_seed/`.
+- Hidden validators live outside `seed_workspace/`.
 - Hidden validators are not copied into the prepared agent workspace.
 - Hidden validators check the actual behavior the task claims to measure.
 

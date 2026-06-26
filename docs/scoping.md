@@ -11,7 +11,7 @@ local Python repo-patch tasks
 The current Week 1 artifact is a thin local eval loop for one toy task. It can:
 
 - validate a task manifest,
-- prepare a clean agent-visible workspace from `workspace_seed/`,
+- prepare a clean agent-visible workspace from `seed_workspace/`,
 - apply a submitted patch,
 - run public checks,
 - run hidden pytest validators,
@@ -34,7 +34,7 @@ This project does not yet measure long-horizon debugging, large-repo navigation,
 
 The current implementation enforces workspace discipline, not secure sandboxing.
 
-Hidden validators are kept outside `workspace_seed/` and are introduced only during hidden scoring. This prevents accidental task leakage in the local eval lifecycle, but it is not a security boundary against a hostile process.
+Hidden validators are kept outside `seed_workspace/` and are introduced only during hidden scoring. This prevents accidental task leakage in the local eval lifecycle, but it is not a security boundary against a hostile process.
 
 Network isolation and process/container hardening are out of scope for Week 1.
 

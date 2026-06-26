@@ -47,8 +47,8 @@ flowchart LR
     subgraph task_pack[Task pack: toy_python_fix]
         task_card[task_card.md<br/>human-readable task design]
         task_yaml[task.yaml<br/>private machine-readable manifest]
-        seed[workspace_seed/<br/>agent-visible starting repo]
-        public_tests[workspace_seed/tests/test_public.py<br/>visible public smoke test]
+        seed[seed_workspace/<br/>agent-visible starting repo]
+        public_tests[seed_workspace/tests/test_public.py<br/>visible public smoke test]
         hidden_tests[hidden_tests/<br/>private behavioral tests]
         controls[controls/<br/>oracle and known-bad patches]
         canary[leakage_canary<br/>private tripwire string]
@@ -56,7 +56,7 @@ flowchart LR
 
     subgraph agent_phase[Agent or patch-author phase]
         derived_instruction[Derived task instruction<br/>from safe manifest fields]
-        agent_workspace[Prepared workspace<br/>copy of workspace_seed only]
+        agent_workspace[Prepared workspace<br/>copy of seed_workspace only]
         patch[Submitted patch<br/>example: controls/oracle.patch]
     end
 
@@ -151,7 +151,7 @@ The task pack contains more than the agent should see. This was the most importa
 The agent-visible part is only:
 
 - the task instruction,
-- the copied `workspace_seed/`,
+- the copied `seed_workspace/`,
 - the public tests if I choose to expose them.
 
 The private eval-side part is:
@@ -195,7 +195,7 @@ My local mapping is:
 ```text
 task_card.md
 task.yaml
-workspace_seed/
+seed_workspace/
 hidden_tests/
 controls/
 ```
@@ -246,7 +246,7 @@ The hidden tests define the real behavioral contract.
 
 ### Hidden Tests Must Not Leak
 
-The hidden tests are outside `workspace_seed/`.
+The hidden tests are outside `seed_workspace/`.
 
 The prepared workspace should not contain:
 
@@ -312,7 +312,7 @@ My current interpretation:
 - `attempt.json` is the final summary.
 - `trace.jsonl` is the timeline of what happened.
 - `stdout.txt` and `stderr.txt` are raw command evidence.
-- `final.diff` is the code delta between `workspace_seed/` and the patched workspace.
+- `final.diff` is the code delta between `seed_workspace/` and the patched workspace.
 
 The key idea is that a score without evidence is hard to debug. The artifacts make the score auditable.
 

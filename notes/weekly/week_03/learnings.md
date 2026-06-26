@@ -113,7 +113,7 @@ The invariants now cover:
 ```text
 hidden validators are not present in the prepared workspace
 control patches are not present in the prepared workspace
-each attempt starts from a fresh copy of workspace_seed
+each attempt starts from a fresh copy of seed_workspace
 the leakage canary is absent from workspace files and all attempt artifacts
 task.yaml contents are absent from workspace files and all attempt artifacts
 deterministic control repeats have stable statuses and final_diff_hash

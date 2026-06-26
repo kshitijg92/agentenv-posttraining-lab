@@ -31,16 +31,16 @@ def load_splits_lock(path: Path) -> TaskSplitsLock:
 
 def validate_task_manifest_paths(manifest: TaskManifest, manifest_path: Path) -> None:
     task_dir = manifest_path.parent.resolve()
-    workspace_seed = _resolve_manifest_path(task_dir, manifest.workspace_seed)
-    _require_dir(workspace_seed, "workspace_seed")
+    seed_workspace = _resolve_manifest_path(task_dir, manifest.seed_workspace)
+    _require_dir(seed_workspace, "seed_workspace")
 
     for hidden_validator in manifest.hidden_validators:
         hidden_path = _resolve_manifest_path(task_dir, hidden_validator.path)
         _require_exists(hidden_path, f"hidden validator {hidden_validator.id}")
-        if hidden_path.is_relative_to(workspace_seed):
+        if hidden_path.is_relative_to(seed_workspace):
             raise ValueError(
                 f"Hidden validator {hidden_validator.id} must not be inside "
-                f"workspace_seed: {hidden_path}"
+                f"seed_workspace: {hidden_path}"
             )
 
     _require_file(
@@ -160,17 +160,17 @@ def _validate_workspace_private_assets_absent(
     manifest_path: Path,
 ) -> None:
     task_dir = manifest_path.parent.resolve()
-    workspace_seed = _resolve_manifest_path(task_dir, manifest.workspace_seed)
+    seed_workspace = _resolve_manifest_path(task_dir, manifest.seed_workspace)
 
     forbidden_paths = [
-        workspace_seed / "task.yaml",
-        workspace_seed / "hidden_tests",
-        workspace_seed / "controls",
+        seed_workspace / "task.yaml",
+        seed_workspace / "hidden_tests",
+        seed_workspace / "controls",
     ]
     for forbidden_path in forbidden_paths:
         if forbidden_path.exists():
             raise ValueError(
-                f"Private task asset must not be inside workspace_seed: "
+                f"Private task asset must not be inside seed_workspace: "
                 f"{forbidden_path}"
             )
 
@@ -181,7 +181,7 @@ def _validate_workspace_private_assets_absent(
         manifest.controls.bad.noop,
         manifest.controls.bad.public_only,
     ]
-    for file_path in _iter_files(workspace_seed):
+    for file_path in _iter_files(seed_workspace):
         content = file_path.read_bytes()
         for marker in forbidden_markers:
             if marker.encode() in content:
@@ -196,10 +196,10 @@ def _validate_hidden_tests_not_public_duplicates(
     manifest_path: Path,
 ) -> None:
     task_dir = manifest_path.parent.resolve()
-    workspace_seed = _resolve_manifest_path(task_dir, manifest.workspace_seed)
+    seed_workspace = _resolve_manifest_path(task_dir, manifest.seed_workspace)
     public_test_hashes = {
         _normalized_text_hash(path): path
-        for path in _iter_python_files(workspace_seed / "tests")
+        for path in _iter_python_files(seed_workspace / "tests")
     }
     if not public_test_hashes:
         return

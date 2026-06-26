@@ -163,7 +163,7 @@ def run_patch_attempt(
             )
         )
         final_diff = render_directory_diff(
-            workspace.task_dir / manifest.workspace_seed,
+            workspace.task_dir / manifest.seed_workspace,
             workspace.path,
         )
         final_diff_hash = hash_diff(final_diff)

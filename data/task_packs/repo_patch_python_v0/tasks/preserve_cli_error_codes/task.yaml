@@ -2,8 +2,8 @@ id: preserve_cli_error_codes
 domain: repo_patch_python
 split: dev
 instruction: "Fix the validate_records CLI so it reads JSONL records with string id and status fields, rejects duplicate ids, prints JSON status counts on success, preserves the documented exit codes, and avoids tracebacks for expected user or input errors."
-workspace_seed: workspace_seed
-allowed_tools: ["shell", "edit", "pytest"]
+seed_workspace: seed_workspace
+allowed_tools: ["read_file", "write_file", "run_tests"]
 public_checks:
   - command: "uv run pytest tests/test_public.py"
 hidden_validators:

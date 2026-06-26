@@ -114,7 +114,7 @@ manifest_overrides:
     [
         """
 manifest_overrides:
-  workspace_seed: hacked
+  seed_workspace: hacked
 """,
         """
 manifest_overrides:

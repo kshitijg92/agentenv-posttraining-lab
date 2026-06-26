@@ -29,7 +29,7 @@ task -> solver/agent -> scorer
 My local mapping is:
 
 ```text
-task.yaml + workspace_seed -> submitted patch -> public checks and hidden pytest scorer
+task.yaml + seed_workspace -> submitted patch -> public checks and hidden pytest scorer
 ```
 
 This means I should avoid thinking of the eval as one undifferentiated script. Even if the implementation is small, I want separate concepts for:
@@ -58,12 +58,12 @@ My local mapping is:
 ```text
 task_card.md        human task explanation
 task.yaml           machine-readable eval manifest
-workspace_seed/     agent-visible starting repo
+seed_workspace/     agent-visible starting repo
 hidden_tests/       private scorer tests
 controls/           oracle and known-bad patches
 ```
 
-The concrete gotcha I learned here is that `hidden_tests/` must not be inside `workspace_seed/`. If hidden tests are present during the agent workspace phase, I have leaked the private verifier.
+The concrete gotcha I learned here is that `hidden_tests/` must not be inside `seed_workspace/`. If hidden tests are present during the agent workspace phase, I have leaked the private verifier.
 
 ### METR Task Standard
 
@@ -78,7 +78,7 @@ My local mapping is:
 ```text
 agent-visible:
   instruction
-  workspace_seed/
+  seed_workspace/
   public tests
 
 private eval-side:
@@ -187,7 +187,7 @@ The hidden tests check:
 The important implementation boundary is:
 
 ```text
-hidden_tests/ is outside workspace_seed/
+hidden_tests/ is outside seed_workspace/
 ```
 
 The hidden scorer should only run hidden tests after a patch has already been applied.
@@ -324,13 +324,13 @@ prepare_agent_workspace(manifest, manifest_path)
 does three important things:
 
 - validates the manifest paths,
-- copies only `workspace_seed/` into a fresh workspace,
+- copies only `seed_workspace/` into a fresh workspace,
 - checks that hidden validator files are not present in that copied workspace.
 
 This keeps the hidden-test leakage invariant executable:
 
 ```text
-agent-visible workspace = workspace_seed only
+agent-visible workspace = seed_workspace only
 ```
 
 The local environment is not a secure sandbox. It is just a disciplined local workspace-preparation layer. A future Docker sandbox would belong under `sandbox/`, not replace the conceptual role of `envs/`.
@@ -574,7 +574,7 @@ public_check
 hidden_score
 ```
 
-`final.diff` records the diff between the original `workspace_seed/` and the patched workspace. I capture it immediately after patch application, before public checks and hidden scoring. This avoids including pytest cache files or any scorer-side files in the submitted-code diff.
+`final.diff` records the diff between the original `seed_workspace/` and the patched workspace. I capture it immediately after patch application, before public checks and hidden scoring. This avoids including pytest cache files or any scorer-side files in the submitted-code diff.
 
 The current expected control behavior is:
 
@@ -656,7 +656,7 @@ task_card.md
 task.yaml
   for the eval framework
 
-workspace_seed/
+seed_workspace/
   for the agent or patch author
 
 hidden_tests/ and controls/
@@ -689,9 +689,9 @@ Schema validation catches mistakes like:
 
 Path validation catches mistakes like:
 
-- missing `workspace_seed`,
+- missing `seed_workspace`,
 - missing hidden validator path,
-- hidden tests accidentally placed inside `workspace_seed`,
+- hidden tests accidentally placed inside `seed_workspace`,
 - missing oracle or bad control patches,
 - manifest paths that are absolute or escape the task directory.
 

@@ -84,7 +84,7 @@ New task directories:
 data/task_packs/repo_patch_python_v0/tasks/<task_slug>/
   task.yaml
   task_card.md
-  workspace_seed/
+  seed_workspace/
   hidden_tests/
   controls/oracle.patch
   controls/bad_noop.patch
@@ -183,7 +183,7 @@ No real LLM agent integration is required this week.
    ```
 
 4. Create one new dev task end to end.
-   Build `workspace_seed`, public tests, hidden tests, controls, manifest, and
+   Build `seed_workspace`, public tests, hidden tests, controls, manifest, and
    task card. Do not batch-create all tasks before calibrating the first one.
 
 5. Calibrate the first task.

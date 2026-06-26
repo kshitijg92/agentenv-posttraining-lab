@@ -9,7 +9,7 @@ TOY_TASK_MANIFEST = Path(
 )
 
 
-def test_prepare_agent_workspace_copies_only_workspace_seed(tmp_path: Path) -> None:
+def test_prepare_agent_workspace_copies_only_seed_workspace(tmp_path: Path) -> None:
     manifest = load_task_manifest(TOY_TASK_MANIFEST)
 
     workspace = prepare_agent_workspace(

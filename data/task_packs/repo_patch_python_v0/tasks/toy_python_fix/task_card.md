@@ -44,7 +44,7 @@ The agent should see only the seed workspace and task instruction.
 Expected visible files:
 
 ```text
-workspace_seed/
+seed_workspace/
   pyproject.toml
   src/mathlib.py
   tests/test_public.py

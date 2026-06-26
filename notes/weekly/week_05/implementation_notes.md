@@ -854,3 +854,177 @@ blur protocol failure with workspace/tool failure.
   and final answer;
 - malformed JSON remains covered by unit-level prompt-loop tests rather than
   promoted to an e2e recovery path.
+
+## Task Manifest Tool Vocabulary Decision
+
+### Decision
+
+Use concrete Week 5 tool names in canonical task manifests:
+
+```text
+read_file
+write_file
+run_tests
+```
+
+Do not add a legacy adapter from old Week 1-4 manifest vocabulary such as:
+
+```text
+shell
+edit
+pytest
+```
+
+### Reasoning
+
+`allowed_tools` is part of the task-to-agent contract. If the manifest supplies
+the allowed tool list and `AgentTaskView` passes that list to the prompt loop,
+then the manifest should use the actual executable agent tool names.
+
+Adding a compatibility adapter would make the harness silently reinterpret task
+permissions and create ambiguity at the exact boundary Week 5 is trying to make
+explicit.
+
+### Implementation
+
+- Updated all `repo_patch_python_v0` task manifests to use
+  `["read_file", "write_file", "run_tests"]`.
+- Tightened the task manifest schema so `allowed_tools` validates against the
+  concrete tool registry names.
+- Added a regression test that rejects the old legacy tool vocabulary.
+
+### Non-Goals
+
+This is not a new task-pack baseline claim, not a new task, and not an eval
+policy integration. It is a vocabulary migration so the next agent-attempt
+bridge can pass manifest `allowed_tools` into `AgentTaskView` without hidden
+translation.
+
+## Agent Task Run Harness Decision
+
+### Decision
+
+Add a minimal harness-side agent task run:
+
+```text
+src/agentenv/orchestrators/agent_task_run.py
+```
+
+with:
+
+```text
+run_agent_task_attempt(...)
+write_agent_task_run_artifacts(...)
+```
+
+### Boundary
+
+The agent loop still receives only:
+
+```text
+AgentTaskView
+ModelClient
+DecodingConfig
+local tools
+```
+
+The harness owns:
+
+```text
+load full task manifest
+prepare agent_interaction_workspace
+construct AgentTaskView from visible fields
+run prompt loop
+derive candidate.patch from workspace diff
+submit candidate.patch through run_patch_attempt(...) in a fresh
+scoring_workspace
+persist agent-side and attempt-side artifacts
+```
+
+### Statuses
+
+`AgentTaskRunResult.status` is intentionally narrow:
+
+```text
+scored
+agent_loop_failed
+orchestrator_error
+```
+
+`scored` means the prompt loop completed, the harness derived a candidate patch,
+and the existing patch-attempt path was invoked. It does not mean task success;
+task success remains `AttemptRun.result.status == PASS`.
+
+`agent_loop_failed` means the model/agent protocol did not reach
+`final_answer`, so the harness does not derive a patch or invoke hidden
+scoring.
+
+`orchestrator_error` is reserved for harness failures such as workspace setup,
+patch derivation, artifact writing, or unexpected scoring invocation errors.
+
+### Artifacts
+
+Agent task run artifacts are separate from the existing attempt artifacts:
+
+```text
+run_manifest.json
+agent_task_run.json
+agent_task_view.json
+prompt_loop_result.json
+candidate.patch
+error.txt
+attempt/
+```
+
+The nested `attempt/` directory uses the existing `write_attempt_artifacts(...)`
+contract unchanged.
+
+### Invariants
+
+- `agent_task_view.json` is harness evidence, not model-facing content.
+- `agent_task_run.json` carries the full nested `AttemptResult` when scoring was
+  invoked, not only a lossy attempt status.
+- `manifest.allowed_tools` is passed directly into `AgentTaskView`.
+- prompt-loop failure does not become an `AttemptStatus`.
+- candidate patch content is opaque to the bridge: correct, wrong, partial, and
+  no-op patches all belong to the existing scoring path once the loop completes.
+- hidden validators remain reachable only through `run_patch_attempt(...)`.
+
+### Workspace Vocabulary
+
+The agent task run uses three distinct workspace concepts:
+
+```text
+seed workspace = immutable task starting files from seed_workspace
+agent_interaction_workspace = workspace exposed to model-mediated tools
+scoring workspace = fresh workspace prepared inside run_patch_attempt(...)
+```
+
+The harness does not score the mutated `agent_interaction_workspace` directly.
+It derives `candidate.patch` from the seed workspace versus the interaction
+workspace, then scores that patch in a fresh scoring workspace through the
+existing patch-attempt path.
+
+## Agent Diff Hygiene Decision
+
+### Decision
+
+Teach `render_directory_diff(...)` to ignore generated `.venv` directories and
+after-only `uv.lock` files.
+
+### Reasoning
+
+The agent loop can run public checks before the harness derives
+`candidate.patch`. In `uv`-based seed workspaces, that can create `.venv/`,
+`.pytest_cache/`, `__pycache__/`, and a generated `uv.lock`. These are tool
+side effects, not candidate source edits.
+
+The existing attempt path captures `final.diff` before public checks, so it did
+not previously see these side effects. Agent-produced patches need equivalent
+artifact hygiene after tool execution.
+
+### Invariant
+
+Seeded `uv.lock` changes are still diffed. Only after-only `uv.lock` files are
+ignored, so the diff runner does not hide lockfile changes when a task actually
+ships a lockfile in `seed_workspace`.

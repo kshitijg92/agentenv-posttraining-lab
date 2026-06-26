@@ -9,7 +9,7 @@ tasks_dir: tasks
 required_task_files:
   - task.yaml
   - task_card.md
-  - workspace_seed
+  - seed_workspace
   - hidden_tests
   - controls/oracle.patch
   - controls/bad_noop.patch

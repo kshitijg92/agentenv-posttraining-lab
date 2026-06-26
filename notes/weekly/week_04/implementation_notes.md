@@ -81,7 +81,7 @@ tasks. It should check structural and leakage-boundary invariants:
 ```text
 required files come from manifest.yaml
 task ids and splits match splits.lock.json
-workspace_seed does not contain private task assets or markers
+seed_workspace does not contain private task assets or markers
 hidden validator files are not exact duplicates of public tests
 ```
 
@@ -253,7 +253,7 @@ uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0
 uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
-uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/workspace_seed/src/jsonl_tools.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/workspace_seed/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py
+uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/src/jsonl_tools.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py
 ```
 
 ### Result
@@ -302,7 +302,7 @@ uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0
 uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
-uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/workspace_seed/src/jsonl_tools.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/workspace_seed/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py
+uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/src/jsonl_tools.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py
 uv run pytest
 uv run ruff check .
 uv run pyright
@@ -359,7 +359,7 @@ uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0
 rm -rf experiments/runs/dev_controls
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
-uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/workspace_seed/src/jsonl_tools.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/workspace_seed/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py tests/test_controls_run.py tests/test_task_manifest.py
+uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/src/jsonl_tools.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py tests/test_controls_run.py tests/test_task_manifest.py
 uv run pytest
 uv run ruff check .
 uv run pyright
@@ -489,7 +489,7 @@ uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0
 uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_public_only.patch --out /tmp/agentenv-preserve-cli-public-only
 rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
-uv run ruff check data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/workspace_seed/src/validate_records.py data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/workspace_seed/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py tests/test_controls_run.py tests/test_task_manifest.py
+uv run ruff check data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/seed_workspace/src/validate_records.py data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/seed_workspace/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py tests/test_controls_run.py tests/test_task_manifest.py
 uv run pytest
 uv run ruff check .
 uv run pyright

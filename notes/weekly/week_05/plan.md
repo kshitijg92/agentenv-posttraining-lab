@@ -20,7 +20,7 @@ Weeks 1-4 are closed.
 Current trusted path:
 
 ```text
-task manifest + workspace_seed -> submitted patch -> orchestrator ->
+task manifest + seed_workspace -> submitted patch -> orchestrator ->
 public checks -> hidden scorer -> attempt artifacts
 ```
 

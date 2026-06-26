@@ -4,12 +4,17 @@ from pathlib import Path
 import xxhash
 
 
-IGNORED_DIR_NAMES = {"__pycache__", ".pytest_cache", ".ruff_cache", ".git"}
+IGNORED_DIR_NAMES = {"__pycache__", ".pytest_cache", ".ruff_cache", ".git", ".venv"}
+IGNORED_AFTER_ONLY_FILE_NAMES = {"uv.lock"}
 IGNORED_SUFFIXES = {".pyc", ".pyo"}
 
 
 def render_directory_diff(before_dir: Path, after_dir: Path) -> str:
-    relative_files = sorted(_relative_files(before_dir) | _relative_files(after_dir))
+    before_files = _relative_files(before_dir)
+    after_files = _relative_files(after_dir)
+    relative_files = sorted(
+        before_files | _after_files_to_diff(before_files, after_files)
+    )
     diff_chunks: list[str] = []
 
     for relative_file in relative_files:
@@ -42,6 +47,14 @@ def _relative_files(root: Path) -> set[Path]:
         path.relative_to(root)
         for path in root.rglob("*")
         if path.is_file() and not _is_ignored_path(path.relative_to(root))
+    }
+
+
+def _after_files_to_diff(before_files: set[Path], after_files: set[Path]) -> set[Path]:
+    return before_files | {
+        path
+        for path in after_files
+        if path in before_files or path.name not in IGNORED_AFTER_ONLY_FILE_NAMES
     }
 
 

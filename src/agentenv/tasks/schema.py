@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from agentenv.tools.schema import ToolName
+
 
 TaskDomain = Literal["repo_patch_python"]
 TaskSplit = Literal["practice", "dev", "heldout_private", "public_calibration"]
@@ -64,8 +66,8 @@ class TaskManifest(BaseModel):
     domain: TaskDomain
     split: TaskSplit
     instruction: str = Field(min_length=1)
-    workspace_seed: str = Field(min_length=1)
-    allowed_tools: list[str] = Field(min_length=1)
+    seed_workspace: str = Field(min_length=1)
+    allowed_tools: list[ToolName] = Field(min_length=1)
     public_checks: list[PublicCheck] = Field(min_length=1)
     hidden_validators: list[HiddenValidator] = Field(min_length=1)
     scoring: ScoringSpec

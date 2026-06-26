@@ -51,7 +51,7 @@ What I am looking for:
 
 Design implication for this repo:
 
-My hidden tests should not be in `workspace_seed`. The hidden scorer should only run them after the patch phase.
+My hidden tests should not be in `seed_workspace`. The hidden scorer should only run them after the patch phase.
 
 ### METR Task Standard
 
@@ -96,6 +96,6 @@ My `agentenv attempt run` command should distinguish patch apply errors, public 
 
 - If the oracle passes but there are no known-bad controls, I have not tested the eval harness.
 - If the public-only patch fails public tests, it is not a useful public-only control.
-- If hidden tests are present in `workspace_seed`, the task does not test hidden validation discipline.
+- If hidden tests are present in `seed_workspace`, the task does not test hidden validation discipline.
 - If all failures are reported as `FAIL`, I will not know whether I built a task failure, scorer failure, orchestrator failure, environment failure, or patch failure.
 - If I add multiple tasks before one task is audited, I am scaling uncertainty instead of learning the loop.

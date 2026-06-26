@@ -35,3 +35,40 @@ def test_render_directory_diff_ignores_pycache(tmp_path: Path) -> None:
     (after_cache / "module.pyc").write_bytes(b"\xa7\r\r\nchanged")
 
     assert render_directory_diff(before, after) == ""
+
+
+def test_render_directory_diff_ignores_generated_virtualenv(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    before.mkdir()
+    after_venv = after / ".venv/lib"
+    after_venv.mkdir(parents=True)
+    (after_venv / "binary.so").write_bytes(b"\xa7\r\r\n")
+
+    assert render_directory_diff(before, after) == ""
+
+
+def test_render_directory_diff_ignores_after_only_uv_lock(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    before.mkdir()
+    after.mkdir()
+    (after / "uv.lock").write_text("generated lock\n")
+
+    assert render_directory_diff(before, after) == ""
+
+
+def test_render_directory_diff_keeps_seeded_uv_lock_changes(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    before.mkdir()
+    after.mkdir()
+    (before / "uv.lock").write_text("old lock\n")
+    (after / "uv.lock").write_text("new lock\n")
+
+    diff = render_directory_diff(before, after)
+
+    assert "--- a/uv.lock" in diff
+    assert "+++ b/uv.lock" in diff
+    assert "-old lock" in diff
+    assert "+new lock" in diff

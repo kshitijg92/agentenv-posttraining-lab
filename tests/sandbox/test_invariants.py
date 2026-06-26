@@ -60,7 +60,7 @@ def test_mutating_one_prepared_workspace_does_not_mutate_seed_or_later_workspace
 ) -> None:
     manifest = load_task_manifest(TOY_TASK_MANIFEST)
     task_dir = TOY_TASK_MANIFEST.parent
-    seed_source = task_dir / manifest.workspace_seed / "src/mathlib.py"
+    seed_source = task_dir / manifest.seed_workspace / "src/mathlib.py"
     original_source = seed_source.read_text()
 
     first_workspace = prepare_agent_workspace(

@@ -14,12 +14,12 @@ For the current local repo environment:
 ```text
 task package
   task.yaml
-  workspace_seed/
+  seed_workspace/
   hidden_tests/
   controls/
 
 prepared agent workspace
-  copied from workspace_seed/
+  copied from seed_workspace/
   must not contain hidden_tests/
 ```
 
@@ -31,7 +31,7 @@ generalization and starts measuring leakage or reward hacking.
 
 ## Current Enforcement
 
-`prepare_agent_workspace(...)` copies only the task's `workspace_seed/` into a
+`prepare_agent_workspace(...)` copies only the task's `seed_workspace/` into a
 fresh workspace. It then checks every manifest-declared hidden validator path and
 raises if that path exists inside the prepared workspace.
 
@@ -51,12 +51,12 @@ For the current local repo environment:
 ```text
 task package
   task.yaml
-  workspace_seed/
+  seed_workspace/
   hidden_tests/
   controls/
 
 prepared agent workspace
-  copied from workspace_seed/
+  copied from seed_workspace/
   must not contain controls/
 ```
 
@@ -68,8 +68,8 @@ infer hidden behavior, or game the control assumptions.
 
 ## Current Enforcement
 
-`prepare_agent_workspace(...)` copies only the task's `workspace_seed/` into a
-fresh workspace. Since controls live outside `workspace_seed/`, they are not
+`prepare_agent_workspace(...)` copies only the task's `seed_workspace/` into a
+fresh workspace. Since controls live outside `seed_workspace/`, they are not
 copied into the prepared agent workspace.
 
 Current test evidence:
@@ -80,23 +80,23 @@ tests/sandbox/test_invariants.py::test_control_patches_are_not_present_in_prepar
 
 ## Invariant 3: Each Attempt Starts From A Fresh Workspace Seed Copy
 
-Each attempt must start from a fresh copy of `workspace_seed`.
+Each attempt must start from a fresh copy of `seed_workspace`.
 
-Mutating one prepared workspace must not mutate `workspace_seed` or any later
+Mutating one prepared workspace must not mutate `seed_workspace` or any later
 prepared workspace.
 
 For the current local repo environment:
 
 ```text
-workspace_seed/
+seed_workspace/
   source of truth for each attempt workspace
 
 prepared workspace A
-  copied from workspace_seed/
+  copied from seed_workspace/
   may be mutated by patch application and checks
 
 prepared workspace B
-  copied independently from workspace_seed/
+  copied independently from seed_workspace/
   must not inherit mutations from workspace A
 ```
 
@@ -109,7 +109,7 @@ caches, or damage from an earlier attempt, making repeated results misleading.
 ## Current Enforcement
 
 `prepare_agent_workspace(...)` uses `shutil.copytree(...)` to create a new
-workspace directory from `workspace_seed/` for each prepared workspace.
+workspace directory from `seed_workspace/` for each prepared workspace.
 
 Current test evidence:
 
@@ -173,7 +173,7 @@ task.yaml
   leakage canary
 
 prepared agent workspace
-  copied from workspace_seed/
+  copied from seed_workspace/
   must not contain task.yaml
   must not contain task manifest contents
 
@@ -192,7 +192,7 @@ validation and control calibration.
 
 ## Current Enforcement
 
-`prepare_agent_workspace(...)` copies only `workspace_seed/`, not `task.yaml`.
+`prepare_agent_workspace(...)` copies only `seed_workspace/`, not `task.yaml`.
 Attempt artifacts keep path provenance for debugging and replay, but do not
 serialize the task manifest body.
 

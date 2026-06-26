@@ -22,6 +22,7 @@ def test_toy_python_fix_manifest_loads() -> None:
     assert manifest.id == "toy_python_fix_001"
     assert manifest.domain == "repo_patch_python"
     assert manifest.split == "practice"
+    assert manifest.allowed_tools == ["read_file", "write_file", "run_tests"]
     assert manifest.controls.bad.noop == "controls/bad_noop.patch"
     assert manifest.controls.bad.public_only == "controls/bad_public_only.patch"
 
@@ -51,7 +52,7 @@ def test_task_pack_validation_rejects_workspace_private_marker(
     tmp_path: Path,
 ) -> None:
     task_pack = _copy_task_pack(tmp_path)
-    source_file = task_pack / "tasks/toy_python_fix/workspace_seed/src/mathlib.py"
+    source_file = task_pack / "tasks/toy_python_fix/seed_workspace/src/mathlib.py"
     source_file.write_text(source_file.read_text() + "\n# hidden_tests\n")
 
     with pytest.raises(ValueError, match="Private task marker 'hidden_tests'"):
@@ -73,11 +74,27 @@ def test_task_pack_validation_rejects_hidden_public_duplicate(
     tmp_path: Path,
 ) -> None:
     task_pack = _copy_task_pack(tmp_path)
-    public_test = task_pack / "tasks/toy_python_fix/workspace_seed/tests/test_public.py"
+    public_test = task_pack / "tasks/toy_python_fix/seed_workspace/tests/test_public.py"
     hidden_test = task_pack / "tasks/toy_python_fix/hidden_tests/test_behavior.py"
     hidden_test.write_text(public_test.read_text())
 
     with pytest.raises(ValueError, match="duplicates public test"):
+        validate_task_pack(task_pack)
+
+
+def test_task_pack_validation_rejects_legacy_allowed_tools(
+    tmp_path: Path,
+) -> None:
+    task_pack = _copy_task_pack(tmp_path)
+    manifest_path = task_pack / "tasks/toy_python_fix/task.yaml"
+    manifest_path.write_text(
+        manifest_path.read_text().replace(
+            'allowed_tools: ["read_file", "write_file", "run_tests"]',
+            'allowed_tools: ["shell", "edit", "pytest"]',
+        )
+    )
+
+    with pytest.raises(ValueError, match="read_file"):
         validate_task_pack(task_pack)
 
 

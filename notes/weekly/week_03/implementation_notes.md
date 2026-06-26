@@ -142,7 +142,7 @@ so `HIDDEN_VALIDATOR_ACCESS_ATTEMPT` takes precedence over `INVALID_SHORTCUT`.
 
 Attempt artifacts currently record `submission_path`; they do not snapshot the
 submitted patch contents. This is consistent with the current replay model,
-which also depends on task-pack paths such as `task.yaml`, `workspace_seed/`,
+which also depends on task-pack paths such as `task.yaml`, `seed_workspace/`,
 hidden validators, and control patches remaining stable. Full content
 snapshotting or content-addressed task assets belongs in a later reproducibility
 checkpoint.
@@ -916,13 +916,13 @@ Add a workspace freshness invariant.
 ### Reasoning
 
 Repeated evals and control runs are only trustworthy if every attempt starts
-from a fresh copy of `workspace_seed`.
+from a fresh copy of `seed_workspace`.
 
 The invariant is:
 
 ```text
-Each attempt must start from a fresh copy of workspace_seed.
-Mutating one prepared workspace must not mutate workspace_seed or any later
+Each attempt must start from a fresh copy of seed_workspace.
+Mutating one prepared workspace must not mutate seed_workspace or any later
 prepared workspace.
 ```
 
@@ -944,7 +944,7 @@ uv run pyright tests/sandbox/test_invariants.py
 ### Result
 
 The test mutates one prepared workspace, then verifies that the task
-`workspace_seed` and a later prepared workspace still contain the original file
+`seed_workspace` and a later prepared workspace still contain the original file
 contents and do not inherit an attempt-local file.
 
 ### Decision

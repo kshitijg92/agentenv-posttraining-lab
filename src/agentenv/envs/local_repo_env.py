@@ -21,11 +21,11 @@ def prepare_agent_workspace(
     validate_task_manifest_paths(manifest, manifest_path)
 
     task_dir = manifest_path.parent.resolve()
-    workspace_seed = (task_dir / manifest.workspace_seed).resolve()
+    seed_workspace = (task_dir / manifest.seed_workspace).resolve()
     workspace_root = _workspace_root(workspace_parent, manifest.id)
     workspace_path = workspace_root / "workspace"
 
-    shutil.copytree(workspace_seed, workspace_path)
+    shutil.copytree(seed_workspace, workspace_path)
     _assert_hidden_validators_absent(manifest, workspace_path)
 
     return LocalRepoWorkspace(path=workspace_path, task_dir=task_dir)
