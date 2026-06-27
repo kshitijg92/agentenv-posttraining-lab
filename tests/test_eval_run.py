@@ -95,18 +95,37 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert eval_run.config.name == "scorer_control_policies"
     assert eval_run.policy == "oracle"
     assert len(eval_run.attempts) == 1
-    assert eval_run.attempts[0].result.status == "PASS"
+    assert eval_run.attempts[0].scorer is not None
+    assert eval_run.attempts[0].scorer.status == "PASS"
     assert run_manifest["artifact_version"] == "eval_run_v0"
     assert run_manifest["config_name"] == "scorer_control_policies"
     assert run_manifest["policy"] == "oracle"
+    assert run_manifest["policy_type"] == "scorer_control_patch"
+    assert run_manifest["policy_family"] == "control"
+    assert run_manifest["control_layer"] == "scorer"
+    assert run_manifest["control_name"] == "oracle"
     assert run_manifest["attempt_count"] == 1
-    assert run_manifest["status_counts"] == {"PASS": 1}
+    assert "status_counts" not in run_manifest
+    assert run_manifest["layer_counts"] == {
+        "scorer_hidden_status": {"PASS": 1},
+        "scorer_public_status": {"PASS": 1},
+        "scorer_status": {"PASS": 1},
+    }
     assert run_manifest["artifacts"] == {
         "attempts": "attempts",
         "trace": "trace.jsonl",
     }
-    assert run_manifest["attempts"][0]["task_id"] == "toy_python_fix_001"
-    assert run_manifest["attempts"][0]["status"] == "PASS"
+    attempt_record = run_manifest["attempts"][0]
+    assert attempt_record["task_id"] == "toy_python_fix_001"
+    assert attempt_record["attempt_index"] == 0
+    assert attempt_record["artifact_dir"] == "attempts/toy_python_fix_001__attempt_001"
+    assert attempt_record["artifact_version"] == "run_artifacts_v0"
+    assert attempt_record["agent"] is None
+    assert attempt_record["scorer"]["status"] == "PASS"
+    assert attempt_record["scorer"]["public_status"] == "PASS"
+    assert attempt_record["scorer"]["hidden_status"] == "PASS"
+    assert attempt_record["scorer"]["error_class"] is None
+    assert attempt_record["scorer"]["final_diff_hash"] == "xxh64:e3fc746d6fe0786c"
     validate_trace_file(tmp_path / "eval/trace.jsonl")
     trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
     assert [event.event_type for event in trace_events] == [
@@ -129,10 +148,16 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert attempt_finished_provenance.attempt_index == 0
     assert (
         attempt_finished_provenance.attempt_id
-        == run_manifest["attempts"][0]["attempt_id"]
+        == attempt_record["scorer"]["attempt_id"]
     )
     assert trace_events[3].output_payload is not None
-    assert trace_events[3].output_payload["status"] == "PASS"
+    assert trace_events[3].output_payload["scorer"]["status"] == "PASS"
+    assert trace_events[4].output_payload is not None
+    assert trace_events[4].output_payload["layer_counts"] == {
+        "scorer_hidden_status": {"PASS": 1},
+        "scorer_public_status": {"PASS": 1},
+        "scorer_status": {"PASS": 1},
+    }
     assert trace_events[3].payload_refs == {
         "attempt": "attempts/toy_python_fix_001__attempt_001/attempt.json",
         "attempt_trace": "attempts/toy_python_fix_001__attempt_001/trace.jsonl",
@@ -148,10 +173,11 @@ def test_run_eval_config_distinguishes_bad_noop(tmp_path: Path) -> None:
     eval_run = run_eval_config(CONTROL_EVAL_CONFIG, "bad-noop", tmp_path / "eval")
 
     assert len(eval_run.attempts) == 1
-    result = eval_run.attempts[0].result
-    assert result.status == "HIDDEN_TEST_FAIL"
-    assert result.public_status == "PASS"
-    assert result.hidden_status == "FAIL"
+    scorer = eval_run.attempts[0].scorer
+    assert scorer is not None
+    assert scorer.status == "HIDDEN_TEST_FAIL"
+    assert scorer.public_status == "PASS"
+    assert scorer.hidden_status == "FAIL"
 
 
 def test_run_eval_config_all_policies_writes_matrix_manifest(
@@ -175,9 +201,11 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     assert matrix_manifest["config_name"] == "scorer_control_policies"
     assert matrix_manifest["policy_count"] == 3
     assert matrix_manifest["attempt_count"] == 3
-    assert matrix_manifest["status_counts"] == {
-        "HIDDEN_TEST_FAIL": 2,
-        "PASS": 1,
+    assert "status_counts" not in matrix_manifest
+    assert matrix_manifest["layer_counts"] == {
+        "scorer_hidden_status": {"FAIL": 2, "PASS": 1},
+        "scorer_public_status": {"PASS": 3},
+        "scorer_status": {"HIDDEN_TEST_FAIL": 2, "PASS": 1},
     }
     assert matrix_manifest["artifacts"] == {
         "policies": "policies",
@@ -186,27 +214,51 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     assert matrix_manifest["policy_runs"] == [
         {
             "policy": "oracle",
+            "policy_type": "scorer_control_patch",
+            "policy_family": "control",
+            "control_layer": "scorer",
+            "control_name": "oracle",
             "eval_run_id": eval_matrix.policy_runs[0].eval_run_id,
             "artifact_dir": "policies/oracle",
             "run_manifest": "policies/oracle/run_manifest.json",
             "attempt_count": 1,
-            "status_counts": {"PASS": 1},
+            "layer_counts": {
+                "scorer_hidden_status": {"PASS": 1},
+                "scorer_public_status": {"PASS": 1},
+                "scorer_status": {"PASS": 1},
+            },
         },
         {
             "policy": "bad-noop",
+            "policy_type": "scorer_control_patch",
+            "policy_family": "control",
+            "control_layer": "scorer",
+            "control_name": "bad.noop",
             "eval_run_id": eval_matrix.policy_runs[1].eval_run_id,
             "artifact_dir": "policies/bad-noop",
             "run_manifest": "policies/bad-noop/run_manifest.json",
             "attempt_count": 1,
-            "status_counts": {"HIDDEN_TEST_FAIL": 1},
+            "layer_counts": {
+                "scorer_hidden_status": {"FAIL": 1},
+                "scorer_public_status": {"PASS": 1},
+                "scorer_status": {"HIDDEN_TEST_FAIL": 1},
+            },
         },
         {
             "policy": "bad-public-only",
+            "policy_type": "scorer_control_patch",
+            "policy_family": "control",
+            "control_layer": "scorer",
+            "control_name": "bad.public_only",
             "eval_run_id": eval_matrix.policy_runs[2].eval_run_id,
             "artifact_dir": "policies/bad-public-only",
             "run_manifest": "policies/bad-public-only/run_manifest.json",
             "attempt_count": 1,
-            "status_counts": {"HIDDEN_TEST_FAIL": 1},
+            "layer_counts": {
+                "scorer_hidden_status": {"FAIL": 1},
+                "scorer_public_status": {"PASS": 1},
+                "scorer_status": {"HIDDEN_TEST_FAIL": 1},
+            },
         },
     ]
     assert (tmp_path / "eval_matrix/policies/oracle/run_manifest.json").is_file()

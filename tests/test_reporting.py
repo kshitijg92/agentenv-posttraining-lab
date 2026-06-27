@@ -67,15 +67,17 @@ def test_write_eval_markdown_report(tmp_path: Path) -> None:
     assert report_path == tmp_path / "reports/eval_report.md"
     assert "# Eval Report" in report
     assert "## Run Details" in report
-    assert "## Status Counts" in report
+    assert "## Layer Counts" in report
     assert "## Attempts" in report
     assert "- Config name: scorer_control_policies" in report
     assert "- Policy: oracle" in report
     assert "- Split: practice" in report
     assert "- Config path: configs/eval/scorer_control_policies.yaml" in report
-    assert "| PASS | 1 |" in report
+    assert "| scorer_status | PASS | 1 |" in report
+    assert "| scorer_public_status | PASS | 1 |" in report
+    assert "| scorer_hidden_status | PASS | 1 |" in report
     assert (
-        "| toy_python_fix_001 | 0 | PASS | PASS | PASS |  | "
+        "| toy_python_fix_001 | 0 | run_artifacts_v0 | PASS | PASS | PASS |  |  |  | "
         "xxh64:e3fc746d6fe0786c | attempts/toy_python_fix_001__attempt_001 |"
     ) in report
 
@@ -174,5 +176,6 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "| oracle | 1 | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 0 | 0 | 0 |" in report
     assert ("| bad-noop | 1 | 0/1 (0%) | 1/1 (100%) | 0/1 (0%) | 1 | 0 | 0 |") in report
     assert (
-        "| toy_python_fix_001 | bad-public-only | HIDDEN_TEST_FAIL | PASS | FAIL |"
+        "| toy_python_fix_001 | bad-public-only | run_artifacts_v0 | "
+        "HIDDEN_TEST_FAIL | PASS | FAIL |"
     ) in report

@@ -13,7 +13,7 @@ from agentenv.evals.resolve import (
     select_policy,
 )
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
-from agentenv.orchestrators.attempt import AttemptResult
+from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.replay.runner import ReplayRun, run_replay
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
@@ -25,11 +25,36 @@ TraceEvent = dict[str, object]
 
 
 @dataclass(frozen=True)
+class ScorerAttemptSummary:
+    run_id: str
+    attempt_id: str
+    status: AttemptStatus
+    public_status: CheckStatus
+    hidden_status: CheckStatus
+    error_class: str | None
+    final_diff_hash: str | None
+    duration_ms: int
+
+
+@dataclass(frozen=True)
+class AgentAttemptSummary:
+    run_id: str
+    status: str
+    prompt_loop_status: str | None
+    error_class: str | None
+    candidate_patch_hash: str | None
+    duration_ms: int
+    scorer_attempt: ScorerAttemptSummary | None
+
+
+@dataclass(frozen=True)
 class EvalAttemptRecord:
     task_id: str
     attempt_index: int
     attempt_dir: Path
-    result: AttemptResult
+    artifact_version: str
+    scorer: ScorerAttemptSummary | None
+    agent: AgentAttemptSummary | None
 
 
 @dataclass(frozen=True)
@@ -160,7 +185,9 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
                 task_id=task.task_id,
                 attempt_index=attempt_index,
                 attempt_dir=attempt_dir,
-                result=attempt_run.result,
+                artifact_version=_child_artifact_version(attempt_dir),
+                scorer=_scorer_summary(attempt_run.result),
+                agent=None,
             )
             attempt_records.append(attempt_record)
             task_attempt_records.append(attempt_record)
@@ -178,11 +205,9 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
                 ),
                 "eval_attempt_finished",
                 output_payload={
-                    "status": attempt_run.result.status,
-                    "public_status": attempt_run.result.public_status,
-                    "hidden_status": attempt_run.result.hidden_status,
-                    "error_class": attempt_run.result.error_class,
-                    "final_diff_hash": attempt_run.result.final_diff_hash,
+                    "artifact_version": attempt_record.artifact_version,
+                    "scorer": _scorer_summary_json(attempt_record.scorer),
+                    "agent": None,
                 },
                 payload_refs={
                     "attempt": f"{artifact_dir_ref}/attempt.json",
@@ -196,7 +221,7 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
             "eval_task_finished",
             output_payload={
                 "attempt_count": len(task_attempt_records),
-                "status_counts": _status_counts(task_attempt_records),
+                "layer_counts": _layer_counts(task_attempt_records),
             },
         )
 
@@ -216,7 +241,7 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
         "eval_finished",
         output_payload={
             "attempt_count": len(eval_run.attempts),
-            "status_counts": _status_counts(eval_run.attempts),
+            "layer_counts": _layer_counts(eval_run.attempts),
         },
         payload_refs={"run_manifest": "run_manifest.json"},
     )
@@ -342,26 +367,14 @@ def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
         "task_pack": eval_run.config.task_pack,
         "split": eval_run.config.split,
         "policy": eval_run.policy,
+        **_policy_metadata(eval_run.config, eval_run.policy),
         "attempt_count": len(eval_run.attempts),
-        "status_counts": _status_counts(eval_run.attempts),
+        "layer_counts": _layer_counts(eval_run.attempts),
         "artifacts": {
             "trace": "trace.jsonl",
             "attempts": "attempts",
         },
-        "attempts": [
-            {
-                "task_id": attempt.task_id,
-                "attempt_index": attempt.attempt_index,
-                "attempt_run_id": attempt.result.run_id,
-                "attempt_id": attempt.result.attempt_id,
-                "status": attempt.result.status,
-                "public_status": attempt.result.public_status,
-                "hidden_status": attempt.result.hidden_status,
-                "final_diff_hash": attempt.result.final_diff_hash,
-                "artifact_dir": str(attempt.attempt_dir.relative_to(eval_run.out_dir)),
-            }
-            for attempt in eval_run.attempts
-        ],
+        "attempts": [_eval_attempt_record(eval_run, attempt) for attempt in eval_run.attempts],
     }
 
 
@@ -388,11 +401,12 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
         "tasks": eval_matrix.config.tasks,
         "policy_count": len(eval_matrix.policy_runs),
         "attempt_count": sum(policy_attempt_counts.values()),
-        "status_counts": _matrix_status_counts(eval_matrix.policy_runs),
+        "layer_counts": _matrix_layer_counts(eval_matrix.policy_runs),
         "artifacts": artifacts,
         "policy_runs": [
             {
                 "policy": policy_run.policy,
+                **_policy_metadata(eval_matrix.config, policy_run.policy),
                 "eval_run_id": policy_run.eval_run_id,
                 "artifact_dir": str(
                     policy_run.out_dir.relative_to(eval_matrix.out_dir)
@@ -403,7 +417,7 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
                     )
                 ),
                 "attempt_count": len(policy_run.attempts),
-                "status_counts": _status_counts(policy_run.attempts),
+                "layer_counts": _layer_counts(policy_run.attempts),
             }
             for policy_run in eval_matrix.policy_runs
         ],
@@ -454,21 +468,163 @@ def _eval_matrix_replay_record(
     }
 
 
-def _status_counts(attempts: list[EvalAttemptRecord]) -> dict[str, int]:
-    status_counts: dict[str, int] = {}
+def _policy_metadata(config: EvalConfig, policy_name: str) -> dict[str, object]:
+    policy = config.policies[policy_name]
+    if policy.type == "scorer_control_patch":
+        return {
+            "policy_type": policy.type,
+            "policy_family": "control",
+            "control_layer": "scorer",
+            "control_name": policy.control,
+        }
+    return {
+        "policy_type": policy.type,
+        "policy_family": "control",
+        "control_layer": "agent",
+        "control_name": policy.control,
+    }
+
+
+def _eval_attempt_record(
+    eval_run: EvalRun,
+    attempt: EvalAttemptRecord,
+) -> dict[str, object]:
+    return {
+        "task_id": attempt.task_id,
+        "attempt_index": attempt.attempt_index,
+        "artifact_dir": str(attempt.attempt_dir.relative_to(eval_run.out_dir)),
+        "artifact_version": attempt.artifact_version,
+        "scorer": _scorer_summary_json(attempt.scorer),
+        "agent": _agent_summary_json(attempt.agent),
+    }
+
+
+def _scorer_summary(result: AttemptResult) -> ScorerAttemptSummary:
+    return ScorerAttemptSummary(
+        run_id=result.run_id,
+        attempt_id=result.attempt_id,
+        status=result.status,
+        public_status=result.public_status,
+        hidden_status=result.hidden_status,
+        error_class=result.error_class,
+        final_diff_hash=result.final_diff_hash,
+        duration_ms=result.duration_ms,
+    )
+
+
+def _scorer_summary_json(
+    scorer: ScorerAttemptSummary | None,
+) -> dict[str, object] | None:
+    if scorer is None:
+        return None
+    return {
+        "run_id": scorer.run_id,
+        "attempt_id": scorer.attempt_id,
+        "status": scorer.status,
+        "public_status": scorer.public_status,
+        "hidden_status": scorer.hidden_status,
+        "error_class": scorer.error_class,
+        "final_diff_hash": scorer.final_diff_hash,
+        "duration_ms": scorer.duration_ms,
+    }
+
+
+def _agent_summary_json(
+    agent: AgentAttemptSummary | None,
+) -> dict[str, object] | None:
+    if agent is None:
+        return None
+    return {
+        "run_id": agent.run_id,
+        "status": agent.status,
+        "prompt_loop_status": agent.prompt_loop_status,
+        "error_class": agent.error_class,
+        "candidate_patch_hash": agent.candidate_patch_hash,
+        "duration_ms": agent.duration_ms,
+        "scorer_attempt": _scorer_summary_json(agent.scorer_attempt),
+    }
+
+
+def _child_artifact_version(attempt_dir: Path) -> str:
+    manifest = json.loads((attempt_dir / "run_manifest.json").read_text())
+    if not isinstance(manifest, dict):
+        raise ValueError(f"Expected run_manifest.json object at {attempt_dir}")
+    artifact_version = manifest.get("artifact_version")
+    if not isinstance(artifact_version, str):
+        raise ValueError(f"Missing artifact_version in {attempt_dir / 'run_manifest.json'}")
+    return artifact_version
+
+
+def _layer_counts(
+    attempts: list[EvalAttemptRecord],
+) -> dict[str, dict[str, int]]:
+    layer_counts: dict[str, dict[str, int]] = {}
     for attempt in attempts:
-        status_counts[attempt.result.status] = (
-            status_counts.get(attempt.result.status, 0) + 1
-        )
-    return status_counts
+        if attempt.scorer is not None:
+            _increment_layer_count(
+                layer_counts,
+                "scorer_status",
+                attempt.scorer.status,
+            )
+            _increment_layer_count(
+                layer_counts,
+                "scorer_public_status",
+                attempt.scorer.public_status,
+            )
+            _increment_layer_count(
+                layer_counts,
+                "scorer_hidden_status",
+                attempt.scorer.hidden_status,
+            )
+        if attempt.agent is not None:
+            _increment_layer_count(
+                layer_counts,
+                "agent_status",
+                attempt.agent.status,
+            )
+            if attempt.agent.prompt_loop_status is not None:
+                _increment_layer_count(
+                    layer_counts,
+                    "prompt_loop_status",
+                    attempt.agent.prompt_loop_status,
+                )
+            if attempt.agent.scorer_attempt is not None:
+                _increment_layer_count(
+                    layer_counts,
+                    "agent_scorer_status",
+                    attempt.agent.scorer_attempt.status,
+                )
+                _increment_layer_count(
+                    layer_counts,
+                    "agent_scorer_public_status",
+                    attempt.agent.scorer_attempt.public_status,
+                )
+                _increment_layer_count(
+                    layer_counts,
+                    "agent_scorer_hidden_status",
+                    attempt.agent.scorer_attempt.hidden_status,
+                )
+    return layer_counts
 
 
-def _matrix_status_counts(policy_runs: list[EvalRun]) -> dict[str, int]:
-    status_counts: dict[str, int] = {}
+def _matrix_layer_counts(policy_runs: list[EvalRun]) -> dict[str, dict[str, int]]:
+    matrix_counts: dict[str, dict[str, int]] = {}
     for policy_run in policy_runs:
-        for status, count in _status_counts(policy_run.attempts).items():
-            status_counts[status] = status_counts.get(status, 0) + count
-    return status_counts
+        for layer_name, status_counts in _layer_counts(policy_run.attempts).items():
+            for status, count in status_counts.items():
+                matrix_counts.setdefault(layer_name, {})[status] = (
+                    matrix_counts.setdefault(layer_name, {}).get(status, 0) + count
+                )
+    return matrix_counts
+
+
+def _increment_layer_count(
+    layer_counts: dict[str, dict[str, int]],
+    layer_name: str,
+    status: str,
+) -> None:
+    counts = layer_counts.setdefault(layer_name, {})
+    counts[status] = counts.get(status, 0) + 1
 
 
 def _append_trace(

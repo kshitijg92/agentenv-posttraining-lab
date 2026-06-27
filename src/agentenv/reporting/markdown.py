@@ -42,26 +42,24 @@ def render_eval_report(
         f"- Task pack: {_display(manifest.get('task_pack'))}",
         f"- Attempt count: {_display(manifest.get('attempt_count'))}",
         "",
-        "## Status Counts",
+        "## Layer Counts",
         "",
-        "| status | count |",
-        "| --- | ---: |",
+        "| layer | status | count |",
+        "| --- | --- | ---: |",
     ]
 
-    status_counts = manifest.get("status_counts")
-    if isinstance(status_counts, dict):
-        for status, count in sorted(status_counts.items()):
-            lines.append(f"| {_display(status)} | {_display(count)} |")
+    lines.extend(_layer_count_rows(manifest))
     lines.extend(
         [
             "",
             "## Attempts",
             "",
             (
-                "| task_id | attempt_index | status | public_status | "
-                "hidden_status | error_class | final_diff_hash | artifact_dir |"
+                "| task_id | attempt_index | artifact_version | scorer_status | "
+                "scorer_public_status | scorer_hidden_status | agent_status | "
+                "prompt_loop_status | error_class | final_diff_hash | artifact_dir |"
             ),
-            "| --- | ---: | --- | --- | --- | --- | --- | --- |",
+            "| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
 
@@ -184,10 +182,12 @@ def render_eval_matrix_report(
             "## Per-Task Outcomes",
             "",
             (
-                "| task_id | policy | status | public_status | hidden_status | "
-                "error_class | duration_ms | final_diff_hash | artifact_dir |"
+                "| task_id | policy | artifact_version | scorer_status | "
+                "scorer_public_status | scorer_hidden_status | agent_status | "
+                "prompt_loop_status | error_class | duration_ms | final_diff_hash | "
+                "artifact_dir |"
             ),
-            "| --- | --- | --- | --- | --- | --- | ---: | --- | --- |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- |",
         ]
     )
     for policy, run_artifact_dir, run_manifest in policy_runs:
@@ -269,16 +269,21 @@ def render_replay_report(
 
 
 def _attempt_row(artifact_dir: Path, attempt_record: dict[str, object]) -> str:
+    del artifact_dir
     attempt_artifact_ref = _required_str(attempt_record, "artifact_dir")
-    attempt_json = _load_json_object(artifact_dir / attempt_artifact_ref / "attempt.json")
+    scorer = _optional_object(attempt_record.get("scorer"))
+    agent = _optional_object(attempt_record.get("agent"))
     return (
         f"| {_display(attempt_record.get('task_id'))} "
         f"| {_display(attempt_record.get('attempt_index'))} "
-        f"| {_display(attempt_json.get('status'))} "
-        f"| {_display(attempt_json.get('public_status'))} "
-        f"| {_display(attempt_json.get('hidden_status'))} "
-        f"| {_display(attempt_json.get('error_class'))} "
-        f"| {_display(attempt_json.get('final_diff_hash'))} "
+        f"| {_display(attempt_record.get('artifact_version'))} "
+        f"| {_display(_field(scorer, 'status'))} "
+        f"| {_display(_field(scorer, 'public_status'))} "
+        f"| {_display(_field(scorer, 'hidden_status'))} "
+        f"| {_display(_field(agent, 'status'))} "
+        f"| {_display(_field(agent, 'prompt_loop_status'))} "
+        f"| {_display(_attempt_error_class(scorer, agent))} "
+        f"| {_display(_attempt_final_diff_hash(scorer, agent))} "
         f"| {attempt_artifact_ref} |"
     )
 
@@ -339,28 +344,42 @@ def _matrix_policy_summary(
         run_manifest,
     )
     attempt_count = len(attempts)
-    final_passes = sum(attempt.get("status") == "PASS" for attempt in attempts)
-    public_passes = sum(attempt.get("public_status") == "PASS" for attempt in attempts)
-    hidden_passes = sum(attempt.get("hidden_status") == "PASS" for attempt in attempts)
+    final_passes = sum(_scorer_field(attempt, "status") == "PASS" for attempt in attempts)
+    public_passes = sum(
+        _scorer_field(attempt, "public_status") == "PASS" for attempt in attempts
+    )
+    hidden_passes = sum(
+        _scorer_field(attempt, "hidden_status") == "PASS" for attempt in attempts
+    )
     public_pass_hidden_fail = sum(
-        attempt.get("public_status") == "PASS"
-        and attempt.get("hidden_status") == "FAIL"
+        _scorer_field(attempt, "public_status") == "PASS"
+        and _scorer_field(attempt, "hidden_status") == "FAIL"
         for attempt in attempts
     )
-    status_counts = _field_counts(attempts, "status")
-    public_status_counts = _field_counts(attempts, "public_status")
-    hidden_status_counts = _field_counts(attempts, "hidden_status")
+    scorer_status_counts = _nested_field_counts(attempts, "scorer", "status")
+    scorer_public_status_counts = _nested_field_counts(
+        attempts,
+        "scorer",
+        "public_status",
+    )
+    scorer_hidden_status_counts = _nested_field_counts(
+        attempts,
+        "scorer",
+        "hidden_status",
+    )
     env_or_harness_failures = sum(
-        attempt.get("status") in {"PATCH_APPLY_ERROR", "TIMEOUT", "ORCHESTRATOR_ERROR"}
+        _scorer_field(attempt, "status")
+        in {"PATCH_APPLY_ERROR", "TIMEOUT", "ORCHESTRATOR_ERROR"}
         for attempt in attempts
     )
     scorer_or_orchestrator_failures = sum(
-        attempt.get("status") == "ORCHESTRATOR_ERROR" for attempt in attempts
+        _scorer_field(attempt, "status") == "ORCHESTRATOR_ERROR"
+        for attempt in attempts
     )
     duration_values = [
         duration_ms
         for attempt in attempts
-        if isinstance((duration_ms := attempt.get("duration_ms")), int)
+        if isinstance((duration_ms := _scorer_field(attempt, "duration_ms")), int)
     ]
     return {
         "policy": policy,
@@ -369,9 +388,9 @@ def _matrix_policy_summary(
         "public_passes": public_passes,
         "hidden_passes": hidden_passes,
         "public_pass_hidden_fail": public_pass_hidden_fail,
-        "status_counts": status_counts,
-        "public_status_counts": public_status_counts,
-        "hidden_status_counts": hidden_status_counts,
+        "scorer_status_counts": scorer_status_counts,
+        "scorer_public_status_counts": scorer_public_status_counts,
+        "scorer_hidden_status_counts": scorer_hidden_status_counts,
         "env_or_harness_failures": env_or_harness_failures,
         "scorer_or_orchestrator_failures": scorer_or_orchestrator_failures,
         "median_duration_ms": int(median(duration_values)) if duration_values else None,
@@ -407,9 +426,17 @@ def _matrix_expectation_row(summary: dict[str, object]) -> str:
     if expected is None:
         return f"| {policy} |  |  |  |  |  |  | {_colored_label('NOT_CHECKED', 'gray')} |"
 
-    final_count = _status_count(summary, "status_counts", expected["final"])
-    public_count = _status_count(summary, "public_status_counts", expected["public"])
-    hidden_count = _status_count(summary, "hidden_status_counts", expected["hidden"])
+    final_count = _status_count(summary, "scorer_status_counts", expected["final"])
+    public_count = _status_count(
+        summary,
+        "scorer_public_status_counts",
+        expected["public"],
+    )
+    hidden_count = _status_count(
+        summary,
+        "scorer_hidden_status_counts",
+        expected["hidden"],
+    )
     on_track = (
         final_count == attempt_count
         and public_count == attempt_count
@@ -490,13 +517,30 @@ def _matrix_replay_runs(manifest: dict[str, object]) -> list[dict[str, object]]:
     return replay_runs
 
 
-def _field_counts(
+def _layer_count_rows(manifest: dict[str, object]) -> list[str]:
+    layer_counts = manifest.get("layer_counts")
+    if not isinstance(layer_counts, dict):
+        return []
+    rows: list[str] = []
+    for layer_name, raw_status_counts in sorted(layer_counts.items()):
+        if not isinstance(raw_status_counts, dict):
+            continue
+        for status, count in sorted(raw_status_counts.items()):
+            rows.append(
+                f"| {_display(layer_name)} | {_display(status)} | {_display(count)} |"
+            )
+    return rows
+
+
+def _nested_field_counts(
     attempts: list[dict[str, object]],
+    object_name: str,
     field_name: str,
 ) -> dict[str, int]:
     counts: dict[str, int] = {}
     for attempt in attempts:
-        value = attempt.get(field_name)
+        nested = _optional_object(attempt.get(object_name))
+        value = _field(nested, field_name)
         if not isinstance(value, str):
             continue
         counts[value] = counts.get(value, 0) + 1
@@ -515,6 +559,72 @@ def _status_count(
     return value if isinstance(value, int) else 0
 
 
+def _optional_object(value: object) -> dict[str, object] | None:
+    return value if isinstance(value, dict) else None
+
+
+def _field(data: dict[str, object] | None, key: str) -> object:
+    if data is None:
+        return None
+    return data.get(key)
+
+
+def _scorer_field(attempt: dict[str, object], key: str) -> object:
+    return _field(_optional_object(attempt.get("scorer")), key)
+
+
+def _agent_field(attempt: dict[str, object], key: str) -> object:
+    return _field(_optional_object(attempt.get("agent")), key)
+
+
+def _agent_scorer_field(attempt: dict[str, object], key: str) -> object:
+    agent = _optional_object(attempt.get("agent"))
+    scorer_attempt = _optional_object(_field(agent, "scorer_attempt"))
+    return _field(scorer_attempt, key)
+
+
+def _attempt_error_class(
+    scorer: dict[str, object] | None,
+    agent: dict[str, object] | None,
+) -> object:
+    if scorer is not None:
+        return scorer.get("error_class")
+    if agent is not None:
+        return agent.get("error_class")
+    return None
+
+
+def _attempt_final_diff_hash(
+    scorer: dict[str, object] | None,
+    agent: dict[str, object] | None,
+) -> object:
+    if scorer is not None:
+        return scorer.get("final_diff_hash")
+    if agent is not None:
+        scorer_attempt = _optional_object(agent.get("scorer_attempt"))
+        return _field(scorer_attempt, "final_diff_hash")
+    return None
+
+
+def _attempt_error_class_from_record(attempt: dict[str, object]) -> object:
+    scorer = _optional_object(attempt.get("scorer"))
+    agent = _optional_object(attempt.get("agent"))
+    return _attempt_error_class(scorer, agent)
+
+
+def _attempt_final_diff_hash_from_record(attempt: dict[str, object]) -> object:
+    scorer = _optional_object(attempt.get("scorer"))
+    agent = _optional_object(attempt.get("agent"))
+    return _attempt_final_diff_hash(scorer, agent)
+
+
+def _attempt_duration_ms(attempt: dict[str, object]) -> object:
+    duration_ms = _scorer_field(attempt, "duration_ms")
+    if duration_ms is not None:
+        return duration_ms
+    return _agent_field(attempt, "duration_ms")
+
+
 def _matrix_attempt_rows(
     artifact_dir: Path,
     policy: str,
@@ -525,12 +635,15 @@ def _matrix_attempt_rows(
         (
             f"| {_display(attempt.get('task_id'))} "
             f"| {policy} "
-            f"| {_display(attempt.get('status'))} "
-            f"| {_display(attempt.get('public_status'))} "
-            f"| {_display(attempt.get('hidden_status'))} "
-            f"| {_display(attempt.get('error_class'))} "
-            f"| {_display(attempt.get('duration_ms'))} "
-            f"| {_display(attempt.get('final_diff_hash'))} "
+            f"| {_display(attempt.get('artifact_version'))} "
+            f"| {_display(_scorer_field(attempt, 'status'))} "
+            f"| {_display(_scorer_field(attempt, 'public_status'))} "
+            f"| {_display(_scorer_field(attempt, 'hidden_status'))} "
+            f"| {_display(_agent_field(attempt, 'status'))} "
+            f"| {_display(_agent_field(attempt, 'prompt_loop_status'))} "
+            f"| {_display(_attempt_error_class_from_record(attempt))} "
+            f"| {_display(_attempt_duration_ms(attempt))} "
+            f"| {_display(_attempt_final_diff_hash_from_record(attempt))} "
             f"| {_display(attempt.get('artifact_dir'))} |"
         )
         for attempt in _matrix_attempts_with_artifacts(
@@ -557,16 +670,9 @@ def _matrix_attempts_with_artifacts(
             raise ValueError("Expected eval run attempt entries to be objects")
         attempt_record = dict(raw_attempt)
         attempt_artifact_ref = _required_str(attempt_record, "artifact_dir")
-        attempt_json = _load_json_object(run_dir / attempt_artifact_ref / "attempt.json")
         attempt_record["artifact_dir"] = str(
             (run_dir / attempt_artifact_ref).relative_to(artifact_dir)
         )
-        attempt_record["error_class"] = attempt_json.get("error_class")
-        attempt_record["duration_ms"] = attempt_json.get("duration_ms")
-        attempt_record["status"] = attempt_json.get("status")
-        attempt_record["public_status"] = attempt_json.get("public_status")
-        attempt_record["hidden_status"] = attempt_json.get("hidden_status")
-        attempt_record["final_diff_hash"] = attempt_json.get("final_diff_hash")
         records.append(attempt_record)
     return records
 

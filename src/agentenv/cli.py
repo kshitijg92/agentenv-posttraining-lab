@@ -136,18 +136,13 @@ def run_eval(
             config,
             out,
         )
-        status_counts = ", ".join(
-            f"{status}={count}"
-            for status, count in sorted(
-                _matrix_status_counts(eval_matrix).items(),
-            )
-        )
+        layer_counts = _format_layer_counts(_matrix_layer_counts(eval_matrix))
         console.print(
             f"[green]eval complete[/green] {eval_matrix.config.name} "
             f"policies={len(eval_matrix.policy_runs)} "
             f"attempts={sum(len(run.attempts) for run in eval_matrix.policy_runs)} "
             f"replays={len(eval_matrix.replay_runs)} "
-            f"{status_counts}"
+            f"{layer_counts}"
         )
         console.print(f"wrote {eval_matrix.out_dir / 'eval_matrix_manifest.json'}")
         return
@@ -156,16 +151,11 @@ def run_eval(
         raise typer.BadParameter("Provide --policy or --all-policies")
 
     eval_run = run_eval_config(config, policy, out)
-    status_counts = ", ".join(
-        f"{status}={count}"
-        for status, count in sorted(
-            _status_counts(eval_run).items(),
-        )
-    )
+    layer_counts = _format_layer_counts(_layer_counts(eval_run))
     console.print(
         f"[green]eval complete[/green] {eval_run.config.name} "
         f"policy={eval_run.policy} attempts={len(eval_run.attempts)} "
-        f"{status_counts}"
+        f"{layer_counts}"
     )
     console.print(f"wrote {eval_run.out_dir / 'run_manifest.json'}")
 
@@ -196,16 +186,54 @@ def report_run(
     console.print(f"[green]wrote[/green] {report_path}")
 
 
-def _status_counts(eval_run: EvalRun) -> dict[str, int]:
-    counts: dict[str, int] = {}
+def _layer_counts(eval_run: EvalRun) -> dict[str, dict[str, int]]:
+    counts: dict[str, dict[str, int]] = {}
     for attempt in eval_run.attempts:
-        counts[attempt.result.status] = counts.get(attempt.result.status, 0) + 1
+        if attempt.scorer is not None:
+            _increment_layer_count(counts, "scorer_status", attempt.scorer.status)
+            _increment_layer_count(
+                counts,
+                "scorer_public_status",
+                attempt.scorer.public_status,
+            )
+            _increment_layer_count(
+                counts,
+                "scorer_hidden_status",
+                attempt.scorer.hidden_status,
+            )
+        if attempt.agent is not None:
+            _increment_layer_count(counts, "agent_status", attempt.agent.status)
+            if attempt.agent.prompt_loop_status is not None:
+                _increment_layer_count(
+                    counts,
+                    "prompt_loop_status",
+                    attempt.agent.prompt_loop_status,
+                )
     return counts
 
 
-def _matrix_status_counts(eval_matrix: EvalMatrixRun) -> dict[str, int]:
-    counts: dict[str, int] = {}
+def _matrix_layer_counts(eval_matrix: EvalMatrixRun) -> dict[str, dict[str, int]]:
+    counts: dict[str, dict[str, int]] = {}
     for eval_run in eval_matrix.policy_runs:
-        for status, count in _status_counts(eval_run).items():
-            counts[status] = counts.get(status, 0) + count
+        for layer_name, status_counts in _layer_counts(eval_run).items():
+            layer_count = counts.setdefault(layer_name, {})
+            for status, count in status_counts.items():
+                layer_count[status] = layer_count.get(status, 0) + count
     return counts
+
+
+def _increment_layer_count(
+    counts: dict[str, dict[str, int]],
+    layer_name: str,
+    status: str,
+) -> None:
+    layer_count = counts.setdefault(layer_name, {})
+    layer_count[status] = layer_count.get(status, 0) + 1
+
+
+def _format_layer_counts(layer_counts: dict[str, dict[str, int]]) -> str:
+    return " ".join(
+        f"{layer_name}.{status}={count}"
+        for layer_name, status_counts in sorted(layer_counts.items())
+        for status, count in sorted(status_counts.items())
+    )

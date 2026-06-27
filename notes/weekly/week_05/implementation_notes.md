@@ -1735,3 +1735,81 @@ Focused eval/report/replay checks passed:
 ```bash
 uv run pytest tests/test_eval_run.py tests/test_reporting.py tests/test_replay.py
 ```
+
+## Eval Attempt Summary Shape Decision
+
+### Decision
+
+Keep the artifact version names `eval_run_v0` and `eval_matrix_v0`, but replace
+the old scorer-shaped attempt summaries with layer-aware summaries.
+
+Each eval attempt record now has a common envelope:
+
+```text
+task_id
+attempt_index
+artifact_dir
+artifact_version
+```
+
+and exactly one primary execution summary for current policies:
+
+```text
+scorer  # for scorer_control_patch
+agent   # for future agent_control_script eval execution
+```
+
+For scorer-control attempts, `scorer` contains only the fields the eval and
+matrix layers need:
+
+```text
+run_id
+attempt_id
+status
+public_status
+hidden_status
+error_class
+final_diff_hash
+duration_ms
+```
+
+The full `AttemptResult` remains in the child attempt artifact. The eval
+manifest is a summary/index, not the owner of the scorer result.
+
+The manifests no longer emit unqualified `status_counts`. They emit
+`layer_counts`, currently:
+
+```text
+scorer_status
+scorer_public_status
+scorer_hidden_status
+```
+
+Matrix policy-run entries now also include policy taxonomy:
+
+```text
+policy_type
+policy_family
+control_layer
+control_name
+```
+
+### Reasoning
+
+`PASS`, `HIDDEN_TEST_FAIL`, `scored`, and `invalid_model_output` live at
+different measurement layers. Mixing them into one top-level `status_counts`
+map would make future agent-control evals easy to misread.
+
+The child artifact directory remains the replay source of truth. The eval
+attempt record only points to that artifact and summarizes the layer outcomes
+needed for matrix aggregation and reports.
+
+### Verification
+
+Focused eval/report/replay checks passed:
+
+```bash
+uv run pytest tests/test_eval_run.py tests/test_reporting.py tests/test_replay.py
+uv run ruff check src/agentenv/orchestrators/eval_run.py src/agentenv/reporting/markdown.py src/agentenv/cli.py tests/test_eval_run.py tests/test_reporting.py
+uv run pyright
+```
