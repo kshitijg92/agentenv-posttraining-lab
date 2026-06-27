@@ -1097,3 +1097,40 @@ a clean place for future `controls/agent_control_scripts/`.
 This step does not add `agent_control_scripts/` or define the script JSON
 contract. It only moves the existing direct patch controls and updates the task
 manifest schema to name them precisely.
+
+## Agent Control Script Case Decision
+
+### Decision
+
+Add the first task-local scripted agent control as a single nested JSON file:
+
+```text
+controls/agent_control_scripts/happy_path.json
+```
+
+The file contains:
+
+```text
+script
+expected_result
+```
+
+For the first checkpoint, `expected_result` asserts only
+`prompt_loop_status`.
+
+### Reasoning
+
+Agent control scripts calibrate the model-agent loop, not the scorer. The fake
+model script and its expectation belong together because they form one
+calibration case; splitting them across two files creates drift risk.
+
+The happy-path script may still produce a valid patch and therefore flow through
+the scoring harness, but the agent-control expectation intentionally does not
+assert `attempt_status`, `public_status`, or `hidden_status` yet. Those outcomes
+are already calibrated by scorer control patches.
+
+### Non-Goals
+
+This step does not add controls CLI discovery or task-manifest references for
+agent control scripts. It only defines and exercises one concrete control-case
+artifact.
