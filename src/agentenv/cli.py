@@ -4,7 +4,7 @@ import typer
 from rich.console import Console
 
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
-from agentenv.orchestrators.controls_run import run_controls
+from agentenv.controls.controls_run import run_controls
 from agentenv.orchestrators.eval_run import (
     EvalMatrixRun,
     EvalRun,

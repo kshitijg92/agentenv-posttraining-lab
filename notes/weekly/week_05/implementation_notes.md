@@ -1265,3 +1265,41 @@ orchestrator module just to validate task-pack files.
 
 This step still does not add controls CLI discovery or reporting for agent
 controls. It makes the artifacts required and validates/runs them in tests.
+
+## Controls Module Boundary Decision
+
+### Decision
+
+Move scorer-control run code from:
+
+```text
+agentenv.orchestrators.controls_run
+```
+
+to:
+
+```text
+agentenv.controls.controls_run
+```
+
+Keep agent-control schema/loading in:
+
+```text
+agentenv.controls.agent_control_scripts
+```
+
+When `controls run` executes agent controls, it should use a harness-owned
+default `DecodingConfig` rather than adding decoding fields to the task
+manifest.
+
+### Reasoning
+
+Controls now span multiple calibration layers: scorer control patches and
+agent-loop scripts. Keeping control-specific loading and run logic under a
+`controls` package gives that concept an explicit home instead of scattering it
+across orchestrators.
+
+`DecodingConfig` is run policy, not task definition. Scripted fake models ignore
+sampling settings, but the prompt-loop interface requires the object. A
+controls-run default is enough for calibration and avoids making task manifests
+model-run configuration files.

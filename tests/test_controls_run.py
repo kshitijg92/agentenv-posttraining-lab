@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from agentenv.orchestrators.controls_run import expected_control_outcome, run_controls
+from agentenv.controls.controls_run import expected_control_outcome, run_controls
 
 
 TASK_PACK = Path("data/task_packs/repo_patch_python_v0")

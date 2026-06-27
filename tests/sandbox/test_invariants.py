@@ -3,7 +3,7 @@ from pathlib import Path
 from agentenv.evals.schema import ControlName
 from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
-from agentenv.orchestrators.controls_run import ControlAttemptRecord, run_controls
+from agentenv.controls.controls_run import ControlAttemptRecord, run_controls
 from agentenv.tasks.validate import load_task_manifest
 
 
