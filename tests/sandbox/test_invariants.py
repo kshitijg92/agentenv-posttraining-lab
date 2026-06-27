@@ -33,7 +33,7 @@ def test_hidden_validators_are_not_present_in_prepared_agent_workspace(
         assert not (workspace.path / hidden_validator.path).exists()
 
 
-def test_control_patches_are_not_present_in_prepared_agent_workspace(
+def test_scorer_control_patches_are_not_present_in_prepared_agent_workspace(
     tmp_path: Path,
 ) -> None:
     manifest = load_task_manifest(TOY_TASK_MANIFEST)

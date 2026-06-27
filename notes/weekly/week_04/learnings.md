@@ -73,7 +73,7 @@ Replay belongs in the trust story.
 Running a full eval matrix shows the controls behaved correctly once. Replaying
 the control-policy runs shows that the recorded outcomes are reproducible.
 
-For this stage, replay is intentionally scoped to `control_patch` policies.
+For this stage, replay is intentionally scoped to `scorer_control_patch` policies.
 That avoids making premature claims about future model-agent replay semantics.
 
 Current durable result:

@@ -75,7 +75,7 @@ copied into the prepared agent workspace.
 Current test evidence:
 
 ```text
-tests/sandbox/test_invariants.py::test_control_patches_are_not_present_in_prepared_agent_workspace
+tests/sandbox/test_invariants.py::test_scorer_control_patches_are_not_present_in_prepared_agent_workspace
 ```
 
 ## Invariant 3: Each Attempt Starts From A Fresh Workspace Seed Copy

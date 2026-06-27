@@ -174,7 +174,7 @@ def test_run_eval_config_all_policies_can_replay_control_policies(
         "policies": "policies",
         "replays": "replays",
     }
-    assert matrix_manifest["replay_policy_scope"] == "control_patch"
+    assert matrix_manifest["replay_policy_scope"] == "scorer_control_patch"
     assert matrix_manifest["replay_runs"] == [
         {
             "policy": "oracle",

@@ -43,7 +43,7 @@
       }
     }
   ],
-  "replay_policy_scope": "control_patch",
+  "replay_policy_scope": "scorer_control_patch",
   "replay_runs": [
     {
       "artifact_dir": "replays/oracle",

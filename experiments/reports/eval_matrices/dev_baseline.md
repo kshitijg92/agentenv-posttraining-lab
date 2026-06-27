@@ -14,7 +14,7 @@
 - Policy count: 3
 - Attempt count: 9
 - Hidden-validator version/hash: not captured in eval_matrix_v0; current substitute is config hash xxh64:2f1db658e87d2562
-- Replay scope: control_patch
+- Replay scope: scorer_control_patch
 - Replay match rate: 9/9 (100%)
 
 ## Tasks

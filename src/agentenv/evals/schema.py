@@ -5,11 +5,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from agentenv.tasks.schema import TaskSplit
 
 
-PolicyType = Literal["control_patch"]
+PolicyType = Literal["scorer_control_patch"]
 ControlName = Literal["oracle", "bad.noop", "bad.public_only"]
 
 
-class ControlPatchPolicy(BaseModel):
+class ScorerControlPatchPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: PolicyType
@@ -33,5 +33,5 @@ class EvalConfig(BaseModel):
     tasks: list[str] = Field(min_length=1)
     split: TaskSplit
     attempts: int = Field(gt=0)
-    policies: dict[str, ControlPatchPolicy] = Field(min_length=1)
+    policies: dict[str, ScorerControlPatchPolicy] = Field(min_length=1)
     trace: TraceCaptureConfig

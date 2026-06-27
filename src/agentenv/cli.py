@@ -130,7 +130,7 @@ def run_eval(
     replay_control_policies: bool = typer.Option(
         False,
         "--replay-control-policies",
-        help="Replay every control_patch policy after a full eval config run.",
+        help="Replay every scorer_control_patch policy after a full eval config run.",
     ),
     out: Path = typer.Option(..., "--out", help="Directory for eval artifacts."),
 ) -> None:

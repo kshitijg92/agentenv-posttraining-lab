@@ -6,13 +6,13 @@ split: practice
 attempts: 1
 policies:
   oracle:
-    type: control_patch
+    type: scorer_control_patch
     control: oracle
   bad-noop:
-    type: control_patch
+    type: scorer_control_patch
     control: bad.noop
   bad-public-only:
-    type: control_patch
+    type: scorer_control_patch
     control: bad.public_only
 trace:
   version: trace_v0

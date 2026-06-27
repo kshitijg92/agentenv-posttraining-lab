@@ -27,7 +27,7 @@ public checks -> hidden scorer -> attempt artifacts
 Current eval path:
 
 ```text
-eval config -> control_patch policies -> attempts -> eval matrix ->
+eval config -> scorer_control_patch policies -> attempts -> eval matrix ->
 control-policy replay -> report
 ```
 
@@ -240,7 +240,7 @@ model failure vs task failure vs infra failure
    remain unchanged.
 
 6. Extend eval config support for one agent policy.
-   Keep `control_patch` behavior intact. Add only the smallest policy schema
+   Keep `scorer_control_patch` behavior intact. Add only the smallest policy schema
    needed for `week05_agent_baseline.yaml`.
 
 7. Write the fake-agent baseline report.
@@ -316,7 +316,7 @@ Minimum:
 
 Quality bar:
 
-- `control_patch` evals still work unchanged;
+- `scorer_control_patch` evals still work unchanged;
 - existing dev-baseline scoring semantics are not weakened;
 - reports separate model failure, task failure, scorer failure, and infra
   failure;

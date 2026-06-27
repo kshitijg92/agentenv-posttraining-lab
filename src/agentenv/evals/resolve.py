@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from agentenv.evals.schema import ControlName, ControlPatchPolicy, EvalConfig
+from agentenv.evals.schema import ControlName, EvalConfig, ScorerControlPatchPolicy
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
@@ -33,7 +33,7 @@ def resolve_eval_tasks(config: EvalConfig, config_path: Path) -> list[ResolvedEv
     ]
 
 
-def select_policy(config: EvalConfig, policy: str) -> ControlPatchPolicy:
+def select_policy(config: EvalConfig, policy: str) -> ScorerControlPatchPolicy:
     try:
         return config.policies[policy]
     except KeyError as exc:
@@ -41,7 +41,7 @@ def select_policy(config: EvalConfig, policy: str) -> ControlPatchPolicy:
         raise ValueError(f"Unknown policy {policy!r}; available: {available}") from exc
 
 
-def control_patch_path(
+def scorer_control_patch_path(
     task_dir: Path,
     manifest: TaskManifest,
     control: ControlName,

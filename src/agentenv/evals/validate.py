@@ -2,7 +2,7 @@ from pathlib import Path
 
 import yaml
 
-from agentenv.evals.resolve import control_patch_path, resolve_eval_tasks
+from agentenv.evals.resolve import scorer_control_patch_path, resolve_eval_tasks
 from agentenv.evals.schema import EvalConfig
 from agentenv.tasks.validate import validate_task_manifest_paths
 
@@ -19,7 +19,7 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
     for task in resolved_tasks:
         validate_task_manifest_paths(task.manifest, task.manifest_path)
         for policy in config.policies.values():
-            control_patch_path(
+            scorer_control_patch_path(
                 task.manifest_path.parent,
                 task.manifest,
                 policy.control,

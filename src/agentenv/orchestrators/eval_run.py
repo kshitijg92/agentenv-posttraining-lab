@@ -8,7 +8,7 @@ import xxhash
 
 from agentenv.evals.schema import EvalConfig
 from agentenv.evals.resolve import (
-    control_patch_path,
+    scorer_control_patch_path,
     resolve_eval_tasks,
     select_policy,
 )
@@ -116,7 +116,7 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
                 "task_manifest_path": str(task.manifest_path),
             },
         )
-        submission_path = control_patch_path(
+        submission_path = scorer_control_patch_path(
             task.manifest_path.parent,
             task.manifest,
             selected_policy.control,
@@ -270,7 +270,7 @@ def _replay_control_policy_runs(
     replay_records: list[EvalMatrixReplayRecord] = []
     for policy_run in policy_runs:
         policy = config.policies[policy_run.policy]
-        if policy.type != "control_patch":
+        if policy.type != "scorer_control_patch":
             continue
         replay_dir = replays_dir / policy_run.policy
         replay_run = run_replay(policy_run.out_dir, replay_dir)
@@ -393,7 +393,7 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
             for policy_run in eval_matrix.policy_runs
         ],
         "replay_policy_scope": (
-            "control_patch" if eval_matrix.replay_runs else "not_run"
+            "scorer_control_patch" if eval_matrix.replay_runs else "not_run"
         ),
         "replay_runs": [
             _eval_matrix_replay_record(eval_matrix, replay_record)

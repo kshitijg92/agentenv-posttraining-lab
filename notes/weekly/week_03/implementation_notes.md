@@ -894,7 +894,7 @@ manifest.controls.bad.public_only
 - Added `Invariant 2: Control Patches Are Not Agent-Visible` to
   `docs/sandbox_invariants_v0.md`.
 - Added
-  `tests/sandbox/test_invariants.py::test_control_patches_are_not_present_in_prepared_agent_workspace`.
+  `tests/sandbox/test_invariants.py::test_scorer_control_patches_are_not_present_in_prepared_agent_workspace`.
 
 ### Ran
 

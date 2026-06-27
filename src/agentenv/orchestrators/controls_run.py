@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from agentenv.evals.resolve import control_patch_path
+from agentenv.evals.resolve import scorer_control_patch_path
 from agentenv.evals.schema import ControlName
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
@@ -88,7 +88,7 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
     for task in tasks:
         for control in CONTROL_NAMES:
             expectation = expected_control_outcome(control)
-            submission_path = control_patch_path(
+            submission_path = scorer_control_patch_path(
                 task.manifest_path.parent,
                 task.manifest,
                 control,

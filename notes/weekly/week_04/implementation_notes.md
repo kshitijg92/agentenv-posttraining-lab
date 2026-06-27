@@ -1036,7 +1036,7 @@ Control-policy replay integration passed:
 
 ```text
 durable matrix: policies=3 attempts=9 replays=3 HIDDEN_TEST_FAIL=6 PASS=3
-replay scope: control_patch
+replay scope: scorer_control_patch
 replay match rate: 9/9
 per-policy replay: oracle 3/3, noop 3/3, public-tests-only 3/3
 trace validation: 24 trace files

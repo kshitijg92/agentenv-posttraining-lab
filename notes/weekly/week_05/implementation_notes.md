@@ -1028,3 +1028,35 @@ artifact hygiene after tool execution.
 Seeded `uv.lock` changes are still diffed. Only after-only `uv.lock` files are
 ignored, so the diff runner does not hide lockfile changes when a task actually
 ships a lockfile in `seed_workspace`.
+
+## Scorer Control Policy Naming Decision
+
+### Decision
+
+Rename the existing eval policy type:
+
+```text
+control_patch -> scorer_control_patch
+```
+
+and rename the corresponding schema object:
+
+```text
+ControlPatchPolicy -> ScorerControlPatchPolicy
+```
+
+### Reasoning
+
+The existing controls bypass the agent loop and submit known patches directly to
+the patch-attempt/scoring path. They calibrate the scorer/orchestrator layer,
+not the model-agent loop.
+
+Now that Week 5 has an agent task run harness, policy names need to identify
+which layer is being calibrated. `scorer_control_patch` makes the old control
+path explicit and leaves room for a separate agent-loop control policy such as
+an agent fake-model script.
+
+### Non-Goals
+
+This migration does not add an agent policy type yet. It only makes the current
+scorer-control policy vocabulary precise before adding agent-loop controls.

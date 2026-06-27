@@ -8,13 +8,13 @@ split: dev
 attempts: 1
 policies:
   oracle:
-    type: control_patch
+    type: scorer_control_patch
     control: oracle
   noop:
-    type: control_patch
+    type: scorer_control_patch
     control: bad.noop
   public-tests-only:
-    type: control_patch
+    type: scorer_control_patch
     control: bad.public_only
 trace:
   version: trace_v0
