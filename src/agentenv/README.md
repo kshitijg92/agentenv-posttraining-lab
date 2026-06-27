@@ -218,7 +218,7 @@ production sandbox guarantee.
 ## Run Repo Checks
 
 ```bash
-uv run pytest
+uv run pytest -n auto
 uv run ruff check .
 uv run pyright
 ```
