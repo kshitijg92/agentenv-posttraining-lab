@@ -1159,3 +1159,71 @@ is terminal `invalid_model_output`.
 
 This control uses the existing `script` plus `expected_result` shape and does
 not expand the expectation schema.
+
+## Agent Control Tool Result Expectation Decision
+
+### Decision
+
+Extend agent control `expected_result` with an optional structured
+`tool_results` list.
+
+Each expected tool result records:
+
+```text
+tool_name
+status
+error_class
+```
+
+`error_class` is required when `status = error` and forbidden when
+`status = ok`.
+
+### Reasoning
+
+`prompt_loop_status = completed` is too weak for recovery controls. A bad-tool
+input script could complete without proving that the loop surfaced a recoverable
+tool error and then continued correctly.
+
+A structured list avoids parallel-array drift and lets controls assert the
+behavioral path while staying less brittle than full transcript role/content
+matching.
+
+### Non-Goals
+
+This step only defines the expectation shape. It does not add the bad-tool-input
+recovery script yet.
+
+## Bad Tool Input Recovery Control Decision
+
+### Decision
+
+Add a third task-local agent control script:
+
+```text
+controls/agent_control_scripts/bad_tool_input_then_recovery.json
+```
+
+The script first emits a valid `read_file` tool action with invalid arguments,
+then corrects the call, writes the fix, runs public tests, and finalizes.
+
+The expected result asserts:
+
+```text
+prompt_loop_status = completed
+tool_results = [
+  read_file error InvalidToolInput
+  read_file ok
+  write_file ok
+  run_tests ok
+]
+```
+
+### Reasoning
+
+This distinguishes recoverable tool-boundary errors from malformed model JSON.
+Malformed JSON is terminal `invalid_model_output` because parsing fails before
+tool execution. Invalid tool input is recoverable because the loop can return a
+tool observation to the model and allow a corrected next turn.
+
+The structured `tool_results` expectation proves the recovery path occurred
+without asserting the full transcript shape.
