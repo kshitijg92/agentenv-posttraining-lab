@@ -1,14 +1,14 @@
 {
   "artifact_version": "replay_v0",
   "artifacts": {
-    "agent_task_run": "agent_task_run",
+    "attempts": "attempts",
     "replay_result": "replay_result.json",
     "replay_results": "replay_results.jsonl",
     "trace": "trace.jsonl"
   },
-  "created_at": "2026-06-27T23:21:08.617488Z",
-  "replay_id": "replay_8c3d7a56d7614b848e3090bfa758b9f1",
+  "created_at": "2026-06-27T23:35:05.901521Z",
+  "replay_id": "replay_0202c044c18644a8a7cf16886f56dce0",
   "source_artifact_version": "eval_run_v0",
-  "source_eval_run_id": "eval_b30da34c6560400895a85a0486dc0688",
+  "source_eval_run_id": "eval_bd4f9562026e4a17bffd5cd9cda1a029",
   "source_run_dir": "/home/kshitij/agentenv-posttraining-lab/experiments/runs/cli_smoke_dev_baseline/policies/agent-recoverable"
 }

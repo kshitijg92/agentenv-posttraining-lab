@@ -9,10 +9,10 @@
     {
       "agent": {
         "candidate_patch_hash": null,
-        "duration_ms": 4,
+        "duration_ms": 3,
         "error_class": "MalformedModelOutput",
         "prompt_loop_status": "invalid_model_output",
-        "run_id": "agent_task_run_d3f928a1aa004ac491d7f31af86e2046",
+        "run_id": "agent_task_run_ade99f2b57c046259523f957531771b5",
         "scorer_attempt": null,
         "status": "agent_loop_failed"
       },
@@ -28,7 +28,7 @@
         "duration_ms": 3,
         "error_class": "MalformedModelOutput",
         "prompt_loop_status": "invalid_model_output",
-        "run_id": "agent_task_run_3e80a40693574311a75ad0d7b85ccc0f",
+        "run_id": "agent_task_run_4f743d3782674ac2843b652c0ada4357",
         "scorer_attempt": null,
         "status": "agent_loop_failed"
       },
@@ -44,7 +44,7 @@
         "duration_ms": 4,
         "error_class": "MalformedModelOutput",
         "prompt_loop_status": "invalid_model_output",
-        "run_id": "agent_task_run_d6468afda6694f32af61d42ccf5d663c",
+        "run_id": "agent_task_run_6e51fcb5aa4e4b53824f88d963ed4b54",
         "scorer_attempt": null,
         "status": "agent_loop_failed"
       },
@@ -60,8 +60,8 @@
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
   "control_layer": "agent",
   "control_name": "malformed",
-  "created_at": "2026-06-27T23:20:58.854427Z",
-  "eval_run_id": "eval_c911258ed5ef4b04921a76920545f5c4",
+  "created_at": "2026-06-27T23:34:55.968038Z",
+  "eval_run_id": "eval_1ec4fa02e9b0481d92859ab3cc8dc3f6",
   "layer_counts": {
     "agent_status": {
       "agent_loop_failed": 3

@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-repair_config_precedence-w8139wk0/workspace
+rootdir: /tmp/agentenv-repair_config_precedence-6q02wmu1/workspace
 configfile: pyproject.toml
 collected 4 items
 
@@ -10,11 +10,11 @@ tests/test_public.py ....                                                [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-repair_config_precedence-w8139wk0/workspace
+rootdir: /tmp/agentenv-repair_config_precedence-6q02wmu1/workspace
 configfile: pyproject.toml
 collected 9 items
 
 test_config_precedence.py .........                                      [100%]
 
-============================== 9 passed in 0.02s ===============================
+============================== 9 passed in 0.03s ===============================
 

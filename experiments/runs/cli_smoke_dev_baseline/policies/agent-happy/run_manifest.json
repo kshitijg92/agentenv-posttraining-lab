@@ -9,18 +9,18 @@
     {
       "agent": {
         "candidate_patch_hash": "xxh64:791a044ad51af90c",
-        "duration_ms": 746,
+        "duration_ms": 756,
         "error_class": null,
         "prompt_loop_status": "completed",
-        "run_id": "agent_task_run_0059cff6e6e2453c94eb02fd8b292572",
+        "run_id": "agent_task_run_85734547521a47839cb73b56cdf52cfe",
         "scorer_attempt": {
-          "attempt_id": "attempt_e57397b853ac484d8bd96cdac5a28b1d",
-          "duration_ms": 443,
+          "attempt_id": "attempt_60e968c2b9764bd9abaffe03ed2a962b",
+          "duration_ms": 444,
           "error_class": null,
           "final_diff_hash": "xxh64:791a044ad51af90c",
           "hidden_status": "PASS",
           "public_status": "PASS",
-          "run_id": "run_0202c16ae9904587a90963de85946c80",
+          "run_id": "run_09f5592d548849938b355842cafaa2d3",
           "status": "PASS"
         },
         "status": "scored"
@@ -34,18 +34,18 @@
     {
       "agent": {
         "candidate_patch_hash": "xxh64:3a6c137988d3cd3a",
-        "duration_ms": 941,
+        "duration_ms": 989,
         "error_class": null,
         "prompt_loop_status": "completed",
-        "run_id": "agent_task_run_1d77fd05775e4688b4fa75068046f73a",
+        "run_id": "agent_task_run_5e1234ce5b42464291c06e0281df817b",
         "scorer_attempt": {
-          "attempt_id": "attempt_73c1294748ef4105b5a81d4fa5399089",
-          "duration_ms": 610,
+          "attempt_id": "attempt_b56e2b96056642e484c932970c62aa8a",
+          "duration_ms": 657,
           "error_class": null,
           "final_diff_hash": "xxh64:3a6c137988d3cd3a",
           "hidden_status": "PASS",
           "public_status": "PASS",
-          "run_id": "run_15022269f2e14cf88751f72b646df754",
+          "run_id": "run_f249ef3ebfa0424eb2725fcd2e52e675",
           "status": "PASS"
         },
         "status": "scored"
@@ -59,18 +59,18 @@
     {
       "agent": {
         "candidate_patch_hash": "xxh64:187bcea16c66ce96",
-        "duration_ms": 812,
+        "duration_ms": 875,
         "error_class": null,
         "prompt_loop_status": "completed",
-        "run_id": "agent_task_run_15968fadfc8643e7bf86a52d77bf2241",
+        "run_id": "agent_task_run_561f6b0e69b844e0bcdfff2d233486ff",
         "scorer_attempt": {
-          "attempt_id": "attempt_76bf22249d8148e89691fde02032847f",
-          "duration_ms": 505,
+          "attempt_id": "attempt_48f7fb86b98a458d8a512b8fb11d1698",
+          "duration_ms": 529,
           "error_class": null,
           "final_diff_hash": "xxh64:187bcea16c66ce96",
           "hidden_status": "PASS",
           "public_status": "PASS",
-          "run_id": "run_3652664189594a7799a13be2a291b390",
+          "run_id": "run_5305f2d538a143a0b270b745398be789",
           "status": "PASS"
         },
         "status": "scored"
@@ -87,8 +87,8 @@
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
   "control_layer": "agent",
   "control_name": "happy",
-  "created_at": "2026-06-27T23:20:56.326685Z",
-  "eval_run_id": "eval_370935f1095f4053a369be4e527c0346",
+  "created_at": "2026-06-27T23:34:53.319075Z",
+  "eval_run_id": "eval_87096682c7654a62bca03feface5e179",
   "layer_counts": {
     "agent_scorer_hidden_status": {
       "PASS": 3

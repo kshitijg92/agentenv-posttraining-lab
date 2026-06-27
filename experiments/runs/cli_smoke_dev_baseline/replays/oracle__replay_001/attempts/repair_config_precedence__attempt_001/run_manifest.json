@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_4dd4997a84284975b7cc5cea6584df4f",
+  "attempt_id": "attempt_e3e13279a6814605862553986d43b785",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_7a828ac4daa847468310805c8bf91cc2",
+  "run_id": "run_4f9420106c6c421b82a2fb82f6a10268",
   "status": "PASS",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/oracle.patch",
   "task_id": "repair_config_precedence",

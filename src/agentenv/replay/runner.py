@@ -555,10 +555,13 @@ def _replay_manifest(
         "replay_results": "replay_results.jsonl",
         "trace": "trace.jsonl",
     }
-    comparison_types = {comparison.comparison_type for comparison in replay_run.comparisons}
-    if "scorer_attempt" in comparison_types:
+    source_artifact_version = source_manifest.get("artifact_version")
+    comparison_types = {
+        comparison.comparison_type for comparison in replay_run.comparisons
+    }
+    if source_artifact_version == SOURCE_EVAL_ARTIFACT_VERSION:
         artifacts["attempts"] = "attempts"
-    if "agent_task_run" in comparison_types:
+    elif "agent_task_run" in comparison_types:
         artifacts["agent_task_run"] = "agent_task_run"
     return {
         "artifact_version": REPLAY_ARTIFACT_VERSION,

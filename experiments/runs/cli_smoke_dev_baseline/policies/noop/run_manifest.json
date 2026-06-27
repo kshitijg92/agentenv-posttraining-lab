@@ -12,13 +12,13 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_181aebd6fa104b77b82929029c84f82c",
-        "duration_ms": 452,
+        "attempt_id": "attempt_f01f50f6145e4145aa271b1192bc865e",
+        "duration_ms": 487,
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
         "hidden_status": "FAIL",
         "public_status": "PASS",
-        "run_id": "run_b5e0f4db40504886aae94d20838351ab",
+        "run_id": "run_129b754cf73c455795c2cc9870a664e5",
         "status": "HIDDEN_TEST_FAIL"
       },
       "task_id": "repair_jsonl_deduper"
@@ -29,13 +29,13 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_82ba9e774377449f8516b24b682c483b",
-        "duration_ms": 632,
+        "attempt_id": "attempt_ecfd7c1a0a444ec59d34412f5a5663c2",
+        "duration_ms": 671,
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
         "hidden_status": "FAIL",
         "public_status": "PASS",
-        "run_id": "run_9cb65cdadeb24d97a7ab0fe74d3c5be4",
+        "run_id": "run_591e96128814461ca92a50acd5534b5c",
         "status": "HIDDEN_TEST_FAIL"
       },
       "task_id": "preserve_cli_error_codes"
@@ -46,13 +46,13 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_bfaebeb3edf640e193240b3152503334",
-        "duration_ms": 472,
+        "attempt_id": "attempt_b6d84974c69c4c21b1b822d05b107187",
+        "duration_ms": 494,
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
         "hidden_status": "FAIL",
         "public_status": "PASS",
-        "run_id": "run_7c70e45c9b224601b30af1c8a033850b",
+        "run_id": "run_db45fc4a5e17473aa2f48d0e5af7a15d",
         "status": "HIDDEN_TEST_FAIL"
       },
       "task_id": "repair_config_precedence"
@@ -63,8 +63,8 @@
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
   "control_layer": "scorer",
   "control_name": "bad.noop",
-  "created_at": "2026-06-27T23:20:53.168753Z",
-  "eval_run_id": "eval_8e0119d773fa4196a05c6bd253b883f6",
+  "created_at": "2026-06-27T23:34:49.835343Z",
+  "eval_run_id": "eval_27d8e44159b247b8954e4f0e22d891b4",
   "layer_counts": {
     "scorer_hidden_status": {
       "FAIL": 3

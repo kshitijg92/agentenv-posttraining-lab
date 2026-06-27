@@ -1860,6 +1860,11 @@ The CLI smoke run also exposed pytest temp-directory fragments in hidden-test
 durable stdout comparison still catches semantic tampering without failing on
 per-run temp names.
 
+Eval-source replay manifests now advertise regenerated child artifacts under
+`artifacts.attempts = "attempts"` even when every comparison is an
+`agent_task_run`. The `artifacts.agent_task_run = "agent_task_run"` entry is
+reserved for direct `agent_task_run_artifacts_v0` replay sources.
+
 ### Verification
 
 Focused and full checks passed:

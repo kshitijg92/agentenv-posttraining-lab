@@ -84,6 +84,8 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
     assert replay_result["matched_attempts"] == 1
     assert replay_manifest["artifact_version"] == "replay_v0"
     assert replay_manifest["source_eval_run_id"] == source_run.eval_run_id
+    assert replay_manifest["artifacts"]["attempts"] == "attempts"
+    assert "agent_task_run" not in replay_manifest["artifacts"]
     assert len(replay_records) == 1
     assert replay_records[0]["matched"] is True
     assert replay_records[0]["comparison_type"] == "scorer_attempt"
@@ -283,6 +285,9 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
 
     replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
 
+    replay_manifest = json.loads(
+        (tmp_path / "replay_run/replay_manifest.json").read_text()
+    )
     replay_records = [
         json.loads(line)
         for line in (tmp_path / "replay_run/replay_results.jsonl")
@@ -291,6 +296,8 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
     ]
 
     assert replay_run.status == "PASS"
+    assert replay_manifest["artifacts"]["attempts"] == "attempts"
+    assert "agent_task_run" not in replay_manifest["artifacts"]
     assert replay_records[0]["comparison_type"] == "agent_task_run"
     assert (
         replay_records[0]["source_artifact_ref"]

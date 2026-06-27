@@ -12,13 +12,13 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_934ca3b846e3488db894de1e4a6eaeb1",
-        "duration_ms": 436,
+        "attempt_id": "attempt_f689439d198647228b81c928350ac05b",
+        "duration_ms": 537,
         "error_class": null,
         "final_diff_hash": "xxh64:791a044ad51af90c",
         "hidden_status": "PASS",
         "public_status": "PASS",
-        "run_id": "run_f971731ab6774f509bb1c62c5544b368",
+        "run_id": "run_200fc063964e4d81b2ef3c70f5baff84",
         "status": "PASS"
       },
       "task_id": "repair_jsonl_deduper"
@@ -29,13 +29,13 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_95e7f6e45f864afa9c667a0fd185db2e",
-        "duration_ms": 616,
+        "attempt_id": "attempt_a892933f857a4580bc48da0f4b338681",
+        "duration_ms": 711,
         "error_class": null,
         "final_diff_hash": "xxh64:3a6c137988d3cd3a",
         "hidden_status": "PASS",
         "public_status": "PASS",
-        "run_id": "run_3ee184dfe7244b848a5bb49d5c2a395e",
+        "run_id": "run_772991fcd7e040ec88e7d6f7766b16dd",
         "status": "PASS"
       },
       "task_id": "preserve_cli_error_codes"
@@ -46,13 +46,13 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_e7d6afae0fa14d8387f47b442a5614b6",
-        "duration_ms": 482,
+        "attempt_id": "attempt_d1aafdb14f604edfa770b5113979c096",
+        "duration_ms": 496,
         "error_class": null,
         "final_diff_hash": "xxh64:187bcea16c66ce96",
         "hidden_status": "PASS",
         "public_status": "PASS",
-        "run_id": "run_e1770e94a2894a1892f429c295b7e09c",
+        "run_id": "run_24e4632ade28400dbf1ff4cbeb14da71",
         "status": "PASS"
       },
       "task_id": "repair_config_precedence"
@@ -63,8 +63,8 @@
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
   "control_layer": "scorer",
   "control_name": "oracle",
-  "created_at": "2026-06-27T23:20:51.609397Z",
-  "eval_run_id": "eval_fd5a7bf7f5fd4da99fdd26e93a8c8567",
+  "created_at": "2026-06-27T23:34:48.062453Z",
+  "eval_run_id": "eval_72553dddfa044ae187ea7f3441ba3352",
   "layer_counts": {
     "scorer_hidden_status": {
       "PASS": 3
