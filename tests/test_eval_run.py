@@ -23,6 +23,9 @@ def test_control_eval_config_loads() -> None:
     assert config.name == "scorer_control_policies"
     assert config.task_pack == "data/task_packs/repo_patch_python_v0"
     assert config.tasks == ["toy_python_fix_001"]
+    assert config.replay.enabled is True
+    assert config.replay.scope == "control_policies"
+    assert config.replay.repeats == 1
     assert sorted(config.policies) == ["bad-noop", "bad-public-only", "oracle"]
 
 
@@ -176,7 +179,10 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
         "HIDDEN_TEST_FAIL": 2,
         "PASS": 1,
     }
-    assert matrix_manifest["artifacts"] == {"policies": "policies"}
+    assert matrix_manifest["artifacts"] == {
+        "policies": "policies",
+        "replays": "replays",
+    }
     assert matrix_manifest["policy_runs"] == [
         {
             "policy": "oracle",
@@ -208,17 +214,17 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     assert (
         tmp_path / "eval_matrix/policies/bad-public-only/run_manifest.json"
     ).is_file()
-    assert matrix_manifest["replay_policy_scope"] == "not_run"
-    assert matrix_manifest["replay_runs"] == []
+    assert matrix_manifest["replay_policy_scope"] == "control_policies"
+    assert matrix_manifest["replay_repeats"] == 1
+    assert len(matrix_manifest["replay_runs"]) == 3
 
 
-def test_run_eval_config_all_policies_can_replay_control_policies(
+def test_run_eval_config_all_policies_replays_configured_control_policies(
     tmp_path: Path,
 ) -> None:
     eval_matrix = run_eval_config_all_policies(
         CONTROL_EVAL_CONFIG,
         tmp_path / "eval_matrix",
-        replay_control_policies=True,
     )
 
     matrix_manifest_path = tmp_path / "eval_matrix/eval_matrix_manifest.json"
@@ -229,14 +235,16 @@ def test_run_eval_config_all_policies_can_replay_control_policies(
         "policies": "policies",
         "replays": "replays",
     }
-    assert matrix_manifest["replay_policy_scope"] == "scorer_control_patch"
+    assert matrix_manifest["replay_policy_scope"] == "control_policies"
+    assert matrix_manifest["replay_repeats"] == 1
     assert matrix_manifest["replay_runs"] == [
         {
             "policy": "oracle",
+            "replay_index": 0,
             "status": "PASS",
-            "artifact_dir": "replays/oracle",
-            "replay_manifest": "replays/oracle/replay_manifest.json",
-            "replay_result": "replays/oracle/replay_result.json",
+            "artifact_dir": "replays/oracle__replay_001",
+            "replay_manifest": "replays/oracle__replay_001/replay_manifest.json",
+            "replay_result": "replays/oracle__replay_001/replay_result.json",
             "attempt_count": 1,
             "matched_attempts": 1,
             "mismatched_attempts": 0,
@@ -244,10 +252,11 @@ def test_run_eval_config_all_policies_can_replay_control_policies(
         },
         {
             "policy": "bad-noop",
+            "replay_index": 0,
             "status": "PASS",
-            "artifact_dir": "replays/bad-noop",
-            "replay_manifest": "replays/bad-noop/replay_manifest.json",
-            "replay_result": "replays/bad-noop/replay_result.json",
+            "artifact_dir": "replays/bad-noop__replay_001",
+            "replay_manifest": "replays/bad-noop__replay_001/replay_manifest.json",
+            "replay_result": "replays/bad-noop__replay_001/replay_result.json",
             "attempt_count": 1,
             "matched_attempts": 1,
             "mismatched_attempts": 0,
@@ -255,18 +264,28 @@ def test_run_eval_config_all_policies_can_replay_control_policies(
         },
         {
             "policy": "bad-public-only",
+            "replay_index": 0,
             "status": "PASS",
-            "artifact_dir": "replays/bad-public-only",
-            "replay_manifest": "replays/bad-public-only/replay_manifest.json",
-            "replay_result": "replays/bad-public-only/replay_result.json",
+            "artifact_dir": "replays/bad-public-only__replay_001",
+            "replay_manifest": (
+                "replays/bad-public-only__replay_001/replay_manifest.json"
+            ),
+            "replay_result": (
+                "replays/bad-public-only__replay_001/replay_result.json"
+            ),
             "attempt_count": 1,
             "matched_attempts": 1,
             "mismatched_attempts": 0,
             "error_count": 0,
         },
     ]
-    assert (tmp_path / "eval_matrix/replays/oracle/replay_result.json").is_file()
-    assert (tmp_path / "eval_matrix/replays/bad-noop/replay_result.json").is_file()
     assert (
-        tmp_path / "eval_matrix/replays/bad-public-only/replay_result.json"
+        tmp_path / "eval_matrix/replays/oracle__replay_001/replay_result.json"
+    ).is_file()
+    assert (
+        tmp_path / "eval_matrix/replays/bad-noop__replay_001/replay_result.json"
+    ).is_file()
+    assert (
+        tmp_path
+        / "eval_matrix/replays/bad-public-only__replay_001/replay_result.json"
     ).is_file()

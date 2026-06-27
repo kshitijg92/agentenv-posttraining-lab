@@ -1,7 +1,12 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from agentenv.evals.schema import AgentControlName, ControlName, EvalConfig, EvalPolicy
+from agentenv.evals.schema import (
+    AgentControlName,
+    EvalConfig,
+    EvalPolicy,
+    ScorerControlName,
+)
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
@@ -43,7 +48,7 @@ def select_policy(config: EvalConfig, policy: str) -> EvalPolicy:
 def scorer_control_patch_path(
     task_dir: Path,
     manifest: TaskManifest,
-    control: ControlName,
+    control: ScorerControlName,
 ) -> Path:
     if control == "oracle":
         relative_path = manifest.controls.scorer_control_patches.oracle

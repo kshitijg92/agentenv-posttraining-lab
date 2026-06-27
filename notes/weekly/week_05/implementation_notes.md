@@ -1686,3 +1686,52 @@ uv run pytest tests/test_replay.py tests/test_reporting.py tests/test_controls_r
 uv run ruff check src/agentenv/replay/runner.py src/agentenv/reporting/markdown.py src/agentenv/controls/controls_run.py src/agentenv/tracing/schema.py tests/test_replay.py tests/test_reporting.py tests/test_controls_run.py tests/test_trace_schema.py
 uv run pyright src/agentenv/replay/runner.py src/agentenv/reporting/markdown.py src/agentenv/controls/controls_run.py src/agentenv/tracing/schema.py tests/test_replay.py tests/test_reporting.py tests/test_controls_run.py tests/test_trace_schema.py
 ```
+
+## Eval Replay Config Decision
+
+### Decision
+
+Move replay orchestration from a CLI flag into the eval config:
+
+```yaml
+replay:
+  enabled: true
+  scope: control_policies
+  repeats: 1
+```
+
+For v0, `scope: control_policies` means replay every control policy in the eval
+matrix. This includes both scorer-control policies and agent-control policies
+once agent-control eval execution is wired.
+
+The `--replay-control-policies` CLI option was removed. `agentenv eval
+--all-policies` now follows the config-owned replay contract.
+
+`ControlName` in the eval schema was renamed to `ScorerControlName` so the
+schema boundary no longer conflates scorer controls with agent controls.
+
+### Reasoning
+
+Replay is now measurement evidence, not a reporting convenience. Whether replay
+is run, which policy family it covers, and how many replay passes are required
+should be hashed with the eval config instead of living in an untracked CLI
+switch.
+
+This also keeps the future eval-matrix contract cleaner:
+
+```text
+attempts = fresh policy attempts per task
+replay.repeats = reproducibility checks over the produced policy-run artifacts
+```
+
+The next eval-design checkpoint can assume replay dispatch is already
+artifact-driven: eval only needs to write replayable child attempt artifact
+directories and list them in the eval manifest.
+
+### Verification
+
+Focused eval/report/replay checks passed:
+
+```bash
+uv run pytest tests/test_eval_run.py tests/test_reporting.py tests/test_replay.py
+```

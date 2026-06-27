@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import xxhash
 
-from agentenv.evals.schema import EvalConfig
+from agentenv.evals.schema import EvalConfig, EvalPolicy
 from agentenv.evals.resolve import (
     scorer_control_patch_path,
     resolve_eval_tasks,
@@ -59,6 +59,7 @@ class EvalMatrixRun:
 @dataclass(frozen=True)
 class EvalMatrixReplayRecord:
     policy: str
+    replay_index: int
     replay_dir: Path
     replay_run: ReplayRun
 
@@ -227,8 +228,6 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
 def run_eval_config_all_policies(
     config_path: Path,
     out_dir: Path,
-    *,
-    replay_control_policies: bool = False,
 ) -> EvalMatrixRun:
     config_path = config_path.resolve()
     out_dir = out_dir.resolve()
@@ -246,11 +245,7 @@ def run_eval_config_all_policies(
         run_eval_config(config_path, policy, policies_dir / policy)
         for policy in config.policies
     ]
-    replay_runs = (
-        _replay_control_policy_runs(config, policy_runs, out_dir)
-        if replay_control_policies
-        else []
-    )
+    replay_runs = _replay_configured_policy_runs(config, policy_runs, out_dir)
     eval_matrix = EvalMatrixRun(
         eval_matrix_id=eval_matrix_id,
         config=config,
@@ -265,27 +260,41 @@ def run_eval_config_all_policies(
     return eval_matrix
 
 
-def _replay_control_policy_runs(
+def _replay_configured_policy_runs(
     config: EvalConfig,
     policy_runs: list[EvalRun],
     out_dir: Path,
 ) -> list[EvalMatrixReplayRecord]:
+    if not config.replay.enabled:
+        return []
+
     replays_dir = out_dir / "replays"
     replay_records: list[EvalMatrixReplayRecord] = []
     for policy_run in policy_runs:
         policy = config.policies[policy_run.policy]
-        if policy.type != "scorer_control_patch":
+        if not _should_replay_policy(config, policy):
             continue
-        replay_dir = replays_dir / policy_run.policy
-        replay_run = run_replay(policy_run.out_dir, replay_dir)
-        replay_records.append(
-            EvalMatrixReplayRecord(
-                policy=policy_run.policy,
-                replay_dir=replay_dir,
-                replay_run=replay_run,
+        for replay_index in range(config.replay.repeats):
+            replay_dir = (
+                replays_dir
+                / f"{policy_run.policy}__replay_{replay_index + 1:03d}"
             )
-        )
+            replay_run = run_replay(policy_run.out_dir, replay_dir)
+            replay_records.append(
+                EvalMatrixReplayRecord(
+                    policy=policy_run.policy,
+                    replay_index=replay_index,
+                    replay_dir=replay_dir,
+                    replay_run=replay_run,
+                )
+            )
     return replay_records
+
+
+def _should_replay_policy(config: EvalConfig, policy: EvalPolicy) -> bool:
+    if config.replay.scope == "control_policies":
+        return policy.type in {"scorer_control_patch", "agent_control_script"}
+    return False
 
 
 def _write_eval_trace(eval_run: EvalRun, trace_events: list[TraceEvent]) -> Path:
@@ -399,7 +408,14 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
             for policy_run in eval_matrix.policy_runs
         ],
         "replay_policy_scope": (
-            "scorer_control_patch" if eval_matrix.replay_runs else "not_run"
+            eval_matrix.config.replay.scope
+            if eval_matrix.config.replay.enabled
+            else "not_run"
+        ),
+        "replay_repeats": (
+            eval_matrix.config.replay.repeats
+            if eval_matrix.config.replay.enabled
+            else 0
         ),
         "replay_runs": [
             _eval_matrix_replay_record(eval_matrix, replay_record)
@@ -418,6 +434,7 @@ def _eval_matrix_replay_record(
     attempt_count = len(replay_record.replay_run.comparisons)
     return {
         "policy": replay_record.policy,
+        "replay_index": replay_record.replay_index,
         "status": replay_record.replay_run.status,
         "artifact_dir": str(replay_record.replay_dir.relative_to(eval_matrix.out_dir)),
         "replay_manifest": str(

@@ -5,15 +5,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from agentenv.tasks.schema import TaskSplit
 
 
-ControlName = Literal["oracle", "bad.noop", "bad.public_only"]
+ScorerControlName = Literal["oracle", "bad.noop", "bad.public_only"]
 AgentControlName = Literal["happy", "malformed", "recoverable"]
+ReplayScope = Literal["control_policies"]
 
 
 class ScorerControlPatchPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["scorer_control_patch"]
-    control: ControlName
+    control: ScorerControlName
 
 
 class AgentControlScriptPolicy(BaseModel):
@@ -35,6 +36,14 @@ class TraceCaptureConfig(BaseModel):
     capture_diff: bool
 
 
+class EvalReplayConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    scope: ReplayScope
+    repeats: int = Field(gt=0)
+
+
 class EvalConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -44,4 +53,5 @@ class EvalConfig(BaseModel):
     split: TaskSplit
     attempts: int = Field(gt=0)
     policies: dict[str, EvalPolicy] = Field(min_length=1)
+    replay: EvalReplayConfig
     trace: TraceCaptureConfig

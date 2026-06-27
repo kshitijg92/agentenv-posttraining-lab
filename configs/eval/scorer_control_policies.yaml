@@ -4,6 +4,10 @@ tasks:
   - toy_python_fix_001
 split: practice
 attempts: 1
+replay:
+  enabled: true
+  scope: control_policies
+  repeats: 1
 policies:
   oracle:
     type: scorer_control_patch

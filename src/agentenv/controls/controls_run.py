@@ -11,7 +11,7 @@ from agentenv.controls.agent_control_scripts import (
     load_agent_control_script_case,
 )
 from agentenv.evals.resolve import scorer_control_patch_path
-from agentenv.evals.schema import ControlName
+from agentenv.evals.schema import ScorerControlName
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import (
@@ -32,7 +32,7 @@ JsonObject = dict[str, Any]
 
 @dataclass(frozen=True)
 class ScorerControlExpectation:
-    control: ControlName
+    control: ScorerControlName
     expected_attempt_status: AttemptStatus
     expected_public_status: CheckStatus
     expected_hidden_status: CheckStatus
@@ -125,7 +125,7 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
     return control_run
 
 
-def expected_control_outcome(control: ControlName) -> ScorerControlExpectation:
+def expected_control_outcome(control: ScorerControlName) -> ScorerControlExpectation:
     if control == "oracle":
         return ScorerControlExpectation(
             control=control,
@@ -153,7 +153,7 @@ def expected_control_outcome(control: ControlName) -> ScorerControlExpectation:
 def _run_scorer_control(
     *,
     task: ControlTask,
-    control: ControlName,
+    control: ScorerControlName,
     submission_path: Path,
     repeat_index: int,
     out_dir: Path,
@@ -240,7 +240,7 @@ def _discover_control_tasks(task_pack_path: Path) -> list[ControlTask]:
     return tasks
 
 
-def _scorer_control_paths(task: ControlTask) -> list[tuple[ControlName, Path]]:
+def _scorer_control_paths(task: ControlTask) -> list[tuple[ScorerControlName, Path]]:
     return [
         (
             "oracle",

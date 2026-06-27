@@ -127,11 +127,6 @@ def run_eval(
         "--all-policies",
         help="Run every policy defined by the config.",
     ),
-    replay_control_policies: bool = typer.Option(
-        False,
-        "--replay-control-policies",
-        help="Replay every scorer_control_patch policy after a full eval config run.",
-    ),
     out: Path = typer.Option(..., "--out", help="Directory for eval artifacts."),
 ) -> None:
     if all_policies:
@@ -140,7 +135,6 @@ def run_eval(
         eval_matrix = run_eval_config_all_policies(
             config,
             out,
-            replay_control_policies=replay_control_policies,
         )
         status_counts = ", ".join(
             f"{status}={count}"
@@ -157,11 +151,6 @@ def run_eval(
         )
         console.print(f"wrote {eval_matrix.out_dir / 'eval_matrix_manifest.json'}")
         return
-
-    if replay_control_policies:
-        raise typer.BadParameter(
-            "--replay-control-policies requires --all-policies"
-        )
 
     if policy is None:
         raise typer.BadParameter("Provide --policy or --all-policies")

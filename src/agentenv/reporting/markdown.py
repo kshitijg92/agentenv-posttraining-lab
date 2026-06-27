@@ -108,6 +108,7 @@ def render_eval_matrix_report(
             f"current substitute is config hash {_display(manifest.get('config_hash'))}"
         ),
         f"- Replay scope: {_display(manifest.get('replay_policy_scope'))}",
+        f"- Replay repeats: {_display(manifest.get('replay_repeats'))}",
         (
             f"- Replay match rate: {_rate_display(replay_match_rate)}"
             if replay_match_rate is not None
