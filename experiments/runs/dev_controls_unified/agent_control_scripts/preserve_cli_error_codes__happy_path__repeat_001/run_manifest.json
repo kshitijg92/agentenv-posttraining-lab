@@ -1,7 +1,7 @@
 {
   "artifact_version": "agent_task_run_artifacts_v0",
   "orchestrator_version": "agent_task_run_v0",
-  "run_id": "agent_task_run_75540d7d8f444dddb37000f22edd6215",
+  "run_id": "agent_task_run_4142fdefecb6413cbd6a27b4f82b98dc",
   "task_id": "preserve_cli_error_codes",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml",
   "status": "scored",

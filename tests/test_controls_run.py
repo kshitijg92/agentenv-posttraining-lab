@@ -91,25 +91,19 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
             assert (
                 records_by_control[("scorer", task_id, "oracle", repeat_index)][
                     "actual"
-                ][
-                    "attempt_status"
-                ]
+                ]["attempt_status"]
                 == "PASS"
             )
             assert (
                 records_by_control[("scorer", task_id, "bad.noop", repeat_index)][
                     "actual"
-                ][
-                    "attempt_status"
-                ]
+                ]["attempt_status"]
                 == "HIDDEN_TEST_FAIL"
             )
             assert (
                 records_by_control[
                     ("scorer", task_id, "bad.public_only", repeat_index)
-                ][
-                    "actual"
-                ]["hidden_status"]
+                ]["actual"]["hidden_status"]
                 == "FAIL"
             )
             assert (
@@ -149,6 +143,15 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
 
     report = (out_dir / "control_report.md").read_text()
     assert "# Control Calibration" in report
+    assert report.index("## Control Overview") < report.index("## Control Summary")
+    assert (
+        "| layer | control | tasks | records | matches | failures | status |" in report
+    )
+    assert "| agent | all controls | 4 | 24 | 24/24 | 0 | " in report
+    assert "| agent | malformed_json | 4 | 8 | 8/8 | 0 | " in report
+    assert "| scorer | all controls | 4 | 24 | 24/24 | 0 | " in report
+    assert "| scorer | oracle | 4 | 8 | 8/8 | 0 | " in report
+    assert "background-color: #dcfce7" in report
     assert (
         "| scorer | toy_python_fix_001 | oracle | 2 | 2/2 | "
         '{"attempt_status": "PASS", "hidden_status": "PASS", '

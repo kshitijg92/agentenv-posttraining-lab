@@ -210,8 +210,7 @@ def _run_agent_control(
     out_dir: Path,
 ) -> ControlRecord:
     artifact_dir = (
-        out_dir
-        / f"{task.task_id}__{control_name}__repeat_{repeat_index + 1:03d}"
+        out_dir / f"{task.task_id}__{control_name}__repeat_{repeat_index + 1:03d}"
     )
     decoding_config = _agent_control_decoding_config()
     model_client = ScriptedFakeModelClient(
@@ -272,8 +271,7 @@ def _write_jsonl(control_run: ControlRun) -> Path:
 def _write_manifest(control_run: ControlRun) -> Path:
     path = control_run.out_dir / "control_run_manifest.json"
     path.write_text(
-        json.dumps(_control_run_manifest(control_run), indent=2, sort_keys=True)
-        + "\n"
+        json.dumps(_control_run_manifest(control_run), indent=2, sort_keys=True) + "\n"
     )
     return path
 
@@ -291,11 +289,30 @@ def _write_markdown(control_run: ControlRun) -> Path:
         f"- Records: {len(control_run.records)}",
         f"- Overall: {_match_display(control_run.overall_match)}",
         "",
-        "## Control Summary",
+        "## Control Overview",
         "",
-        "| layer | task_id | control | repeats | matches | expected |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| layer | control | tasks | records | matches | failures | status |",
+        "| --- | --- | ---: | ---: | ---: | ---: | --- |",
     ]
+    for layer, control_name, task_count, record_count, matches in _overview_rows(
+        control_run
+    ):
+        failures = record_count - matches
+        lines.append(
+            f"| {layer} | {control_name} | {task_count} | {record_count} | "
+            f"{matches}/{record_count} | {failures} | "
+            f"{_match_badge(matches == record_count)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Control Summary",
+            "",
+            "| layer | task_id | control | repeats | matches | expected |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
     for control_layer, task_id, control_name in _summary_keys(control_run):
         records = [
             record
@@ -371,10 +388,47 @@ def _record_json(
 
 
 def _summary_keys(control_run: ControlRun) -> list[tuple[str, str, str]]:
-    return sorted({
-        (record.control_layer, record.task_id, record.control_name)
-        for record in control_run.records
-    })
+    return sorted(
+        {
+            (record.control_layer, record.task_id, record.control_name)
+            for record in control_run.records
+        }
+    )
+
+
+def _overview_rows(control_run: ControlRun) -> list[tuple[str, str, int, int, int]]:
+    rows: list[tuple[str, str, int, int, int]] = []
+    for control_layer in sorted(
+        {record.control_layer for record in control_run.records}
+    ):
+        layer_records = [
+            record
+            for record in control_run.records
+            if record.control_layer == control_layer
+        ]
+        rows.append(_overview_row(control_layer, "all controls", layer_records))
+        for control_name in sorted({record.control_name for record in layer_records}):
+            control_records = [
+                record
+                for record in layer_records
+                if record.control_name == control_name
+            ]
+            rows.append(_overview_row(control_layer, control_name, control_records))
+    return rows
+
+
+def _overview_row(
+    control_layer: str,
+    control_name: str,
+    records: list[ControlRecord],
+) -> tuple[str, str, int, int, int]:
+    return (
+        control_layer,
+        control_name,
+        len({record.task_id for record in records}),
+        len(records),
+        sum(record.match for record in records),
+    )
 
 
 def _scorer_expected_json(expectation: ScorerControlExpectation) -> JsonObject:
@@ -497,6 +551,18 @@ def _json_display(value: JsonObject) -> str:
 
 def _match_display(match: bool) -> MatchStatus:
     return "PASS" if match else "FAIL"
+
+
+def _match_badge(match: bool) -> str:
+    if match:
+        return (
+            '<span style="background-color: #dcfce7; color: #166534; '
+            'font-weight: 700; padding: 2px 6px; border-radius: 4px;">PASS</span>'
+        )
+    return (
+        '<span style="background-color: #fee2e2; color: #991b1b; '
+        'font-weight: 700; padding: 2px 6px; border-radius: 4px;">FAIL</span>'
+    )
 
 
 def _control_slug(control_name: str) -> str:

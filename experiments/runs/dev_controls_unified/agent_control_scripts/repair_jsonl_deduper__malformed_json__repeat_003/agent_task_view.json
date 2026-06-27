@@ -1,7 +1,7 @@
 {
   "task_id": "repair_jsonl_deduper",
   "instruction": "Fix dedupe_jsonl so it removes duplicate JSON object lines by the caller-supplied dedupe_key, preserves the first-seen record for each key value, returns a JSONL blob, and raises ValueError for malformed JSONL, non-object lines, or records missing the dedupe key.",
-  "workspace_path": "/tmp/agentenv-agent_task_run_fdb777ebae5b4e138ad92121f1d69779-3pqjmdga/agent_interaction_workspace/workspace",
+  "workspace_path": "/tmp/agentenv-agent_task_run_aa9f990991f649618d6ad44407df71a8-t836dwbu/agent_interaction_workspace/workspace",
   "allowed_tools": [
     "read_file",
     "write_file",

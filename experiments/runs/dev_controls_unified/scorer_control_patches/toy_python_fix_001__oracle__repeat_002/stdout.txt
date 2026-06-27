@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-yd7nhfj1/workspace
+rootdir: /tmp/agentenv-toy_python_fix_001-83ns2hoj/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,7 +10,7 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-yd7nhfj1/workspace
+rootdir: /tmp/agentenv-toy_python_fix_001-83ns2hoj/workspace
 configfile: pyproject.toml
 collected 7 items
 

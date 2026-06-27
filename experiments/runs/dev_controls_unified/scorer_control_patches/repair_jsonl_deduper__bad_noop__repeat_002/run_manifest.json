@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_4a0b320f561443519ea63b22ac5631e7",
+  "attempt_id": "attempt_11c4a5f1c7df454cb086101f6be94c7d",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_643b8fda248a49ce9def3daacafe4b38",
+  "run_id": "run_556a67b2c14e416c938eac903fc0ba62",
   "status": "HIDDEN_TEST_FAIL",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_noop.patch",
   "task_id": "repair_jsonl_deduper",

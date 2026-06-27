@@ -2,7 +2,7 @@
   "task_id": "repair_config_precedence",
   "status": "completed",
   "turns_executed": 6,
-  "duration_ms": 280,
+  "duration_ms": 285,
   "token_usage": {
     "prompt_tokens": null,
     "completion_tokens": null,
@@ -252,10 +252,10 @@
       "output": {
         "passed": true
       },
-      "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /tmp/agentenv-agent_task_run_83ec126f460a4936905dcaca1e50b484-8tyy2ng1/agent_interaction_workspace/workspace\nconfigfile: pyproject.toml\ncollected 4 items\n\ntests/test_public.py ....                                                [100%]\n\n============================== 4 passed in 0.01s ===============================\n",
+      "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /tmp/agentenv-agent_task_run_c420e3d4107147b08e0411e9d3b98971-mz53ex08/agent_interaction_workspace/workspace\nconfigfile: pyproject.toml\ncollected 4 items\n\ntests/test_public.py ....                                                [100%]\n\n============================== 4 passed in 0.01s ===============================\n",
       "stderr": "warning: `VIRTUAL_ENV=/home/kshitij/agentenv-posttraining-lab/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead\nUsing CPython 3.11.14\nCreating virtual environment at: .venv\nInstalled 5 packages in 10ms\n",
       "exit_code": 0,
-      "duration_ms": 280,
+      "duration_ms": 284,
       "error_class": null,
       "error_message": null
     }

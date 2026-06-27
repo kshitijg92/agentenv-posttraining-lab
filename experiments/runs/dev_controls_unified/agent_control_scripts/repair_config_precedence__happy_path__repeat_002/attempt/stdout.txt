@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_83ec126f460a4936905dcaca1e50b484-8tyy2ng1/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_c420e3d4107147b08e0411e9d3b98971-mz53ex08/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 4 items
 
@@ -10,11 +10,11 @@ tests/test_public.py ....                                                [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_83ec126f460a4936905dcaca1e50b484-8tyy2ng1/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_c420e3d4107147b08e0411e9d3b98971-mz53ex08/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 9 items
 
 test_config_precedence.py .........                                      [100%]
 
-============================== 9 passed in 0.03s ===============================
+============================== 9 passed in 0.02s ===============================
 

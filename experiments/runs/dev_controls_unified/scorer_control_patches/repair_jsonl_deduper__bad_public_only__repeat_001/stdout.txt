@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-repair_jsonl_deduper-bie0ahz5/workspace
+rootdir: /tmp/agentenv-repair_jsonl_deduper-3isv8u96/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,7 +10,7 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-repair_jsonl_deduper-bie0ahz5/workspace
+rootdir: /tmp/agentenv-repair_jsonl_deduper-3isv8u96/workspace
 configfile: pyproject.toml
 collected 5 items
 
@@ -105,5 +105,5 @@ E       Failed: DID NOT RAISE ValueError
 FAILED test_behavior.py::test_uses_caller_supplied_dedupe_key - AssertionErro...
 FAILED test_behavior.py::test_preserves_first_seen_order_for_non_adjacent_duplicates
 FAILED test_behavior.py::test_missing_dedupe_key_raises_value_error - Failed:...
-========================= 3 failed, 2 passed in 0.02s ==========================
+========================= 3 failed, 2 passed in 0.03s ==========================
 

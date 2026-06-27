@@ -1,16 +1,16 @@
 {
-  "run_id": "run_ee45e511015e433ba393a8e10c26833a",
+  "run_id": "run_e14d33787f214d478f77fed9463a2c65",
   "task_id": "toy_python_fix_001",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
-  "attempt_id": "attempt_fa4c3beb2aad409caeb7278e4b088977",
+  "attempt_id": "attempt_04e4c351f6b9404993b0caf9142f45b5",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/scorer_control_patches/oracle.patch",
   "status": "PASS",
   "public_status": "PASS",
   "hidden_status": "PASS",
   "error_class": null,
-  "started_at": "2026-06-27T04:01:22.713337Z",
-  "ended_at": "2026-06-27T04:01:23.138644Z",
-  "duration_ms": 425,
+  "started_at": "2026-06-27T04:14:35.379596Z",
+  "ended_at": "2026-06-27T04:14:35.820491Z",
+  "duration_ms": 440,
   "final_diff_hash": "xxh64:e3fc746d6fe0786c",
   "orchestrator_version": "attempt_v0"
 }

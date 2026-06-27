@@ -1,7 +1,7 @@
 {
   "task_id": "preserve_cli_error_codes",
   "instruction": "Fix the validate_records CLI so it reads JSONL records with string id and status fields, rejects duplicate ids, prints JSON status counts on success, preserves the documented exit codes, and avoids tracebacks for expected user or input errors.",
-  "workspace_path": "/tmp/agentenv-agent_task_run_d1f51f9fde2a4f819a2c56403a7f0eaf-33aoi4z0/agent_interaction_workspace/workspace",
+  "workspace_path": "/tmp/agentenv-agent_task_run_89ea6df1fd874ef5bb1f47baa69c897d-k2uejwd5/agent_interaction_workspace/workspace",
   "allowed_tools": [
     "read_file",
     "write_file",

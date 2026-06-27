@@ -6,14 +6,14 @@
     "results": "control_results.jsonl",
     "scorer_control_patches": "scorer_control_patches"
   },
-  "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
-  "created_at": "2026-06-27T04:00:53.056598Z",
+  "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
+  "created_at": "2026-06-27T04:14:06.312156Z",
   "overall_match": true,
   "record_count": 72,
   "records": [
     {
       "actual": {
-        "attempt_id": "attempt_5ba7ce4b8a134a24b6d269fd609270dc",
+        "attempt_id": "attempt_e48c254ef79444c785f4f8798b8fdf73",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:3a6c137988d3cd3a",
@@ -23,7 +23,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__oracle__repeat_001",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -35,7 +35,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_280475a17ed34acebe7b4363dbf0a3d2",
+        "attempt_id": "attempt_f5ac30372cdb475d98b3329fb4145f8e",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:3a6c137988d3cd3a",
@@ -45,7 +45,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__oracle__repeat_002",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -57,7 +57,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_fd02585a2bfa4e138b716d7f034d8199",
+        "attempt_id": "attempt_bbb9688cb48448c5b41ac36ea18f7fed",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:3a6c137988d3cd3a",
@@ -67,7 +67,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__oracle__repeat_003",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -79,7 +79,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_d39e70c157434a68918bcdf0c1330bc3",
+        "attempt_id": "attempt_945d8886bdf8410db7f5356dbd442006",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -89,7 +89,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__bad_noop__repeat_001",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -101,7 +101,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_804c59e212a84f78b945cdc97324f337",
+        "attempt_id": "attempt_3050d39b029b424bb10e09005a67d787",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -111,7 +111,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__bad_noop__repeat_002",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -123,7 +123,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_a8b93b7cb2e84b0aa58b66fef06746e6",
+        "attempt_id": "attempt_518315141fa44588a97e2184a7e341ff",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -133,7 +133,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__bad_noop__repeat_003",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -145,7 +145,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_6fa5329176ce4115a5590cde6dbfafa8",
+        "attempt_id": "attempt_c84f7825cb4c4d08a1e38e58999c8aa7",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:2318ffb1a4be45cf",
@@ -155,7 +155,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__bad_public_only__repeat_001",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -167,7 +167,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_2cd89c6226fd48568f4d2ae818d0d42f",
+        "attempt_id": "attempt_675a5bf473a44fff865a8b426c4b386a",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:2318ffb1a4be45cf",
@@ -177,7 +177,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__bad_public_only__repeat_002",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -189,7 +189,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_839ff90fae4c4d738d5eea66e90da538",
+        "attempt_id": "attempt_fd913a3439794eedb4e5cf30df3860e5",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:2318ffb1a4be45cf",
@@ -199,7 +199,7 @@
       "artifact_dir": "scorer_control_patches/preserve_cli_error_codes__bad_public_only__repeat_003",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -211,7 +211,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_75540d7d8f444dddb37000f22edd6215",
+        "agent_run_id": "agent_task_run_4142fdefecb6413cbd6a27b4f82b98dc",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -239,7 +239,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__happy_path__repeat_001",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -249,7 +249,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_b791c243a88d40f9a478ae3039e90a1d",
+        "agent_run_id": "agent_task_run_7354fb26cfff492183bc0ea7636d3d3b",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -277,7 +277,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__happy_path__repeat_002",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -287,7 +287,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_1f356fcbcd2e465fb61a2ff0c6a6f681",
+        "agent_run_id": "agent_task_run_9b98fd4df0c04ab9839fcebff1a5233e",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -315,7 +315,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__happy_path__repeat_003",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -325,7 +325,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_d1f51f9fde2a4f819a2c56403a7f0eaf",
+        "agent_run_id": "agent_task_run_89ea6df1fd874ef5bb1f47baa69c897d",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -337,7 +337,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__malformed_json__repeat_001",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -347,7 +347,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_6057b84e64e0403e8922fec47cc7b142",
+        "agent_run_id": "agent_task_run_d3c2d845210f440dac5c263657c46852",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -359,7 +359,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__malformed_json__repeat_002",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -369,7 +369,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_3f860eb3cc92415a86f671af36bb1690",
+        "agent_run_id": "agent_task_run_de5b630d24614838af94e2153db5f6ef",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -381,7 +381,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__malformed_json__repeat_003",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -391,7 +391,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_7a0126a65c0d4e3680138a73cd301045",
+        "agent_run_id": "agent_task_run_685fc508954c4bbf8305ce950b1cf1e9",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -424,7 +424,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__bad_tool_input_then_recovery__repeat_001",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -456,7 +456,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_9ee03863d34d46f3aa15c278cfd9533e",
+        "agent_run_id": "agent_task_run_b746f5fee8204ed88a96fcaa0a937f0a",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -489,7 +489,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__bad_tool_input_then_recovery__repeat_002",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -521,7 +521,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_459f73bbe6e84445bb090675023ac40b",
+        "agent_run_id": "agent_task_run_d66e322f39c14220a9eba3a82a38dd1c",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -554,7 +554,7 @@
       "artifact_dir": "agent_control_scripts/preserve_cli_error_codes__bad_tool_input_then_recovery__repeat_003",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -586,7 +586,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_acedd2014f504274b33103d83071237f",
+        "attempt_id": "attempt_c0a8dff7c8fb46eea3995318e0af8db8",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:187bcea16c66ce96",
@@ -596,7 +596,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__oracle__repeat_001",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -608,7 +608,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_bbf5f6a4d9b04f79be29239ddccf379a",
+        "attempt_id": "attempt_21b9868f780b4cac9b081b02f152f21f",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:187bcea16c66ce96",
@@ -618,7 +618,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__oracle__repeat_002",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -630,7 +630,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_fd3d4740ee014728949e6429fe4fca97",
+        "attempt_id": "attempt_7cb09c31808c44788478a194bf3de38f",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:187bcea16c66ce96",
@@ -640,7 +640,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__oracle__repeat_003",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -652,7 +652,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_0d51f23aedaa45ab8f470a5d91e951ce",
+        "attempt_id": "attempt_2bba6c4447e6430ca872ead3f547a025",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -662,7 +662,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__bad_noop__repeat_001",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -674,7 +674,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_609d812f2a3e47abbd209902ff3e29fa",
+        "attempt_id": "attempt_336e1e53090b459f8df9e04ffc92a433",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -684,7 +684,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__bad_noop__repeat_002",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -696,7 +696,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_2fa3f7aaa1e24d56a056c5bdec30c1da",
+        "attempt_id": "attempt_8a1272b555eb4a9b9f67eb1d2fa1271b",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -706,7 +706,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__bad_noop__repeat_003",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -718,7 +718,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_8a0dc29eca20462ca5d7ef8ba0452503",
+        "attempt_id": "attempt_c956a35f30ed4d43995de02225a4bfd6",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:8ea4a8dafa72fda7",
@@ -728,7 +728,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__bad_public_only__repeat_001",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -740,7 +740,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_9021c17db82344a4839ddaed1965603f",
+        "attempt_id": "attempt_61193857dbf84dbaa534b2b4208a693d",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:8ea4a8dafa72fda7",
@@ -750,7 +750,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__bad_public_only__repeat_002",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -762,7 +762,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_a690c6be33da41f28bffb5606f81374e",
+        "attempt_id": "attempt_39bde7fb63f9430699c6e91410c2520d",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:8ea4a8dafa72fda7",
@@ -772,7 +772,7 @@
       "artifact_dir": "scorer_control_patches/repair_config_precedence__bad_public_only__repeat_003",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -784,7 +784,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_9f631bc104ea47df8dfd28b1f01f8bf5",
+        "agent_run_id": "agent_task_run_b2459dcca3494b53b147b940e5edc07b",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -822,7 +822,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__happy_path__repeat_001",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -832,7 +832,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_83ec126f460a4936905dcaca1e50b484",
+        "agent_run_id": "agent_task_run_c420e3d4107147b08e0411e9d3b98971",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -870,7 +870,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__happy_path__repeat_002",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -880,7 +880,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_1afbc874575a422e985fc0d9b1e46312",
+        "agent_run_id": "agent_task_run_d535595fbd664b53aa604d061a7046da",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -918,7 +918,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__happy_path__repeat_003",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -928,7 +928,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_566bbaa4b2d647239c37909e1f1ff59d",
+        "agent_run_id": "agent_task_run_e63fb23038764952b3bbfbfd1a440fa3",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -940,7 +940,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__malformed_json__repeat_001",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -950,7 +950,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_c8c2ca50865b43a689a52c32be2071b8",
+        "agent_run_id": "agent_task_run_c01fb81bd59b45989c302d85cfaa8b2a",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -962,7 +962,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__malformed_json__repeat_002",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -972,7 +972,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_c19d970bb801455d9a18cd040644f9ee",
+        "agent_run_id": "agent_task_run_c0e85b3fe91b49c79f3dce1f8d196c0e",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -984,7 +984,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__malformed_json__repeat_003",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -994,7 +994,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_1e639d3464f5418e8edefec17469b886",
+        "agent_run_id": "agent_task_run_4a84eef5f2e440f08f648513a12f4d8e",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1032,7 +1032,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__bad_tool_input_then_recovery__repeat_001",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -1069,7 +1069,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_80995200517042e7aaf89ebe654d1d23",
+        "agent_run_id": "agent_task_run_916b5827c45648a3af4d8d56f383f9c3",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1107,7 +1107,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__bad_tool_input_then_recovery__repeat_002",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -1144,7 +1144,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_56346eca67f74808bd04b722bd83a6ee",
+        "agent_run_id": "agent_task_run_dba5ad4cc7ad42daa791123d16af1222",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1182,7 +1182,7 @@
       "artifact_dir": "agent_control_scripts/repair_config_precedence__bad_tool_input_then_recovery__repeat_003",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -1219,7 +1219,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_e75001c37b66467785d388ced7eb1ab6",
+        "attempt_id": "attempt_8149828676504c619e5c79e626799163",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:791a044ad51af90c",
@@ -1229,7 +1229,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__oracle__repeat_001",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -1241,7 +1241,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_f2c741cb88eb4e74a81665baf828dc0e",
+        "attempt_id": "attempt_20ee86aa71cc4c669344814d4bfee9e0",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:791a044ad51af90c",
@@ -1251,7 +1251,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__oracle__repeat_002",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -1263,7 +1263,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_dd94e0d50186402cbb2db768547d0077",
+        "attempt_id": "attempt_7f545be80d9f4b259c16bb5541a45d32",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:791a044ad51af90c",
@@ -1273,7 +1273,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__oracle__repeat_003",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -1285,7 +1285,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_da5374922833487d8d059a1ee80fd5e6",
+        "attempt_id": "attempt_8140ec6bcb4a4ed19e29f82233c3df8e",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -1295,7 +1295,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__bad_noop__repeat_001",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1307,7 +1307,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_4a0b320f561443519ea63b22ac5631e7",
+        "attempt_id": "attempt_11c4a5f1c7df454cb086101f6be94c7d",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -1317,7 +1317,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__bad_noop__repeat_002",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1329,7 +1329,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_4cda366e2db941e099659684f571a024",
+        "attempt_id": "attempt_ece9e7dd93af427eb4d5e8d5ee41469e",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -1339,7 +1339,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__bad_noop__repeat_003",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1351,7 +1351,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_c401afe1e25c4dbd82dd0bfee1b0d4fa",
+        "attempt_id": "attempt_0d641a70249b4ad1af9c5979d86354da",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:83ebe19f1a70c989",
@@ -1361,7 +1361,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__bad_public_only__repeat_001",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1373,7 +1373,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_0f3448eeea794ad3a1ecb16db18c43f3",
+        "attempt_id": "attempt_6c8caa73edd14ea9b0ce8d4c3979c8c9",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:83ebe19f1a70c989",
@@ -1383,7 +1383,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__bad_public_only__repeat_002",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1395,7 +1395,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_a89705c6c2ca49b096f7cb2e714a80f0",
+        "attempt_id": "attempt_4ee2dad037734ae1a02da4f52a14c9db",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:83ebe19f1a70c989",
@@ -1405,7 +1405,7 @@
       "artifact_dir": "scorer_control_patches/repair_jsonl_deduper__bad_public_only__repeat_003",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1417,7 +1417,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_174d9907055f407da3f6e775e8b52a0d",
+        "agent_run_id": "agent_task_run_8cb76ff9f1eb4544be95a501800b2245",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1445,7 +1445,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__happy_path__repeat_001",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -1455,7 +1455,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_8ec9ccfb583b4cfb8e551049a2fe96c5",
+        "agent_run_id": "agent_task_run_0c2f94a38d7243f7a65bb97b9779baa9",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1483,7 +1483,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__happy_path__repeat_002",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -1493,7 +1493,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_7c84852184c141ffaf8f040c110a6816",
+        "agent_run_id": "agent_task_run_547dc8373df6480abeb0f2e248856c65",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1521,7 +1521,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__happy_path__repeat_003",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -1531,7 +1531,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_f4276aeaa1a848f6a8c10dd5be8c4ad5",
+        "agent_run_id": "agent_task_run_bb5034f6e65e4ae3a4dd2b7bcc37c18c",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -1543,7 +1543,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__malformed_json__repeat_001",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -1553,7 +1553,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_c46520a652b04a968b6d7da5d1566581",
+        "agent_run_id": "agent_task_run_57ac05d03bc9491db68abac5f4b09acb",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -1565,7 +1565,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__malformed_json__repeat_002",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -1575,7 +1575,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_fdb777ebae5b4e138ad92121f1d69779",
+        "agent_run_id": "agent_task_run_aa9f990991f649618d6ad44407df71a8",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -1587,7 +1587,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__malformed_json__repeat_003",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -1597,7 +1597,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_a139e1355b5b4548a424c0d5dae51228",
+        "agent_run_id": "agent_task_run_4dd0fb1dd5cf4523992a6d5bcf523f34",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1630,7 +1630,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__bad_tool_input_then_recovery__repeat_001",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -1662,7 +1662,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_ed0057dd59f04334925e3e7ac5164019",
+        "agent_run_id": "agent_task_run_30f4c3bb77e1463b9b2cb8ca8a69e3d8",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1695,7 +1695,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__bad_tool_input_then_recovery__repeat_002",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -1727,7 +1727,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_b8e259b3b24a4a1ba87dbe8327839ab4",
+        "agent_run_id": "agent_task_run_2403152a933a41129c441553df5b9087",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -1760,7 +1760,7 @@
       "artifact_dir": "agent_control_scripts/repair_jsonl_deduper__bad_tool_input_then_recovery__repeat_003",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -1792,7 +1792,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_ce01e55f38e342f0b62fd1bc14df0146",
+        "attempt_id": "attempt_e4263ee35c784b21b1a08b43dc31e4a3",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:e3fc746d6fe0786c",
@@ -1802,7 +1802,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__oracle__repeat_001",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -1814,7 +1814,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_fa4c3beb2aad409caeb7278e4b088977",
+        "attempt_id": "attempt_04e4c351f6b9404993b0caf9142f45b5",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:e3fc746d6fe0786c",
@@ -1824,7 +1824,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__oracle__repeat_002",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -1836,7 +1836,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_c1da4e2201424f37be1f6335168c6398",
+        "attempt_id": "attempt_6973e64513174447ac89e9572e5947ce",
         "attempt_status": "PASS",
         "error_class": null,
         "final_diff_hash": "xxh64:e3fc746d6fe0786c",
@@ -1846,7 +1846,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__oracle__repeat_003",
       "control_layer": "scorer",
       "control_name": "oracle",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "PASS",
         "hidden_status": "PASS",
@@ -1858,7 +1858,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_273590307f5f433eb85654e75b5e48c0",
+        "attempt_id": "attempt_5b429315aa704ad6adbcf9b282361dfd",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -1868,7 +1868,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__bad_noop__repeat_001",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1880,7 +1880,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_9a3b6698cfd7456cac11f540c6a2a773",
+        "attempt_id": "attempt_63732427e20a4a4f8a827bcea2551d0a",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -1890,7 +1890,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__bad_noop__repeat_002",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1902,7 +1902,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_53dfe7404a8a453582c7aabec15279e1",
+        "attempt_id": "attempt_ee1ca7ae30c741c7a153387ccda72974",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:ef46db3751d8e999",
@@ -1912,7 +1912,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__bad_noop__repeat_003",
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1924,7 +1924,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_64f1f3ebab88496086baefb16169800e",
+        "attempt_id": "attempt_bee261c1bcb443dca05117fd4e07aad6",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:963c30a755bee9ee",
@@ -1934,7 +1934,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__bad_public_only__repeat_001",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1946,7 +1946,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_e3abfd8e449a46f294fb7a7e43e43dc5",
+        "attempt_id": "attempt_6225d425d62e4665b0440aad2794b5d4",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:963c30a755bee9ee",
@@ -1956,7 +1956,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__bad_public_only__repeat_002",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1968,7 +1968,7 @@
     },
     {
       "actual": {
-        "attempt_id": "attempt_efd5c7da864543618dcc63fea8d115ea",
+        "attempt_id": "attempt_f8f318b6c876445ba1d4ea3a9f31a4f3",
         "attempt_status": "HIDDEN_TEST_FAIL",
         "error_class": "HiddenCheckFailed",
         "final_diff_hash": "xxh64:963c30a755bee9ee",
@@ -1978,7 +1978,7 @@
       "artifact_dir": "scorer_control_patches/toy_python_fix_001__bad_public_only__repeat_003",
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "attempt_status": "HIDDEN_TEST_FAIL",
         "hidden_status": "FAIL",
@@ -1990,7 +1990,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_7a310523090d4cf984795bb895212a31",
+        "agent_run_id": "agent_task_run_c3b380b06a94415d900d3c76e47cf701",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -2018,7 +2018,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__happy_path__repeat_001",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -2028,7 +2028,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_e7bdb76870284787a846b8365bb847b7",
+        "agent_run_id": "agent_task_run_1ae124ff338e4dd58071a29c84152686",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -2056,7 +2056,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__happy_path__repeat_002",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -2066,7 +2066,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_6b024f23469045d8b3ffea090bb5e06b",
+        "agent_run_id": "agent_task_run_e18abb639f1446edb090a39a3b81e9c6",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -2094,7 +2094,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__happy_path__repeat_003",
       "control_layer": "agent",
       "control_name": "happy_path",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed"
       },
@@ -2104,7 +2104,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_bb50aca5501f4b9bab897671886426d5",
+        "agent_run_id": "agent_task_run_4ddd244ac912461485158fbab78844d3",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -2116,7 +2116,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__malformed_json__repeat_001",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -2126,7 +2126,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_2005b662ac1b434b9bb4c5270816138d",
+        "agent_run_id": "agent_task_run_11a5c69604f847bfb49d5a51c39bb5fe",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -2138,7 +2138,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__malformed_json__repeat_002",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -2148,7 +2148,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_54160eb8655244539a2e689a57768614",
+        "agent_run_id": "agent_task_run_9296769023314e1ab5c034528ea4591a",
         "agent_run_status": "agent_loop_failed",
         "attempt_status": null,
         "error_class": "MalformedModelOutput",
@@ -2160,7 +2160,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__malformed_json__repeat_003",
       "control_layer": "agent",
       "control_name": "malformed_json",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "invalid_model_output"
       },
@@ -2170,7 +2170,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_4aa111babb224385a10ae32a028de775",
+        "agent_run_id": "agent_task_run_385469825a004617984dd664a7790fbb",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -2203,7 +2203,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__bad_tool_input_then_recovery__repeat_001",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -2235,7 +2235,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_42a47f12458e46f1a3636e8b4f5a1a0c",
+        "agent_run_id": "agent_task_run_c6565f85a223472e8be45b606dcc4122",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -2268,7 +2268,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__bad_tool_input_then_recovery__repeat_002",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
@@ -2300,7 +2300,7 @@
     },
     {
       "actual": {
-        "agent_run_id": "agent_task_run_edb7b01870434838be5237991efd79fc",
+        "agent_run_id": "agent_task_run_77e8c95847ae4107a53fddd4fea3a02c",
         "agent_run_status": "scored",
         "attempt_status": "PASS",
         "error_class": null,
@@ -2333,7 +2333,7 @@
       "artifact_dir": "agent_control_scripts/toy_python_fix_001__bad_tool_input_then_recovery__repeat_003",
       "control_layer": "agent",
       "control_name": "bad_tool_input_then_recovery",
-      "control_run_id": "controls_758fc19571284e69bdd05c60a28a8801",
+      "control_run_id": "controls_31969689a1e446ba945ae8fb42bcaf1d",
       "expected": {
         "prompt_loop_status": "completed",
         "tool_results": [
