@@ -69,6 +69,10 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     selected_policy = select_policy(config, policy)
+    if selected_policy.type != "scorer_control_patch":
+        raise NotImplementedError(
+            "agent_control_script eval execution is not implemented yet"
+        )
     config_hash = _hash_file(config_path)
     eval_run_id = f"eval_{uuid4().hex}"
     created_at = _utc_now()
@@ -381,7 +385,9 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
             {
                 "policy": policy_run.policy,
                 "eval_run_id": policy_run.eval_run_id,
-                "artifact_dir": str(policy_run.out_dir.relative_to(eval_matrix.out_dir)),
+                "artifact_dir": str(
+                    policy_run.out_dir.relative_to(eval_matrix.out_dir)
+                ),
                 "run_manifest": str(
                     (policy_run.out_dir / "run_manifest.json").relative_to(
                         eval_matrix.out_dir

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from agentenv.evals.schema import ControlName, EvalConfig, ScorerControlPatchPolicy
+from agentenv.evals.schema import AgentControlName, ControlName, EvalConfig, EvalPolicy
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
@@ -28,12 +28,11 @@ def resolve_task_pack_path(config: EvalConfig, config_path: Path) -> Path:
 def resolve_eval_tasks(config: EvalConfig, config_path: Path) -> list[ResolvedEvalTask]:
     task_pack_path = resolve_task_pack_path(config, config_path)
     return [
-        _resolve_eval_task(task_pack_path, config, task_id)
-        for task_id in config.tasks
+        _resolve_eval_task(task_pack_path, config, task_id) for task_id in config.tasks
     ]
 
 
-def select_policy(config: EvalConfig, policy: str) -> ScorerControlPatchPolicy:
+def select_policy(config: EvalConfig, policy: str) -> EvalPolicy:
     try:
         return config.policies[policy]
     except KeyError as exc:
@@ -57,6 +56,28 @@ def scorer_control_patch_path(
     if not patch_path.is_file():
         raise ValueError(f"Control patch does not exist: {patch_path}")
     return patch_path
+
+
+def agent_control_script_path(
+    task_dir: Path,
+    manifest: TaskManifest,
+    control: AgentControlName,
+) -> Path:
+    if control == "happy":
+        relative_path = manifest.controls.agent_control_scripts.happy
+    elif control == "malformed":
+        relative_path = manifest.controls.agent_control_scripts.malformed
+    else:
+        relative_path = manifest.controls.agent_control_scripts.recoverable
+
+    script_path = (task_dir / relative_path).resolve()
+    if not script_path.is_relative_to(task_dir.resolve()):
+        raise ValueError(
+            f"Agent control script escapes task directory: {relative_path}"
+        )
+    if not script_path.is_file():
+        raise ValueError(f"Agent control script does not exist: {script_path}")
+    return script_path
 
 
 def _resolve_eval_task(

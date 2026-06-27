@@ -1463,3 +1463,48 @@ outcomes; the task manifest only owns names and paths.
 - Agent control JSON is parsed during task validation.
 - Control report names for agent controls use the manifest keys:
   `happy`, `malformed`, and `recoverable`.
+
+## Agent-Control Eval Policy Config Decision
+
+### Decision
+
+Extend eval policy config with a deterministic agent-control policy type:
+
+```yaml
+policies:
+  agent-happy:
+    type: agent_control_script
+    control: happy
+```
+
+Supported `control` values are the task-manifest agent control keys:
+
+```text
+happy
+malformed
+recoverable
+```
+
+The first config using this contract is:
+
+```text
+configs/eval/week05_agent_controls.yaml
+```
+
+### Reasoning
+
+This keeps the first agent eval policy deterministic and task-local. The eval
+config chooses a named control, while `task.yaml` owns the path to the script
+artifact and the script JSON owns the model script plus expected prompt-loop
+result.
+
+This is intentionally narrower than a non-control agent policy. A future
+non-control policy can choose a model/model config and decoding policy, but the
+agent-control policy should not duplicate those concerns before the deterministic
+path is wired.
+
+### Current Boundary
+
+This checkpoint adds schema loading and path validation only. Eval execution for
+`agent_control_script` currently fails explicitly until the next checkpoint
+wires it to `run_agent_task_attempt(...)`.

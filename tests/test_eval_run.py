@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.eval_run import (
     run_eval_config,
@@ -11,6 +13,7 @@ from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
 
 CONTROL_EVAL_CONFIG = Path("configs/eval/control_policies.yaml")
+AGENT_CONTROL_EVAL_CONFIG = Path("configs/eval/week05_agent_controls.yaml")
 
 
 def test_control_eval_config_loads() -> None:
@@ -26,6 +29,43 @@ def test_control_eval_config_paths_are_valid() -> None:
     config = load_eval_config(CONTROL_EVAL_CONFIG)
 
     validate_eval_config_paths(config, CONTROL_EVAL_CONFIG)
+
+
+def test_agent_control_eval_config_loads() -> None:
+    config = load_eval_config(AGENT_CONTROL_EVAL_CONFIG)
+
+    assert config.name == "week05_agent_controls"
+    assert config.task_pack == "data/task_packs/repo_patch_python_v0"
+    assert config.tasks == ["toy_python_fix_001"]
+    assert sorted(config.policies) == [
+        "agent-happy",
+        "agent-malformed",
+        "agent-recoverable",
+    ]
+    assert config.policies["agent-happy"].type == "agent_control_script"
+    assert config.policies["agent-happy"].control == "happy"
+    assert config.policies["agent-malformed"].control == "malformed"
+    assert config.policies["agent-recoverable"].control == "recoverable"
+
+
+def test_agent_control_eval_config_paths_are_valid() -> None:
+    config = load_eval_config(AGENT_CONTROL_EVAL_CONFIG)
+
+    validate_eval_config_paths(config, AGENT_CONTROL_EVAL_CONFIG)
+
+
+def test_agent_control_eval_policy_execution_is_not_wired_yet(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        NotImplementedError,
+        match="agent_control_script eval execution is not implemented yet",
+    ):
+        run_eval_config(
+            AGENT_CONTROL_EVAL_CONFIG,
+            "agent-happy",
+            tmp_path / "eval",
+        )
 
 
 def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
