@@ -209,6 +209,22 @@ def _layer_counts(eval_run: EvalRun) -> dict[str, dict[str, int]]:
                     "prompt_loop_status",
                     attempt.agent.prompt_loop_status,
                 )
+            if attempt.agent.scorer_attempt is not None:
+                _increment_layer_count(
+                    counts,
+                    "agent_scorer_status",
+                    attempt.agent.scorer_attempt.status,
+                )
+                _increment_layer_count(
+                    counts,
+                    "agent_scorer_public_status",
+                    attempt.agent.scorer_attempt.public_status,
+                )
+                _increment_layer_count(
+                    counts,
+                    "agent_scorer_hidden_status",
+                    attempt.agent.scorer_attempt.hidden_status,
+                )
     return counts
 
 

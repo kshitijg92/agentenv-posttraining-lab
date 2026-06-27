@@ -277,9 +277,9 @@ def _attempt_row(artifact_dir: Path, attempt_record: dict[str, object]) -> str:
         f"| {_display(attempt_record.get('task_id'))} "
         f"| {_display(attempt_record.get('attempt_index'))} "
         f"| {_display(attempt_record.get('artifact_version'))} "
-        f"| {_display(_field(scorer, 'status'))} "
-        f"| {_display(_field(scorer, 'public_status'))} "
-        f"| {_display(_field(scorer, 'hidden_status'))} "
+        f"| {_display(_attempt_scorer_field(scorer, agent, 'status'))} "
+        f"| {_display(_attempt_scorer_field(scorer, agent, 'public_status'))} "
+        f"| {_display(_attempt_scorer_field(scorer, agent, 'hidden_status'))} "
         f"| {_display(_field(agent, 'status'))} "
         f"| {_display(_field(agent, 'prompt_loop_status'))} "
         f"| {_display(_attempt_error_class(scorer, agent))} "
@@ -344,42 +344,44 @@ def _matrix_policy_summary(
         run_manifest,
     )
     attempt_count = len(attempts)
-    final_passes = sum(_scorer_field(attempt, "status") == "PASS" for attempt in attempts)
+    final_passes = sum(
+        _effective_scorer_field(attempt, "status") == "PASS" for attempt in attempts
+    )
     public_passes = sum(
-        _scorer_field(attempt, "public_status") == "PASS" for attempt in attempts
-    )
-    hidden_passes = sum(
-        _scorer_field(attempt, "hidden_status") == "PASS" for attempt in attempts
-    )
-    public_pass_hidden_fail = sum(
-        _scorer_field(attempt, "public_status") == "PASS"
-        and _scorer_field(attempt, "hidden_status") == "FAIL"
+        _effective_scorer_field(attempt, "public_status") == "PASS"
         for attempt in attempts
     )
-    scorer_status_counts = _nested_field_counts(attempts, "scorer", "status")
-    scorer_public_status_counts = _nested_field_counts(
+    hidden_passes = sum(
+        _effective_scorer_field(attempt, "hidden_status") == "PASS"
+        for attempt in attempts
+    )
+    public_pass_hidden_fail = sum(
+        _effective_scorer_field(attempt, "public_status") == "PASS"
+        and _effective_scorer_field(attempt, "hidden_status") == "FAIL"
+        for attempt in attempts
+    )
+    scorer_status_counts = _effective_scorer_field_counts(attempts, "status")
+    scorer_public_status_counts = _effective_scorer_field_counts(
         attempts,
-        "scorer",
         "public_status",
     )
-    scorer_hidden_status_counts = _nested_field_counts(
+    scorer_hidden_status_counts = _effective_scorer_field_counts(
         attempts,
-        "scorer",
         "hidden_status",
     )
     env_or_harness_failures = sum(
-        _scorer_field(attempt, "status")
+        _effective_scorer_field(attempt, "status")
         in {"PATCH_APPLY_ERROR", "TIMEOUT", "ORCHESTRATOR_ERROR"}
         for attempt in attempts
     )
     scorer_or_orchestrator_failures = sum(
-        _scorer_field(attempt, "status") == "ORCHESTRATOR_ERROR"
+        _effective_scorer_field(attempt, "status") == "ORCHESTRATOR_ERROR"
         for attempt in attempts
     )
     duration_values = [
         duration_ms
         for attempt in attempts
-        if isinstance((duration_ms := _scorer_field(attempt, "duration_ms")), int)
+        if isinstance((duration_ms := _attempt_duration_ms(attempt)), int)
     ]
     return {
         "policy": policy,
@@ -547,6 +549,19 @@ def _nested_field_counts(
     return counts
 
 
+def _effective_scorer_field_counts(
+    attempts: list[dict[str, object]],
+    field_name: str,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for attempt in attempts:
+        value = _effective_scorer_field(attempt, field_name)
+        if not isinstance(value, str):
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
 def _status_count(
     summary: dict[str, object],
     counts_key: str,
@@ -579,6 +594,25 @@ def _agent_field(attempt: dict[str, object], key: str) -> object:
 
 def _agent_scorer_field(attempt: dict[str, object], key: str) -> object:
     agent = _optional_object(attempt.get("agent"))
+    scorer_attempt = _optional_object(_field(agent, "scorer_attempt"))
+    return _field(scorer_attempt, key)
+
+
+def _effective_scorer_field(attempt: dict[str, object], key: str) -> object:
+    value = _scorer_field(attempt, key)
+    if value is not None:
+        return value
+    return _agent_scorer_field(attempt, key)
+
+
+def _attempt_scorer_field(
+    scorer: dict[str, object] | None,
+    agent: dict[str, object] | None,
+    key: str,
+) -> object:
+    value = _field(scorer, key)
+    if value is not None:
+        return value
     scorer_attempt = _optional_object(_field(agent, "scorer_attempt"))
     return _field(scorer_attempt, key)
 
@@ -636,9 +670,9 @@ def _matrix_attempt_rows(
             f"| {_display(attempt.get('task_id'))} "
             f"| {policy} "
             f"| {_display(attempt.get('artifact_version'))} "
-            f"| {_display(_scorer_field(attempt, 'status'))} "
-            f"| {_display(_scorer_field(attempt, 'public_status'))} "
-            f"| {_display(_scorer_field(attempt, 'hidden_status'))} "
+            f"| {_display(_effective_scorer_field(attempt, 'status'))} "
+            f"| {_display(_effective_scorer_field(attempt, 'public_status'))} "
+            f"| {_display(_effective_scorer_field(attempt, 'hidden_status'))} "
             f"| {_display(_agent_field(attempt, 'status'))} "
             f"| {_display(_agent_field(attempt, 'prompt_loop_status'))} "
             f"| {_display(_attempt_error_class_from_record(attempt))} "

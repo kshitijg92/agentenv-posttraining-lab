@@ -1,0 +1,16 @@
+{
+  "run_id": "run_aa22fae2aadd412b89b478c900a32065",
+  "task_id": "repair_config_precedence",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml",
+  "attempt_id": "attempt_0e1677a5bd4049a0a6f963aebe37046e",
+  "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_public_only.patch",
+  "status": "HIDDEN_TEST_FAIL",
+  "public_status": "PASS",
+  "hidden_status": "FAIL",
+  "error_class": "HiddenCheckFailed",
+  "started_at": "2026-06-27T23:20:55.836947Z",
+  "ended_at": "2026-06-27T23:20:56.313765Z",
+  "duration_ms": 476,
+  "final_diff_hash": "xxh64:8ea4a8dafa72fda7",
+  "orchestrator_version": "attempt_v0"
+}

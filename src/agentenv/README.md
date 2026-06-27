@@ -12,6 +12,9 @@ cd /home/kshitij/agentenv-posttraining-lab
 uv run agentenv --help
 uv run agentenv tasks --help
 uv run agentenv attempt --help
+uv run agentenv eval --help
+uv run agentenv replay --help
+uv run agentenv report --help
 uv run agentenv scorers --help
 uv run agentenv controls --help
 uv run agentenv sandbox --help
@@ -62,6 +65,8 @@ uv run agentenv attempt run \
 
 ## Run Configured Eval Policies
 
+Single scorer-control policy:
+
 ```bash
 uv run agentenv eval \
   --config configs/eval/scorer_control_policies.yaml \
@@ -79,13 +84,56 @@ uv run agentenv eval \
   --out experiments/runs/scorer_control_policies_bad_public_only
 ```
 
-## Replay An Eval Run
+Single agent-control policy:
+
+```bash
+uv run agentenv eval \
+  --config configs/eval/agent_control_policies.yaml \
+  --policy agent-happy \
+  --out experiments/runs/agent_control_policies_agent_happy
+```
+
+All policies from one config:
+
+```bash
+uv run agentenv eval \
+  --config configs/eval/dev_baseline.yaml \
+  --all-policies \
+  --out experiments/runs/dev_baseline
+```
+
+`--all-policies` writes an eval matrix. Replay is config-owned through the
+config `replay:` block; for `dev_baseline`, scorer and agent control policies
+are replayed automatically.
+
+Main eval matrix outputs:
+
+```text
+experiments/runs/dev_baseline/eval_matrix_manifest.json
+experiments/runs/dev_baseline/policies/
+experiments/runs/dev_baseline/replays/
+```
+
+## Replay An Artifact Directory
+
+Replay a scorer eval run:
 
 ```bash
 uv run agentenv replay \
   experiments/runs/scorer_control_policies_oracle \
   --out experiments/replays/scorer_control_policies_oracle
 ```
+
+Replay an agent eval run:
+
+```bash
+uv run agentenv replay \
+  experiments/runs/dev_baseline/policies/agent-happy \
+  --out experiments/replays/dev_baseline_agent_happy
+```
+
+Replay accepts source artifact directories such as `eval_run_v0` policy runs
+and direct `agent_task_run_artifacts_v0` agent task run artifacts.
 
 ## Write Markdown Reports
 
@@ -95,6 +143,14 @@ Eval report:
 uv run agentenv report \
   experiments/runs/scorer_control_policies_oracle \
   --out experiments/reports/evals/scorer_control_policies_oracle.md
+```
+
+Eval matrix report:
+
+```bash
+uv run agentenv report \
+  experiments/runs/dev_baseline \
+  --out experiments/reports/eval_matrices/dev_baseline.md
 ```
 
 Replay report:

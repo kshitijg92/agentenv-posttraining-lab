@@ -6,13 +6,24 @@ from uuid import uuid4
 
 import xxhash
 
+from agentenv.controls.agent_control_scripts import (
+    AgentControlScriptCase,
+    load_agent_control_script_case,
+)
 from agentenv.evals.schema import EvalConfig, EvalPolicy
 from agentenv.evals.resolve import (
-    scorer_control_patch_path,
+    agent_control_script_path,
+    ResolvedEvalTask,
     resolve_eval_tasks,
+    scorer_control_patch_path,
     select_policy,
 )
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
+from agentenv.models.fake import ScriptedFakeModelClient
+from agentenv.orchestrators.agent_task_run import (
+    AgentTaskRunResult,
+    run_and_persist_agent_task_attempt_to_dir,
+)
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.replay.runner import ReplayRun, run_replay
@@ -95,10 +106,6 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     selected_policy = select_policy(config, policy)
-    if selected_policy.type != "scorer_control_patch":
-        raise NotImplementedError(
-            "agent_control_script eval execution is not implemented yet"
-        )
     config_hash = _hash_file(config_path)
     eval_run_id = f"eval_{uuid4().hex}"
     created_at = _utc_now()
@@ -146,11 +153,6 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
                 "task_manifest_path": str(task.manifest_path),
             },
         )
-        submission_path = scorer_control_patch_path(
-            task.manifest_path.parent,
-            task.manifest,
-            selected_policy.control,
-        )
         task_attempt_records: list[EvalAttemptRecord] = []
 
         for attempt_index in range(config.attempts):
@@ -167,28 +169,61 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
                 attempt_index=attempt_index,
             )
             artifact_dir_ref = str(attempt_dir.relative_to(out_dir))
-            _append_trace(
-                trace_events,
-                attempt_provenance,
-                "eval_attempt_started",
-                input_payload={
+            if selected_policy.type == "scorer_control_patch":
+                submission_path = scorer_control_patch_path(
+                    task.manifest_path.parent,
+                    task.manifest,
+                    selected_policy.control,
+                )
+                started_payload: dict[str, object] = {
                     "attempt_artifact_dir": artifact_dir_ref,
                     "submission_path": str(submission_path),
-                },
-            )
-            attempt_run = run_and_persist_patch_attempt_to_dir(
-                task.manifest_path,
-                submission_path,
-                attempt_dir,
-            )
-            attempt_record = EvalAttemptRecord(
-                task_id=task.task_id,
-                attempt_index=attempt_index,
-                attempt_dir=attempt_dir,
-                artifact_version=_child_artifact_version(attempt_dir),
-                scorer=_scorer_summary(attempt_run.result),
-                agent=None,
-            )
+                }
+                _append_trace(
+                    trace_events,
+                    attempt_provenance,
+                    "eval_attempt_started",
+                    input_payload=started_payload,
+                )
+                attempt_record = _run_scorer_eval_attempt(
+                    task=task,
+                    submission_path=submission_path,
+                    attempt_index=attempt_index,
+                    attempt_dir=attempt_dir,
+                )
+                attempt_id = _required_scorer(attempt_record).attempt_id
+                payload_refs = {
+                    "attempt": f"{artifact_dir_ref}/attempt.json",
+                    "attempt_trace": f"{artifact_dir_ref}/trace.jsonl",
+                }
+            else:
+                script_path = agent_control_script_path(
+                    task.manifest_path.parent,
+                    task.manifest,
+                    selected_policy.control,
+                )
+                started_payload = {
+                    "attempt_artifact_dir": artifact_dir_ref,
+                    "agent_control_script_path": str(script_path),
+                }
+                _append_trace(
+                    trace_events,
+                    attempt_provenance,
+                    "eval_attempt_started",
+                    input_payload=started_payload,
+                )
+                control_case = load_agent_control_script_case(script_path)
+                attempt_record = _run_agent_control_eval_attempt(
+                    task=task,
+                    control_case=control_case,
+                    attempt_index=attempt_index,
+                    attempt_dir=attempt_dir,
+                )
+                attempt_id = _required_agent(attempt_record).run_id
+                payload_refs = _agent_eval_attempt_payload_refs(
+                    artifact_dir_ref,
+                    attempt_dir,
+                )
             attempt_records.append(attempt_record)
             task_attempt_records.append(attempt_record)
             _append_trace(
@@ -201,18 +236,15 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
                     task_id=task.task_id,
                     task_index=task_index,
                     attempt_index=attempt_index,
-                    attempt_id=attempt_run.result.attempt_id,
+                    attempt_id=attempt_id,
                 ),
                 "eval_attempt_finished",
                 output_payload={
                     "artifact_version": attempt_record.artifact_version,
                     "scorer": _scorer_summary_json(attempt_record.scorer),
-                    "agent": None,
+                    "agent": _agent_summary_json(attempt_record.agent),
                 },
-                payload_refs={
-                    "attempt": f"{artifact_dir_ref}/attempt.json",
-                    "attempt_trace": f"{artifact_dir_ref}/trace.jsonl",
-                },
+                payload_refs=payload_refs,
             )
 
         _append_trace(
@@ -399,6 +431,7 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
         "task_pack": eval_matrix.config.task_pack,
         "split": eval_matrix.config.split,
         "tasks": eval_matrix.config.tasks,
+        "task_count": len(eval_matrix.config.tasks),
         "policy_count": len(eval_matrix.policy_runs),
         "attempt_count": sum(policy_attempt_counts.values()),
         "layer_counts": _matrix_layer_counts(eval_matrix.policy_runs),
@@ -430,6 +463,9 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
             eval_matrix.config.replay.repeats
             if eval_matrix.config.replay.enabled
             else 0
+        ),
+        "replay_run_success_summary": _replay_run_success_summary(
+            eval_matrix.replay_runs
         ),
         "replay_runs": [
             _eval_matrix_replay_record(eval_matrix, replay_record)
@@ -466,6 +502,89 @@ def _eval_matrix_replay_record(
         "mismatched_attempts": attempt_count - matched_attempts,
         "error_count": 1 if replay_record.replay_run.status == "REPLAY_ERROR" else 0,
     }
+
+
+def _replay_run_success_summary(
+    replay_records: list[EvalMatrixReplayRecord],
+) -> str:
+    passed = sum(
+        1
+        for replay_record in replay_records
+        if replay_record.replay_run.status == "PASS"
+    )
+    total = len(replay_records)
+    return f"{passed}/{total}"
+
+
+def _run_scorer_eval_attempt(
+    *,
+    task: ResolvedEvalTask,
+    submission_path: Path,
+    attempt_index: int,
+    attempt_dir: Path,
+) -> EvalAttemptRecord:
+    attempt_run = run_and_persist_patch_attempt_to_dir(
+        task.manifest_path,
+        submission_path,
+        attempt_dir,
+    )
+    return EvalAttemptRecord(
+        task_id=task.task_id,
+        attempt_index=attempt_index,
+        attempt_dir=attempt_dir,
+        artifact_version=_child_artifact_version(attempt_dir),
+        scorer=_scorer_summary(attempt_run.result),
+        agent=None,
+    )
+
+
+def _run_agent_control_eval_attempt(
+    *,
+    task: ResolvedEvalTask,
+    control_case: AgentControlScriptCase,
+    attempt_index: int,
+    attempt_dir: Path,
+) -> EvalAttemptRecord:
+    model_client = ScriptedFakeModelClient(
+        model_id="agent-control-scripted-v0",
+        script=control_case.script.steps,
+    )
+    decoding_config = model_client.default_decoding_config()
+    agent_task_run = run_and_persist_agent_task_attempt_to_dir(
+        task.manifest_path,
+        model_client,
+        decoding_config,
+        attempt_dir,
+        agent_control_script=control_case,
+    )
+    return EvalAttemptRecord(
+        task_id=task.task_id,
+        attempt_index=attempt_index,
+        attempt_dir=attempt_dir,
+        artifact_version=_child_artifact_version(attempt_dir),
+        scorer=None,
+        agent=_agent_summary(agent_task_run.result),
+    )
+
+
+def _agent_eval_attempt_payload_refs(
+    artifact_dir_ref: str,
+    attempt_dir: Path,
+) -> dict[str, str]:
+    payload_refs = {
+        "agent_task_run": f"{artifact_dir_ref}/agent_task_run.json",
+        "agent_control_script": f"{artifact_dir_ref}/agent_control_script.json",
+        "decoding_config": f"{artifact_dir_ref}/decoding_config.json",
+    }
+    if (attempt_dir / "prompt_loop_result.json").is_file():
+        payload_refs["prompt_loop_result"] = (
+            f"{artifact_dir_ref}/prompt_loop_result.json"
+        )
+    if (attempt_dir / "candidate.patch").is_file():
+        payload_refs["candidate_patch"] = f"{artifact_dir_ref}/candidate.patch"
+    if (attempt_dir / "attempt/attempt.json").is_file():
+        payload_refs["nested_attempt"] = f"{artifact_dir_ref}/attempt/attempt.json"
+    return payload_refs
 
 
 def _policy_metadata(config: EvalConfig, policy_name: str) -> dict[str, object]:
@@ -512,6 +631,22 @@ def _scorer_summary(result: AttemptResult) -> ScorerAttemptSummary:
     )
 
 
+def _agent_summary(result: AgentTaskRunResult) -> AgentAttemptSummary:
+    return AgentAttemptSummary(
+        run_id=result.run_id,
+        status=result.status,
+        prompt_loop_status=result.prompt_loop_status,
+        error_class=result.error_class,
+        candidate_patch_hash=result.candidate_patch_hash,
+        duration_ms=result.duration_ms,
+        scorer_attempt=(
+            _scorer_summary(result.attempt_result)
+            if result.attempt_result is not None
+            else None
+        ),
+    )
+
+
 def _scorer_summary_json(
     scorer: ScorerAttemptSummary | None,
 ) -> dict[str, object] | None:
@@ -543,6 +678,18 @@ def _agent_summary_json(
         "duration_ms": agent.duration_ms,
         "scorer_attempt": _scorer_summary_json(agent.scorer_attempt),
     }
+
+
+def _required_scorer(attempt: EvalAttemptRecord) -> ScorerAttemptSummary:
+    if attempt.scorer is None:
+        raise ValueError("Expected scorer eval attempt summary")
+    return attempt.scorer
+
+
+def _required_agent(attempt: EvalAttemptRecord) -> AgentAttemptSummary:
+    if attempt.agent is None:
+        raise ValueError("Expected agent eval attempt summary")
+    return attempt.agent
 
 
 def _child_artifact_version(attempt_dir: Path) -> str:

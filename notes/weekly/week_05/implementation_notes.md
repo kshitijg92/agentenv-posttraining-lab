@@ -1813,3 +1813,62 @@ uv run pytest tests/test_eval_run.py tests/test_reporting.py tests/test_replay.p
 uv run ruff check src/agentenv/orchestrators/eval_run.py src/agentenv/reporting/markdown.py src/agentenv/cli.py tests/test_eval_run.py tests/test_reporting.py
 uv run pyright
 ```
+
+## Agent-Control Eval Execution Decision
+
+### Decision
+
+`agent_control_script` eval policies now execute through the agent task runner
+instead of being left as config-only placeholders.
+
+Each agent-control eval attempt writes an `agent_task_run_artifacts_v0` child
+artifact directory and the eval attempt summary stores:
+
+```text
+agent.run_id
+agent.status
+agent.prompt_loop_status
+agent.error_class
+agent.candidate_patch_hash
+agent.duration_ms
+agent.scorer_attempt  # nested scorer summary, only when the agent produced a patch
+```
+
+The eval manifest keeps `scorer` and `agent` as separate primary execution
+summaries. For current policy types, one is populated and the other is null.
+For agent policies, any scorer result stays nested under
+`agent.scorer_attempt`.
+
+### Artifact Boundary
+
+The deterministic fake-model decoding defaults now live on
+`ScriptedFakeModelClient.default_decoding_config()`.
+
+`run_and_persist_agent_task_attempt_to_dir(...)` now persists
+`decoding_config.json` for agent task runs and can persist an optional
+`agent_control_script.json` source artifact. Controls, eval execution, and
+replay all use that shared persistence path instead of manually writing those
+files after the runner returns.
+
+This keeps the generic agent runner responsible for the artifacts it can see
+directly, while callers still explicitly provide the control-script provenance
+when the model client was built from a deterministic script.
+
+The CLI smoke run also exposed pytest temp-directory fragments in hidden-test
+`stdout.txt` artifacts, including pytest's shortened path rendering such as
+`...pytest-583/...`. Replay normalization now masks those volatile fragments so
+durable stdout comparison still catches semantic tampering without failing on
+per-run temp names.
+
+### Verification
+
+Focused and full checks passed:
+
+```bash
+uv run pytest tests/test_agent_task_run.py tests/test_replay.py tests/test_reporting.py tests/test_agent_control_scripts.py tests/models/test_fake_model.py tests/test_eval_run.py tests/test_controls_run.py
+uv run ruff check src/agentenv/reporting/markdown.py tests/test_reporting.py src/agentenv/orchestrators/agent_task_run.py src/agentenv/models/fake.py src/agentenv/controls/controls_run.py src/agentenv/orchestrators/eval_run.py src/agentenv/replay/runner.py tests/test_agent_task_run.py tests/test_replay.py tests/test_agent_control_scripts.py tests/models/test_fake_model.py
+uv run pyright src/agentenv/reporting/markdown.py tests/test_reporting.py src/agentenv/orchestrators/agent_task_run.py src/agentenv/models/fake.py src/agentenv/controls/controls_run.py src/agentenv/orchestrators/eval_run.py src/agentenv/replay/runner.py tests/test_agent_task_run.py tests/test_replay.py tests/test_agent_control_scripts.py tests/models/test_fake_model.py
+uv run ruff check .
+uv run pyright
+uv run pytest
+```

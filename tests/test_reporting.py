@@ -2,7 +2,6 @@ from pathlib import Path
 
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.models.fake import ScriptedFakeModelClient
-from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import (
     run_and_persist_agent_task_attempt_to_dir,
 )
@@ -15,6 +14,7 @@ from agentenv.reporting.markdown import write_markdown_report
 
 
 CONTROL_EVAL_CONFIG = Path("configs/eval/scorer_control_policies.yaml")
+AGENT_CONTROL_EVAL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
 TOY_TASK_MANIFEST = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 )
@@ -24,19 +24,8 @@ TOY_HAPPY_AGENT_CONTROL = Path(
 )
 
 
-def _decoding_config() -> DecodingConfig:
-    return DecodingConfig(
-        strategy="greedy",
-        temperature=0.0,
-        top_p=1.0,
-        max_new_tokens=512,
-        timeout_seconds=30,
-    )
-
-
 def _write_agent_control_source_artifact(out_dir: Path) -> None:
     control_case = load_agent_control_script_case(TOY_HAPPY_AGENT_CONTROL)
-    decoding_config = _decoding_config()
     model_client = ScriptedFakeModelClient(
         model_id="agent-control-scripted-v0",
         script=control_case.script.steps,
@@ -44,14 +33,9 @@ def _write_agent_control_source_artifact(out_dir: Path) -> None:
     run_and_persist_agent_task_attempt_to_dir(
         TOY_TASK_MANIFEST,
         model_client,
-        decoding_config,
+        model_client.default_decoding_config(),
         out_dir,
-    )
-    (out_dir / "decoding_config.json").write_text(
-        decoding_config.model_dump_json(indent=2) + "\n"
-    )
-    (out_dir / "agent_control_script.json").write_text(
-        control_case.model_dump_json(indent=2) + "\n"
+        agent_control_script=control_case,
     )
 
 
@@ -178,4 +162,35 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert (
         "| toy_python_fix_001 | bad-public-only | run_artifacts_v0 | "
         "HIDDEN_TEST_FAIL | PASS | FAIL |"
+    ) in report
+
+
+def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
+    run_eval_config_all_policies(
+        AGENT_CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+    )
+
+    report_path = write_markdown_report(
+        tmp_path / "eval_matrix",
+        tmp_path / "reports/agent_eval_matrix.md",
+    )
+    report = report_path.read_text()
+
+    assert "- Config name: agent_control_policies" in report
+    assert "- Policy count: 3" in report
+    assert "- Replay match rate: 3/3 (100%)" in report
+    assert (
+        "| agent-happy | 1 | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 0 | 0 | 0 |"
+    ) in report
+    assert (
+        "| agent-malformed | 1 | 0/1 (0%) | 0/1 (0%) | 0/1 (0%) | 0 | 0 | 0 |"
+    ) in report
+    assert (
+        "| toy_python_fix_001 | agent-happy | agent_task_run_artifacts_v0 | "
+        "PASS | PASS | PASS | scored | completed |"
+    ) in report
+    assert (
+        "| toy_python_fix_001 | agent-malformed | agent_task_run_artifacts_v0 | "
+        " |  |  | agent_loop_failed | invalid_model_output | MalformedModelOutput |"
     ) in report

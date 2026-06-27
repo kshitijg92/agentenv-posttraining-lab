@@ -59,6 +59,16 @@ def test_scripted_fake_model_returns_scripted_outputs_in_order() -> None:
     assert second_response.total_tokens is None
 
 
+def test_scripted_fake_model_default_decoding_config_is_deterministic() -> None:
+    decoding_config = ScriptedFakeModelClient.default_decoding_config()
+
+    assert decoding_config.strategy == "greedy"
+    assert decoding_config.temperature == 0.0
+    assert decoding_config.top_p == 1.0
+    assert decoding_config.max_new_tokens == 512
+    assert decoding_config.timeout_seconds == 30
+
+
 def test_scripted_fake_model_returns_error_when_script_exhausted() -> None:
     client = ScriptedFakeModelClient(
         model_id="fake-scripted-v0",

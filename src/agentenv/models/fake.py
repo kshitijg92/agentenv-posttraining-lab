@@ -21,6 +21,16 @@ class ScriptedFakeModelClient:
     raw_response_ref: str = "fake_model/raw_response.json"
     _next_index: int = field(default=0, init=False)
 
+    @staticmethod
+    def default_decoding_config() -> DecodingConfig:
+        return DecodingConfig(
+            strategy="greedy",
+            temperature=0.0,
+            top_p=1.0,
+            max_new_tokens=512,
+            timeout_seconds=30,
+        )
+
     def generate(
         self,
         messages: list[Message],

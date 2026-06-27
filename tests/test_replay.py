@@ -3,17 +3,17 @@ from pathlib import Path
 
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.models.fake import ScriptedFakeModelClient
-from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import (
     run_and_persist_agent_task_attempt_to_dir,
 )
 from agentenv.orchestrators.eval_run import run_eval_config
-from agentenv.replay.runner import run_replay
+from agentenv.replay.runner import _normalize_text, run_replay
 from agentenv.tracing.schema import ReplayTraceProvenance
 from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
 
 CONTROL_EVAL_CONFIG = Path("configs/eval/scorer_control_policies.yaml")
+DEV_BASELINE_EVAL_CONFIG = Path("configs/eval/dev_baseline.yaml")
 TOY_TASK_MANIFEST = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 )
@@ -40,22 +40,11 @@ AGENT_FIELD_MATCHES = {
 }
 
 
-def _decoding_config() -> DecodingConfig:
-    return DecodingConfig(
-        strategy="greedy",
-        temperature=0.0,
-        top_p=1.0,
-        max_new_tokens=512,
-        timeout_seconds=30,
-    )
-
-
 def _write_agent_control_source_artifact(
     control_path: Path,
     out_dir: Path,
 ) -> None:
     control_case = load_agent_control_script_case(control_path)
-    decoding_config = _decoding_config()
     model_client = ScriptedFakeModelClient(
         model_id="agent-control-scripted-v0",
         script=control_case.script.steps,
@@ -63,14 +52,9 @@ def _write_agent_control_source_artifact(
     run_and_persist_agent_task_attempt_to_dir(
         TOY_TASK_MANIFEST,
         model_client,
-        decoding_config,
+        model_client.default_decoding_config(),
         out_dir,
-    )
-    (out_dir / "decoding_config.json").write_text(
-        decoding_config.model_dump_json(indent=2) + "\n"
-    )
-    (out_dir / "agent_control_script.json").write_text(
-        control_case.model_dump_json(indent=2) + "\n"
+        agent_control_script=control_case,
     )
 
 
@@ -183,6 +167,46 @@ def test_run_replay_detects_durable_attempt_artifact_mismatch(
         **SCORER_ATTEMPT_ARTIFACTS,
         "stdout.txt": False,
     }
+
+
+def test_run_replay_normalizes_pytest_tmp_paths_for_dev_controls(
+    tmp_path: Path,
+) -> None:
+    run_eval_config(
+        DEV_BASELINE_EVAL_CONFIG,
+        "noop",
+        tmp_path / "source_run",
+    )
+
+    replay_run = run_replay(tmp_path / "source_run", tmp_path / "replay_run")
+
+    replay_result = json.loads((tmp_path / "replay_run/replay_result.json").read_text())
+    replay_records = [
+        json.loads(line)
+        for line in (tmp_path / "replay_run/replay_results.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+
+    assert replay_run.status == "PASS"
+    assert replay_result["status"] == "PASS"
+    assert replay_result["matched_attempts"] == 3
+    assert all(record["artifact_matches"]["stdout.txt"] for record in replay_records)
+
+
+def test_replay_normalizes_elided_pytest_tmp_path_fragments() -> None:
+    first = _normalize_text(
+        "...pytest-1119/test_duplicate_id_exits_with_i0/records.jsonl",
+        repo_roots=(),
+    )
+    second = _normalize_text(
+        "...ytest-1123/test_duplicate_id_exits_with_i0/records.jsonl",
+        repo_roots=(),
+    )
+
+    assert first == second == (
+        "...<PYTEST_TMP>/test_duplicate_id_exits_with_i0/records.jsonl"
+    )
 
 
 def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:

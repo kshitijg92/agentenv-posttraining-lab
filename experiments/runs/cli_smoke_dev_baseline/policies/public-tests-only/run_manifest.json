@@ -1,0 +1,84 @@
+{
+  "artifact_version": "eval_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "trace": "trace.jsonl"
+  },
+  "attempt_count": 3,
+  "attempts": [
+    {
+      "agent": null,
+      "artifact_dir": "attempts/repair_jsonl_deduper__attempt_001",
+      "artifact_version": "run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": {
+        "attempt_id": "attempt_3af7c0aa8a92483f9b7f3b34318639eb",
+        "duration_ms": 449,
+        "error_class": "HiddenCheckFailed",
+        "final_diff_hash": "xxh64:83ebe19f1a70c989",
+        "hidden_status": "FAIL",
+        "public_status": "PASS",
+        "run_id": "run_26c791becae64974b4aa1c6dfa127f1b",
+        "status": "HIDDEN_TEST_FAIL"
+      },
+      "task_id": "repair_jsonl_deduper"
+    },
+    {
+      "agent": null,
+      "artifact_dir": "attempts/preserve_cli_error_codes__attempt_001",
+      "artifact_version": "run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": {
+        "attempt_id": "attempt_844fb0ed04ee4e93b2dc46c480353879",
+        "duration_ms": 625,
+        "error_class": "HiddenCheckFailed",
+        "final_diff_hash": "xxh64:2318ffb1a4be45cf",
+        "hidden_status": "FAIL",
+        "public_status": "PASS",
+        "run_id": "run_7b7cfb6bb45c4568bd3eb9d09349cffc",
+        "status": "HIDDEN_TEST_FAIL"
+      },
+      "task_id": "preserve_cli_error_codes"
+    },
+    {
+      "agent": null,
+      "artifact_dir": "attempts/repair_config_precedence__attempt_001",
+      "artifact_version": "run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": {
+        "attempt_id": "attempt_0e1677a5bd4049a0a6f963aebe37046e",
+        "duration_ms": 476,
+        "error_class": "HiddenCheckFailed",
+        "final_diff_hash": "xxh64:8ea4a8dafa72fda7",
+        "hidden_status": "FAIL",
+        "public_status": "PASS",
+        "run_id": "run_aa22fae2aadd412b89b478c900a32065",
+        "status": "HIDDEN_TEST_FAIL"
+      },
+      "task_id": "repair_config_precedence"
+    }
+  ],
+  "config_hash": "xxh64:7d0070161dcfb5d0",
+  "config_name": "dev_baseline",
+  "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
+  "control_layer": "scorer",
+  "control_name": "bad.public_only",
+  "created_at": "2026-06-27T23:20:54.750111Z",
+  "eval_run_id": "eval_494bdfaa5bdf4eb0a230bc17b29c5941",
+  "layer_counts": {
+    "scorer_hidden_status": {
+      "FAIL": 3
+    },
+    "scorer_public_status": {
+      "PASS": 3
+    },
+    "scorer_status": {
+      "HIDDEN_TEST_FAIL": 3
+    }
+  },
+  "policy": "public-tests-only",
+  "policy_family": "control",
+  "policy_type": "scorer_control_patch",
+  "split": "dev",
+  "task_pack": "data/task_packs/repo_patch_python_v0"
+}

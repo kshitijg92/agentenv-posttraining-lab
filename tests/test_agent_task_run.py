@@ -118,6 +118,8 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
 
     assert artifact_paths.run_manifest_json == tmp_path / "out/run_manifest.json"
     assert artifact_paths.agent_task_run_json == tmp_path / "out/agent_task_run.json"
+    assert artifact_paths.decoding_config_json is None
+    assert artifact_paths.agent_control_script_json is None
     assert artifact_paths.agent_task_view_json == tmp_path / "out/agent_task_view.json"
     assert (
         artifact_paths.prompt_loop_result_json
@@ -249,17 +251,30 @@ def test_run_and_persist_agent_task_attempt_keeps_scratch_out_of_artifacts(
         ],
     )
     out_dir = tmp_path / "out"
+    agent_control_script = {"schema_version": "test_agent_control_script_v0"}
 
     agent_task_run = run_and_persist_agent_task_attempt_to_dir(
         TOY_TASK_MANIFEST,
         model_client,
         _decoding_config(),
         out_dir,
+        agent_control_script=agent_control_script,
     )
 
+    run_manifest = json.loads((out_dir / "run_manifest.json").read_text())
     assert agent_task_run.result.prompt_loop_status == "completed"
     assert (out_dir / "agent_task_run.json").is_file()
+    assert (out_dir / "decoding_config.json").is_file()
+    assert (out_dir / "agent_control_script.json").is_file()
     assert (out_dir / "prompt_loop_result.json").is_file()
+    assert run_manifest["artifacts"]["decoding_config"] == "decoding_config.json"
+    assert (
+        run_manifest["artifacts"]["agent_control_script"]
+        == "agent_control_script.json"
+    )
+    assert json.loads((out_dir / "agent_control_script.json").read_text()) == (
+        agent_control_script
+    )
     assert not (out_dir / "work").exists()
     assert not (out_dir / "agent_interaction_workspace").exists()
     assert not (out_dir / "scoring_workspace").exists()

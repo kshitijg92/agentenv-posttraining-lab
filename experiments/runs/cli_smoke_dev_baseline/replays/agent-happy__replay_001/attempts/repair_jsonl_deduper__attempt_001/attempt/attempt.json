@@ -1,0 +1,16 @@
+{
+  "run_id": "run_7ab5043282f747ec84247ffcdf4706f6",
+  "task_id": "repair_jsonl_deduper",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml",
+  "attempt_id": "attempt_4463ae81dfb14f0897e312598804cff7",
+  "submission_path": "/tmp/agentenv-agent_task_run_8b508361e2f5408ca2367d8a94a45629-z4jvapvx/candidate.patch",
+  "status": "PASS",
+  "public_status": "PASS",
+  "hidden_status": "PASS",
+  "error_class": null,
+  "started_at": "2026-06-27T23:21:06.416090Z",
+  "ended_at": "2026-06-27T23:21:06.861618Z",
+  "duration_ms": 445,
+  "final_diff_hash": "xxh64:791a044ad51af90c",
+  "orchestrator_version": "attempt_v0"
+}

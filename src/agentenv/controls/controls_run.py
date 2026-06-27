@@ -13,7 +13,6 @@ from agentenv.controls.agent_control_scripts import (
 from agentenv.evals.resolve import scorer_control_patch_path
 from agentenv.evals.schema import ScorerControlName
 from agentenv.models.fake import ScriptedFakeModelClient
-from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import (
     AgentTaskRun,
     run_and_persist_agent_task_attempt_to_dir,
@@ -193,19 +192,18 @@ def _run_agent_control(
     artifact_dir = (
         out_dir / f"{task.task_id}__{control_name}__repeat_{repeat_index + 1:03d}"
     )
-    decoding_config = _agent_control_decoding_config()
     model_client = ScriptedFakeModelClient(
         model_id="agent-control-scripted-v0",
         script=control_case.script.steps,
     )
+    decoding_config = model_client.default_decoding_config()
     agent_task_run = run_and_persist_agent_task_attempt_to_dir(
         task.manifest_path,
         model_client,
         decoding_config,
         artifact_dir,
+        agent_control_script=control_case,
     )
-    _write_decoding_config(decoding_config, artifact_dir)
-    _write_agent_control_script(control_case, artifact_dir)
 
     expected = _agent_expected_json(control_case.expected_result)
     actual = _agent_actual_json(agent_task_run)
@@ -570,31 +568,6 @@ def _agent_match(
         }
         for tool_result in expected_tool_results
     ]
-
-
-def _agent_control_decoding_config() -> DecodingConfig:
-    return DecodingConfig(
-        strategy="greedy",
-        temperature=0.0,
-        top_p=1.0,
-        max_new_tokens=512,
-        timeout_seconds=30,
-    )
-
-
-def _write_decoding_config(decoding_config: DecodingConfig, artifact_dir: Path) -> Path:
-    path = artifact_dir / "decoding_config.json"
-    path.write_text(decoding_config.model_dump_json(indent=2) + "\n")
-    return path
-
-
-def _write_agent_control_script(
-    control_case: AgentControlScriptCase,
-    artifact_dir: Path,
-) -> Path:
-    path = artifact_dir / "agent_control_script.json"
-    path.write_text(control_case.model_dump_json(indent=2) + "\n")
-    return path
 
 
 def _json_display(value: JsonObject) -> str:

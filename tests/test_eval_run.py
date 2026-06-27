@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.eval_run import (
     run_eval_config,
@@ -72,18 +70,101 @@ def test_agent_control_eval_config_paths_are_valid() -> None:
     validate_eval_config_paths(config, AGENT_CONTROL_EVAL_CONFIG)
 
 
-def test_agent_control_eval_policy_execution_is_not_wired_yet(
+def test_run_eval_config_writes_agent_control_happy_manifest(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(
-        NotImplementedError,
-        match="agent_control_script eval execution is not implemented yet",
-    ):
-        run_eval_config(
-            AGENT_CONTROL_EVAL_CONFIG,
-            "agent-happy",
-            tmp_path / "eval",
-        )
+    eval_run = run_eval_config(
+        AGENT_CONTROL_EVAL_CONFIG,
+        "agent-happy",
+        tmp_path / "eval",
+    )
+
+    run_manifest_path = tmp_path / "eval/run_manifest.json"
+    run_manifest = json.loads(run_manifest_path.read_text())
+
+    assert eval_run.config.name == "agent_control_policies"
+    assert eval_run.policy == "agent-happy"
+    assert len(eval_run.attempts) == 1
+    assert eval_run.attempts[0].scorer is None
+    assert eval_run.attempts[0].agent is not None
+    assert eval_run.attempts[0].agent.status == "scored"
+    assert run_manifest["policy_type"] == "agent_control_script"
+    assert run_manifest["policy_family"] == "control"
+    assert run_manifest["control_layer"] == "agent"
+    assert run_manifest["control_name"] == "happy"
+    assert run_manifest["layer_counts"] == {
+        "agent_scorer_hidden_status": {"PASS": 1},
+        "agent_scorer_public_status": {"PASS": 1},
+        "agent_scorer_status": {"PASS": 1},
+        "agent_status": {"scored": 1},
+        "prompt_loop_status": {"completed": 1},
+    }
+    attempt_record = run_manifest["attempts"][0]
+    assert attempt_record["task_id"] == "toy_python_fix_001"
+    assert attempt_record["artifact_version"] == "agent_task_run_artifacts_v0"
+    assert attempt_record["scorer"] is None
+    assert attempt_record["agent"]["status"] == "scored"
+    assert attempt_record["agent"]["prompt_loop_status"] == "completed"
+    assert attempt_record["agent"]["error_class"] is None
+    assert attempt_record["agent"]["candidate_patch_hash"] == "xxh64:e3fc746d6fe0786c"
+    assert attempt_record["agent"]["scorer_attempt"]["status"] == "PASS"
+    assert attempt_record["agent"]["scorer_attempt"]["public_status"] == "PASS"
+    assert attempt_record["agent"]["scorer_attempt"]["hidden_status"] == "PASS"
+    attempt_dir = tmp_path / "eval" / attempt_record["artifact_dir"]
+    assert (attempt_dir / "agent_task_run.json").is_file()
+    assert (attempt_dir / "prompt_loop_result.json").is_file()
+    assert (attempt_dir / "candidate.patch").is_file()
+    assert (attempt_dir / "attempt/attempt.json").is_file()
+    assert (attempt_dir / "decoding_config.json").is_file()
+    assert (attempt_dir / "agent_control_script.json").is_file()
+    validate_trace_file(tmp_path / "eval/trace.jsonl")
+    trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
+    assert trace_events[3].output_payload is not None
+    assert trace_events[3].output_payload["agent"]["status"] == "scored"
+    assert trace_events[3].payload_refs == {
+        "agent_control_script": (
+            "attempts/toy_python_fix_001__attempt_001/agent_control_script.json"
+        ),
+        "agent_task_run": "attempts/toy_python_fix_001__attempt_001/agent_task_run.json",
+        "candidate_patch": "attempts/toy_python_fix_001__attempt_001/candidate.patch",
+        "decoding_config": "attempts/toy_python_fix_001__attempt_001/decoding_config.json",
+        "nested_attempt": "attempts/toy_python_fix_001__attempt_001/attempt/attempt.json",
+        "prompt_loop_result": (
+            "attempts/toy_python_fix_001__attempt_001/prompt_loop_result.json"
+        ),
+    }
+
+
+def test_run_eval_config_records_agent_control_malformed_failure(
+    tmp_path: Path,
+) -> None:
+    run_eval_config(
+        AGENT_CONTROL_EVAL_CONFIG,
+        "agent-malformed",
+        tmp_path / "eval",
+    )
+
+    run_manifest = json.loads((tmp_path / "eval/run_manifest.json").read_text())
+
+    assert run_manifest["layer_counts"] == {
+        "agent_status": {"agent_loop_failed": 1},
+        "prompt_loop_status": {"invalid_model_output": 1},
+    }
+    attempt_record = run_manifest["attempts"][0]
+    assert attempt_record["artifact_version"] == "agent_task_run_artifacts_v0"
+    assert attempt_record["scorer"] is None
+    assert attempt_record["agent"]["status"] == "agent_loop_failed"
+    assert attempt_record["agent"]["prompt_loop_status"] == "invalid_model_output"
+    assert attempt_record["agent"]["error_class"] == "MalformedModelOutput"
+    assert attempt_record["agent"]["candidate_patch_hash"] is None
+    assert attempt_record["agent"]["scorer_attempt"] is None
+    attempt_dir = tmp_path / "eval" / attempt_record["artifact_dir"]
+    assert (attempt_dir / "agent_task_run.json").is_file()
+    assert (attempt_dir / "prompt_loop_result.json").is_file()
+    assert (attempt_dir / "decoding_config.json").is_file()
+    assert (attempt_dir / "agent_control_script.json").is_file()
+    assert not (attempt_dir / "candidate.patch").exists()
+    assert not (attempt_dir / "attempt").exists()
 
 
 def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
@@ -199,6 +280,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     ]
     assert matrix_manifest["artifact_version"] == "eval_matrix_v0"
     assert matrix_manifest["config_name"] == "scorer_control_policies"
+    assert matrix_manifest["task_count"] == 1
     assert matrix_manifest["policy_count"] == 3
     assert matrix_manifest["attempt_count"] == 3
     assert "status_counts" not in matrix_manifest
@@ -268,6 +350,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     ).is_file()
     assert matrix_manifest["replay_policy_scope"] == "control_policies"
     assert matrix_manifest["replay_repeats"] == 1
+    assert matrix_manifest["replay_run_success_summary"] == "3/3"
     assert len(matrix_manifest["replay_runs"]) == 3
 
 
@@ -289,6 +372,7 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
     }
     assert matrix_manifest["replay_policy_scope"] == "control_policies"
     assert matrix_manifest["replay_repeats"] == 1
+    assert matrix_manifest["replay_run_success_summary"] == "3/3"
     assert matrix_manifest["replay_runs"] == [
         {
             "policy": "oracle",
@@ -340,4 +424,65 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
     assert (
         tmp_path
         / "eval_matrix/replays/bad-public-only__replay_001/replay_result.json"
+    ).is_file()
+
+
+def test_run_eval_config_all_policies_replays_agent_control_policies(
+    tmp_path: Path,
+) -> None:
+    eval_matrix = run_eval_config_all_policies(
+        AGENT_CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+    )
+
+    matrix_manifest = json.loads(
+        (tmp_path / "eval_matrix/eval_matrix_manifest.json").read_text()
+    )
+
+    assert [run.policy for run in eval_matrix.policy_runs] == [
+        "agent-happy",
+        "agent-malformed",
+        "agent-recoverable",
+    ]
+    assert len(eval_matrix.replay_runs) == 3
+    assert matrix_manifest["task_count"] == 1
+    assert matrix_manifest["layer_counts"] == {
+        "agent_scorer_hidden_status": {"PASS": 2},
+        "agent_scorer_public_status": {"PASS": 2},
+        "agent_scorer_status": {"PASS": 2},
+        "agent_status": {"agent_loop_failed": 1, "scored": 2},
+        "prompt_loop_status": {"completed": 2, "invalid_model_output": 1},
+    }
+    assert [
+        replay_record["policy"] for replay_record in matrix_manifest["replay_runs"]
+    ] == [
+        "agent-happy",
+        "agent-malformed",
+        "agent-recoverable",
+    ]
+    assert {
+        replay_record["status"] for replay_record in matrix_manifest["replay_runs"]
+    } == {"PASS"}
+    assert matrix_manifest["replay_run_success_summary"] == "3/3"
+    happy_manifest = json.loads(
+        (
+            tmp_path
+            / "eval_matrix/policies/agent-happy/run_manifest.json"
+        ).read_text()
+    )
+    malformed_manifest = json.loads(
+        (
+            tmp_path
+            / "eval_matrix/policies/agent-malformed/run_manifest.json"
+        ).read_text()
+    )
+    assert happy_manifest["attempts"][0]["agent"]["scorer_attempt"]["status"] == "PASS"
+    assert malformed_manifest["attempts"][0]["agent"]["scorer_attempt"] is None
+    assert (
+        tmp_path
+        / "eval_matrix/replays/agent-happy__replay_001/replay_result.json"
+    ).is_file()
+    assert (
+        tmp_path
+        / "eval_matrix/replays/agent-malformed__replay_001/replay_result.json"
     ).is_file()

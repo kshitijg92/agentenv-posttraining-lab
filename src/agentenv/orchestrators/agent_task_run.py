@@ -1,10 +1,11 @@
+import json
 import tempfile
 import traceback
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -71,6 +72,8 @@ class AgentTaskRun:
 class AgentTaskRunArtifactPaths:
     run_manifest_json: Path
     agent_task_run_json: Path
+    decoding_config_json: Path | None
+    agent_control_script_json: Path | None
     agent_task_view_json: Path | None
     prompt_loop_result_json: Path | None
     candidate_patch: Path | None
@@ -216,23 +219,41 @@ def run_and_persist_agent_task_attempt_to_dir(
     model_client: ModelClient,
     decoding_config: DecodingConfig,
     out_dir: Path,
+    *,
+    agent_control_script: BaseModel | dict[str, Any] | None = None,
 ) -> AgentTaskRun:
     agent_task_run = run_agent_task_attempt(
         task_manifest_path,
         model_client,
         decoding_config,
     )
-    write_agent_task_run_artifacts(agent_task_run, out_dir)
+    write_agent_task_run_artifacts(
+        agent_task_run,
+        out_dir,
+        decoding_config=decoding_config,
+        agent_control_script=agent_control_script,
+    )
     return agent_task_run
 
 
 def write_agent_task_run_artifacts(
     agent_task_run: AgentTaskRun,
     out_dir: Path,
+    *,
+    decoding_config: DecodingConfig | None = None,
+    agent_control_script: BaseModel | dict[str, Any] | None = None,
 ) -> AgentTaskRunArtifactPaths:
     out_dir.mkdir(parents=True, exist_ok=True)
     run_manifest_path = out_dir / "run_manifest.json"
     agent_task_run_path = out_dir / "agent_task_run.json"
+    decoding_config_path = (
+        out_dir / "decoding_config.json" if decoding_config is not None else None
+    )
+    agent_control_script_path = (
+        out_dir / "agent_control_script.json"
+        if agent_control_script is not None
+        else None
+    )
     agent_task_view_path = (
         out_dir / "agent_task_view.json"
         if agent_task_run.agent_task_view is not None
@@ -252,6 +273,10 @@ def write_agent_task_run_artifacts(
     attempt_dir = out_dir / "attempt" if agent_task_run.attempt_run is not None else None
 
     agent_task_run_path.write_text(agent_task_run.result.model_dump_json(indent=2) + "\n")
+    if decoding_config_path is not None and decoding_config is not None:
+        decoding_config_path.write_text(decoding_config.model_dump_json(indent=2) + "\n")
+    if agent_control_script_path is not None and agent_control_script is not None:
+        agent_control_script_path.write_text(_json_artifact(agent_control_script))
     agent_task_view = agent_task_run.agent_task_view
     if agent_task_view_path is not None and agent_task_view is not None:
         agent_task_view_path.write_text(agent_task_view.model_dump_json(indent=2) + "\n")
@@ -269,11 +294,19 @@ def write_agent_task_run_artifacts(
         if agent_task_run.attempt_run is not None and attempt_dir is not None
         else None
     )
-    run_manifest_path.write_text(_run_manifest_json(agent_task_run))
+    run_manifest_path.write_text(
+        _run_manifest_json(
+            agent_task_run,
+            include_decoding_config=decoding_config is not None,
+            include_agent_control_script=agent_control_script is not None,
+        )
+    )
 
     return AgentTaskRunArtifactPaths(
         run_manifest_json=run_manifest_path,
         agent_task_run_json=agent_task_run_path,
+        decoding_config_json=decoding_config_path,
+        agent_control_script_json=agent_control_script_path,
         agent_task_view_json=agent_task_view_path,
         prompt_loop_result_json=prompt_loop_result_path,
         candidate_patch=candidate_patch_path,
@@ -281,6 +314,12 @@ def write_agent_task_run_artifacts(
         attempt_dir=attempt_dir,
         attempt_artifacts=attempt_artifacts,
     )
+
+
+def _json_artifact(value: BaseModel | dict[str, Any]) -> str:
+    if isinstance(value, BaseModel):
+        return value.model_dump_json(indent=2) + "\n"
+    return json.dumps(value, indent=2, sort_keys=True) + "\n"
 
 
 def _run_root(workspace_parent: Path | None, run_id: str) -> Path:
@@ -347,11 +386,20 @@ def _error_text(agent_task_run: AgentTaskRun) -> str:
     )
 
 
-def _run_manifest_json(agent_task_run: AgentTaskRun) -> str:
+def _run_manifest_json(
+    agent_task_run: AgentTaskRun,
+    *,
+    include_decoding_config: bool,
+    include_agent_control_script: bool,
+) -> str:
     artifacts: dict[str, str] = {
         "agent_task_run": "agent_task_run.json",
         "error": "error.txt",
     }
+    if include_decoding_config:
+        artifacts["decoding_config"] = "decoding_config.json"
+    if include_agent_control_script:
+        artifacts["agent_control_script"] = "agent_control_script.json"
     if agent_task_run.agent_task_view is not None:
         artifacts["agent_task_view"] = "agent_task_view.json"
     if agent_task_run.prompt_loop_result is not None:

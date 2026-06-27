@@ -10,7 +10,6 @@ from agentenv.controls.agent_control_scripts import (
     load_agent_control_script_case,
 )
 from agentenv.models.fake import ScriptedFakeModelClient
-from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import run_agent_task_attempt
 
 
@@ -33,16 +32,6 @@ TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
 ALL_AGENT_CONTROL_CASES = sorted(
     TASK_PACK.glob("tasks/*/controls/agent_control_scripts/*.json")
 )
-
-
-def _decoding_config() -> DecodingConfig:
-    return DecodingConfig(
-        strategy="greedy",
-        temperature=0.0,
-        top_p=1.0,
-        max_new_tokens=512,
-        timeout_seconds=30,
-    )
 
 
 def test_happy_path_agent_control_script_loads() -> None:
@@ -109,7 +98,7 @@ def test_agent_control_matches_prompt_loop_expectation(
     agent_task_run = run_agent_task_attempt(
         task_manifest_path,
         model_client,
-        _decoding_config(),
+        model_client.default_decoding_config(),
         workspace_parent=tmp_path / "work",
     )
 

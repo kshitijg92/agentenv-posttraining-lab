@@ -1,0 +1,14 @@
+{
+  "artifact_version": "replay_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "replay_result": "replay_result.json",
+    "replay_results": "replay_results.jsonl",
+    "trace": "trace.jsonl"
+  },
+  "created_at": "2026-06-27T23:21:04.498340Z",
+  "replay_id": "replay_daf0b2e6e80b465eafdee566c9b31d4d",
+  "source_artifact_version": "eval_run_v0",
+  "source_eval_run_id": "eval_494bdfaa5bdf4eb0a230bc17b29c5941",
+  "source_run_dir": "/home/kshitij/agentenv-posttraining-lab/experiments/runs/cli_smoke_dev_baseline/policies/public-tests-only"
+}

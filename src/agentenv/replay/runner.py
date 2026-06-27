@@ -430,9 +430,8 @@ def _replay_agent_task_run_artifact(
         model_client,
         decoding_config,
         replay_agent_dir,
+        agent_control_script=control_case,
     )
-    _write_decoding_config(decoding_config, replay_agent_dir)
-    _write_agent_control_script(control_case.model_dump(), replay_agent_dir)
     replay_agent_result = replay_agent_run.result
     replay_provenance = _event_provenance(
         base_provenance,
@@ -679,6 +678,16 @@ def _normalize_text(text: str, *, repo_roots: tuple[Path, ...]) -> str:
     for repo_root in repo_roots:
         normalized = normalized.replace(str(repo_root), "<REPO_ROOT>")
     normalized = re.sub(r"/tmp/agentenv-[^/\s:]+", "<AGENTENV_TMP>", normalized)
+    normalized = re.sub(
+        r"/tmp/pytest-of-[^/\s:]+/pytest-(?:\d+|current)",
+        "<PYTEST_TMP>",
+        normalized,
+    )
+    normalized = re.sub(
+        r"\.\.\.[^'\"\s]*/?p?ytest-(?:\d+|current)",
+        "...<PYTEST_TMP>",
+        normalized,
+    )
     normalized = re.sub(r"in \d+\.\d+s", "in <PYTEST_DURATION>s", normalized)
     normalized = re.sub(r"in \d+ms", "in <TOOL_DURATION>ms", normalized)
     return normalized
@@ -775,21 +784,6 @@ def _source_agent_model_id(source_agent_dir: Path) -> str:
                 if isinstance(model_id, str) and model_id:
                     return model_id
     return "agent-control-scripted-v0"
-
-
-def _write_decoding_config(decoding_config: DecodingConfig, artifact_dir: Path) -> Path:
-    path = artifact_dir / DECODING_CONFIG_ARTIFACT
-    path.write_text(decoding_config.model_dump_json(indent=2) + "\n")
-    return path
-
-
-def _write_agent_control_script(
-    agent_control_script: dict[str, object],
-    artifact_dir: Path,
-) -> Path:
-    path = artifact_dir / AGENT_CONTROL_SCRIPT_ARTIFACT
-    path.write_text(json.dumps(agent_control_script, indent=2, sort_keys=True) + "\n")
-    return path
 
 
 def _repo_root_from_path(path: Path) -> Path:
