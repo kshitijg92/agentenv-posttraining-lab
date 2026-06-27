@@ -47,11 +47,11 @@ def scorer_control_patch_path(
     control: ControlName,
 ) -> Path:
     if control == "oracle":
-        relative_path = manifest.controls.oracle
+        relative_path = manifest.controls.scorer_control_patches.oracle
     elif control == "bad.noop":
-        relative_path = manifest.controls.bad.noop
+        relative_path = manifest.controls.scorer_control_patches.bad.noop
     else:
-        relative_path = manifest.controls.bad.public_only
+        relative_path = manifest.controls.scorer_control_patches.bad.public_only
 
     patch_path = (task_dir / relative_path).resolve()
     if not patch_path.is_file():

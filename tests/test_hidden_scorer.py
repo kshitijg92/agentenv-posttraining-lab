@@ -16,9 +16,9 @@ TOY_TASK_MANIFEST = Path(
 @pytest.mark.parametrize(
     ("patch_path", "expected_passed"),
     [
-        ("controls/oracle.patch", True),
-        ("controls/bad_noop.patch", False),
-        ("controls/bad_public_only.patch", False),
+        ("controls/scorer_control_patches/oracle.patch", True),
+        ("controls/scorer_control_patches/bad_noop.patch", False),
+        ("controls/scorer_control_patches/bad_public_only.patch", False),
     ],
 )
 def test_hidden_scorer_distinguishes_controls(

@@ -82,9 +82,9 @@ excluded.
 Every task must include controls before it can be trusted in a baseline:
 
 ```text
-controls/oracle.patch
-controls/bad_noop.patch
-controls/bad_public_only.patch
+controls/scorer_control_patches/oracle.patch
+controls/scorer_control_patches/bad_noop.patch
+controls/scorer_control_patches/bad_public_only.patch
 ```
 
 Expected outcomes:

@@ -11,9 +11,9 @@ task.yaml
 task_card.md
 seed_workspace/
 hidden_tests/
-controls/oracle.patch
-controls/bad_noop.patch
-controls/bad_public_only.patch
+controls/scorer_control_patches/oracle.patch
+controls/scorer_control_patches/bad_noop.patch
+controls/scorer_control_patches/bad_public_only.patch
 ```
 
 ## Task Shape
@@ -94,9 +94,9 @@ bad.public_only -> HIDDEN_TEST_FAIL / PASS / FAIL
 For each task, run or include in repeated control calibration:
 
 ```bash
-uv run agentenv attempt run --task-manifest <task>/task.yaml --submission <task>/controls/oracle.patch --out <out>
-uv run agentenv attempt run --task-manifest <task>/task.yaml --submission <task>/controls/bad_noop.patch --out <out>
-uv run agentenv attempt run --task-manifest <task>/task.yaml --submission <task>/controls/bad_public_only.patch --out <out>
+uv run agentenv attempt run --task-manifest <task>/task.yaml --submission <task>/controls/scorer_control_patches/oracle.patch --out <out>
+uv run agentenv attempt run --task-manifest <task>/task.yaml --submission <task>/controls/scorer_control_patches/bad_noop.patch --out <out>
+uv run agentenv attempt run --task-manifest <task>/task.yaml --submission <task>/controls/scorer_control_patches/bad_public_only.patch --out <out>
 ```
 
 Then run the pack-level repeated controls before including the task in a

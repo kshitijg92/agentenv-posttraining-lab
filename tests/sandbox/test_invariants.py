@@ -11,7 +11,7 @@ TOY_TASK_MANIFEST = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 )
 TOY_ORACLE_PATCH = Path(
-    "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/oracle.patch"
+    "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/scorer_control_patches/oracle.patch"
 )
 TOY_TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
 
@@ -46,9 +46,9 @@ def test_scorer_control_patches_are_not_present_in_prepared_agent_workspace(
     )
 
     control_paths = [
-        manifest.controls.oracle,
-        manifest.controls.bad.noop,
-        manifest.controls.bad.public_only,
+        manifest.controls.scorer_control_patches.oracle,
+        manifest.controls.scorer_control_patches.bad.noop,
+        manifest.controls.scorer_control_patches.bad.public_only,
     ]
     for control_path in control_paths:
         assert (task_dir / control_path).is_file()

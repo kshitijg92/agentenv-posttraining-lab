@@ -20,7 +20,7 @@ def test_apply_oracle_patch_to_prepared_workspace(tmp_path: Path) -> None:
 
     result = apply_patch_file(
         workspace.path,
-        workspace.task_dir / manifest.controls.oracle,
+        workspace.task_dir / manifest.controls.scorer_control_patches.oracle,
         timeout_seconds=manifest.limits.timeout_seconds,
     )
 
@@ -40,7 +40,7 @@ def test_empty_patch_is_successful_noop(tmp_path: Path) -> None:
 
     result = apply_patch_file(
         workspace.path,
-        workspace.task_dir / manifest.controls.bad.noop,
+        workspace.task_dir / manifest.controls.scorer_control_patches.bad.noop,
         timeout_seconds=manifest.limits.timeout_seconds,
     )
 

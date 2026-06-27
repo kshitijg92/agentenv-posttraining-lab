@@ -20,7 +20,7 @@ TOY_TASK_MANIFEST = Path(
 def test_write_attempt_artifacts(tmp_path: Path) -> None:
     attempt_run = run_patch_attempt(
         TOY_TASK_MANIFEST,
-        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        TOY_TASK_MANIFEST.parent / "controls/scorer_control_patches/oracle.patch",
         workspace_parent=tmp_path / "workspace_parent",
     )
 
@@ -100,7 +100,7 @@ def test_write_attempt_artifacts_preserves_orchestrator_error_details(
 
     attempt_run = run_patch_attempt(
         TOY_TASK_MANIFEST,
-        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        TOY_TASK_MANIFEST.parent / "controls/scorer_control_patches/oracle.patch",
         workspace_parent=tmp_path / "workspace_parent",
     )
 
@@ -124,7 +124,7 @@ def test_write_attempt_artifacts_preserves_orchestrator_error_details(
 def test_run_and_persist_patch_attempt_to_dir(tmp_path: Path) -> None:
     attempt_run = run_and_persist_patch_attempt_to_dir(
         TOY_TASK_MANIFEST,
-        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        TOY_TASK_MANIFEST.parent / "controls/scorer_control_patches/oracle.patch",
         tmp_path / "out",
     )
 

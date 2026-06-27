@@ -19,7 +19,7 @@ def test_attempt_result_schema() -> None:
         task_id="toy_python_fix_001",
         task_manifest_path="data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
         attempt_id="attempt_001",
-        submission_path="controls/oracle.patch",
+        submission_path="controls/scorer_control_patches/oracle.patch",
         status="PASS",
         public_status="PASS",
         hidden_status="PASS",
@@ -40,9 +40,9 @@ def test_attempt_result_schema() -> None:
 @pytest.mark.parametrize(
     ("patch_path", "expected_status", "expected_public", "expected_hidden"),
     [
-        ("controls/oracle.patch", "PASS", "PASS", "PASS"),
-        ("controls/bad_noop.patch", "HIDDEN_TEST_FAIL", "PASS", "FAIL"),
-        ("controls/bad_public_only.patch", "HIDDEN_TEST_FAIL", "PASS", "FAIL"),
+        ("controls/scorer_control_patches/oracle.patch", "PASS", "PASS", "PASS"),
+        ("controls/scorer_control_patches/bad_noop.patch", "HIDDEN_TEST_FAIL", "PASS", "FAIL"),
+        ("controls/scorer_control_patches/bad_public_only.patch", "HIDDEN_TEST_FAIL", "PASS", "FAIL"),
     ],
 )
 def test_run_patch_attempt_distinguishes_controls(
@@ -68,7 +68,7 @@ def test_run_patch_attempt_distinguishes_controls(
     assert result.final_diff_hash.startswith("xxh64:")
     assert attempt_run.command_results
 
-    if patch_path == "controls/bad_noop.patch":
+    if patch_path == "controls/scorer_control_patches/bad_noop.patch":
         assert attempt_run.final_diff == ""
     else:
         assert "src/mathlib.py" in attempt_run.final_diff
@@ -89,7 +89,7 @@ def test_run_patch_attempt_surfaces_unexpected_exception_as_orchestrator_error(
 
     attempt_run = run_patch_attempt(
         TOY_TASK_MANIFEST,
-        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        TOY_TASK_MANIFEST.parent / "controls/scorer_control_patches/oracle.patch",
         workspace_parent=tmp_path,
     )
 
@@ -222,7 +222,7 @@ def test_run_patch_attempt_reports_patch_apply_timeout_phase(
 
     attempt_run = run_patch_attempt(
         TOY_TASK_MANIFEST,
-        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        TOY_TASK_MANIFEST.parent / "controls/scorer_control_patches/oracle.patch",
         workspace_parent=tmp_path,
     )
 
@@ -244,7 +244,7 @@ def test_run_patch_attempt_reports_public_check_timeout_phase(
 
     attempt_run = run_patch_attempt(
         TOY_TASK_MANIFEST,
-        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        TOY_TASK_MANIFEST.parent / "controls/scorer_control_patches/oracle.patch",
         workspace_parent=tmp_path,
     )
 
@@ -277,7 +277,7 @@ def test_run_patch_attempt_reports_hidden_validation_timeout_phase(
 
     attempt_run = run_patch_attempt(
         TOY_TASK_MANIFEST,
-        TOY_TASK_MANIFEST.parent / "controls/oracle.patch",
+        TOY_TASK_MANIFEST.parent / "controls/scorer_control_patches/oracle.patch",
         workspace_parent=tmp_path,
     )
 

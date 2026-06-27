@@ -95,9 +95,9 @@ The hidden validator should be deterministic and should not depend on network ac
 This task should include three control patches:
 
 ```text
-controls/oracle.patch
-controls/bad_noop.patch
-controls/bad_public_only.patch
+controls/scorer_control_patches/oracle.patch
+controls/scorer_control_patches/bad_noop.patch
+controls/scorer_control_patches/bad_public_only.patch
 ```
 
 Expected behavior:

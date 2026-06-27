@@ -884,9 +884,9 @@ The test should derive paths from the manifest, not hardcode the current toy
 task layout. That keeps the invariant attached to the task contract:
 
 ```text
-manifest.controls.oracle
-manifest.controls.bad.noop
-manifest.controls.bad.public_only
+manifest.controls.scorer_control_patches.oracle
+manifest.controls.scorer_control_patches.bad.noop
+manifest.controls.scorer_control_patches.bad.public_only
 ```
 
 ### Shipped

@@ -140,9 +140,9 @@ control attempts.
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 ```
 
@@ -248,9 +248,9 @@ Recalibrate `repair_jsonl_deduper` after the seed-docstring change.
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
 uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/src/jsonl_tools.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py
@@ -297,9 +297,9 @@ contract update.
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
 uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/src/jsonl_tools.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/seed_workspace/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py
@@ -353,9 +353,9 @@ Regenerate `dev_controls` so generated evidence uses the current task id.
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
 rm -rf experiments/runs/dev_controls
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
@@ -413,9 +413,9 @@ Recalibrate `repair_jsonl_deduper` after relaxing hidden error-message checks.
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/oracle.patch --out /tmp/agentenv-repair-jsonl-oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_noop.patch --out /tmp/agentenv-repair-jsonl-noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_public_only.patch --out /tmp/agentenv-repair-jsonl-public-only
 rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
 uv run ruff check data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/hidden_tests/test_behavior.py tests/test_controls_run.py tests/test_task_manifest.py
@@ -484,9 +484,9 @@ control attempts.
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/oracle.patch --out /tmp/agentenv-preserve-cli-oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_noop.patch --out /tmp/agentenv-preserve-cli-noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_public_only.patch --out /tmp/agentenv-preserve-cli-public-only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/scorer_control_patches/oracle.patch --out /tmp/agentenv-preserve-cli-oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/scorer_control_patches/bad_noop.patch --out /tmp/agentenv-preserve-cli-noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/scorer_control_patches/bad_public_only.patch --out /tmp/agentenv-preserve-cli-public-only
 rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
 uv run ruff check data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/seed_workspace/src/validate_records.py data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/seed_workspace/tests/test_public.py data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/hidden_tests/test_cli_behavior.py tests/test_controls_run.py tests/test_task_manifest.py
@@ -565,9 +565,9 @@ error-message wording.
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/oracle.patch --out /tmp/repair_config_precedence_oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_noop.patch --out /tmp/repair_config_precedence_noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_public_only.patch --out /tmp/repair_config_precedence_public_only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/oracle.patch --out /tmp/repair_config_precedence_oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_noop.patch --out /tmp/repair_config_precedence_noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_public_only.patch --out /tmp/repair_config_precedence_public_only
 rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
 uv run pytest
@@ -620,9 +620,9 @@ public tests and fails hidden on exactly this mixed merge case.
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/oracle.patch --out /tmp/repair_config_precedence_oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_public_only.patch --out /tmp/repair_config_precedence_public_only
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_noop.patch --out /tmp/repair_config_precedence_noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/oracle.patch --out /tmp/repair_config_precedence_oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_public_only.patch --out /tmp/repair_config_precedence_public_only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_noop.patch --out /tmp/repair_config_precedence_noop
 rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
 uv run pytest
@@ -665,12 +665,12 @@ Fixed the three suite-review findings:
 ```bash
 env -u VIRTUAL_ENV uv run pytest tests/test_public.py
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/oracle.patch --out /tmp/fix_preserve_oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_noop.patch --out /tmp/fix_preserve_noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/bad_public_only.patch --out /tmp/fix_preserve_public_only
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/oracle.patch --out /tmp/fix_config_oracle
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_noop.patch --out /tmp/fix_config_noop
-uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/bad_public_only.patch --out /tmp/fix_config_public_only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/scorer_control_patches/oracle.patch --out /tmp/fix_preserve_oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/scorer_control_patches/bad_noop.patch --out /tmp/fix_preserve_noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/scorer_control_patches/bad_public_only.patch --out /tmp/fix_preserve_public_only
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/oracle.patch --out /tmp/fix_config_oracle
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_noop.patch --out /tmp/fix_config_noop
+uv run agentenv attempt run --task-manifest data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml --submission data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_public_only.patch --out /tmp/fix_config_public_only
 rm -rf experiments/runs/dev_controls && uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/dev_controls
 uv run pytest tests/test_controls_run.py tests/test_task_manifest.py
 uv run pytest

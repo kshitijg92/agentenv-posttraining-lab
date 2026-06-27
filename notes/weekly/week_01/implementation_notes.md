@@ -213,10 +213,10 @@ I changed the manifest schema so bad controls are named by role:
 
 ```yaml
 controls:
-  oracle: controls/oracle.patch
+  oracle: controls/scorer_control_patches/oracle.patch
   bad:
-    noop: controls/bad_noop.patch
-    public_only: controls/bad_public_only.patch
+    noop: controls/scorer_control_patches/bad_noop.patch
+    public_only: controls/scorer_control_patches/bad_public_only.patch
 ```
 
 This is better than an anonymous list because `noop` and `public_only` test different failure modes. The schema should require both for this task family.

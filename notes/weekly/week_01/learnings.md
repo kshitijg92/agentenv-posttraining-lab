@@ -57,7 +57,7 @@ flowchart LR
     subgraph agent_phase[Agent or patch-author phase]
         derived_instruction[Derived task instruction<br/>from safe manifest fields]
         agent_workspace[Prepared workspace<br/>copy of seed_workspace only]
-        patch[Submitted patch<br/>example: controls/oracle.patch]
+        patch[Submitted patch<br/>example: controls/scorer_control_patches/oracle.patch]
     end
 
     subgraph orchestrator[Orchestrator: agentenv attempt run]

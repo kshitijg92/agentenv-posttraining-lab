@@ -16,9 +16,9 @@ TOY_TASK_MANIFEST = Path(
 @pytest.mark.parametrize(
     "patch_path",
     [
-        "controls/oracle.patch",
-        "controls/bad_noop.patch",
-        "controls/bad_public_only.patch",
+        "controls/scorer_control_patches/oracle.patch",
+        "controls/scorer_control_patches/bad_noop.patch",
+        "controls/scorer_control_patches/bad_public_only.patch",
     ],
 )
 def test_controls_pass_public_checks(tmp_path: Path, patch_path: str) -> None:

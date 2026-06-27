@@ -11,9 +11,9 @@ required_task_files:
   - task_card.md
   - seed_workspace
   - hidden_tests
-  - controls/oracle.patch
-  - controls/bad_noop.patch
-  - controls/bad_public_only.patch
+  - controls/scorer_control_patches/oracle.patch
+  - controls/scorer_control_patches/bad_noop.patch
+  - controls/scorer_control_patches/bad_public_only.patch
 baseline_policy:
   practice: "Calibration and harness-shaping tasks."
   dev: "Authored tasks used for baseline iteration and reporting."

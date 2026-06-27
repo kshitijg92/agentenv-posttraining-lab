@@ -39,18 +39,24 @@ class LimitSpec(BaseModel):
     network: NetworkMode
 
 
-class BadControlSpec(BaseModel):
+class BadScorerControlPatchSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     noop: str = Field(min_length=1)
     public_only: str = Field(min_length=1)
 
 
-class ControlSpec(BaseModel):
+class ScorerControlPatchSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     oracle: str = Field(min_length=1)
-    bad: BadControlSpec
+    bad: BadScorerControlPatchSpec
+
+
+class ControlSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scorer_control_patches: ScorerControlPatchSpec
 
 
 class ReplaySpec(BaseModel):

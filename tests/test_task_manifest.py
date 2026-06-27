@@ -23,8 +23,12 @@ def test_toy_python_fix_manifest_loads() -> None:
     assert manifest.domain == "repo_patch_python"
     assert manifest.split == "practice"
     assert manifest.allowed_tools == ["read_file", "write_file", "run_tests"]
-    assert manifest.controls.bad.noop == "controls/bad_noop.patch"
-    assert manifest.controls.bad.public_only == "controls/bad_public_only.patch"
+    assert manifest.controls.scorer_control_patches.bad.noop == (
+        "controls/scorer_control_patches/bad_noop.patch"
+    )
+    assert manifest.controls.scorer_control_patches.bad.public_only == (
+        "controls/scorer_control_patches/bad_public_only.patch"
+    )
 
 
 def test_toy_python_fix_manifest_paths_are_valid() -> None:

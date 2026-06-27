@@ -44,15 +44,24 @@ def validate_task_manifest_paths(manifest: TaskManifest, manifest_path: Path) ->
             )
 
     _require_file(
-        _resolve_manifest_path(task_dir, manifest.controls.oracle),
+        _resolve_manifest_path(
+            task_dir,
+            manifest.controls.scorer_control_patches.oracle,
+        ),
         "oracle control",
     )
     _require_file(
-        _resolve_manifest_path(task_dir, manifest.controls.bad.noop),
+        _resolve_manifest_path(
+            task_dir,
+            manifest.controls.scorer_control_patches.bad.noop,
+        ),
         "noop bad control",
     )
     _require_file(
-        _resolve_manifest_path(task_dir, manifest.controls.bad.public_only),
+        _resolve_manifest_path(
+            task_dir,
+            manifest.controls.scorer_control_patches.bad.public_only,
+        ),
         "public-only bad control",
     )
 
@@ -177,9 +186,9 @@ def _validate_workspace_private_assets_absent(
     forbidden_markers = [
         manifest.leakage_canary,
         "hidden_tests",
-        manifest.controls.oracle,
-        manifest.controls.bad.noop,
-        manifest.controls.bad.public_only,
+        manifest.controls.scorer_control_patches.oracle,
+        manifest.controls.scorer_control_patches.bad.noop,
+        manifest.controls.scorer_control_patches.bad.public_only,
     ]
     for file_path in _iter_files(seed_workspace):
         content = file_path.read_bytes()

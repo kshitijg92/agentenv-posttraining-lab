@@ -17,10 +17,11 @@ limits:
   max_turns: 10
   network: "off"
 controls:
-  oracle: controls/oracle.patch
-  bad:
-    noop: controls/bad_noop.patch
-    public_only: controls/bad_public_only.patch
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
 replay:
   capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
 leakage_canary: "CANARY_REPAIR_CONFIG_PRECEDENCE_PRIVATE"

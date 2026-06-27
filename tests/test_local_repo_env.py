@@ -21,4 +21,4 @@ def test_prepare_agent_workspace_copies_only_seed_workspace(tmp_path: Path) -> N
     assert (workspace.path / "src/mathlib.py").is_file()
     assert (workspace.path / "tests/test_public.py").is_file()
     assert not (workspace.path / "hidden_tests/test_behavior.py").exists()
-    assert not (workspace.path / "controls/oracle.patch").exists()
+    assert not (workspace.path / "controls/scorer_control_patches/oracle.patch").exists()

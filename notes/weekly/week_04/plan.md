@@ -86,9 +86,9 @@ data/task_packs/repo_patch_python_v0/tasks/<task_slug>/
   task_card.md
   seed_workspace/
   hidden_tests/
-  controls/oracle.patch
-  controls/bad_noop.patch
-  controls/bad_public_only.patch
+  controls/scorer_control_patches/oracle.patch
+  controls/scorer_control_patches/bad_noop.patch
+  controls/scorer_control_patches/bad_public_only.patch
 ```
 
 Default candidate task set:

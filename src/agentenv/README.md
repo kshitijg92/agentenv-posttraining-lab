@@ -38,7 +38,7 @@ Oracle control:
 ```bash
 uv run agentenv attempt run \
   --task-manifest data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml \
-  --submission data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/oracle.patch \
+  --submission data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/scorer_control_patches/oracle.patch \
   --out experiments/runs/manual_oracle_attempt
 ```
 
@@ -47,7 +47,7 @@ Known-bad no-op control:
 ```bash
 uv run agentenv attempt run \
   --task-manifest data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml \
-  --submission data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/bad_noop.patch \
+  --submission data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/scorer_control_patches/bad_noop.patch \
   --out experiments/runs/manual_bad_noop_attempt
 ```
 
@@ -56,7 +56,7 @@ Known-bad public-only control:
 ```bash
 uv run agentenv attempt run \
   --task-manifest data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml \
-  --submission data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/bad_public_only.patch \
+  --submission data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/scorer_control_patches/bad_public_only.patch \
   --out experiments/runs/manual_bad_public_only_attempt
 ```
 

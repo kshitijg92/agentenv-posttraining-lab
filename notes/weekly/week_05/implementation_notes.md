@@ -1060,3 +1060,40 @@ an agent fake-model script.
 
 This migration does not add an agent policy type yet. It only makes the current
 scorer-control policy vocabulary precise before adding agent-loop controls.
+
+## Scorer Control Patch Directory Decision
+
+### Decision
+
+Move direct patch controls under a layer-specific controls subdirectory:
+
+```text
+controls/scorer_control_patches/
+```
+
+The task manifest now records:
+
+```yaml
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+```
+
+### Reasoning
+
+The top-level `controls/` directory will hold private eval-side calibration
+artifacts for multiple harness layers. Direct patch controls calibrate the
+scorer path. Future scripted fake-model controls will calibrate the agent loop.
+
+Putting scorer controls in `controls/scorer_control_patches/` prevents the
+current patch controls from occupying the generic controls namespace and leaves
+a clean place for future `controls/agent_control_scripts/`.
+
+### Non-Goals
+
+This step does not add `agent_control_scripts/` or define the script JSON
+contract. It only moves the existing direct patch controls and updates the task
+manifest schema to name them precisely.
