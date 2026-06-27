@@ -12,14 +12,15 @@ from agentenv.tracing.schema import EvalTraceProvenance
 from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
 
-CONTROL_EVAL_CONFIG = Path("configs/eval/control_policies.yaml")
-AGENT_CONTROL_EVAL_CONFIG = Path("configs/eval/week05_agent_controls.yaml")
+CONTROL_EVAL_CONFIG = Path("configs/eval/scorer_control_policies.yaml")
+AGENT_CONTROL_EVAL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
+DEV_BASELINE_EVAL_CONFIG = Path("configs/eval/dev_baseline.yaml")
 
 
 def test_control_eval_config_loads() -> None:
     config = load_eval_config(CONTROL_EVAL_CONFIG)
 
-    assert config.name == "control_policies"
+    assert config.name == "scorer_control_policies"
     assert config.task_pack == "data/task_packs/repo_patch_python_v0"
     assert config.tasks == ["toy_python_fix_001"]
     assert sorted(config.policies) == ["bad-noop", "bad-public-only", "oracle"]
@@ -31,10 +32,24 @@ def test_control_eval_config_paths_are_valid() -> None:
     validate_eval_config_paths(config, CONTROL_EVAL_CONFIG)
 
 
+def test_dev_baseline_eval_config_paths_are_valid() -> None:
+    config = load_eval_config(DEV_BASELINE_EVAL_CONFIG)
+
+    assert sorted(config.policies) == [
+        "agent-happy",
+        "agent-malformed",
+        "agent-recoverable",
+        "noop",
+        "oracle",
+        "public-tests-only",
+    ]
+    validate_eval_config_paths(config, DEV_BASELINE_EVAL_CONFIG)
+
+
 def test_agent_control_eval_config_loads() -> None:
     config = load_eval_config(AGENT_CONTROL_EVAL_CONFIG)
 
-    assert config.name == "week05_agent_controls"
+    assert config.name == "agent_control_policies"
     assert config.task_pack == "data/task_packs/repo_patch_python_v0"
     assert config.tasks == ["toy_python_fix_001"]
     assert sorted(config.policies) == [
@@ -74,12 +89,12 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     run_manifest_path = tmp_path / "eval/run_manifest.json"
     run_manifest = json.loads(run_manifest_path.read_text())
 
-    assert eval_run.config.name == "control_policies"
+    assert eval_run.config.name == "scorer_control_policies"
     assert eval_run.policy == "oracle"
     assert len(eval_run.attempts) == 1
     assert eval_run.attempts[0].result.status == "PASS"
     assert run_manifest["artifact_version"] == "eval_run_v0"
-    assert run_manifest["config_name"] == "control_policies"
+    assert run_manifest["config_name"] == "scorer_control_policies"
     assert run_manifest["policy"] == "oracle"
     assert run_manifest["attempt_count"] == 1
     assert run_manifest["status_counts"] == {"PASS": 1}
@@ -102,7 +117,7 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     first_provenance = trace_events[0].provenance_config
     assert isinstance(first_provenance, EvalTraceProvenance)
     assert first_provenance.eval_run_id == eval_run.eval_run_id
-    assert first_provenance.config_name == "control_policies"
+    assert first_provenance.config_name == "scorer_control_policies"
     assert first_provenance.policy == "oracle"
     attempt_finished_provenance = trace_events[3].provenance_config
     assert isinstance(attempt_finished_provenance, EvalTraceProvenance)
@@ -147,14 +162,14 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     matrix_manifest_path = tmp_path / "eval_matrix/eval_matrix_manifest.json"
     matrix_manifest = json.loads(matrix_manifest_path.read_text())
 
-    assert eval_matrix.config.name == "control_policies"
+    assert eval_matrix.config.name == "scorer_control_policies"
     assert [run.policy for run in eval_matrix.policy_runs] == [
         "oracle",
         "bad-noop",
         "bad-public-only",
     ]
     assert matrix_manifest["artifact_version"] == "eval_matrix_v0"
-    assert matrix_manifest["config_name"] == "control_policies"
+    assert matrix_manifest["config_name"] == "scorer_control_policies"
     assert matrix_manifest["policy_count"] == 3
     assert matrix_manifest["attempt_count"] == 3
     assert matrix_manifest["status_counts"] == {

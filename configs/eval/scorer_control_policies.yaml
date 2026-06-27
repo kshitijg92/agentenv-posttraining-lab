@@ -1,4 +1,4 @@
-name: control_policies
+name: scorer_control_policies
 task_pack: data/task_packs/repo_patch_python_v0
 tasks:
   - toy_python_fix_001

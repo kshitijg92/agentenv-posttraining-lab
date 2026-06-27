@@ -150,7 +150,7 @@ Eval event provenance supports:
 {
   "eval_run_id": "eval_...",
   "config_hash": "xxh64:...",
-  "config_name": "control_policies",
+  "config_name": "scorer_control_policies",
   "policy": "oracle",
   "task_id": "toy_python_fix_001",
   "task_index": 0,

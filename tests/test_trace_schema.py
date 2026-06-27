@@ -68,7 +68,7 @@ def test_trace_event_schema_accepts_eval_event() -> None:
         provenance_config=EvalTraceProvenance(
             eval_run_id="eval_001",
             config_hash="xxh64:abc123",
-            config_name="control_policies",
+            config_name="scorer_control_policies",
             policy="oracle",
             task_id="toy_python_fix_001",
             task_index=0,
@@ -233,7 +233,7 @@ def test_eval_attempt_finished_requires_attempt_id() -> None:
                 "provenance_config": {
                     "eval_run_id": "eval_001",
                     "config_hash": "xxh64:abc123",
-                    "config_name": "control_policies",
+                    "config_name": "scorer_control_policies",
                     "policy": "oracle",
                     "task_id": "toy_python_fix_001",
                     "task_index": 0,

@@ -64,27 +64,27 @@ uv run agentenv attempt run \
 
 ```bash
 uv run agentenv eval \
-  --config configs/eval/control_policies.yaml \
+  --config configs/eval/scorer_control_policies.yaml \
   --policy oracle \
-  --out experiments/runs/control_policies_oracle
+  --out experiments/runs/scorer_control_policies_oracle
 
 uv run agentenv eval \
-  --config configs/eval/control_policies.yaml \
+  --config configs/eval/scorer_control_policies.yaml \
   --policy bad-noop \
-  --out experiments/runs/control_policies_bad_noop
+  --out experiments/runs/scorer_control_policies_bad_noop
 
 uv run agentenv eval \
-  --config configs/eval/control_policies.yaml \
+  --config configs/eval/scorer_control_policies.yaml \
   --policy bad-public-only \
-  --out experiments/runs/control_policies_bad_public_only
+  --out experiments/runs/scorer_control_policies_bad_public_only
 ```
 
 ## Replay An Eval Run
 
 ```bash
 uv run agentenv replay \
-  experiments/runs/control_policies_oracle \
-  --out experiments/replays/control_policies_oracle
+  experiments/runs/scorer_control_policies_oracle \
+  --out experiments/replays/scorer_control_policies_oracle
 ```
 
 ## Write Markdown Reports
@@ -93,16 +93,16 @@ Eval report:
 
 ```bash
 uv run agentenv report \
-  experiments/runs/control_policies_oracle \
-  --out experiments/reports/evals/control_policies_oracle.md
+  experiments/runs/scorer_control_policies_oracle \
+  --out experiments/reports/evals/scorer_control_policies_oracle.md
 ```
 
 Replay report:
 
 ```bash
 uv run agentenv report \
-  experiments/replays/control_policies_oracle \
-  --out experiments/reports/replays/control_policies_oracle.md
+  experiments/replays/scorer_control_policies_oracle \
+  --out experiments/reports/replays/scorer_control_policies_oracle.md
 ```
 
 ## Run The Scorer Audit

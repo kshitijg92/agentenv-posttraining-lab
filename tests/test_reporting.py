@@ -8,7 +8,7 @@ from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
 
 
-CONTROL_EVAL_CONFIG = Path("configs/eval/control_policies.yaml")
+CONTROL_EVAL_CONFIG = Path("configs/eval/scorer_control_policies.yaml")
 
 
 def test_write_eval_markdown_report(tmp_path: Path) -> None:
@@ -25,10 +25,10 @@ def test_write_eval_markdown_report(tmp_path: Path) -> None:
     assert "## Run Details" in report
     assert "## Status Counts" in report
     assert "## Attempts" in report
-    assert "- Config name: control_policies" in report
+    assert "- Config name: scorer_control_policies" in report
     assert "- Policy: oracle" in report
     assert "- Split: practice" in report
-    assert "- Config path: configs/eval/control_policies.yaml" in report
+    assert "- Config path: configs/eval/scorer_control_policies.yaml" in report
     assert "| PASS | 1 |" in report
     assert (
         "| toy_python_fix_001 | 0 | PASS | PASS | PASS |  | "
@@ -81,7 +81,7 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "## Calibration Checks" in report
     assert "### Control Expectations" in report
     assert "## Per-Task Outcomes" in report
-    assert "- Config name: control_policies" in report
+    assert "- Config name: scorer_control_policies" in report
     assert "- Task count: 1" in report
     assert "- Policy count: 3" in report
     assert "- Replay scope: scorer_control_patch" in report
@@ -90,7 +90,10 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Known-bad final PASS rate: 0/2 (0%)" in report
     assert "- Known-bad public-pass/hidden-fail rate: 2/2 (100%)" in report
     assert "### Replay Checks" in report
-    assert "| oracle | PASS | 1/1 (100%) | 0 | replays/oracle/replay_result.json |" in report
+    assert (
+        "| oracle | PASS | 1/1 (100%) | 0 | replays/oracle/replay_result.json |"
+        in report
+    )
     assert (
         "| bad-public-only | PASS | 1/1 (100%) | 0 | "
         "replays/bad-public-only/replay_result.json |"
@@ -104,9 +107,7 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
         'FAIL | 1/1 (100%) | <span style="color: green">ON_TRACK</span> |'
     ) in report
     assert "| oracle | 1 | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 0 | 0 | 0 |" in report
-    assert (
-        "| bad-noop | 1 | 0/1 (0%) | 1/1 (100%) | 0/1 (0%) | 1 | 0 | 0 |"
-    ) in report
+    assert ("| bad-noop | 1 | 0/1 (0%) | 1/1 (100%) | 0/1 (0%) | 1 | 0 | 0 |") in report
     assert (
         "| toy_python_fix_001 | bad-public-only | HIDDEN_TEST_FAIL | PASS | FAIL |"
     ) in report

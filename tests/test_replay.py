@@ -7,7 +7,7 @@ from agentenv.tracing.schema import ReplayTraceProvenance
 from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
 
-CONTROL_EVAL_CONFIG = Path("configs/eval/control_policies.yaml")
+CONTROL_EVAL_CONFIG = Path("configs/eval/scorer_control_policies.yaml")
 
 
 def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
@@ -60,8 +60,7 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
         "status": True,
     }
     assert (
-        tmp_path
-        / "replay_run/attempts/toy_python_fix_001__attempt_001/attempt.json"
+        tmp_path / "replay_run/attempts/toy_python_fix_001__attempt_001/attempt.json"
     ).is_file()
     validate_trace_file(tmp_path / "replay_run/trace.jsonl")
     trace_events = load_trace_events(tmp_path / "replay_run/trace.jsonl")
