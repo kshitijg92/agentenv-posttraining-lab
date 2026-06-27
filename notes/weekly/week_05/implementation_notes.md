@@ -1134,3 +1134,28 @@ are already calibrated by scorer control patches.
 This step does not add controls CLI discovery or task-manifest references for
 agent control scripts. It only defines and exercises one concrete control-case
 artifact.
+
+## Malformed JSON Agent Control Decision
+
+### Decision
+
+Add a second task-local agent control script:
+
+```text
+controls/agent_control_scripts/malformed_json.json
+```
+
+This script emits malformed JSON from the fake model and expects:
+
+```text
+prompt_loop_status = invalid_model_output
+```
+
+### Reasoning
+
+Malformed model JSON fails before the tool boundary. It is not recoverable
+through tool feedback in the current loop contract, so the expected loop result
+is terminal `invalid_model_output`.
+
+This control uses the existing `script` plus `expected_result` shape and does
+not expand the expectation schema.

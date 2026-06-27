@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from agentenv.agents.schema import PromptLoopStatus
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_control_scripts import (
@@ -18,6 +19,10 @@ TOY_TASK_MANIFEST = Path(
 TOY_HAPPY_PATH_AGENT_CONTROL = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix"
     "/controls/agent_control_scripts/happy_path.json"
+)
+TOY_MALFORMED_JSON_AGENT_CONTROL = Path(
+    "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix"
+    "/controls/agent_control_scripts/malformed_json.json"
 )
 
 
@@ -49,10 +54,19 @@ def test_agent_control_script_rejects_unknown_schema_version(tmp_path: Path) -> 
         load_agent_control_script_case(control_path)
 
 
-def test_happy_path_agent_control_matches_prompt_loop_expectation(
+@pytest.mark.parametrize(
+    ("control_path", "expected_status"),
+    [
+        (TOY_HAPPY_PATH_AGENT_CONTROL, "completed"),
+        (TOY_MALFORMED_JSON_AGENT_CONTROL, "invalid_model_output"),
+    ],
+)
+def test_agent_control_matches_prompt_loop_expectation(
+    control_path: Path,
+    expected_status: PromptLoopStatus,
     tmp_path: Path,
 ) -> None:
-    control_case = load_agent_control_script_case(TOY_HAPPY_PATH_AGENT_CONTROL)
+    control_case = load_agent_control_script_case(control_path)
     model_client = ScriptedFakeModelClient(
         model_id="agent-control-scripted-v0",
         script=control_case.script.steps,
@@ -66,6 +80,7 @@ def test_happy_path_agent_control_matches_prompt_loop_expectation(
     )
 
     assert agent_task_run.prompt_loop_result is not None
+    assert control_case.expected_result.prompt_loop_status == expected_status
     assert agent_task_run.prompt_loop_result.status == (
         control_case.expected_result.prompt_loop_status
     )
