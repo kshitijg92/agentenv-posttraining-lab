@@ -83,6 +83,19 @@ only `APP_HOST` or `APP_DEBUG` is present it treats environment as a separate
 source and drops config-derived values back to defaults. It passes public tests
 but fails the mixed default/config/environment hidden case.
 
+## Agent Control Summary
+
+The task manifest indexes three agent-loop control scripts:
+
+- `happy` -> `controls/agent_control_scripts/happy_path.json`
+- `malformed` -> `controls/agent_control_scripts/malformed_json.json`
+- `recoverable` -> `controls/agent_control_scripts/bad_tool_input_then_recovery.json`
+
+`happy` scripts a valid read/write/test/final-answer path and should complete.
+`malformed` emits malformed model JSON and should stop with
+`invalid_model_output`. `recoverable` first emits invalid tool input, receives
+an `InvalidToolInput` tool result, corrects the call, and should complete.
+
 ## Flake Risks
 
 The task should be deterministic. It uses local temporary JSON files, explicit

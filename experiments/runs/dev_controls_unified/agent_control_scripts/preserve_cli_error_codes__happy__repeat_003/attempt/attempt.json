@@ -1,0 +1,16 @@
+{
+  "run_id": "run_887770fee4c5427683ae4f19ef56c5a8",
+  "task_id": "preserve_cli_error_codes",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml",
+  "attempt_id": "attempt_05bedff70fff4753a1c8e5a8aee7c231",
+  "submission_path": "/tmp/agentenv-agent_task_run_c64ed886716f492aaaf73f3cae1fa28c-o4zv11uj/candidate.patch",
+  "status": "PASS",
+  "public_status": "PASS",
+  "hidden_status": "PASS",
+  "error_class": null,
+  "started_at": "2026-06-27T04:50:52.834448Z",
+  "ended_at": "2026-06-27T04:50:53.446703Z",
+  "duration_ms": 612,
+  "final_diff_hash": "xxh64:3a6c137988d3cd3a",
+  "orchestrator_version": "attempt_v0"
+}

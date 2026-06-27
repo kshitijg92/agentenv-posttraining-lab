@@ -25,16 +25,6 @@ from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_p
 
 
 CONTROL_RUN_ARTIFACT_VERSION = "control_run_v0"
-SCORER_CONTROL_NAMES: tuple[ControlName, ...] = (
-    "oracle",
-    "bad.noop",
-    "bad.public_only",
-)
-AGENT_CONTROL_NAMES: tuple[str, ...] = (
-    "happy_path",
-    "malformed_json",
-    "bad_tool_input_then_recovery",
-)
 ControlLayer = Literal["scorer", "agent"]
 MatchStatus = Literal["PASS", "FAIL"]
 JsonObject = dict[str, Any]
@@ -104,24 +94,19 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
     )
 
     for task in tasks:
-        for control in SCORER_CONTROL_NAMES:
+        for control, submission_path in _scorer_control_paths(task):
             for repeat_index in range(repeats):
                 control_run.records.append(
                     _run_scorer_control(
                         task=task,
                         control=control,
+                        submission_path=submission_path,
                         repeat_index=repeat_index,
                         out_dir=scorer_control_dir,
                     )
                 )
 
-        for control_name in AGENT_CONTROL_NAMES:
-            control_path = (
-                task.manifest_path.parent
-                / "controls"
-                / "agent_control_scripts"
-                / f"{control_name}.json"
-            )
+        for control_name, control_path in _agent_control_script_paths(task):
             control_case = load_agent_control_script_case(control_path)
             for repeat_index in range(repeats):
                 control_run.records.append(
@@ -169,15 +154,11 @@ def _run_scorer_control(
     *,
     task: ControlTask,
     control: ControlName,
+    submission_path: Path,
     repeat_index: int,
     out_dir: Path,
 ) -> ControlRecord:
     expectation = expected_control_outcome(control)
-    submission_path = scorer_control_patch_path(
-        task.manifest_path.parent,
-        task.manifest,
-        control,
-    )
     artifact_dir = (
         out_dir
         / f"{task.task_id}__{_control_slug(control)}__repeat_{repeat_index + 1:03d}"
@@ -256,6 +237,67 @@ def _discover_control_tasks(task_pack_path: Path) -> list[ControlTask]:
             )
         )
     return tasks
+
+
+def _scorer_control_paths(task: ControlTask) -> list[tuple[ControlName, Path]]:
+    return [
+        (
+            "oracle",
+            scorer_control_patch_path(
+                task.manifest_path.parent,
+                task.manifest,
+                "oracle",
+            ),
+        ),
+        (
+            "bad.noop",
+            scorer_control_patch_path(
+                task.manifest_path.parent,
+                task.manifest,
+                "bad.noop",
+            ),
+        ),
+        (
+            "bad.public_only",
+            scorer_control_patch_path(
+                task.manifest_path.parent,
+                task.manifest,
+                "bad.public_only",
+            ),
+        ),
+    ]
+
+
+def _agent_control_script_paths(task: ControlTask) -> list[tuple[str, Path]]:
+    agent_controls = task.manifest.controls.agent_control_scripts
+    return [
+        (
+            "happy",
+            _resolve_task_control_path(task, agent_controls.happy),
+        ),
+        (
+            "malformed",
+            _resolve_task_control_path(task, agent_controls.malformed),
+        ),
+        (
+            "recoverable",
+            _resolve_task_control_path(task, agent_controls.recoverable),
+        ),
+    ]
+
+
+def _resolve_task_control_path(task: ControlTask, raw_path: str) -> Path:
+    path = Path(raw_path)
+    if path.is_absolute():
+        raise ValueError(f"Task control paths must be relative: {raw_path}")
+
+    task_dir = task.manifest_path.parent.resolve()
+    resolved = (task_dir / path).resolve()
+    if not resolved.is_relative_to(task_dir):
+        raise ValueError(f"Task control path escapes task directory: {raw_path}")
+    if not resolved.is_file():
+        raise ValueError(f"Task control file does not exist: {resolved}")
+    return resolved
 
 
 def _write_jsonl(control_run: ControlRun) -> Path:

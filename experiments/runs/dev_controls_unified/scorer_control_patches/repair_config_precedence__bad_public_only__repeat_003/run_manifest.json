@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_39bde7fb63f9430699c6e91410c2520d",
+  "attempt_id": "attempt_b7859f0f842b4e978217746a013f9cf3",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_4f5c95b77dc14edca5651622ffb63f7f",
+  "run_id": "run_b7824a43528a43478a24e1b81f258ac4",
   "status": "HIDDEN_TEST_FAIL",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_public_only.patch",
   "task_id": "repair_config_precedence",

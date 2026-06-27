@@ -92,7 +92,7 @@ The hidden validator should be deterministic and should not depend on network ac
 
 ## Controls
 
-This task should include three control patches:
+This task should include three scorer control patches:
 
 ```text
 controls/scorer_control_patches/oracle.patch
@@ -118,6 +118,19 @@ def normalize_ratio(numerator: int | float, denominator: int | float) -> float:
 The public-only bad patch may fix zero-denominator handling and true division while still making a semantic mistake such as returning the absolute value of the ratio.
 
 The public-only control is important because it proves the hidden validator catches at least one plausible shortcut.
+
+The task manifest should also index three agent-loop control scripts:
+
+```text
+happy -> controls/agent_control_scripts/happy_path.json
+malformed -> controls/agent_control_scripts/malformed_json.json
+recoverable -> controls/agent_control_scripts/bad_tool_input_then_recovery.json
+```
+
+The `happy` agent control should complete through a scripted
+read/write/test/final-answer path. The `malformed` control should stop with
+`invalid_model_output`. The `recoverable` control should surface an
+`InvalidToolInput` tool result, then recover and complete.
 
 ## Scoring Contract
 

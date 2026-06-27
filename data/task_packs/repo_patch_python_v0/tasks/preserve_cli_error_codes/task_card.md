@@ -71,6 +71,19 @@ errors to the wrong exit code and does not validate duplicate ids.
 the public success-path test but fails hidden tests for missing files and
 invalid input.
 
+## Agent Control Summary
+
+The task manifest indexes three agent-loop control scripts:
+
+- `happy` -> `controls/agent_control_scripts/happy_path.json`
+- `malformed` -> `controls/agent_control_scripts/malformed_json.json`
+- `recoverable` -> `controls/agent_control_scripts/bad_tool_input_then_recovery.json`
+
+`happy` scripts a valid read/write/test/final-answer path and should complete.
+`malformed` emits malformed model JSON and should stop with
+`invalid_model_output`. `recoverable` first emits invalid tool input, receives
+an `InvalidToolInput` tool result, corrects the call, and should complete.
+
 ## Flake Risks
 
 The task should be deterministic. It uses local temporary files, subprocess CLI

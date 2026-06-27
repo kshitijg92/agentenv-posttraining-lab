@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-preserve_cli_error_codes-rw_tb3qa/workspace
+rootdir: /tmp/agentenv-preserve_cli_error_codes-q_ir7atl/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,11 +10,11 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-preserve_cli_error_codes-rw_tb3qa/workspace
+rootdir: /tmp/agentenv-preserve_cli_error_codes-q_ir7atl/workspace
 configfile: pyproject.toml
 collected 8 items
 
 test_cli_behavior.py ........                                            [100%]
 
-============================== 8 passed in 0.15s ===============================
+============================== 8 passed in 0.16s ===============================
 

@@ -30,6 +30,15 @@ def test_toy_python_fix_manifest_loads() -> None:
     assert manifest.controls.scorer_control_patches.bad.public_only == (
         "controls/scorer_control_patches/bad_public_only.patch"
     )
+    assert manifest.controls.agent_control_scripts.happy == (
+        "controls/agent_control_scripts/happy_path.json"
+    )
+    assert manifest.controls.agent_control_scripts.malformed == (
+        "controls/agent_control_scripts/malformed_json.json"
+    )
+    assert manifest.controls.agent_control_scripts.recoverable == (
+        "controls/agent_control_scripts/bad_tool_input_then_recovery.json"
+    )
 
 
 def test_toy_python_fix_manifest_paths_are_valid() -> None:
@@ -116,6 +125,26 @@ def test_task_pack_validation_rejects_invalid_agent_control_script(
     control_path.write_text(json.dumps(raw_control))
 
     with pytest.raises(ValueError, match="Invalid agent control script"):
+        validate_task_pack(task_pack)
+
+
+def test_task_pack_validation_rejects_missing_agent_control_manifest_reference(
+    tmp_path: Path,
+) -> None:
+    task_pack = _copy_task_pack(tmp_path)
+    manifest_path = task_pack / "tasks/toy_python_fix/task.yaml"
+    manifest_path.write_text(
+        manifest_path.read_text().replace(
+            """  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+""",
+            "",
+        )
+    )
+
+    with pytest.raises(ValueError, match="agent_control_scripts"):
         validate_task_pack(task_pack)
 
 

@@ -1,16 +1,16 @@
 {
-  "run_id": "run_98910104dc6a46ff954e1c5a2fb07a57",
+  "run_id": "run_285eba49b63d47f1a3655e1b06df5ede",
   "task_id": "repair_jsonl_deduper",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml",
-  "attempt_id": "attempt_8140ec6bcb4a4ed19e29f82233c3df8e",
+  "attempt_id": "attempt_bac48a5d33e44e16a21285cc4bf41012",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/controls/scorer_control_patches/bad_noop.patch",
   "status": "HIDDEN_TEST_FAIL",
   "public_status": "PASS",
   "hidden_status": "FAIL",
   "error_class": "HiddenCheckFailed",
-  "started_at": "2026-06-27T04:14:28.026521Z",
-  "ended_at": "2026-06-27T04:14:28.465668Z",
-  "duration_ms": 439,
+  "started_at": "2026-06-27T04:51:06.906960Z",
+  "ended_at": "2026-06-27T04:51:07.357899Z",
+  "duration_ms": 450,
   "final_diff_hash": "xxh64:ef46db3751d8e999",
   "orchestrator_version": "attempt_v0"
 }

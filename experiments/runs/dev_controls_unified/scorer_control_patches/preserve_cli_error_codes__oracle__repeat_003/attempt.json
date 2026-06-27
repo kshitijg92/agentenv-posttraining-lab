@@ -1,16 +1,16 @@
 {
-  "run_id": "run_755ecff95cb7492eb91ee99502c8a119",
+  "run_id": "run_b2f6756803c94590bf797455de97f051",
   "task_id": "preserve_cli_error_codes",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml",
-  "attempt_id": "attempt_bbb9688cb48448c5b41ac36ea18f7fed",
+  "attempt_id": "attempt_a131e18d5baa4d9089cf06c308f7f6b0",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/controls/scorer_control_patches/oracle.patch",
   "status": "PASS",
   "public_status": "PASS",
   "hidden_status": "PASS",
   "error_class": null,
-  "started_at": "2026-06-27T04:14:07.522423Z",
-  "ended_at": "2026-06-27T04:14:08.124688Z",
-  "duration_ms": 602,
+  "started_at": "2026-06-27T04:50:46.332707Z",
+  "ended_at": "2026-06-27T04:50:46.924188Z",
+  "duration_ms": 591,
   "final_diff_hash": "xxh64:3a6c137988d3cd3a",
   "orchestrator_version": "attempt_v0"
 }

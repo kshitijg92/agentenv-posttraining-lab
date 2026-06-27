@@ -1425,3 +1425,41 @@ scratch workspaces.
 Regenerating `experiments/runs/dev_controls_unified` produced 72 passing control
 records with no `work/`, `agent_interaction_workspace/`, or
 `scoring_workspace/` directories under the generated artifacts.
+
+## Task-Manifest Agent Control Index Decision
+
+### Decision
+
+Add agent-control script paths to each task manifest under:
+
+```yaml
+controls:
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+```
+
+`controls run` now resolves both scorer controls and agent controls from
+`task.yaml`. The task-pack `required_task_files` list still requires the files
+to exist across the pack, but the task manifest is the task-local control index.
+
+### Reasoning
+
+The previous implementation validated agent-control files through the
+task-pack manifest but discovered them in `controls run` by hardcoded
+convention. That meant the pack required the files, but the task itself did not
+declare which agent-loop controls belonged to its calibration contract.
+
+Putting the paths in `task.yaml.controls` gives both control layers the same
+shape: task-local named control artifacts resolved through the task manifest.
+The script JSON remains responsible for behavior and expected prompt-loop
+outcomes; the task manifest only owns names and paths.
+
+### Invariants
+
+- Scorer and agent control paths are relative to the task directory.
+- Control paths must not escape the task directory.
+- Agent control JSON is parsed during task validation.
+- Control report names for agent controls use the manifest keys:
+  `happy`, `malformed`, and `recoverable`.

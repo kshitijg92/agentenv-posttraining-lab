@@ -53,10 +53,19 @@ class ScorerControlPatchSpec(BaseModel):
     bad: BadScorerControlPatchSpec
 
 
+class AgentControlScriptSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    happy: str = Field(min_length=1)
+    malformed: str = Field(min_length=1)
+    recoverable: str = Field(min_length=1)
+
+
 class ControlSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scorer_control_patches: ScorerControlPatchSpec
+    agent_control_scripts: AgentControlScriptSpec
 
 
 class ReplaySpec(BaseModel):

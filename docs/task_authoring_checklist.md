@@ -97,9 +97,9 @@ bad.public_only -> HIDDEN_TEST_FAIL / PASS / FAIL
 Required agent-loop controls:
 
 ```text
-happy_path -> prompt_loop_status completed
-malformed_json -> prompt_loop_status invalid_model_output
-bad_tool_input_then_recovery -> prompt_loop_status completed, first tool result InvalidToolInput, then recovery
+happy -> prompt_loop_status completed
+malformed -> prompt_loop_status invalid_model_output
+recoverable -> prompt_loop_status completed, first tool result InvalidToolInput, then recovery
 ```
 
 For each task, run or include in repeated control calibration:

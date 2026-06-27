@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_e4263ee35c784b21b1a08b43dc31e4a3",
+  "attempt_id": "attempt_cf51f7841e67453abf26be801ea8c9dd",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_aa57b92eef57467e83d68232c0473735",
+  "run_id": "run_532366087a0e4b28815f885776e37b49",
   "status": "PASS",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/scorer_control_patches/oracle.patch",
   "task_id": "toy_python_fix_001",

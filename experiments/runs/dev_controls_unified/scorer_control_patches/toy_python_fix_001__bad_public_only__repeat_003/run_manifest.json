@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_f8f318b6c876445ba1d4ea3a9f31a4f3",
+  "attempt_id": "attempt_66b32f8dc1054af5afd4ff7524b0021b",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_36319996f3c442cdb420ad11e28e0715",
+  "run_id": "run_a174608a3e6f40e29597a1575e09b877",
   "status": "HIDDEN_TEST_FAIL",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/controls/scorer_control_patches/bad_public_only.patch",
   "task_id": "toy_python_fix_001",

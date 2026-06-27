@@ -1,0 +1,16 @@
+{
+  "run_id": "agent_task_run_f082c606638b462697e86d7306ca599a",
+  "task_id": "repair_config_precedence",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml",
+  "status": "agent_loop_failed",
+  "prompt_loop_status": "invalid_model_output",
+  "candidate_patch_path": null,
+  "candidate_patch_hash": null,
+  "attempt_result": null,
+  "error_class": "MalformedModelOutput",
+  "error_message": "model output is not valid JSON",
+  "started_at": "2026-06-27T04:51:03.300393Z",
+  "ended_at": "2026-06-27T04:51:03.304414Z",
+  "duration_ms": 4,
+  "orchestrator_version": "agent_task_run_v0"
+}

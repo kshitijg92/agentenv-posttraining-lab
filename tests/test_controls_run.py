@@ -13,9 +13,9 @@ TASK_IDS = {
 }
 CONTROL_NAMES = {"oracle", "bad.noop", "bad.public_only"}
 AGENT_CONTROL_NAMES = {
-    "happy_path",
-    "malformed_json",
-    "bad_tool_input_then_recovery",
+    "happy",
+    "malformed",
+    "recoverable",
 }
 
 
@@ -107,19 +107,19 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
                 == "FAIL"
             )
             assert (
-                records_by_control[("agent", task_id, "happy_path", repeat_index)][
-                    "actual"
-                ]["prompt_loop_status"]
+                records_by_control[("agent", task_id, "happy", repeat_index)]["actual"][
+                    "prompt_loop_status"
+                ]
                 == "completed"
             )
             assert (
-                records_by_control[("agent", task_id, "malformed_json", repeat_index)][
+                records_by_control[("agent", task_id, "malformed", repeat_index)][
                     "actual"
                 ]["prompt_loop_status"]
                 == "invalid_model_output"
             )
             recovery = records_by_control[
-                ("agent", task_id, "bad_tool_input_then_recovery", repeat_index)
+                ("agent", task_id, "recoverable", repeat_index)
             ]
             assert recovery["actual"]["prompt_loop_status"] == "completed"
             assert recovery["actual"]["tool_results"][0] == {
@@ -148,7 +148,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         "| layer | control | tasks | records | matches | failures | status |" in report
     )
     assert "| agent | all controls | 4 | 24 | 24/24 | 0 | " in report
-    assert "| agent | malformed_json | 4 | 8 | 8/8 | 0 | " in report
+    assert "| agent | malformed | 4 | 8 | 8/8 | 0 | " in report
     assert "| scorer | all controls | 4 | 24 | 24/24 | 0 | " in report
     assert "| scorer | oracle | 4 | 8 | 8/8 | 0 | " in report
     assert "background-color: #dcfce7" in report
@@ -158,12 +158,10 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         '"public_status": "PASS"} |'
     ) in report
     assert (
-        "| agent | toy_python_fix_001 | malformed_json | 2 | 2/2 | "
+        "| agent | toy_python_fix_001 | malformed | 2 | 2/2 | "
         '{"prompt_loop_status": "invalid_model_output"} |'
     ) in report
-    assert (
-        "| agent | toy_python_fix_001 | bad_tool_input_then_recovery | 2 | 2/2 | "
-    ) in report
+    assert ("| agent | toy_python_fix_001 | recoverable | 2 | 2/2 | ") in report
 
     for record in records:
         artifact_dir = out_dir / record["artifact_dir"]

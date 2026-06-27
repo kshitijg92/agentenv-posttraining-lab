@@ -1,0 +1,16 @@
+{
+  "run_id": "agent_task_run_acffb12110f04507a6028f9a0005969d",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+  "status": "agent_loop_failed",
+  "prompt_loop_status": "invalid_model_output",
+  "candidate_patch_path": null,
+  "candidate_patch_hash": null,
+  "attempt_result": null,
+  "error_class": "MalformedModelOutput",
+  "error_message": "model output is not valid JSON",
+  "started_at": "2026-06-27T04:51:20.187881Z",
+  "ended_at": "2026-06-27T04:51:20.191434Z",
+  "duration_ms": 3,
+  "orchestrator_version": "agent_task_run_v0"
+}

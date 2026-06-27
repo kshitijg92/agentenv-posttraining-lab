@@ -65,6 +65,21 @@ def validate_task_manifest_paths(manifest: TaskManifest, manifest_path: Path) ->
         ),
         "public-only bad control",
     )
+    _require_agent_control_script(
+        task_dir,
+        manifest.controls.agent_control_scripts.happy,
+        "happy agent control",
+    )
+    _require_agent_control_script(
+        task_dir,
+        manifest.controls.agent_control_scripts.malformed,
+        "malformed agent control",
+    )
+    _require_agent_control_script(
+        task_dir,
+        manifest.controls.agent_control_scripts.recoverable,
+        "recoverable agent control",
+    )
 
 
 def validate_task_pack(task_pack_path: Path) -> TaskPackValidationResult:
@@ -172,6 +187,16 @@ def _validate_agent_control_script(path: Path, raw_path: str) -> None:
         raise ValueError(f"Invalid agent control script {raw_path}: {exc}") from exc
 
 
+def _require_agent_control_script(
+    task_dir: Path,
+    raw_path: str,
+    label: str,
+) -> None:
+    path = _resolve_manifest_path(task_dir, raw_path)
+    _require_file(path, label)
+    _validate_agent_control_script(path, raw_path)
+
+
 def _validate_task_pack_domain(
     pack_manifest: TaskPackManifest,
     manifest: TaskManifest,
@@ -261,8 +286,7 @@ def _validate_split_membership(
         for task_id in task_ids:
             if task_id in seen:
                 raise ValueError(
-                    f"Task {task_id!r} appears in both {seen[task_id]!r} "
-                    f"and {split!r}"
+                    f"Task {task_id!r} appears in both {seen[task_id]!r} and {split!r}"
                 )
             seen[task_id] = split
 

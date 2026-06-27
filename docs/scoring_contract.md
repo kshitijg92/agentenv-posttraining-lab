@@ -94,6 +94,21 @@ The scorer control patches calibrate the patch-attempt/scoring path. The agent
 control scripts calibrate the model-agent loop before a candidate patch is
 scored.
 
+`task.yaml` must index both layers under `controls`:
+
+```yaml
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+```
+
 Expected outcomes:
 
 ```text
