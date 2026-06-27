@@ -1,0 +1,31 @@
+{
+  "run_id": "agent_task_run_1afbc874575a422e985fc0d9b1e46312",
+  "task_id": "repair_config_precedence",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml",
+  "status": "scored",
+  "prompt_loop_status": "completed",
+  "candidate_patch_path": "/tmp/agentenv-agent_task_run_1afbc874575a422e985fc0d9b1e46312-9ocrv8kp/candidate.patch",
+  "candidate_patch_hash": "xxh64:187bcea16c66ce96",
+  "attempt_result": {
+    "run_id": "run_3da21ed68fbc490691daa64aa7d7d431",
+    "task_id": "repair_config_precedence",
+    "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml",
+    "attempt_id": "attempt_c29904b929ef4c948b0efd5791cee42a",
+    "submission_path": "/tmp/agentenv-agent_task_run_1afbc874575a422e985fc0d9b1e46312-9ocrv8kp/candidate.patch",
+    "status": "PASS",
+    "public_status": "PASS",
+    "hidden_status": "PASS",
+    "error_class": null,
+    "started_at": "2026-06-27T04:01:11.315983Z",
+    "ended_at": "2026-06-27T04:01:11.757127Z",
+    "duration_ms": 441,
+    "final_diff_hash": "xxh64:187bcea16c66ce96",
+    "orchestrator_version": "attempt_v0"
+  },
+  "error_class": null,
+  "error_message": null,
+  "started_at": "2026-06-27T04:01:11.014523Z",
+  "ended_at": "2026-06-27T04:01:11.757177Z",
+  "duration_ms": 742,
+  "orchestrator_version": "agent_task_run_v0"
+}

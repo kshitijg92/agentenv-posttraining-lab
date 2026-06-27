@@ -1,0 +1,16 @@
+{
+  "artifact_version": "agent_task_run_artifacts_v0",
+  "orchestrator_version": "agent_task_run_v0",
+  "run_id": "agent_task_run_2005b662ac1b434b9bb4c5270816138d",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+  "status": "agent_loop_failed",
+  "prompt_loop_status": "invalid_model_output",
+  "attempt_status": null,
+  "artifacts": {
+    "agent_task_run": "agent_task_run.json",
+    "error": "error.txt",
+    "agent_task_view": "agent_task_view.json",
+    "prompt_loop_result": "prompt_loop_result.json"
+  }
+}

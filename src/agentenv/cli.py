@@ -94,11 +94,11 @@ def run_control_calibration(
     out: Path = typer.Option(..., "--out", help="Directory for control artifacts."),
 ) -> None:
     control_run = run_controls(task_pack, repeats, out)
-    failed = sum(not attempt.match for attempt in control_run.attempts)
+    failed = sum(not record.match for record in control_run.records)
     style = "green" if failed == 0 else "red"
     console.print(
         f"[{style}]controls complete[/{style}] "
-        f"attempts={len(control_run.attempts)} failed={failed}"
+        f"records={len(control_run.records)} failed={failed}"
     )
     console.print(f"wrote {control_run.out_dir / 'control_report.md'}")
 

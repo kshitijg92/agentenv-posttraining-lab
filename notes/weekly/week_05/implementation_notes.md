@@ -1303,3 +1303,125 @@ across orchestrators.
 sampling settings, but the prompt-loop interface requires the object. A
 controls-run default is enough for calibration and avoids making task manifests
 model-run configuration files.
+
+## Layer-Neutral Control Record Decision
+
+### Decision
+
+Migrate `controls run` toward one unified record stream:
+
+```text
+ControlRun.records
+ControlRecord.control_layer
+ControlRecord.control_name
+```
+
+Current scorer controls now emit records with:
+
+```text
+control_layer = scorer
+control_name = oracle | bad.noop | bad.public_only
+```
+
+The JSONL records include `control_layer`, `control_name`, `expected`, `actual`,
+`match`, and `artifact_dir`.
+
+### Reasoning
+
+The controls report should answer one harness-calibration question across
+layers, but each record still needs an explicit contract boundary. A single
+stream avoids multiple unrelated artifacts while `control_layer` prevents
+mixing scorer and agent-loop expectations.
+
+## Agent Controls Run Decision
+
+### Decision
+
+`controls run` now executes both calibration layers in one run:
+
+```text
+scorer control patches
+agent control scripts
+```
+
+Each result is emitted as a `ControlRecord` with:
+
+```text
+control_layer
+control_name
+expected
+actual
+match
+artifact_dir
+```
+
+Scorer control artifact directories live under:
+
+```text
+scorer_control_patches/
+```
+
+Agent control artifact directories live under:
+
+```text
+agent_control_scripts/
+```
+
+Each agent control artifact directory includes:
+
+```text
+agent_task_run.json
+prompt_loop_result.json
+decoding_config.json
+```
+
+and the other agent-task-run artifacts produced by the agent run harness.
+
+### Reasoning
+
+The control run should be one harness-calibration artifact, but each record must
+state which subsystem contract it checks. Scorer records compare patch-attempt
+public/hidden outcomes. Agent records compare prompt-loop outcomes and optional
+tool-result traces.
+
+Persisting `decoding_config.json` keeps the agent-control run auditable without
+moving decoding policy into the task manifest.
+
+## Agent Run Artifact Boundary Fix
+
+### Decision
+
+Add an agent-side persistence helper:
+
+```text
+run_and_persist_agent_task_attempt_to_dir(...)
+```
+
+The helper mirrors `run_and_persist_patch_attempt_to_dir(...)`: it runs the
+agent task attempt using scratch workspace state outside the durable artifact
+directory, then writes curated artifacts into the requested output directory.
+
+`controls run` now uses this helper for agent controls.
+
+### Reasoning
+
+The first agent-control implementation passed:
+
+```text
+workspace_parent = artifact_dir / "work"
+```
+
+to `run_agent_task_attempt(...)`. That leaked internal scratch state into
+durable control artifacts, including `agent_interaction_workspace/`,
+`scoring_workspace/`, `.venv/`, and `.pytest_cache/`.
+
+The durable artifact directory should contain serialized run artifacts such as
+`agent_task_run.json`, `prompt_loop_result.json`, `candidate.patch`,
+`decoding_config.json`, and nested scoring artifacts. It should not contain raw
+scratch workspaces.
+
+### Verification
+
+Regenerating `experiments/runs/dev_controls_unified` produced 72 passing control
+records with no `work/`, `agent_interaction_workspace/`, or
+`scoring_workspace/` directories under the generated artifacts.

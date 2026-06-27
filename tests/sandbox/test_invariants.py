@@ -1,9 +1,8 @@
 from pathlib import Path
 
-from agentenv.evals.schema import ControlName
+from agentenv.controls.controls_run import ControlRecord, run_controls
 from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
-from agentenv.controls.controls_run import ControlAttemptRecord, run_controls
 from agentenv.tasks.validate import load_task_manifest
 
 
@@ -146,24 +145,27 @@ def test_repeated_control_runs_produce_stable_statuses_and_final_diff_hashes(
         out_dir=tmp_path / "controls",
     )
 
-    attempts_by_task_control: dict[tuple[str, ControlName], list[ControlAttemptRecord]] = {}
-    for attempt in control_run.attempts:
-        attempts_by_task_control.setdefault(
-            (attempt.task_id, attempt.control),
+    scorer_records = [
+        record for record in control_run.records if record.control_layer == "scorer"
+    ]
+    records_by_task_control: dict[tuple[str, str], list[ControlRecord]] = {}
+    for record in scorer_records:
+        records_by_task_control.setdefault(
+            (record.task_id, record.control_name),
             [],
-        ).append(attempt)
+        ).append(record)
 
-    assert attempts_by_task_control
-    for attempts in attempts_by_task_control.values():
-        assert len(attempts) == 2
+    assert records_by_task_control
+    for records in records_by_task_control.values():
+        assert len(records) == 2
         observed_results = {
             (
-                attempt.result.status,
-                attempt.result.public_status,
-                attempt.result.hidden_status,
-                attempt.result.final_diff_hash,
+                record.actual["attempt_status"],
+                record.actual["public_status"],
+                record.actual["hidden_status"],
+                record.actual["final_diff_hash"],
             )
-            for attempt in attempts
+            for record in records
         }
         assert len(observed_results) == 1
 

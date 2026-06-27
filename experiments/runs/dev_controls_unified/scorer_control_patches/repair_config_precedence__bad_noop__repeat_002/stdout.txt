@@ -1,0 +1,158 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-repair_config_precedence-z1b4f33_/workspace
+configfile: pyproject.toml
+collected 4 items
+
+tests/test_public.py ....                                                [100%]
+
+============================== 4 passed in 0.01s ===============================
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-repair_config_precedence-z1b4f33_/workspace
+configfile: pyproject.toml
+collected 9 items
+
+test_config_precedence.py FF.FFFF..                                      [100%]
+
+=================================== FAILURES ===================================
+_________________ test_environment_overrides_all_config_fields _________________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-1090/test_environment_overrides_all0')
+
+    def test_environment_overrides_all_config_fields(tmp_path: Path) -> None:
+        config_path = tmp_path / "settings.json"
+        config_path.write_text(
+            json.dumps({"host": "file.local", "port": 9000, "debug": False})
+        )
+    
+        settings = load_settings(
+            config_path,
+            environ={
+                "APP_HOST": "env.local",
+                "APP_PORT": "7001",
+                "APP_DEBUG": "true",
+            },
+        )
+    
+>       assert settings == Settings(host="env.local", port=7001, debug=True)
+E       AssertionError: assert Settings(host..., debug=False) == Settings(host...1, debug=True)
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing attributes:
+E         ['host', 'debug']
+E         
+E         Drill down into differing attribute host:
+E           host: 'file.local' != 'env.local'...
+E         
+E         ...Full output truncated (5 lines hidden), use '-vv' to show
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/hidden_tests/test_config_precedence.py:25: AssertionError
+___________ test_defaults_config_and_partial_environment_are_merged ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-1090/test_defaults_config_and_parti0')
+
+    def test_defaults_config_and_partial_environment_are_merged(
+        tmp_path: Path,
+    ) -> None:
+        config_path = tmp_path / "settings.json"
+        config_path.write_text(json.dumps({"host": "file.local"}))
+    
+        settings = load_settings(config_path, environ={"APP_DEBUG": "true"})
+    
+>       assert settings == Settings(host="file.local", port=8080, debug=True)
+E       AssertionError: assert Settings(host..., debug=False) == Settings(host...0, debug=True)
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing attributes:
+E         ['debug']
+E         
+E         Drill down into differing attribute debug:
+E           debug: False != True
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/hidden_tests/test_config_precedence.py:36: AssertionError
+________________ test_debug_accepts_only_true_and_false_strings ________________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-1090/test_debug_accepts_only_true_a0')
+
+    def test_debug_accepts_only_true_and_false_strings(tmp_path: Path) -> None:
+        true_config = tmp_path / "true.json"
+        true_config.write_text(json.dumps({"debug": "true"}))
+        false_config = tmp_path / "false.json"
+        false_config.write_text(json.dumps({"debug": "false"}))
+        invalid_config = tmp_path / "invalid.json"
+        invalid_config.write_text(json.dumps({"debug": "1"}))
+    
+>       assert load_settings(true_config, environ={}).debug is True
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/hidden_tests/test_config_precedence.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/config_loader.py:54: in load_settings
+    debug=_parse_debug(raw_settings["debug"]),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = 'true'
+
+    def _parse_debug(value: Any) -> bool:
+        if not isinstance(value, bool):
+>           raise ValueError("debug must be a boolean or true/false string")
+E           ValueError: debug must be a boolean or true/false string
+
+src/config_loader.py:79: ValueError
+_____________ test_environment_debug_false_string_overrides_config _____________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-1090/test_environment_debug_false_s0')
+
+    def test_environment_debug_false_string_overrides_config(tmp_path: Path) -> None:
+        config_path = tmp_path / "settings.json"
+        config_path.write_text(json.dumps({"debug": True}))
+    
+        settings = load_settings(config_path, environ={"APP_DEBUG": "false"})
+    
+>       assert settings == Settings(host="localhost", port=8080, debug=False)
+E       AssertionError: assert Settings(host...0, debug=True) == Settings(host..., debug=False)
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing attributes:
+E         ['debug']
+E         
+E         Drill down into differing attribute debug:
+E           debug: True != False
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/hidden_tests/test_config_precedence.py:68: AssertionError
+__________________ test_unknown_config_key_raises_value_error __________________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-1090/test_unknown_config_key_raises0')
+
+    def test_unknown_config_key_raises_value_error(tmp_path: Path) -> None:
+        config_path = tmp_path / "settings.json"
+        config_path.write_text(json.dumps({"host": "api.local", "timeout": 30}))
+    
+>       with pytest.raises(ValueError):
+E       Failed: DID NOT RAISE ValueError
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/hidden_tests/test_config_precedence.py:75: Failed
+_________________________ test_boolean_port_is_invalid _________________________
+
+tmp_path = PosixPath('/tmp/pytest-of-kshitij/pytest-1090/test_boolean_port_is_invalid0')
+
+    def test_boolean_port_is_invalid(tmp_path: Path) -> None:
+        config_path = tmp_path / "settings.json"
+        config_path.write_text(json.dumps({"port": True}))
+    
+>       with pytest.raises(ValueError):
+E       Failed: DID NOT RAISE ValueError
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/hidden_tests/test_config_precedence.py:83: Failed
+=========================== short test summary info ============================
+FAILED test_config_precedence.py::test_environment_overrides_all_config_fields
+FAILED test_config_precedence.py::test_defaults_config_and_partial_environment_are_merged
+FAILED test_config_precedence.py::test_debug_accepts_only_true_and_false_strings
+FAILED test_config_precedence.py::test_environment_debug_false_string_overrides_config
+FAILED test_config_precedence.py::test_unknown_config_key_raises_value_error
+FAILED test_config_precedence.py::test_boolean_port_is_invalid - Failed: DID ...
+========================= 6 failed, 3 passed in 0.04s ==========================
+

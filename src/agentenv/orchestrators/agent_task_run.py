@@ -211,6 +211,21 @@ def run_agent_task_attempt(
         )
 
 
+def run_and_persist_agent_task_attempt_to_dir(
+    task_manifest_path: Path,
+    model_client: ModelClient,
+    decoding_config: DecodingConfig,
+    out_dir: Path,
+) -> AgentTaskRun:
+    agent_task_run = run_agent_task_attempt(
+        task_manifest_path,
+        model_client,
+        decoding_config,
+    )
+    write_agent_task_run_artifacts(agent_task_run, out_dir)
+    return agent_task_run
+
+
 def write_agent_task_run_artifacts(
     agent_task_run: AgentTaskRun,
     out_dir: Path,

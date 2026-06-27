@@ -2,11 +2,22 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
+from agentenv.controls.agent_control_scripts import (
+    AgentControlScriptCase,
+    ExpectedAgentControlResult,
+    load_agent_control_script_case,
+)
 from agentenv.evals.resolve import scorer_control_patch_path
 from agentenv.evals.schema import ControlName
+from agentenv.models.fake import ScriptedFakeModelClient
+from agentenv.models.schema import DecodingConfig
+from agentenv.orchestrators.agent_task_run import (
+    AgentTaskRun,
+    run_and_persist_agent_task_attempt_to_dir,
+)
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.tasks.schema import TaskManifest
@@ -14,12 +25,23 @@ from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_p
 
 
 CONTROL_RUN_ARTIFACT_VERSION = "control_run_v0"
-CONTROL_NAMES: tuple[ControlName, ...] = ("oracle", "bad.noop", "bad.public_only")
+SCORER_CONTROL_NAMES: tuple[ControlName, ...] = (
+    "oracle",
+    "bad.noop",
+    "bad.public_only",
+)
+AGENT_CONTROL_NAMES: tuple[str, ...] = (
+    "happy_path",
+    "malformed_json",
+    "bad_tool_input_then_recovery",
+)
+ControlLayer = Literal["scorer", "agent"]
 MatchStatus = Literal["PASS", "FAIL"]
+JsonObject = dict[str, Any]
 
 
 @dataclass(frozen=True)
-class ControlExpectation:
+class ScorerControlExpectation:
     control: ControlName
     expected_attempt_status: AttemptStatus
     expected_public_status: CheckStatus
@@ -34,21 +56,15 @@ class ControlTask:
 
 
 @dataclass(frozen=True)
-class ControlAttemptRecord:
+class ControlRecord:
     task_id: str
-    control: ControlName
+    control_layer: ControlLayer
+    control_name: str
     repeat_index: int
-    attempt_dir: Path
-    result: AttemptResult
-    expectation: ControlExpectation
-
-    @property
-    def match(self) -> bool:
-        return (
-            self.result.status == self.expectation.expected_attempt_status
-            and self.result.public_status == self.expectation.expected_public_status
-            and self.result.hidden_status == self.expectation.expected_hidden_status
-        )
+    artifact_dir: Path
+    expected: JsonObject
+    actual: JsonObject
+    match: bool
 
 
 @dataclass(frozen=True)
@@ -58,11 +74,11 @@ class ControlRun:
     out_dir: Path
     repeats: int
     created_at: str
-    attempts: list[ControlAttemptRecord]
+    records: list[ControlRecord]
 
     @property
     def overall_match(self) -> bool:
-        return all(attempt.match for attempt in self.attempts)
+        return all(record.match for record in self.records)
 
 
 def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
@@ -72,8 +88,10 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
     task_pack_path = task_pack.resolve()
     out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    attempts_dir = out_dir / "attempts"
-    attempts_dir.mkdir(parents=True, exist_ok=True)
+    scorer_control_dir = out_dir / "scorer_control_patches"
+    agent_control_dir = out_dir / "agent_control_scripts"
+    scorer_control_dir.mkdir(parents=True, exist_ok=True)
+    agent_control_dir.mkdir(parents=True, exist_ok=True)
 
     tasks = _discover_control_tasks(task_pack_path)
     control_run = ControlRun(
@@ -82,35 +100,37 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
         out_dir=out_dir,
         repeats=repeats,
         created_at=_utc_now(),
-        attempts=[],
+        records=[],
     )
 
     for task in tasks:
-        for control in CONTROL_NAMES:
-            expectation = expected_control_outcome(control)
-            submission_path = scorer_control_patch_path(
-                task.manifest_path.parent,
-                task.manifest,
-                control,
-            )
+        for control in SCORER_CONTROL_NAMES:
             for repeat_index in range(repeats):
-                attempt_dir = (
-                    attempts_dir
-                    / f"{task.task_id}__{_control_slug(control)}__repeat_{repeat_index + 1:03d}"
-                )
-                attempt_run = run_and_persist_patch_attempt_to_dir(
-                    task.manifest_path,
-                    submission_path,
-                    attempt_dir,
-                )
-                control_run.attempts.append(
-                    ControlAttemptRecord(
-                        task_id=task.task_id,
+                control_run.records.append(
+                    _run_scorer_control(
+                        task=task,
                         control=control,
                         repeat_index=repeat_index,
-                        attempt_dir=attempt_dir,
-                        result=attempt_run.result,
-                        expectation=expectation,
+                        out_dir=scorer_control_dir,
+                    )
+                )
+
+        for control_name in AGENT_CONTROL_NAMES:
+            control_path = (
+                task.manifest_path.parent
+                / "controls"
+                / "agent_control_scripts"
+                / f"{control_name}.json"
+            )
+            control_case = load_agent_control_script_case(control_path)
+            for repeat_index in range(repeats):
+                control_run.records.append(
+                    _run_agent_control(
+                        task=task,
+                        control_name=control_name,
+                        control_case=control_case,
+                        repeat_index=repeat_index,
+                        out_dir=agent_control_dir,
                     )
                 )
 
@@ -120,29 +140,104 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
     return control_run
 
 
-def expected_control_outcome(control: ControlName) -> ControlExpectation:
+def expected_control_outcome(control: ControlName) -> ScorerControlExpectation:
     if control == "oracle":
-        return ControlExpectation(
+        return ScorerControlExpectation(
             control=control,
             expected_attempt_status="PASS",
             expected_public_status="PASS",
             expected_hidden_status="PASS",
         )
     if control == "bad.noop":
-        return ControlExpectation(
+        return ScorerControlExpectation(
             control=control,
             expected_attempt_status="HIDDEN_TEST_FAIL",
             expected_public_status="PASS",
             expected_hidden_status="FAIL",
         )
     if control == "bad.public_only":
-        return ControlExpectation(
+        return ScorerControlExpectation(
             control=control,
             expected_attempt_status="HIDDEN_TEST_FAIL",
             expected_public_status="PASS",
             expected_hidden_status="FAIL",
         )
     raise ValueError(f"Unknown control: {control}")
+
+
+def _run_scorer_control(
+    *,
+    task: ControlTask,
+    control: ControlName,
+    repeat_index: int,
+    out_dir: Path,
+) -> ControlRecord:
+    expectation = expected_control_outcome(control)
+    submission_path = scorer_control_patch_path(
+        task.manifest_path.parent,
+        task.manifest,
+        control,
+    )
+    artifact_dir = (
+        out_dir
+        / f"{task.task_id}__{_control_slug(control)}__repeat_{repeat_index + 1:03d}"
+    )
+    attempt_run = run_and_persist_patch_attempt_to_dir(
+        task.manifest_path,
+        submission_path,
+        artifact_dir,
+    )
+    expected = _scorer_expected_json(expectation)
+    actual = _scorer_actual_json(attempt_run.result)
+    return ControlRecord(
+        task_id=task.task_id,
+        control_layer="scorer",
+        control_name=control,
+        repeat_index=repeat_index,
+        artifact_dir=artifact_dir,
+        expected=expected,
+        actual=actual,
+        match=_scorer_match(expectation, attempt_run.result),
+    )
+
+
+def _run_agent_control(
+    *,
+    task: ControlTask,
+    control_name: str,
+    control_case: AgentControlScriptCase,
+    repeat_index: int,
+    out_dir: Path,
+) -> ControlRecord:
+    artifact_dir = (
+        out_dir
+        / f"{task.task_id}__{control_name}__repeat_{repeat_index + 1:03d}"
+    )
+    decoding_config = _agent_control_decoding_config()
+    model_client = ScriptedFakeModelClient(
+        model_id="agent-control-scripted-v0",
+        script=control_case.script.steps,
+    )
+    agent_task_run = run_and_persist_agent_task_attempt_to_dir(
+        task.manifest_path,
+        model_client,
+        decoding_config,
+        artifact_dir,
+    )
+    _write_decoding_config(decoding_config, artifact_dir)
+
+    expected = _agent_expected_json(control_case.expected_result)
+    actual = _agent_actual_json(agent_task_run)
+    return ControlRecord(
+        task_id=task.task_id,
+        control_layer="agent",
+        control_name=control_name,
+        repeat_index=repeat_index,
+        artifact_dir=artifact_dir,
+        expected=expected,
+        actual=actual,
+        match=_agent_match(control_case.expected_result, agent_task_run),
+    )
 
 
 def _discover_control_tasks(task_pack_path: Path) -> list[ControlTask]:
@@ -167,8 +262,8 @@ def _discover_control_tasks(task_pack_path: Path) -> list[ControlTask]:
 def _write_jsonl(control_run: ControlRun) -> Path:
     path = control_run.out_dir / "control_results.jsonl"
     lines = [
-        json.dumps(_attempt_record_json(control_run, attempt), sort_keys=True)
-        for attempt in control_run.attempts
+        json.dumps(_record_json(control_run, record), sort_keys=True)
+        for record in control_run.records
     ]
     path.write_text("\n".join(lines) + ("\n" if lines else ""))
     return path
@@ -193,42 +288,44 @@ def _write_markdown(control_run: ControlRun) -> Path:
         f"- Control run ID: {control_run.control_run_id}",
         f"- Task pack: {control_run.task_pack_path}",
         f"- Repeats: {control_run.repeats}",
-        f"- Attempts: {len(control_run.attempts)}",
+        f"- Records: {len(control_run.records)}",
         f"- Overall: {_match_display(control_run.overall_match)}",
         "",
         "## Control Summary",
         "",
-        "| task_id | control | repeats | matches | expected |",
-        "| --- | --- | --- | --- | --- |",
+        "| layer | task_id | control | repeats | matches | expected |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
-    for task_id, control in _summary_keys(control_run):
-        attempts = [
-            attempt
-            for attempt in control_run.attempts
-            if attempt.task_id == task_id and attempt.control == control
+    for control_layer, task_id, control_name in _summary_keys(control_run):
+        records = [
+            record
+            for record in control_run.records
+            if record.control_layer == control_layer
+            and record.task_id == task_id
+            and record.control_name == control_name
         ]
-        matches = sum(attempt.match for attempt in attempts)
-        expectation = expected_control_outcome(control)
+        matches = sum(record.match for record in records)
+        expected = records[0].expected if records else {}
         lines.append(
-            f"| {task_id} | {control} | {len(attempts)} | "
-            f"{matches}/{len(attempts)} | {_expectation_display(expectation)} |"
+            f"| {control_layer} | {task_id} | {control_name} | {len(records)} | "
+            f"{matches}/{len(records)} | {_json_display(expected)} |"
         )
 
     lines.extend(
         [
             "",
-            "## Attempt Details",
+            "## Record Details",
             "",
-            "| task_id | control | repeat | expected | actual | match | artifact_dir |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| layer | task_id | control | repeat | expected | actual | match | artifact_dir |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
-    for attempt in control_run.attempts:
+    for record in control_run.records:
         lines.append(
-            f"| {attempt.task_id} | {attempt.control} | {attempt.repeat_index + 1} | "
-            f"{_expectation_display(attempt.expectation)} | "
-            f"{_actual_display(attempt.result)} | {_match_display(attempt.match)} | "
-            f"{attempt.attempt_dir.relative_to(control_run.out_dir)} |"
+            f"| {record.control_layer} | {record.task_id} | {record.control_name} | "
+            f"{record.repeat_index + 1} | {_json_display(record.expected)} | "
+            f"{_json_display(record.actual)} | {_match_display(record.match)} | "
+            f"{record.artifact_dir.relative_to(control_run.out_dir)} |"
         )
 
     path.write_text("\n".join(lines) + "\n")
@@ -242,71 +339,168 @@ def _control_run_manifest(control_run: ControlRun) -> dict[str, object]:
         "created_at": control_run.created_at,
         "task_pack_path": str(control_run.task_pack_path),
         "repeats": control_run.repeats,
-        "attempt_count": len(control_run.attempts),
+        "record_count": len(control_run.records),
         "overall_match": control_run.overall_match,
         "artifacts": {
-            "attempts": "attempts",
-            "results": "control_results.jsonl",
+            "agent_control_scripts": "agent_control_scripts",
+            "scorer_control_patches": "scorer_control_patches",
             "report": "control_report.md",
+            "results": "control_results.jsonl",
         },
-        "attempts": [
-            _attempt_record_json(control_run, attempt) for attempt in control_run.attempts
+        "records": [
+            _record_json(control_run, record) for record in control_run.records
         ],
     }
 
 
-def _attempt_record_json(
+def _record_json(
     control_run: ControlRun,
-    attempt: ControlAttemptRecord,
+    record: ControlRecord,
 ) -> dict[str, object]:
     return {
         "control_run_id": control_run.control_run_id,
-        "task_id": attempt.task_id,
-        "control": attempt.control,
-        "repeat_index": attempt.repeat_index,
-        "attempt_id": attempt.result.attempt_id,
-        "attempt_artifact_dir": str(attempt.attempt_dir.relative_to(control_run.out_dir)),
-        "expected": {
-            "attempt_status": attempt.expectation.expected_attempt_status,
-            "public_status": attempt.expectation.expected_public_status,
-            "hidden_status": attempt.expectation.expected_hidden_status,
-        },
-        "actual": {
-            "attempt_status": attempt.result.status,
-            "public_status": attempt.result.public_status,
-            "hidden_status": attempt.result.hidden_status,
-            "error_class": attempt.result.error_class,
-        },
-        "match": attempt.match,
+        "task_id": record.task_id,
+        "control_layer": record.control_layer,
+        "control_name": record.control_name,
+        "repeat_index": record.repeat_index,
+        "artifact_dir": str(record.artifact_dir.relative_to(control_run.out_dir)),
+        "expected": record.expected,
+        "actual": record.actual,
+        "match": record.match,
     }
 
 
-def _summary_keys(control_run: ControlRun) -> list[tuple[str, ControlName]]:
-    return sorted({(attempt.task_id, attempt.control) for attempt in control_run.attempts})
+def _summary_keys(control_run: ControlRun) -> list[tuple[str, str, str]]:
+    return sorted({
+        (record.control_layer, record.task_id, record.control_name)
+        for record in control_run.records
+    })
 
 
-def _expectation_display(expectation: ControlExpectation) -> str:
+def _scorer_expected_json(expectation: ScorerControlExpectation) -> JsonObject:
+    return {
+        "attempt_status": expectation.expected_attempt_status,
+        "public_status": expectation.expected_public_status,
+        "hidden_status": expectation.expected_hidden_status,
+    }
+
+
+def _scorer_actual_json(result: AttemptResult) -> JsonObject:
+    return {
+        "attempt_id": result.attempt_id,
+        "attempt_status": result.status,
+        "public_status": result.public_status,
+        "hidden_status": result.hidden_status,
+        "final_diff_hash": result.final_diff_hash,
+        "error_class": result.error_class,
+    }
+
+
+def _scorer_match(
+    expectation: ScorerControlExpectation,
+    result: AttemptResult,
+) -> bool:
     return (
-        f"attempt_status: {expectation.expected_attempt_status}; "
-        f"public_status: {expectation.expected_public_status}; "
-        f"hidden_status: {expectation.expected_hidden_status}"
+        result.status == expectation.expected_attempt_status
+        and result.public_status == expectation.expected_public_status
+        and result.hidden_status == expectation.expected_hidden_status
     )
 
 
-def _actual_display(result: AttemptResult) -> str:
-    return (
-        f"attempt_status: {result.status}; "
-        f"public_status: {result.public_status}; "
-        f"hidden_status: {result.hidden_status}"
+def _agent_expected_json(expected_result: ExpectedAgentControlResult) -> JsonObject:
+    expected: JsonObject = {
+        "prompt_loop_status": expected_result.prompt_loop_status,
+    }
+    if expected_result.tool_results is not None:
+        expected["tool_results"] = [
+            {
+                "tool_name": tool_result.tool_name,
+                "status": tool_result.status,
+                "error_class": tool_result.error_class,
+            }
+            for tool_result in expected_result.tool_results
+        ]
+    return expected
+
+
+def _agent_actual_json(agent_task_run: AgentTaskRun) -> JsonObject:
+    attempt_result = agent_task_run.result.attempt_result
+    return {
+        "agent_run_id": agent_task_run.result.run_id,
+        "agent_run_status": agent_task_run.result.status,
+        "prompt_loop_status": agent_task_run.result.prompt_loop_status,
+        "tool_results": _actual_tool_results(agent_task_run),
+        "attempt_status": attempt_result.status if attempt_result is not None else None,
+        "public_status": (
+            attempt_result.public_status if attempt_result is not None else None
+        ),
+        "hidden_status": (
+            attempt_result.hidden_status if attempt_result is not None else None
+        ),
+        "error_class": agent_task_run.result.error_class,
+    }
+
+
+def _actual_tool_results(agent_task_run: AgentTaskRun) -> list[JsonObject]:
+    if agent_task_run.prompt_loop_result is None:
+        return []
+    return [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in agent_task_run.prompt_loop_result.tool_results
+    ]
+
+
+def _agent_match(
+    expected_result: ExpectedAgentControlResult,
+    agent_task_run: AgentTaskRun,
+) -> bool:
+    if agent_task_run.result.prompt_loop_status != expected_result.prompt_loop_status:
+        return False
+
+    expected_tool_results = expected_result.tool_results
+    if expected_tool_results is None:
+        return True
+
+    return _actual_tool_results(agent_task_run) == [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in expected_tool_results
+    ]
+
+
+def _agent_control_decoding_config() -> DecodingConfig:
+    return DecodingConfig(
+        strategy="greedy",
+        temperature=0.0,
+        top_p=1.0,
+        max_new_tokens=512,
+        timeout_seconds=30,
     )
+
+
+def _write_decoding_config(decoding_config: DecodingConfig, artifact_dir: Path) -> Path:
+    path = artifact_dir / "decoding_config.json"
+    path.write_text(decoding_config.model_dump_json(indent=2) + "\n")
+    return path
+
+
+def _json_display(value: JsonObject) -> str:
+    return json.dumps(value, sort_keys=True)
 
 
 def _match_display(match: bool) -> MatchStatus:
     return "PASS" if match else "FAIL"
 
 
-def _control_slug(control: ControlName) -> str:
-    return control.replace(".", "_")
+def _control_slug(control_name: str) -> str:
+    return control_name.replace(".", "_")
 
 
 def _utc_now() -> str:

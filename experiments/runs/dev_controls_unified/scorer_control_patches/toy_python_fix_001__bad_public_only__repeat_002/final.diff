@@ -1,0 +1,9 @@
+--- a/src/mathlib.py
++++ b/src/mathlib.py
+@@ -1,3 +1,5 @@
+ def normalize_ratio(numerator: int | float, denominator: int | float) -> float:
+     """Return numerator divided by denominator as a normalized ratio."""
+-    return numerator // denominator
++    if denominator == 0:
++        raise ValueError("denominator must not be zero")
++    return float(abs(numerator / denominator))

@@ -4,6 +4,7 @@ from pathlib import Path
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import (
+    run_and_persist_agent_task_attempt_to_dir,
     run_agent_task_attempt,
     write_agent_task_run_artifacts,
 )
@@ -214,3 +215,51 @@ def test_run_agent_task_attempt_does_not_score_failed_prompt_loop(
     assert "attempt" not in run_manifest["artifacts"]
     assert agent_task_result["attempt_result"] is None
     assert prompt_loop_result["status"] == "invalid_model_output"
+
+
+def test_run_and_persist_agent_task_attempt_keeps_scratch_out_of_artifacts(
+    tmp_path: Path,
+) -> None:
+    model_client = ScriptedFakeModelClient(
+        model_id="fake-scripted-v0",
+        script=[
+            FakeModelScriptStep(
+                output_text=_action({
+                    "action": "tool_call",
+                    "tool_name": "read_file",
+                    "arguments": {"path": "src/mathlib.py"},
+                }),
+            ),
+            FakeModelScriptStep(
+                output_text=_action({
+                    "action": "tool_call",
+                    "tool_name": "write_file",
+                    "arguments": {
+                        "path": "src/mathlib.py",
+                        "content": FIXED_MATHLIB,
+                    },
+                }),
+            ),
+            FakeModelScriptStep(
+                output_text=_action({
+                    "action": "final_answer",
+                    "text": "done",
+                }),
+            ),
+        ],
+    )
+    out_dir = tmp_path / "out"
+
+    agent_task_run = run_and_persist_agent_task_attempt_to_dir(
+        TOY_TASK_MANIFEST,
+        model_client,
+        _decoding_config(),
+        out_dir,
+    )
+
+    assert agent_task_run.result.prompt_loop_status == "completed"
+    assert (out_dir / "agent_task_run.json").is_file()
+    assert (out_dir / "prompt_loop_result.json").is_file()
+    assert not (out_dir / "work").exists()
+    assert not (out_dir / "agent_interaction_workspace").exists()
+    assert not (out_dir / "scoring_workspace").exists()
