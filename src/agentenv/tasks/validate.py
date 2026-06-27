@@ -5,6 +5,7 @@ import unicodedata
 
 import yaml
 
+from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.tasks.schema import TaskManifest, TaskPackManifest, TaskSplitsLock
 
 
@@ -150,6 +151,25 @@ def _validate_task_required_files(
     for raw_required_path in required_task_files:
         required_path = _resolve_manifest_path(task_dir, raw_required_path)
         _require_exists(required_path, f"required task file {raw_required_path}")
+        if _is_agent_control_script_path(raw_required_path):
+            _validate_agent_control_script(required_path, raw_required_path)
+
+
+def _is_agent_control_script_path(raw_path: str) -> bool:
+    path = Path(raw_path)
+    return (
+        len(path.parts) >= 3
+        and path.parts[0] == "controls"
+        and path.parts[1] == "agent_control_scripts"
+        and path.suffix == ".json"
+    )
+
+
+def _validate_agent_control_script(path: Path, raw_path: str) -> None:
+    try:
+        load_agent_control_script_case(path)
+    except ValueError as exc:
+        raise ValueError(f"Invalid agent control script {raw_path}: {exc}") from exc
 
 
 def _validate_task_pack_domain(

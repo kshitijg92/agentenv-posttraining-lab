@@ -14,6 +14,9 @@ hidden_tests/
 controls/scorer_control_patches/oracle.patch
 controls/scorer_control_patches/bad_noop.patch
 controls/scorer_control_patches/bad_public_only.patch
+controls/agent_control_scripts/happy_path.json
+controls/agent_control_scripts/malformed_json.json
+controls/agent_control_scripts/bad_tool_input_then_recovery.json
 ```
 
 ## Task Shape
@@ -89,6 +92,14 @@ Expected control outcomes:
 oracle -> PASS / PASS / PASS
 bad.noop -> HIDDEN_TEST_FAIL / PASS / FAIL
 bad.public_only -> HIDDEN_TEST_FAIL / PASS / FAIL
+```
+
+Required agent-loop controls:
+
+```text
+happy_path -> prompt_loop_status completed
+malformed_json -> prompt_loop_status invalid_model_output
+bad_tool_input_then_recovery -> prompt_loop_status completed, first tool result InvalidToolInput, then recovery
 ```
 
 For each task, run or include in repeated control calibration:

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import shutil
 
@@ -99,6 +100,22 @@ def test_task_pack_validation_rejects_legacy_allowed_tools(
     )
 
     with pytest.raises(ValueError, match="read_file"):
+        validate_task_pack(task_pack)
+
+
+def test_task_pack_validation_rejects_invalid_agent_control_script(
+    tmp_path: Path,
+) -> None:
+    task_pack = _copy_task_pack(tmp_path)
+    control_path = (
+        task_pack
+        / "tasks/toy_python_fix/controls/agent_control_scripts/happy_path.json"
+    )
+    raw_control = json.loads(control_path.read_text())
+    raw_control["schema_version"] = "agent_control_script_v1"
+    control_path.write_text(json.dumps(raw_control))
+
+    with pytest.raises(ValueError, match="Invalid agent control script"):
         validate_task_pack(task_pack)
 
 

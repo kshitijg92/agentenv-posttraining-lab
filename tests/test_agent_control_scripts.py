@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from agentenv.agents.schema import PromptLoopResult, PromptLoopStatus
-from agentenv.models.fake import ScriptedFakeModelClient
-from agentenv.models.schema import DecodingConfig
-from agentenv.orchestrators.agent_control_scripts import (
+from agentenv.agents.schema import PromptLoopResult
+from agentenv.controls.agent_control_scripts import (
     AGENT_CONTROL_SCRIPT_SCHEMA_VERSION,
     ExpectedAgentControlResult,
     load_agent_control_script_case,
 )
+from agentenv.models.fake import ScriptedFakeModelClient
+from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import run_agent_task_attempt
 
 
@@ -28,6 +28,10 @@ TOY_MALFORMED_JSON_AGENT_CONTROL = Path(
 TOY_BAD_TOOL_INPUT_AGENT_CONTROL = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix"
     "/controls/agent_control_scripts/bad_tool_input_then_recovery.json"
+)
+TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
+ALL_AGENT_CONTROL_CASES = sorted(
+    TASK_PACK.glob("tasks/*/controls/agent_control_scripts/*.json")
 )
 
 
@@ -87,16 +91,12 @@ def test_expected_tool_results_reject_error_class_for_ok_results() -> None:
 
 
 @pytest.mark.parametrize(
-    ("control_path", "expected_status"),
-    [
-        (TOY_HAPPY_PATH_AGENT_CONTROL, "completed"),
-        (TOY_MALFORMED_JSON_AGENT_CONTROL, "invalid_model_output"),
-        (TOY_BAD_TOOL_INPUT_AGENT_CONTROL, "completed"),
-    ],
+    "control_path",
+    ALL_AGENT_CONTROL_CASES,
+    ids=lambda path: f"{path.parents[2].name}/{path.stem}",
 )
 def test_agent_control_matches_prompt_loop_expectation(
     control_path: Path,
-    expected_status: PromptLoopStatus,
     tmp_path: Path,
 ) -> None:
     control_case = load_agent_control_script_case(control_path)
@@ -104,16 +104,16 @@ def test_agent_control_matches_prompt_loop_expectation(
         model_id="agent-control-scripted-v0",
         script=control_case.script.steps,
     )
+    task_manifest_path = control_path.parents[2] / "task.yaml"
 
     agent_task_run = run_agent_task_attempt(
-        TOY_TASK_MANIFEST,
+        task_manifest_path,
         model_client,
         _decoding_config(),
         workspace_parent=tmp_path / "work",
     )
 
     assert agent_task_run.prompt_loop_result is not None
-    assert control_case.expected_result.prompt_loop_status == expected_status
     _assert_expected_result_matches(
         control_case.expected_result,
         agent_task_run.prompt_loop_result,

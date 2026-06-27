@@ -85,7 +85,14 @@ Every task must include controls before it can be trusted in a baseline:
 controls/scorer_control_patches/oracle.patch
 controls/scorer_control_patches/bad_noop.patch
 controls/scorer_control_patches/bad_public_only.patch
+controls/agent_control_scripts/happy_path.json
+controls/agent_control_scripts/malformed_json.json
+controls/agent_control_scripts/bad_tool_input_then_recovery.json
 ```
+
+The scorer control patches calibrate the patch-attempt/scoring path. The agent
+control scripts calibrate the model-agent loop before a candidate patch is
+scored.
 
 Expected outcomes:
 

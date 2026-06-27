@@ -14,6 +14,9 @@ required_task_files:
   - controls/scorer_control_patches/oracle.patch
   - controls/scorer_control_patches/bad_noop.patch
   - controls/scorer_control_patches/bad_public_only.patch
+  - controls/agent_control_scripts/happy_path.json
+  - controls/agent_control_scripts/malformed_json.json
+  - controls/agent_control_scripts/bad_tool_input_then_recovery.json
 baseline_policy:
   practice: "Calibration and harness-shaping tasks."
   dev: "Authored tasks used for baseline iteration and reporting."

@@ -1227,3 +1227,41 @@ tool observation to the model and allow a corrected next turn.
 
 The structured `tool_results` expectation proves the recovery path occurred
 without asserting the full transcript shape.
+
+## Required Agent Controls Decision
+
+### Decision
+
+Make the three initial agent control scripts required for every task in the
+`repo_patch_python_v0` task pack:
+
+```text
+controls/agent_control_scripts/happy_path.json
+controls/agent_control_scripts/malformed_json.json
+controls/agent_control_scripts/bad_tool_input_then_recovery.json
+```
+
+The task-pack manifest now lists these paths in `required_task_files`, and
+task-pack validation loads each required agent-control JSON.
+
+The agent-control schema and loader live under:
+
+```text
+agentenv.controls.agent_control_scripts
+```
+
+### Reasoning
+
+Agent controls calibrate the model-agent loop. If they are optional by default,
+a controls report or validation pass could silently skip tasks that lack
+agent-loop calibration. Making them required avoids that self-deception risk
+for this pack.
+
+The schema/loader moved out of `orchestrators/` because task validation needs to
+parse the control artifacts. `tasks.validate` should not depend on an
+orchestrator module just to validate task-pack files.
+
+### Non-Goals
+
+This step still does not add controls CLI discovery or reporting for agent
+controls. It makes the artifacts required and validates/runs them in tests.
