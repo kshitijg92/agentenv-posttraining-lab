@@ -173,6 +173,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
             assert (artifact_dir / "agent_task_run.json").is_file()
             assert (artifact_dir / "prompt_loop_result.json").is_file()
             assert (artifact_dir / "decoding_config.json").is_file()
+            assert (artifact_dir / "agent_control_script.json").is_file()
             assert not (artifact_dir / "work").exists()
             assert not (artifact_dir / "agent_interaction_workspace").exists()
             assert not (artifact_dir / "scoring_workspace").exists()

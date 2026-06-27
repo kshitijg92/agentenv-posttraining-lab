@@ -255,10 +255,10 @@ def render_replay_report(
         "## Attempt Comparisons",
         "",
         (
-            "| task_id | matched | status | public_status | hidden_status | "
-            "error_class | final_diff_hash | source_attempt | replay_attempt |"
+            "| task_id | type | matched | artifacts | fields | source_artifact | "
+            "replay_artifact |"
         ),
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| --- | --- | --- | ---: | ---: | --- | --- |",
     ]
 
     for comparison in _load_jsonl_objects(artifact_dir / "replay_results.jsonl"):
@@ -574,17 +574,16 @@ def _comparison_row(comparison: dict[str, object]) -> str:
     field_matches = comparison.get("field_matches")
     if not isinstance(field_matches, dict):
         raise ValueError("Expected replay comparison field_matches object")
+    artifact_matches = comparison.get("artifact_matches")
 
     return (
         f"| {_display(comparison.get('task_id'))} "
+        f"| {_display(comparison.get('comparison_type'))} "
         f"| {_match_display(comparison.get('matched'))} "
-        f"| {_match_display(field_matches.get('status'))} "
-        f"| {_match_display(field_matches.get('public_status'))} "
-        f"| {_match_display(field_matches.get('hidden_status'))} "
-        f"| {_match_display(field_matches.get('error_class'))} "
-        f"| {_match_display(field_matches.get('final_diff_hash'))} "
-        f"| {_display(comparison.get('source_attempt_artifact_ref'))} "
-        f"| {_display(comparison.get('replay_attempt_artifact_ref'))} |"
+        f"| {_artifact_match_display(artifact_matches)} "
+        f"| {_field_match_display(field_matches)} "
+        f"| {_display(comparison.get('source_artifact_ref'))} "
+        f"| {_display(comparison.get('replay_artifact_ref'))} |"
     )
 
 
@@ -660,6 +659,20 @@ def _match_display(value: object) -> str:
     if value is False:
         return "mismatch"
     return _display(value)
+
+
+def _artifact_match_display(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    total = len(value)
+    matches = sum(artifact_match is True for artifact_match in value.values())
+    return _count_rate(matches, total)
+
+
+def _field_match_display(value: dict[object, object]) -> str:
+    total = len(value)
+    matches = sum(field_match is True for field_match in value.values())
+    return _count_rate(matches, total)
 
 
 def _count_rate(count_value: object, total: int) -> str:

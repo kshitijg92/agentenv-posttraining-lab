@@ -1,5 +1,11 @@
 from pathlib import Path
 
+from agentenv.controls.agent_control_scripts import load_agent_control_script_case
+from agentenv.models.fake import ScriptedFakeModelClient
+from agentenv.models.schema import DecodingConfig
+from agentenv.orchestrators.agent_task_run import (
+    run_and_persist_agent_task_attempt_to_dir,
+)
 from agentenv.orchestrators.eval_run import (
     run_eval_config,
     run_eval_config_all_policies,
@@ -9,6 +15,44 @@ from agentenv.reporting.markdown import write_markdown_report
 
 
 CONTROL_EVAL_CONFIG = Path("configs/eval/scorer_control_policies.yaml")
+TOY_TASK_MANIFEST = Path(
+    "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
+)
+TOY_HAPPY_AGENT_CONTROL = Path(
+    "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/"
+    "controls/agent_control_scripts/happy_path.json"
+)
+
+
+def _decoding_config() -> DecodingConfig:
+    return DecodingConfig(
+        strategy="greedy",
+        temperature=0.0,
+        top_p=1.0,
+        max_new_tokens=512,
+        timeout_seconds=30,
+    )
+
+
+def _write_agent_control_source_artifact(out_dir: Path) -> None:
+    control_case = load_agent_control_script_case(TOY_HAPPY_AGENT_CONTROL)
+    decoding_config = _decoding_config()
+    model_client = ScriptedFakeModelClient(
+        model_id="agent-control-scripted-v0",
+        script=control_case.script.steps,
+    )
+    run_and_persist_agent_task_attempt_to_dir(
+        TOY_TASK_MANIFEST,
+        model_client,
+        decoding_config,
+        out_dir,
+    )
+    (out_dir / "decoding_config.json").write_text(
+        decoding_config.model_dump_json(indent=2) + "\n"
+    )
+    (out_dir / "agent_control_script.json").write_text(
+        control_case.model_dump_json(indent=2) + "\n"
+    )
 
 
 def test_write_eval_markdown_report(tmp_path: Path) -> None:
@@ -56,9 +100,29 @@ def test_write_replay_markdown_report(tmp_path: Path) -> None:
     assert "- Attempt count: 1" in report
     assert "- Matched attempts: 1" in report
     assert (
-        "| toy_python_fix_001 | match | match | match | match | match | match | "
+        "| toy_python_fix_001 | scorer_attempt | match | 7/7 (100%) | "
+        "5/5 (100%) | "
         "attempts/toy_python_fix_001__attempt_001 | "
         "attempts/toy_python_fix_001__attempt_001 |"
+    ) in report
+
+
+def test_write_agent_replay_markdown_report(tmp_path: Path) -> None:
+    _write_agent_control_source_artifact(tmp_path / "source_agent")
+    run_replay(tmp_path / "source_agent", tmp_path / "replay_run")
+
+    report_path = write_markdown_report(
+        tmp_path / "replay_run",
+        tmp_path / "reports/agent_replay.md",
+    )
+    report = report_path.read_text()
+
+    assert report_path == tmp_path / "reports/agent_replay.md"
+    assert "# Replay Report" in report
+    assert "- Source artifact version: agent_task_run_artifacts_v0" in report
+    assert (
+        "| toy_python_fix_001 | agent_task_run | match | 15/15 (100%) | "
+        "6/6 (100%) | . | agent_task_run |"
     ) in report
 
 

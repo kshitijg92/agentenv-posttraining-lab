@@ -88,6 +88,8 @@ class ReplayTraceProvenance(BaseModel):
 
     replay_id: str = Field(min_length=1)
     source_eval_run_id: str | None = Field(default=None, min_length=1)
+    source_artifact_id: str | None = Field(default=None, min_length=1)
+    replay_artifact_id: str | None = Field(default=None, min_length=1)
     task_id: str | None = Field(default=None, min_length=1)
     source_attempt_id: str | None = Field(default=None, min_length=1)
     replay_attempt_id: str | None = Field(default=None, min_length=1)
@@ -169,23 +171,29 @@ def _validate_replay_event_provenance(
     provenance: ReplayTraceProvenance,
 ) -> None:
     if event_type == "source_run_manifest_loaded":
-        _require_provenance_fields(event_type, provenance, ("source_eval_run_id",))
-    if event_type in {"source_attempt_loaded", "fresh_attempt_started"}:
-        _require_provenance_fields(
+        _require_any_provenance_field(
             event_type,
             provenance,
-            ("source_eval_run_id", "task_id", "source_attempt_id"),
+            ("source_eval_run_id", "source_artifact_id"),
+        )
+    if event_type in {"source_attempt_loaded", "fresh_attempt_started"}:
+        _require_provenance_fields(event_type, provenance, ("task_id",))
+        _require_any_provenance_field(
+            event_type,
+            provenance,
+            ("source_attempt_id", "source_artifact_id"),
         )
     if event_type in {"fresh_attempt_finished", "comparison_recorded"}:
-        _require_provenance_fields(
+        _require_provenance_fields(event_type, provenance, ("task_id",))
+        _require_any_provenance_field(
             event_type,
             provenance,
-            (
-                "source_eval_run_id",
-                "task_id",
-                "source_attempt_id",
-                "replay_attempt_id",
-            ),
+            ("source_attempt_id", "source_artifact_id"),
+        )
+        _require_any_provenance_field(
+            event_type,
+            provenance,
+            ("replay_attempt_id", "replay_artifact_id"),
         )
 
 
@@ -204,3 +212,16 @@ def _require_provenance_fields(
         raise ValueError(
             f"{event_type} provenance is missing required field(s): {missing_fields}"
         )
+
+
+def _require_any_provenance_field(
+    event_type: TraceEventType,
+    provenance: BaseModel,
+    field_names: tuple[str, ...],
+) -> None:
+    if any(getattr(provenance, field_name) is not None for field_name in field_names):
+        return
+    joined_fields = " or ".join(field_names)
+    raise ValueError(
+        f"{event_type} provenance is missing required field(s): {joined_fields}"
+    )

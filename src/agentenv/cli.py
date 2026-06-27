@@ -183,14 +183,17 @@ def run_eval(
 
 @app.command("replay")
 def replay_run(
-    source_run_dir: Path = typer.Argument(..., help="Eval run directory to replay."),
+    source_run_dir: Path = typer.Argument(
+        ...,
+        help="Source artifact directory to replay.",
+    ),
     out: Path = typer.Option(..., "--out", help="Directory for replay artifacts."),
 ) -> None:
     replay = run_replay(source_run_dir, out)
     style = "green" if replay.status == "PASS" else "red"
     console.print(
         f"[{style}]{replay.status}[/{style}] "
-        f"attempts={len(replay.comparisons)}"
+        f"comparisons={len(replay.comparisons)}"
     )
     console.print(f"wrote {replay.out_dir / 'replay_result.json'}")
 

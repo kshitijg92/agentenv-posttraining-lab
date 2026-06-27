@@ -205,6 +205,7 @@ def _run_agent_control(
         artifact_dir,
     )
     _write_decoding_config(decoding_config, artifact_dir)
+    _write_agent_control_script(control_case, artifact_dir)
 
     expected = _agent_expected_json(control_case.expected_result)
     actual = _agent_actual_json(agent_task_run)
@@ -584,6 +585,15 @@ def _agent_control_decoding_config() -> DecodingConfig:
 def _write_decoding_config(decoding_config: DecodingConfig, artifact_dir: Path) -> Path:
     path = artifact_dir / "decoding_config.json"
     path.write_text(decoding_config.model_dump_json(indent=2) + "\n")
+    return path
+
+
+def _write_agent_control_script(
+    control_case: AgentControlScriptCase,
+    artifact_dir: Path,
+) -> Path:
+    path = artifact_dir / "agent_control_script.json"
+    path.write_text(control_case.model_dump_json(indent=2) + "\n")
     return path
 
 

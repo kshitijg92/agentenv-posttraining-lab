@@ -1508,3 +1508,181 @@ path is wired.
 This checkpoint adds schema loading and path validation only. Eval execution for
 `agent_control_script` currently fails explicitly until the next checkpoint
 wires it to `run_agent_task_attempt(...)`.
+
+## Replay Normalized-Exact Artifact Contract Decision
+
+### Decision
+
+Strengthen scorer-control replay from a five-field `AttemptResult` comparison
+to a normalized durable-artifact comparison.
+
+For scorer patch attempts, replay now compares these attempt artifacts:
+
+```text
+run_manifest.json
+attempt.json
+stdout.txt
+stderr.txt
+error.txt
+trace.jsonl
+final.diff
+```
+
+Replay still records the compact scorer field checks:
+
+```text
+status
+public_status
+hidden_status
+error_class
+final_diff_hash
+```
+
+but an attempt only matches if both the scorer fields and all normalized durable
+artifacts match.
+
+### Normalization
+
+Replay intentionally normalizes volatile execution fields:
+
+```text
+run_id
+attempt_id
+started_at
+ended_at
+timestamp_utc
+duration_ms
+stdout_bytes
+stderr_bytes
+absolute repo paths
+temporary agent workspace paths
+pytest elapsed-time strings
+uv/tool elapsed-time strings
+```
+
+Everything else in the durable scorer attempt artifacts is expected to match.
+
+### Reasoning
+
+The purpose of replay is reproducibility of the artifact, not merely matching
+the final scorer status. The previous replay implementation could pass even if
+a deterministic durable file such as `stdout.txt` or `trace.jsonl` had changed,
+as long as `status`, `public_status`, `hidden_status`, `error_class`, and
+`final_diff_hash` matched.
+
+The new contract makes that self-deception harder: replay reruns the same patch
+attempt, regenerates the attempt artifact directory, normalizes legitimate
+nondeterminism, and reports per-artifact matches in `replay_results.jsonl`.
+
+### Verification
+
+Focused replay/report checks passed:
+
+```bash
+uv run pytest tests/test_replay.py tests/test_reporting.py
+uv run ruff check src/agentenv/replay/runner.py src/agentenv/reporting/markdown.py tests/test_replay.py tests/test_reporting.py
+uv run pytest tests/test_eval_run.py
+uv run pyright src/agentenv/replay/runner.py src/agentenv/reporting/markdown.py tests/test_replay.py tests/test_reporting.py
+```
+
+## Agent-Control Replay Contract Decision
+
+### Decision
+
+Extend replay to support deterministic agent-control artifacts directly.
+
+An agent-control replay source is an `agent_task_run_artifacts_v0` directory
+that includes these replay inputs:
+
+```text
+agent_control_script.json
+decoding_config.json
+```
+
+Replay uses `agent_control_script.json` to rebuild the scripted fake model and
+uses `decoding_config.json` as the model-call configuration. It then reruns the
+agent task through `run_and_persist_agent_task_attempt_to_dir(...)` and compares
+the regenerated durable artifacts after normalization.
+
+For future eval-run integration, replay also dispatches per eval attempt
+artifact: if an `eval_run_v0` attempt directory contains an
+`agent_task_run_artifacts_v0` manifest, replay treats that attempt as an agent
+task run instead of assuming a direct scorer patch attempt.
+
+The prompt-loop trajectory is not used as the model script. It is an output to
+compare.
+
+### Durable Artifacts
+
+For a completed/scored agent-control run, replay compares:
+
+```text
+run_manifest.json
+agent_task_run.json
+agent_task_view.json
+prompt_loop_result.json
+decoding_config.json
+agent_control_script.json
+candidate.patch
+error.txt
+attempt/run_manifest.json
+attempt/attempt.json
+attempt/stdout.txt
+attempt/stderr.txt
+attempt/error.txt
+attempt/trace.jsonl
+attempt/final.diff
+```
+
+For prompt-loop failures that do not produce a candidate patch or nested
+scoring attempt, replay compares only the artifacts that exist in the source
+agent run.
+
+### Reasoning
+
+Using `prompt_loop_result.model_responses` as the replay input would be
+self-deceptive: a tampered trajectory could become the script used to reproduce
+itself. Persisting the control script gives replay a clean input/output
+boundary:
+
+```text
+control script + decoding config + task manifest -> regenerated agent trajectory
+```
+
+The regenerated trajectory, tool results, candidate patch, nested scorer
+attempt, and manifests are then the replay outputs that must match after
+normalization.
+
+### Reporting
+
+Replay reports now use a generic comparison table:
+
+```text
+task_id | type | matched | artifacts | fields | source_artifact | replay_artifact
+```
+
+This avoids baking scorer-only fields into the markdown report while keeping
+the detailed per-field and per-artifact match maps in `replay_results.jsonl`.
+The replay JSONL schema likewise uses generic source/replay fields only:
+
+```text
+source_id
+source_artifact_ref
+source_artifact_path
+replay_id
+replay_artifact_ref
+replay_artifact_path
+```
+
+It intentionally does not emit scorer-specific or agent-specific aliases such
+as `source_attempt_artifact_ref` or `source_agent_artifact_ref`.
+
+### Verification
+
+Focused agent/scorer replay and report checks passed:
+
+```bash
+uv run pytest tests/test_replay.py tests/test_reporting.py tests/test_controls_run.py tests/test_trace_schema.py
+uv run ruff check src/agentenv/replay/runner.py src/agentenv/reporting/markdown.py src/agentenv/controls/controls_run.py src/agentenv/tracing/schema.py tests/test_replay.py tests/test_reporting.py tests/test_controls_run.py tests/test_trace_schema.py
+uv run pyright src/agentenv/replay/runner.py src/agentenv/reporting/markdown.py src/agentenv/controls/controls_run.py src/agentenv/tracing/schema.py tests/test_replay.py tests/test_reporting.py tests/test_controls_run.py tests/test_trace_schema.py
+```
