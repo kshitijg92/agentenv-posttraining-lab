@@ -55,6 +55,23 @@ MAX_TURNS_TOOL_RESULTS = [
     }
     for _ in range(10)
 ]
+TERMINAL_TOOL_RESULTS = [
+    {
+        "tool_name": "read_file",
+        "status": "ok",
+        "error_class": None,
+    },
+    {
+        "tool_name": "read_file",
+        "status": "ok",
+        "error_class": None,
+    },
+    {
+        "tool_name": "read_file",
+        "status": "error",
+        "error_class": "UnsafePath",
+    },
+]
 TASK_MANIFEST = "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 EXPECTED_COMPARISONS = {
     "happy_path": [
@@ -108,6 +125,15 @@ EXPECTED_COMPARISONS = {
         ("public_status", None, None, True),
         ("hidden_status", None, None, True),
     ],
+    "terminal_tool_error": [
+        ("agent_run_status", "agent_loop_failed", "agent_loop_failed", True),
+        ("prompt_loop_status", "terminal_tool_error", "terminal_tool_error", True),
+        ("prompt_loop_error_class", "UnsafePath", "UnsafePath", True),
+        ("tool_results", TERMINAL_TOOL_RESULTS, TERMINAL_TOOL_RESULTS, True),
+        ("attempt_status", None, None, True),
+        ("public_status", None, None, True),
+        ("hidden_status", None, None, True),
+    ],
     "tool_recovery": [
         ("agent_run_status", "scored", "scored", True),
         ("prompt_loop_status", "completed", "completed", True),
@@ -153,6 +179,15 @@ EXPECTED_RECORD_FIELDS = {
         "purpose": (
             "Verify a model finish_reason=error fails the agent loop without "
             "running tools or the nested scorer."
+        ),
+    },
+    "terminal_tool_error": {
+        "agent_run_status": "agent_loop_failed",
+        "error_class": "UnsafePath",
+        "prompt_loop_status": "terminal_tool_error",
+        "purpose": (
+            "Verify a terminal tool error on the third tool call stops the "
+            "agent loop without running the nested scorer."
         ),
     },
     "tool_recovery": {
@@ -236,6 +271,27 @@ def test_load_agent_task_audit_case() -> None:
     assert model_error_case.expected_public_status is None
     assert model_error_case.expected_hidden_status is None
 
+    terminal_tool_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "terminal_tool_error/case.yaml"
+    )
+
+    assert terminal_tool_case.id == "terminal_tool_error"
+    assert terminal_tool_case.expected_agent_run_status == "agent_loop_failed"
+    assert terminal_tool_case.expected_prompt_loop_status == "terminal_tool_error"
+    assert terminal_tool_case.expected_prompt_loop_error_class == "UnsafePath"
+    assert terminal_tool_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in terminal_tool_case.expected_tool_results
+    ] == TERMINAL_TOOL_RESULTS
+    assert terminal_tool_case.expected_attempt_status is None
+    assert terminal_tool_case.expected_public_status is None
+    assert terminal_tool_case.expected_hidden_status is None
+
     recovery_case = load_agent_task_audit_case(
         AGENT_CASE_ROOT / "tool_recovery/case.yaml"
     )
@@ -286,7 +342,12 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         assert (artifact_dir / "decoding_config.json").is_file()
         assert (artifact_dir / "agent_control_script.json").is_file()
 
-    for case_id in ("malformed_json", "max_turns_exceeded", "model_error"):
+    for case_id in (
+        "malformed_json",
+        "max_turns_exceeded",
+        "model_error",
+        "terminal_tool_error",
+    ):
         artifact_dir = out_dir / f"agent_task_runs/{case_id}"
         assert not (artifact_dir / "candidate.patch").exists()
         assert not (artifact_dir / "attempt").exists()
@@ -359,6 +420,15 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
     assert (
         "| model_error | prompt_loop_error_class | ScriptedProviderError "
         "| ScriptedProviderError | PASS |"
+    ) in markdown
+    assert (
+        "| terminal_tool_error | PASS | agent_loop_failed | terminal_tool_error "
+        "| agent_task_runs/terminal_tool_error |"
+    ) in markdown
+    assert "| terminal_tool_error | attempt_status |  |  | PASS |" in markdown
+    assert (
+        "| terminal_tool_error | prompt_loop_error_class | UnsafePath "
+        "| UnsafePath | PASS |"
     ) in markdown
     assert (
         "| tool_recovery | PASS | scored | completed "

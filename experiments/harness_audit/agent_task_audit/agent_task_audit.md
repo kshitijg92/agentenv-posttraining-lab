@@ -8,6 +8,7 @@
 | malformed_json | PASS | agent_loop_failed | invalid_model_output | agent_task_runs/malformed_json |
 | max_turns_exceeded | PASS | agent_loop_failed | max_turns_exceeded | agent_task_runs/max_turns_exceeded |
 | model_error | PASS | agent_loop_failed | model_error | agent_task_runs/model_error |
+| terminal_tool_error | PASS | agent_loop_failed | terminal_tool_error | agent_task_runs/terminal_tool_error |
 | tool_recovery | PASS | scored | completed | agent_task_runs/tool_recovery |
 
 ## Field Comparisons
@@ -45,6 +46,14 @@
 | model_error | attempt_status |  |  | PASS |
 | model_error | public_status |  |  | PASS |
 | model_error | hidden_status |  |  | PASS |
+|  |  |  |  |  |
+| terminal_tool_error | agent_run_status | agent_loop_failed | agent_loop_failed | PASS |
+| terminal_tool_error | prompt_loop_status | terminal_tool_error | terminal_tool_error | PASS |
+| terminal_tool_error | prompt_loop_error_class | UnsafePath | UnsafePath | PASS |
+| terminal_tool_error | tool_results | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": "UnsafePath", "status": "error", "tool_name": "read_file"}] | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": "UnsafePath", "status": "error", "tool_name": "read_file"}] | PASS |
+| terminal_tool_error | attempt_status |  |  | PASS |
+| terminal_tool_error | public_status |  |  | PASS |
+| terminal_tool_error | hidden_status |  |  | PASS |
 |  |  |  |  |  |
 | tool_recovery | agent_run_status | scored | scored | PASS |
 | tool_recovery | prompt_loop_status | completed | completed | PASS |

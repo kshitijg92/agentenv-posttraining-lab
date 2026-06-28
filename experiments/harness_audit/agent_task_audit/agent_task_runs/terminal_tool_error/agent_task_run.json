@@ -1,16 +1,16 @@
 {
-  "run_id": "agent_task_run_e77d6fcb52c5458ba4e32890f4d3e566",
+  "run_id": "agent_task_run_268f25dfd957492cb66310ca063e73a7",
   "task_id": "toy_python_fix_001",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
   "status": "agent_loop_failed",
-  "prompt_loop_status": "model_error",
+  "prompt_loop_status": "terminal_tool_error",
   "candidate_patch_path": null,
   "candidate_patch_hash": null,
   "attempt_result": null,
-  "error_class": "ScriptedProviderError",
-  "error_message": "Model generation stopped with finish_reason=error.",
-  "started_at": "2026-06-28T01:44:29.341534Z",
-  "ended_at": "2026-06-28T01:44:29.345156Z",
-  "duration_ms": 3,
+  "error_class": "UnsafePath",
+  "error_message": "Path is outside the workspace: ../outside.py",
+  "started_at": "2026-06-28T01:44:29.346779Z",
+  "ended_at": "2026-06-28T01:44:29.350855Z",
+  "duration_ms": 4,
   "orchestrator_version": "agent_task_run_v0"
 }

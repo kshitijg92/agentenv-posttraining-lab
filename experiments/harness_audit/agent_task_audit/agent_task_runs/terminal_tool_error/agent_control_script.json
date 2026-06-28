@@ -1,0 +1,47 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/mathlib.py\"}}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"tests/test_public.py\"}}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"../outside.py\"}}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"should not be reached\"}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "terminal_tool_error",
+    "tool_results": [
+      {
+        "tool_name": "read_file",
+        "status": "ok",
+        "error_class": null
+      },
+      {
+        "tool_name": "read_file",
+        "status": "ok",
+        "error_class": null
+      },
+      {
+        "tool_name": "read_file",
+        "status": "error",
+        "error_class": "UnsafePath"
+      }
+    ]
+  }
+}

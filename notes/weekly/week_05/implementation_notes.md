@@ -2058,6 +2058,7 @@ data/harness_audit/agent_task_cases/happy_path
 data/harness_audit/agent_task_cases/malformed_json
 data/harness_audit/agent_task_cases/max_turns_exceeded
 data/harness_audit/agent_task_cases/model_error
+data/harness_audit/agent_task_cases/terminal_tool_error
 data/harness_audit/agent_task_cases/tool_recovery
 ```
 
@@ -2113,6 +2114,20 @@ agent_run_status = agent_loop_failed
 prompt_loop_status = model_error
 prompt_loop_error_class = ScriptedProviderError
 tool_results = []
+attempt_status = null
+public_status = null
+hidden_status = null
+```
+
+The terminal-tool-error case emits two successful `read_file` calls, then tries
+to read `../outside.py`. It expects the local tool layer to stop the loop before
+the fourth scripted model response:
+
+```text
+agent_run_status = agent_loop_failed
+prompt_loop_status = terminal_tool_error
+prompt_loop_error_class = UnsafePath
+tool_results = read_file ok, read_file ok, read_file UnsafePath
 attempt_status = null
 public_status = null
 hidden_status = null
