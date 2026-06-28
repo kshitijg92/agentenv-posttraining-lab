@@ -1,0 +1,30 @@
+id: max_turns_exceeded
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+agent_control_script: agent_control_script.json
+expected_agent_run_status: agent_loop_failed
+expected_prompt_loop_status: max_turns_exceeded
+expected_tool_results:
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: read_file
+    status: ok
+expected_attempt_status:
+expected_public_status:
+expected_hidden_status:
+purpose: Verify an agent that never emits final_answer stops at max_turns without running the nested scorer.

@@ -6,6 +6,7 @@
 | --- | --- | --- | --- | --- |
 | happy_path | PASS | scored | completed | agent_task_runs/happy_path |
 | malformed_json | PASS | agent_loop_failed | invalid_model_output | agent_task_runs/malformed_json |
+| max_turns_exceeded | PASS | agent_loop_failed | max_turns_exceeded | agent_task_runs/max_turns_exceeded |
 | tool_recovery | PASS | scored | completed | agent_task_runs/tool_recovery |
 
 ## Field Comparisons
@@ -25,6 +26,13 @@
 | malformed_json | attempt_status |  |  | PASS |
 | malformed_json | public_status |  |  | PASS |
 | malformed_json | hidden_status |  |  | PASS |
+|  |  |  |  |  |
+| max_turns_exceeded | agent_run_status | agent_loop_failed | agent_loop_failed | PASS |
+| max_turns_exceeded | prompt_loop_status | max_turns_exceeded | max_turns_exceeded | PASS |
+| max_turns_exceeded | tool_results | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}] | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}] | PASS |
+| max_turns_exceeded | attempt_status |  |  | PASS |
+| max_turns_exceeded | public_status |  |  | PASS |
+| max_turns_exceeded | hidden_status |  |  | PASS |
 |  |  |  |  |  |
 | tool_recovery | agent_run_status | scored | scored | PASS |
 | tool_recovery | prompt_loop_status | completed | completed | PASS |

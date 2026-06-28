@@ -2055,6 +2055,7 @@ The first cases are:
 ```text
 data/harness_audit/agent_task_cases/happy_path
 data/harness_audit/agent_task_cases/malformed_json
+data/harness_audit/agent_task_cases/max_turns_exceeded
 data/harness_audit/agent_task_cases/tool_recovery
 ```
 
@@ -2081,6 +2082,18 @@ nested scorer attempt:
 agent_run_status = agent_loop_failed
 prompt_loop_status = invalid_model_output
 tool_results = []
+attempt_status = null
+public_status = null
+hidden_status = null
+```
+
+The max-turns case emits valid `read_file` tool calls for all ten allowed turns
+without a `final_answer`. It expects the prompt loop to stop before scoring:
+
+```text
+agent_run_status = agent_loop_failed
+prompt_loop_status = max_turns_exceeded
+tool_results = ten read_file ok results
 attempt_status = null
 public_status = null
 hidden_status = null

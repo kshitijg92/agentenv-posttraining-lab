@@ -1,16 +1,16 @@
 {
-  "run_id": "agent_task_run_a878226d71bf4ce7a1261c414b15faf9",
+  "run_id": "agent_task_run_847b22446eb44bad81187361af91dfcd",
   "task_id": "toy_python_fix_001",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
   "status": "agent_loop_failed",
-  "prompt_loop_status": "invalid_model_output",
+  "prompt_loop_status": "max_turns_exceeded",
   "candidate_patch_path": null,
   "candidate_patch_hash": null,
   "attempt_result": null,
-  "error_class": "MalformedModelOutput",
-  "error_message": "model output is not valid JSON",
-  "started_at": "2026-06-28T01:28:53.650896Z",
-  "ended_at": "2026-06-28T01:28:53.654712Z",
-  "duration_ms": 3,
+  "error_class": "MaxTurnsExceeded",
+  "error_message": "Prompt loop reached max_turns.",
+  "started_at": "2026-06-28T01:28:53.656759Z",
+  "ended_at": "2026-06-28T01:28:53.661509Z",
+  "duration_ms": 4,
   "orchestrator_version": "agent_task_run_v0"
 }

@@ -47,6 +47,15 @@ RECOVERY_TOOL_RESULTS = [
         "error_class": None,
     },
 ]
+MAX_TURNS_TOOL_RESULTS = [
+    {
+        "tool_name": "read_file",
+        "status": "ok",
+        "error_class": None,
+    }
+    for _ in range(10)
+]
+TASK_MANIFEST = "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 EXPECTED_COMPARISONS = {
     "happy_path": [
         ("agent_run_status", "scored", "scored", True),
@@ -69,6 +78,14 @@ EXPECTED_COMPARISONS = {
         ("public_status", None, None, True),
         ("hidden_status", None, None, True),
     ],
+    "max_turns_exceeded": [
+        ("agent_run_status", "agent_loop_failed", "agent_loop_failed", True),
+        ("prompt_loop_status", "max_turns_exceeded", "max_turns_exceeded", True),
+        ("tool_results", MAX_TURNS_TOOL_RESULTS, MAX_TURNS_TOOL_RESULTS, True),
+        ("attempt_status", None, None, True),
+        ("public_status", None, None, True),
+        ("hidden_status", None, None, True),
+    ],
     "tool_recovery": [
         ("agent_run_status", "scored", "scored", True),
         ("prompt_loop_status", "completed", "completed", True),
@@ -77,6 +94,44 @@ EXPECTED_COMPARISONS = {
         ("public_status", "PASS", "PASS", True),
         ("hidden_status", "PASS", "PASS", True),
     ],
+}
+EXPECTED_RECORD_FIELDS = {
+    "happy_path": {
+        "agent_run_status": "scored",
+        "error_class": None,
+        "prompt_loop_status": "completed",
+        "purpose": (
+            "Verify the deterministic happy-path agent control completes, "
+            "produces a patch, and scores PASS."
+        ),
+    },
+    "malformed_json": {
+        "agent_run_status": "agent_loop_failed",
+        "error_class": "MalformedModelOutput",
+        "prompt_loop_status": "invalid_model_output",
+        "purpose": (
+            "Verify malformed model JSON fails the agent loop without running "
+            "the nested scorer."
+        ),
+    },
+    "max_turns_exceeded": {
+        "agent_run_status": "agent_loop_failed",
+        "error_class": "MaxTurnsExceeded",
+        "prompt_loop_status": "max_turns_exceeded",
+        "purpose": (
+            "Verify an agent that never emits final_answer stops at max_turns "
+            "without running the nested scorer."
+        ),
+    },
+    "tool_recovery": {
+        "agent_run_status": "scored",
+        "error_class": None,
+        "prompt_loop_status": "completed",
+        "purpose": (
+            "Verify a recoverable bad tool input is recorded and the agent "
+            "can continue to a PASS scorer result."
+        ),
+    },
 }
 
 
@@ -111,6 +166,26 @@ def test_load_agent_task_audit_case() -> None:
     assert malformed_case.expected_public_status is None
     assert malformed_case.expected_hidden_status is None
 
+    max_turns_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "max_turns_exceeded/case.yaml"
+    )
+
+    assert max_turns_case.id == "max_turns_exceeded"
+    assert max_turns_case.expected_agent_run_status == "agent_loop_failed"
+    assert max_turns_case.expected_prompt_loop_status == "max_turns_exceeded"
+    assert max_turns_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in max_turns_case.expected_tool_results
+    ] == MAX_TURNS_TOOL_RESULTS
+    assert max_turns_case.expected_attempt_status is None
+    assert max_turns_case.expected_public_status is None
+    assert max_turns_case.expected_hidden_status is None
+
     recovery_case = load_agent_task_audit_case(
         AGENT_CASE_ROOT / "tool_recovery/case.yaml"
     )
@@ -135,6 +210,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
     results = run_agent_task_audit(AGENT_CASE_ROOT, out_dir)
 
     assert {result.case.id for result in results} == set(EXPECTED_COMPARISONS)
+    results_by_case = {result.case.id: result for result in results}
     assert all(result.overall_match for result in results)
     comparisons_by_case = {
         result.case.id: [
@@ -159,9 +235,10 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         assert (artifact_dir / "decoding_config.json").is_file()
         assert (artifact_dir / "agent_control_script.json").is_file()
 
-    malformed_artifact_dir = out_dir / "agent_task_runs/malformed_json"
-    assert not (malformed_artifact_dir / "candidate.patch").exists()
-    assert not (malformed_artifact_dir / "attempt").exists()
+    for case_id in ("malformed_json", "max_turns_exceeded"):
+        artifact_dir = out_dir / f"agent_task_runs/{case_id}"
+        assert not (artifact_dir / "candidate.patch").exists()
+        assert not (artifact_dir / "attempt").exists()
 
     for case_id in ("happy_path", "tool_recovery"):
         artifact_dir = out_dir / f"agent_task_runs/{case_id}"
@@ -191,94 +268,12 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
             for field, expected, actual, match in expected_comparisons
         ]
         assert record["overall_match"] is True
-        assert record["task_manifest"] == (
-            "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
+        assert record["task_manifest"] == TASK_MANIFEST
+        assert record["agent_run_id"] == (
+            results_by_case[case_id].agent_task_run.result.run_id
         )
-
-    assert records_by_case["happy_path"] == {
-        "agent_control_script": "agent_control_script.json",
-        "agent_run_id": results[0].agent_task_run.result.run_id,
-        "agent_run_status": "scored",
-        "agent_task_artifact_dir": "agent_task_runs/happy_path",
-        "case_id": "happy_path",
-        "comparisons": [
-            {
-                "field": field,
-                "expected": expected,
-                "actual": actual,
-                "match": match,
-            }
-            for field, expected, actual, match in EXPECTED_COMPARISONS[
-                "happy_path"
-            ]
-        ],
-        "error_class": None,
-        "overall_match": True,
-        "prompt_loop_status": "completed",
-        "purpose": (
-            "Verify the deterministic happy-path agent control completes, "
-            "produces a patch, and scores PASS."
-        ),
-        "task_manifest": (
-            "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
-        ),
-    }
-    assert records_by_case["malformed_json"] == {
-        "agent_control_script": "agent_control_script.json",
-        "agent_run_id": results[1].agent_task_run.result.run_id,
-        "agent_run_status": "agent_loop_failed",
-        "agent_task_artifact_dir": "agent_task_runs/malformed_json",
-        "case_id": "malformed_json",
-        "comparisons": [
-            {
-                "field": field,
-                "expected": expected,
-                "actual": actual,
-                "match": match,
-            }
-            for field, expected, actual, match in EXPECTED_COMPARISONS[
-                "malformed_json"
-            ]
-        ],
-        "error_class": "MalformedModelOutput",
-        "overall_match": True,
-        "prompt_loop_status": "invalid_model_output",
-        "purpose": (
-            "Verify malformed model JSON fails the agent loop without running "
-            "the nested scorer."
-        ),
-        "task_manifest": (
-            "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
-        ),
-    }
-    assert records_by_case["tool_recovery"] == {
-        "agent_control_script": "agent_control_script.json",
-        "agent_run_id": results[2].agent_task_run.result.run_id,
-        "agent_run_status": "scored",
-        "agent_task_artifact_dir": "agent_task_runs/tool_recovery",
-        "case_id": "tool_recovery",
-        "comparisons": [
-            {
-                "field": field,
-                "expected": expected,
-                "actual": actual,
-                "match": match,
-            }
-            for field, expected, actual, match in EXPECTED_COMPARISONS[
-                "tool_recovery"
-            ]
-        ],
-        "error_class": None,
-        "overall_match": True,
-        "prompt_loop_status": "completed",
-        "purpose": (
-            "Verify a recoverable bad tool input is recorded and the agent "
-            "can continue to a PASS scorer result."
-        ),
-        "task_manifest": (
-            "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
-        ),
-    }
+        for field, expected_value in EXPECTED_RECORD_FIELDS[case_id].items():
+            assert record[field] == expected_value
 
     markdown = markdown_path.read_text()
     assert "# Agent Task Audit" in markdown
@@ -291,6 +286,11 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "| agent_task_runs/malformed_json |"
     ) in markdown
     assert "| malformed_json | attempt_status |  |  | PASS |" in markdown
+    assert (
+        "| max_turns_exceeded | PASS | agent_loop_failed | max_turns_exceeded "
+        "| agent_task_runs/max_turns_exceeded |"
+    ) in markdown
+    assert "| max_turns_exceeded | attempt_status |  |  | PASS |" in markdown
     assert (
         "| tool_recovery | PASS | scored | completed "
         "| agent_task_runs/tool_recovery |"

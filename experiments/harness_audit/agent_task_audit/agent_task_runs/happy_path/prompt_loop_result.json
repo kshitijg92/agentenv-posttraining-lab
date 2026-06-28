@@ -168,10 +168,10 @@
       "output": {
         "passed": true
       },
-      "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /tmp/agentenv-agent_task_run_ae095db5b8c74b6898e1627937d3cadd-4119iyjc/agent_interaction_workspace/workspace\nconfigfile: pyproject.toml\ncollected 1 item\n\ntests/test_public.py .                                                   [100%]\n\n============================== 1 passed in 0.00s ===============================\n",
+      "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /tmp/agentenv-agent_task_run_3343b599e59e45249dd9b4602daee6d5-10hh_hke/agent_interaction_workspace/workspace\nconfigfile: pyproject.toml\ncollected 1 item\n\ntests/test_public.py .                                                   [100%]\n\n============================== 1 passed in 0.00s ===============================\n",
       "stderr": "warning: `VIRTUAL_ENV=/home/kshitij/agentenv-posttraining-lab/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead\nUsing CPython 3.11.14\nCreating virtual environment at: .venv\nInstalled 5 packages in 11ms\n",
       "exit_code": 0,
-      "duration_ms": 297,
+      "duration_ms": 298,
       "error_class": null,
       "error_message": null
     }
