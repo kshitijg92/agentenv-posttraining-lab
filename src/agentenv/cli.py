@@ -3,6 +3,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from agentenv.agents.audit import run_agent_task_audit
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.controls.controls_run import run_controls
 from agentenv.orchestrators.eval_run import (
@@ -25,11 +26,13 @@ from agentenv.tasks.validate import (
 app = typer.Typer(no_args_is_help=True)
 tasks_app = typer.Typer(no_args_is_help=True)
 attempt_app = typer.Typer(no_args_is_help=True)
+agents_app = typer.Typer(no_args_is_help=True)
 controls_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(attempt_app, name="attempt")
+app.add_typer(agents_app, name="agents")
 app.add_typer(controls_app, name="controls")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
@@ -85,6 +88,21 @@ def audit_scorers(
         f"cases={len(results)} failed={failed}"
     )
     console.print(f"wrote {out / 'scorer_audit.md'}")
+
+
+@agents_app.command("audit")
+def audit_agent_tasks(
+    cases: Path = typer.Option(..., "--cases", help="Directory of agent task cases."),
+    out: Path = typer.Option(..., "--out", help="Directory for audit artifacts."),
+) -> None:
+    results = run_agent_task_audit(cases, out)
+    failed = sum(not result.overall_match for result in results)
+    style = "green" if failed == 0 else "red"
+    console.print(
+        f"[{style}]agent task audit complete[/{style}] "
+        f"cases={len(results)} failed={failed}"
+    )
+    console.print(f"wrote {out / 'agent_task_audit.md'}")
 
 
 @controls_app.command("run")

@@ -2025,3 +2025,69 @@ uv run pytest -n auto tests/test_controls_run.py
 uv run ruff check src/agentenv/controls/controls_run.py tests/test_controls_run.py
 uv run pyright src/agentenv/controls/controls_run.py tests/test_controls_run.py
 ```
+
+## Agent Task Audit Happy-Path Decision
+
+### Decision
+
+Add a first agent-task harness audit surface parallel to the scorer audit:
+
+```text
+data/harness_audit/agent_task_cases/
+src/agentenv/agents/audit.py
+uv run agentenv agents audit
+```
+
+Agent task audit cases compare explicit layer fields instead of collapsing the
+agent path into one status:
+
+```text
+agent_run_status
+prompt_loop_status
+tool_results
+attempt_status
+public_status
+hidden_status
+```
+
+The first case is:
+
+```text
+data/harness_audit/agent_task_cases/happy_path
+```
+
+It owns a case-local `agent_control_script.json` instead of pointing at a
+task-pack control script. This mirrors scorer audit cases owning their
+`submission.patch` files and lets future agent audit cases probe scripts that
+are not part of task-pack calibration controls.
+
+The happy-path case targets `toy_python_fix_001` and expects:
+
+```text
+agent_run_status = scored
+prompt_loop_status = completed
+tool_results = read_file ok, write_file ok, run_tests ok
+attempt_status = PASS
+public_status = PASS
+hidden_status = PASS
+```
+
+### Reasoning
+
+`prompt_loop_status` explains what happened inside the model/tool loop.
+`agent_run_status` explains what the harness did with the prompt-loop result.
+Nested scorer statuses explain whether a produced candidate patch went through
+the scorer path correctly.
+
+Keeping those as separate audit comparisons makes failures diagnostic and keeps
+the agent harness audit aligned with the existing scorer audit style.
+
+### Verification
+
+Focused checks passed:
+
+```bash
+uv run pytest -n auto tests/agents/test_agent_audit.py
+uv run ruff check src/agentenv/agents/audit.py src/agentenv/cli.py tests/agents/test_agent_audit.py
+uv run pyright src/agentenv/agents/audit.py src/agentenv/cli.py tests/agents/test_agent_audit.py
+```

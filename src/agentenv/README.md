@@ -12,6 +12,7 @@ cd /home/kshitij/agentenv-posttraining-lab
 uv run agentenv --help
 uv run agentenv tasks --help
 uv run agentenv attempt --help
+uv run agentenv agents --help
 uv run agentenv eval --help
 uv run agentenv replay --help
 uv run agentenv report --help
@@ -175,6 +176,22 @@ Main outputs:
 experiments/harness_audit/scorer_audit/scorer_audit.md
 experiments/harness_audit/scorer_audit/scorer_audit_results.jsonl
 experiments/harness_audit/scorer_audit/attempts/
+```
+
+## Run The Agent Task Audit
+
+```bash
+uv run agentenv agents audit \
+  --cases data/harness_audit/agent_task_cases \
+  --out experiments/harness_audit/agent_task_audit
+```
+
+Main outputs:
+
+```text
+experiments/harness_audit/agent_task_audit/agent_task_audit.md
+experiments/harness_audit/agent_task_audit/agent_task_audit_results.jsonl
+experiments/harness_audit/agent_task_audit/agent_task_runs/
 ```
 
 ## Run Repeated Control Calibration

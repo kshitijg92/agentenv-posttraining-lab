@@ -1,0 +1,16 @@
+id: happy_path
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+agent_control_script: agent_control_script.json
+expected_agent_run_status: scored
+expected_prompt_loop_status: completed
+expected_tool_results:
+  - tool_name: read_file
+    status: ok
+  - tool_name: write_file
+    status: ok
+  - tool_name: run_tests
+    status: ok
+expected_attempt_status: PASS
+expected_public_status: PASS
+expected_hidden_status: PASS
+purpose: Verify the deterministic happy-path agent control completes, produces a patch, and scores PASS.

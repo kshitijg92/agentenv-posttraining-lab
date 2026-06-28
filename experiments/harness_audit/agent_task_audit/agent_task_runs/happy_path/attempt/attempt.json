@@ -1,0 +1,16 @@
+{
+  "run_id": "run_237ee41cc4014c799fafced58abaac72",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+  "attempt_id": "attempt_bcf38dc378044aac9fe52c2c86af595c",
+  "submission_path": "/tmp/agentenv-agent_task_run_ed914522199c4b2982656af204ad393b-m3ry_vz9/candidate.patch",
+  "status": "PASS",
+  "public_status": "PASS",
+  "hidden_status": "PASS",
+  "error_class": null,
+  "started_at": "2026-06-28T01:15:57.209054Z",
+  "ended_at": "2026-06-28T01:15:57.651188Z",
+  "duration_ms": 442,
+  "final_diff_hash": "xxh64:e3fc746d6fe0786c",
+  "orchestrator_version": "attempt_v0"
+}
