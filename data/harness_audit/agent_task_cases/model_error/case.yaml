@@ -1,0 +1,10 @@
+id: model_error
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+agent_control_script: agent_control_script.json
+expected_agent_run_status: agent_loop_failed
+expected_prompt_loop_status: model_error
+expected_tool_results: []
+expected_attempt_status:
+expected_public_status:
+expected_hidden_status:
+purpose: Verify a model finish_reason=error fails the agent loop without running tools or the nested scorer.

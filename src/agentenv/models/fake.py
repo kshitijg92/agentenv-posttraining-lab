@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from time import perf_counter
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agentenv.models.schema import DecodingConfig, Message, ModelFinishReason
 from agentenv.models.schema import ModelResponse
@@ -12,6 +12,22 @@ class FakeModelScriptStep(BaseModel):
 
     output_text: str
     finish_reason: ModelFinishReason = "stop_criteria_met"
+    error_class: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_error_class(self) -> "FakeModelScriptStep":
+        if self.finish_reason in {"timeout", "error"}:
+            if self.error_class is None:
+                raise ValueError(
+                    f"{self.finish_reason} script steps require error_class"
+                )
+            return self
+
+        if self.error_class is not None:
+            raise ValueError(
+                f"{self.finish_reason} script steps cannot include error_class"
+            )
+        return self
 
 
 @dataclass
@@ -58,6 +74,7 @@ class ScriptedFakeModelClient:
             output_text=step.output_text,
             finish_reason=step.finish_reason,
             latency_ms=_latency_ms(started),
+            error_class=step.error_class,
             raw_response_ref=self.raw_response_ref,
         )
 

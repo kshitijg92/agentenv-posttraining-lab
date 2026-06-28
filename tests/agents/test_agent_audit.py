@@ -86,6 +86,14 @@ EXPECTED_COMPARISONS = {
         ("public_status", None, None, True),
         ("hidden_status", None, None, True),
     ],
+    "model_error": [
+        ("agent_run_status", "agent_loop_failed", "agent_loop_failed", True),
+        ("prompt_loop_status", "model_error", "model_error", True),
+        ("tool_results", [], [], True),
+        ("attempt_status", None, None, True),
+        ("public_status", None, None, True),
+        ("hidden_status", None, None, True),
+    ],
     "tool_recovery": [
         ("agent_run_status", "scored", "scored", True),
         ("prompt_loop_status", "completed", "completed", True),
@@ -121,6 +129,15 @@ EXPECTED_RECORD_FIELDS = {
         "purpose": (
             "Verify an agent that never emits final_answer stops at max_turns "
             "without running the nested scorer."
+        ),
+    },
+    "model_error": {
+        "agent_run_status": "agent_loop_failed",
+        "error_class": "ScriptedProviderError",
+        "prompt_loop_status": "model_error",
+        "purpose": (
+            "Verify a model finish_reason=error fails the agent loop without "
+            "running tools or the nested scorer."
         ),
     },
     "tool_recovery": {
@@ -186,6 +203,18 @@ def test_load_agent_task_audit_case() -> None:
     assert max_turns_case.expected_public_status is None
     assert max_turns_case.expected_hidden_status is None
 
+    model_error_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "model_error/case.yaml"
+    )
+
+    assert model_error_case.id == "model_error"
+    assert model_error_case.expected_agent_run_status == "agent_loop_failed"
+    assert model_error_case.expected_prompt_loop_status == "model_error"
+    assert model_error_case.expected_tool_results == []
+    assert model_error_case.expected_attempt_status is None
+    assert model_error_case.expected_public_status is None
+    assert model_error_case.expected_hidden_status is None
+
     recovery_case = load_agent_task_audit_case(
         AGENT_CASE_ROOT / "tool_recovery/case.yaml"
     )
@@ -235,7 +264,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         assert (artifact_dir / "decoding_config.json").is_file()
         assert (artifact_dir / "agent_control_script.json").is_file()
 
-    for case_id in ("malformed_json", "max_turns_exceeded"):
+    for case_id in ("malformed_json", "max_turns_exceeded", "model_error"):
         artifact_dir = out_dir / f"agent_task_runs/{case_id}"
         assert not (artifact_dir / "candidate.patch").exists()
         assert not (artifact_dir / "attempt").exists()
@@ -291,6 +320,11 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "| agent_task_runs/max_turns_exceeded |"
     ) in markdown
     assert "| max_turns_exceeded | attempt_status |  |  | PASS |" in markdown
+    assert (
+        "| model_error | PASS | agent_loop_failed | model_error "
+        "| agent_task_runs/model_error |"
+    ) in markdown
+    assert "| model_error | attempt_status |  |  | PASS |" in markdown
     assert (
         "| tool_recovery | PASS | scored | completed "
         "| agent_task_runs/tool_recovery |"

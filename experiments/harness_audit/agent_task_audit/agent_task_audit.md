@@ -7,6 +7,7 @@
 | happy_path | PASS | scored | completed | agent_task_runs/happy_path |
 | malformed_json | PASS | agent_loop_failed | invalid_model_output | agent_task_runs/malformed_json |
 | max_turns_exceeded | PASS | agent_loop_failed | max_turns_exceeded | agent_task_runs/max_turns_exceeded |
+| model_error | PASS | agent_loop_failed | model_error | agent_task_runs/model_error |
 | tool_recovery | PASS | scored | completed | agent_task_runs/tool_recovery |
 
 ## Field Comparisons
@@ -33,6 +34,13 @@
 | max_turns_exceeded | attempt_status |  |  | PASS |
 | max_turns_exceeded | public_status |  |  | PASS |
 | max_turns_exceeded | hidden_status |  |  | PASS |
+|  |  |  |  |  |
+| model_error | agent_run_status | agent_loop_failed | agent_loop_failed | PASS |
+| model_error | prompt_loop_status | model_error | model_error | PASS |
+| model_error | tool_results | [] | [] | PASS |
+| model_error | attempt_status |  |  | PASS |
+| model_error | public_status |  |  | PASS |
+| model_error | hidden_status |  |  | PASS |
 |  |  |  |  |  |
 | tool_recovery | agent_run_status | scored | scored | PASS |
 | tool_recovery | prompt_loop_status | completed | completed | PASS |

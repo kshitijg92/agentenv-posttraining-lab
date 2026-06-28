@@ -1,5 +1,8 @@
 import json
 
+import pytest
+from pydantic import ValidationError
+
 from agentenv.agents.schema import ToolCallAction, parse_agent_action
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig, Message
@@ -90,6 +93,44 @@ def test_scripted_fake_model_returns_error_when_script_exhausted() -> None:
     assert exhausted_response.error_class == "FakeModelScriptExhausted"
     assert exhausted_response.output_text == ""
     assert exhausted_response.raw_response_ref == "fake_model/raw_response.json"
+
+
+def test_scripted_fake_model_returns_scripted_error_response() -> None:
+    client = ScriptedFakeModelClient(
+        model_id="fake-scripted-v0",
+        script=[
+            FakeModelScriptStep(
+                output_text="",
+                finish_reason="error",
+                error_class="ScriptedProviderError",
+            ),
+        ],
+    )
+
+    response = client.generate(_messages(), _decoding_config())
+
+    assert response.finish_reason == "error"
+    assert response.error_class == "ScriptedProviderError"
+    assert response.output_text == ""
+
+
+def test_fake_model_script_step_requires_error_class_for_error_finish() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="error script steps require error_class",
+    ):
+        FakeModelScriptStep(output_text="", finish_reason="error")
+
+
+def test_fake_model_script_step_rejects_error_class_for_normal_finish() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="stop_criteria_met script steps cannot include error_class",
+    ):
+        FakeModelScriptStep(
+            output_text="{}",
+            error_class="UnexpectedErrorClass",
+        )
 
 
 def test_scripted_fake_model_uses_custom_raw_response_ref() -> None:

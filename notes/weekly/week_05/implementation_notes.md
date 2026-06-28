@@ -2056,6 +2056,7 @@ The first cases are:
 data/harness_audit/agent_task_cases/happy_path
 data/harness_audit/agent_task_cases/malformed_json
 data/harness_audit/agent_task_cases/max_turns_exceeded
+data/harness_audit/agent_task_cases/model_error
 data/harness_audit/agent_task_cases/tool_recovery
 ```
 
@@ -2094,6 +2095,19 @@ without a `final_answer`. It expects the prompt loop to stop before scoring:
 agent_run_status = agent_loop_failed
 prompt_loop_status = max_turns_exceeded
 tool_results = ten read_file ok results
+attempt_status = null
+public_status = null
+hidden_status = null
+```
+
+The model-error case emits a provider-style scripted model response with
+`finish_reason = error` and `error_class = ScriptedProviderError`. It expects
+the prompt loop to stop before any tool execution or scoring:
+
+```text
+agent_run_status = agent_loop_failed
+prompt_loop_status = model_error
+tool_results = []
 attempt_status = null
 public_status = null
 hidden_status = null
