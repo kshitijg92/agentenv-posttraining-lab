@@ -5,6 +5,8 @@
 | case | overall | agent_run_status | prompt_loop_status | agent_task_artifact_dir |
 | --- | --- | --- | --- | --- |
 | happy_path | PASS | scored | completed | agent_task_runs/happy_path |
+| malformed_json | PASS | agent_loop_failed | invalid_model_output | agent_task_runs/malformed_json |
+| tool_recovery | PASS | scored | completed | agent_task_runs/tool_recovery |
 
 ## Field Comparisons
 
@@ -16,3 +18,17 @@
 | happy_path | attempt_status | PASS | PASS | PASS |
 | happy_path | public_status | PASS | PASS | PASS |
 | happy_path | hidden_status | PASS | PASS | PASS |
+|  |  |  |  |  |
+| malformed_json | agent_run_status | agent_loop_failed | agent_loop_failed | PASS |
+| malformed_json | prompt_loop_status | invalid_model_output | invalid_model_output | PASS |
+| malformed_json | tool_results | [] | [] | PASS |
+| malformed_json | attempt_status |  |  | PASS |
+| malformed_json | public_status |  |  | PASS |
+| malformed_json | hidden_status |  |  | PASS |
+|  |  |  |  |  |
+| tool_recovery | agent_run_status | scored | scored | PASS |
+| tool_recovery | prompt_loop_status | completed | completed | PASS |
+| tool_recovery | tool_results | [{"error_class": "InvalidToolInput", "status": "error", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | [{"error_class": "InvalidToolInput", "status": "error", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | PASS |
+| tool_recovery | attempt_status | PASS | PASS | PASS |
+| tool_recovery | public_status | PASS | PASS | PASS |
+| tool_recovery | hidden_status | PASS | PASS | PASS |

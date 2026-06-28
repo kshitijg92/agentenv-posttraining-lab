@@ -2026,7 +2026,7 @@ uv run ruff check src/agentenv/controls/controls_run.py tests/test_controls_run.
 uv run pyright src/agentenv/controls/controls_run.py tests/test_controls_run.py
 ```
 
-## Agent Task Audit Happy-Path Decision
+## Agent Task Audit Cases Decision
 
 ### Decision
 
@@ -2050,16 +2050,18 @@ public_status
 hidden_status
 ```
 
-The first case is:
+The first cases are:
 
 ```text
 data/harness_audit/agent_task_cases/happy_path
+data/harness_audit/agent_task_cases/malformed_json
+data/harness_audit/agent_task_cases/tool_recovery
 ```
 
-It owns a case-local `agent_control_script.json` instead of pointing at a
+Each case owns a case-local `agent_control_script.json` instead of pointing at a
 task-pack control script. This mirrors scorer audit cases owning their
-`submission.patch` files and lets future agent audit cases probe scripts that
-are not part of task-pack calibration controls.
+`submission.patch` files and lets agent audit cases probe scripts that are not
+part of task-pack calibration controls.
 
 The happy-path case targets `toy_python_fix_001` and expects:
 
@@ -2067,6 +2069,31 @@ The happy-path case targets `toy_python_fix_001` and expects:
 agent_run_status = scored
 prompt_loop_status = completed
 tool_results = read_file ok, write_file ok, run_tests ok
+attempt_status = PASS
+public_status = PASS
+hidden_status = PASS
+```
+
+The malformed JSON case expects the prompt loop to stop before any tool call or
+nested scorer attempt:
+
+```text
+agent_run_status = agent_loop_failed
+prompt_loop_status = invalid_model_output
+tool_results = []
+attempt_status = null
+public_status = null
+hidden_status = null
+```
+
+The tool-recovery case first emits an invalid `read_file` call with missing
+arguments, then continues with the corrected read/write/test sequence. It
+expects:
+
+```text
+agent_run_status = scored
+prompt_loop_status = completed
+tool_results = read_file InvalidToolInput, read_file ok, write_file ok, run_tests ok
 attempt_status = PASS
 public_status = PASS
 hidden_status = PASS
