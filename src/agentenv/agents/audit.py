@@ -23,6 +23,7 @@ from agentenv.orchestrators.attempt import AttemptStatus, CheckStatus
 
 AgentAuditField = Literal[
     "agent_run_status",
+    "agent_error_class",
     "prompt_loop_status",
     "prompt_loop_error_class",
     "tool_results",
@@ -34,6 +35,7 @@ AgentAuditValue = str | None | list[dict[str, object]]
 
 _EXPECTATION_FIELDS = {
     "expected_agent_run_status",
+    "expected_agent_error_class",
     "expected_prompt_loop_status",
     "expected_prompt_loop_error_class",
     "expected_tool_results",
@@ -51,6 +53,7 @@ class AgentTaskAuditCase(BaseModel):
     agent_control_script: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
     expected_agent_run_status: AgentTaskRunStatus | None = None
+    expected_agent_error_class: str | None = Field(default=None, min_length=1)
     expected_prompt_loop_status: PromptLoopStatus | None = None
     expected_prompt_loop_error_class: str | None = Field(default=None, min_length=1)
     expected_tool_results: list[ExpectedAgentControlToolResult] | None = None
@@ -183,6 +186,13 @@ def _comparisons(
         comparisons,
         case,
         agent_task_run,
+        expected_field="expected_agent_error_class",
+        comparison_field="agent_error_class",
+    )
+    _append_comparison(
+        comparisons,
+        case,
+        agent_task_run,
         expected_field="expected_prompt_loop_status",
         comparison_field="prompt_loop_status",
     )
@@ -273,6 +283,8 @@ def _actual_value(
     attempt_result = result.attempt_result
     if field == "agent_run_status":
         return result.status
+    if field == "agent_error_class":
+        return result.error_class
     if field == "prompt_loop_status":
         return result.prompt_loop_status
     if field == "prompt_loop_error_class":

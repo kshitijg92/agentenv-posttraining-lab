@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_bc980eeab77e4cf381cf54be73fe942f-ko9gn7je/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_e1f87def77cb4d8ea48b4da3c1bc4d12-8478wnp1/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,7 +10,7 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_bc980eeab77e4cf381cf54be73fe942f-ko9gn7je/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_e1f87def77cb4d8ea48b4da3c1bc4d12-8478wnp1/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 7 items
 

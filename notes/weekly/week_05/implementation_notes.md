@@ -2043,6 +2043,7 @@ agent path into one status:
 
 ```text
 agent_run_status
+agent_error_class
 prompt_loop_status
 prompt_loop_error_class
 tool_results
@@ -2058,6 +2059,7 @@ data/harness_audit/agent_task_cases/happy_path
 data/harness_audit/agent_task_cases/malformed_json
 data/harness_audit/agent_task_cases/max_turns_exceeded
 data/harness_audit/agent_task_cases/model_error
+data/harness_audit/agent_task_cases/orchestrator_error_after_completed_prompt
 data/harness_audit/agent_task_cases/terminal_tool_error
 data/harness_audit/agent_task_cases/tool_recovery
 ```
@@ -2119,6 +2121,21 @@ public_status = null
 hidden_status = null
 ```
 
+The completed-prompt orchestrator-error case emits valid tool calls and
+`final_answer`, but mutates the workspace so candidate patch materialization
+raises `UnicodeDecodeError`. It expects:
+
+```text
+agent_run_status = orchestrator_error
+agent_error_class = UnicodeDecodeError
+prompt_loop_status = completed
+prompt_loop_error_class = null
+tool_results = read_file ok, write_file ok, run_tests ok
+attempt_status = null
+public_status = null
+hidden_status = null
+```
+
 The terminal-tool-error case emits two successful `read_file` calls, then tries
 to read `../outside.py`. It expects the local tool layer to stop the loop before
 the fourth scripted model response:
@@ -2153,6 +2170,9 @@ hidden_status = PASS
 `prompt_loop_error_class` ensures boundary failures fail for the expected reason,
 not just with the expected broad status.
 `agent_run_status` explains what the harness did with the prompt-loop result.
+`agent_error_class` captures failures outside the prompt loop, such as candidate
+patch materialization or scoring orchestration failures after a completed
+prompt.
 Nested scorer statuses explain whether a produced candidate patch went through
 the scorer path correctly.
 

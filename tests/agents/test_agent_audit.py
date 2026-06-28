@@ -72,6 +72,7 @@ TERMINAL_TOOL_RESULTS = [
         "error_class": "UnsafePath",
     },
 ]
+ORCHESTRATOR_ERROR_TOOL_RESULTS = HAPPY_TOOL_RESULTS
 TASK_MANIFEST = "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 EXPECTED_COMPARISONS = {
     "happy_path": [
@@ -121,6 +122,21 @@ EXPECTED_COMPARISONS = {
             True,
         ),
         ("tool_results", [], [], True),
+        ("attempt_status", None, None, True),
+        ("public_status", None, None, True),
+        ("hidden_status", None, None, True),
+    ],
+    "orchestrator_error_after_completed_prompt": [
+        ("agent_run_status", "orchestrator_error", "orchestrator_error", True),
+        ("agent_error_class", "UnicodeDecodeError", "UnicodeDecodeError", True),
+        ("prompt_loop_status", "completed", "completed", True),
+        ("prompt_loop_error_class", None, None, True),
+        (
+            "tool_results",
+            ORCHESTRATOR_ERROR_TOOL_RESULTS,
+            ORCHESTRATOR_ERROR_TOOL_RESULTS,
+            True,
+        ),
         ("attempt_status", None, None, True),
         ("public_status", None, None, True),
         ("hidden_status", None, None, True),
@@ -179,6 +195,15 @@ EXPECTED_RECORD_FIELDS = {
         "purpose": (
             "Verify a model finish_reason=error fails the agent loop without "
             "running tools or the nested scorer."
+        ),
+    },
+    "orchestrator_error_after_completed_prompt": {
+        "agent_run_status": "orchestrator_error",
+        "error_class": "UnicodeDecodeError",
+        "prompt_loop_status": "completed",
+        "purpose": (
+            "Verify a completed prompt loop can still fail at the agent "
+            "orchestrator layer while materializing the candidate patch."
         ),
     },
     "terminal_tool_error": {
@@ -271,6 +296,28 @@ def test_load_agent_task_audit_case() -> None:
     assert model_error_case.expected_public_status is None
     assert model_error_case.expected_hidden_status is None
 
+    orchestrator_error_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "orchestrator_error_after_completed_prompt/case.yaml"
+    )
+
+    assert orchestrator_error_case.id == "orchestrator_error_after_completed_prompt"
+    assert orchestrator_error_case.expected_agent_run_status == "orchestrator_error"
+    assert orchestrator_error_case.expected_agent_error_class == "UnicodeDecodeError"
+    assert orchestrator_error_case.expected_prompt_loop_status == "completed"
+    assert orchestrator_error_case.expected_prompt_loop_error_class is None
+    assert orchestrator_error_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in orchestrator_error_case.expected_tool_results
+    ] == ORCHESTRATOR_ERROR_TOOL_RESULTS
+    assert orchestrator_error_case.expected_attempt_status is None
+    assert orchestrator_error_case.expected_public_status is None
+    assert orchestrator_error_case.expected_hidden_status is None
+
     terminal_tool_case = load_agent_task_audit_case(
         AGENT_CASE_ROOT / "terminal_tool_error/case.yaml"
     )
@@ -346,6 +393,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "malformed_json",
         "max_turns_exceeded",
         "model_error",
+        "orchestrator_error_after_completed_prompt",
         "terminal_tool_error",
     ):
         artifact_dir = out_dir / f"agent_task_runs/{case_id}"
@@ -420,6 +468,22 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
     assert (
         "| model_error | prompt_loop_error_class | ScriptedProviderError "
         "| ScriptedProviderError | PASS |"
+    ) in markdown
+    assert (
+        "| orchestrator_error_after_completed_prompt | PASS | orchestrator_error "
+        "| completed | agent_task_runs/orchestrator_error_after_completed_prompt |"
+    ) in markdown
+    assert (
+        "| orchestrator_error_after_completed_prompt | agent_error_class "
+        "| UnicodeDecodeError | UnicodeDecodeError | PASS |"
+    ) in markdown
+    assert (
+        "| orchestrator_error_after_completed_prompt | prompt_loop_error_class "
+        "|  |  | PASS |"
+    ) in markdown
+    assert (
+        "| orchestrator_error_after_completed_prompt | attempt_status "
+        "|  |  | PASS |"
     ) in markdown
     assert (
         "| terminal_tool_error | PASS | agent_loop_failed | terminal_tool_error "

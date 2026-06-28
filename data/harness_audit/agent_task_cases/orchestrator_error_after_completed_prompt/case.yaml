@@ -1,0 +1,18 @@
+id: orchestrator_error_after_completed_prompt
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+agent_control_script: agent_control_script.json
+expected_agent_run_status: orchestrator_error
+expected_agent_error_class: UnicodeDecodeError
+expected_prompt_loop_status: completed
+expected_prompt_loop_error_class:
+expected_tool_results:
+  - tool_name: read_file
+    status: ok
+  - tool_name: write_file
+    status: ok
+  - tool_name: run_tests
+    status: ok
+expected_attempt_status:
+expected_public_status:
+expected_hidden_status:
+purpose: Verify a completed prompt loop can still fail at the agent orchestrator layer while materializing the candidate patch.

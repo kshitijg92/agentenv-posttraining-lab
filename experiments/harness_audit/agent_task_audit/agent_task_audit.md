@@ -8,6 +8,7 @@
 | malformed_json | PASS | agent_loop_failed | invalid_model_output | agent_task_runs/malformed_json |
 | max_turns_exceeded | PASS | agent_loop_failed | max_turns_exceeded | agent_task_runs/max_turns_exceeded |
 | model_error | PASS | agent_loop_failed | model_error | agent_task_runs/model_error |
+| orchestrator_error_after_completed_prompt | PASS | orchestrator_error | completed | agent_task_runs/orchestrator_error_after_completed_prompt |
 | terminal_tool_error | PASS | agent_loop_failed | terminal_tool_error | agent_task_runs/terminal_tool_error |
 | tool_recovery | PASS | scored | completed | agent_task_runs/tool_recovery |
 
@@ -46,6 +47,15 @@
 | model_error | attempt_status |  |  | PASS |
 | model_error | public_status |  |  | PASS |
 | model_error | hidden_status |  |  | PASS |
+|  |  |  |  |  |
+| orchestrator_error_after_completed_prompt | agent_run_status | orchestrator_error | orchestrator_error | PASS |
+| orchestrator_error_after_completed_prompt | agent_error_class | UnicodeDecodeError | UnicodeDecodeError | PASS |
+| orchestrator_error_after_completed_prompt | prompt_loop_status | completed | completed | PASS |
+| orchestrator_error_after_completed_prompt | prompt_loop_error_class |  |  | PASS |
+| orchestrator_error_after_completed_prompt | tool_results | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | PASS |
+| orchestrator_error_after_completed_prompt | attempt_status |  |  | PASS |
+| orchestrator_error_after_completed_prompt | public_status |  |  | PASS |
+| orchestrator_error_after_completed_prompt | hidden_status |  |  | PASS |
 |  |  |  |  |  |
 | terminal_tool_error | agent_run_status | agent_loop_failed | agent_loop_failed | PASS |
 | terminal_tool_error | prompt_loop_status | terminal_tool_error | terminal_tool_error | PASS |
