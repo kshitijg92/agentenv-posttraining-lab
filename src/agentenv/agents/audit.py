@@ -24,6 +24,7 @@ from agentenv.orchestrators.attempt import AttemptStatus, CheckStatus
 AgentAuditField = Literal[
     "agent_run_status",
     "prompt_loop_status",
+    "prompt_loop_error_class",
     "tool_results",
     "attempt_status",
     "public_status",
@@ -34,6 +35,7 @@ AgentAuditValue = str | None | list[dict[str, object]]
 _EXPECTATION_FIELDS = {
     "expected_agent_run_status",
     "expected_prompt_loop_status",
+    "expected_prompt_loop_error_class",
     "expected_tool_results",
     "expected_attempt_status",
     "expected_public_status",
@@ -50,6 +52,7 @@ class AgentTaskAuditCase(BaseModel):
     purpose: str = Field(min_length=1)
     expected_agent_run_status: AgentTaskRunStatus | None = None
     expected_prompt_loop_status: PromptLoopStatus | None = None
+    expected_prompt_loop_error_class: str | None = Field(default=None, min_length=1)
     expected_tool_results: list[ExpectedAgentControlToolResult] | None = None
     expected_attempt_status: AttemptStatus | None = None
     expected_public_status: CheckStatus | None = None
@@ -187,6 +190,13 @@ def _comparisons(
         comparisons,
         case,
         agent_task_run,
+        expected_field="expected_prompt_loop_error_class",
+        comparison_field="prompt_loop_error_class",
+    )
+    _append_comparison(
+        comparisons,
+        case,
+        agent_task_run,
         expected_field="expected_tool_results",
         comparison_field="tool_results",
     )
@@ -265,6 +275,9 @@ def _actual_value(
         return result.status
     if field == "prompt_loop_status":
         return result.prompt_loop_status
+    if field == "prompt_loop_error_class":
+        prompt_loop_result = agent_task_run.prompt_loop_result
+        return prompt_loop_result.error_class if prompt_loop_result is not None else None
     if field == "tool_results":
         return _actual_tool_results(agent_task_run)
     if field == "attempt_status":

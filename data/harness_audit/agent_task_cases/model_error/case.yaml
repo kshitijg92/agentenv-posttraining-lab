@@ -3,6 +3,7 @@ task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.ya
 agent_control_script: agent_control_script.json
 expected_agent_run_status: agent_loop_failed
 expected_prompt_loop_status: model_error
+expected_prompt_loop_error_class: ScriptedProviderError
 expected_tool_results: []
 expected_attempt_status:
 expected_public_status:

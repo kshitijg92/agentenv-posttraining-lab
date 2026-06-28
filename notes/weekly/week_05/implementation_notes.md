@@ -2044,6 +2044,7 @@ agent path into one status:
 ```text
 agent_run_status
 prompt_loop_status
+prompt_loop_error_class
 tool_results
 attempt_status
 public_status
@@ -2070,6 +2071,7 @@ The happy-path case targets `toy_python_fix_001` and expects:
 ```text
 agent_run_status = scored
 prompt_loop_status = completed
+prompt_loop_error_class = null
 tool_results = read_file ok, write_file ok, run_tests ok
 attempt_status = PASS
 public_status = PASS
@@ -2082,6 +2084,7 @@ nested scorer attempt:
 ```text
 agent_run_status = agent_loop_failed
 prompt_loop_status = invalid_model_output
+prompt_loop_error_class = MalformedModelOutput
 tool_results = []
 attempt_status = null
 public_status = null
@@ -2094,6 +2097,7 @@ without a `final_answer`. It expects the prompt loop to stop before scoring:
 ```text
 agent_run_status = agent_loop_failed
 prompt_loop_status = max_turns_exceeded
+prompt_loop_error_class = MaxTurnsExceeded
 tool_results = ten read_file ok results
 attempt_status = null
 public_status = null
@@ -2107,6 +2111,7 @@ the prompt loop to stop before any tool execution or scoring:
 ```text
 agent_run_status = agent_loop_failed
 prompt_loop_status = model_error
+prompt_loop_error_class = ScriptedProviderError
 tool_results = []
 attempt_status = null
 public_status = null
@@ -2120,6 +2125,7 @@ expects:
 ```text
 agent_run_status = scored
 prompt_loop_status = completed
+prompt_loop_error_class = null
 tool_results = read_file InvalidToolInput, read_file ok, write_file ok, run_tests ok
 attempt_status = PASS
 public_status = PASS
@@ -2129,6 +2135,8 @@ hidden_status = PASS
 ### Reasoning
 
 `prompt_loop_status` explains what happened inside the model/tool loop.
+`prompt_loop_error_class` ensures boundary failures fail for the expected reason,
+not just with the expected broad status.
 `agent_run_status` explains what the harness did with the prompt-loop result.
 Nested scorer statuses explain whether a produced candidate patch went through
 the scorer path correctly.

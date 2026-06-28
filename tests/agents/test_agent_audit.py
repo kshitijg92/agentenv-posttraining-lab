@@ -60,6 +60,7 @@ EXPECTED_COMPARISONS = {
     "happy_path": [
         ("agent_run_status", "scored", "scored", True),
         ("prompt_loop_status", "completed", "completed", True),
+        ("prompt_loop_error_class", None, None, True),
         ("tool_results", HAPPY_TOOL_RESULTS, HAPPY_TOOL_RESULTS, True),
         ("attempt_status", "PASS", "PASS", True),
         ("public_status", "PASS", "PASS", True),
@@ -73,6 +74,12 @@ EXPECTED_COMPARISONS = {
             "invalid_model_output",
             True,
         ),
+        (
+            "prompt_loop_error_class",
+            "MalformedModelOutput",
+            "MalformedModelOutput",
+            True,
+        ),
         ("tool_results", [], [], True),
         ("attempt_status", None, None, True),
         ("public_status", None, None, True),
@@ -81,6 +88,7 @@ EXPECTED_COMPARISONS = {
     "max_turns_exceeded": [
         ("agent_run_status", "agent_loop_failed", "agent_loop_failed", True),
         ("prompt_loop_status", "max_turns_exceeded", "max_turns_exceeded", True),
+        ("prompt_loop_error_class", "MaxTurnsExceeded", "MaxTurnsExceeded", True),
         ("tool_results", MAX_TURNS_TOOL_RESULTS, MAX_TURNS_TOOL_RESULTS, True),
         ("attempt_status", None, None, True),
         ("public_status", None, None, True),
@@ -89,6 +97,12 @@ EXPECTED_COMPARISONS = {
     "model_error": [
         ("agent_run_status", "agent_loop_failed", "agent_loop_failed", True),
         ("prompt_loop_status", "model_error", "model_error", True),
+        (
+            "prompt_loop_error_class",
+            "ScriptedProviderError",
+            "ScriptedProviderError",
+            True,
+        ),
         ("tool_results", [], [], True),
         ("attempt_status", None, None, True),
         ("public_status", None, None, True),
@@ -97,6 +111,7 @@ EXPECTED_COMPARISONS = {
     "tool_recovery": [
         ("agent_run_status", "scored", "scored", True),
         ("prompt_loop_status", "completed", "completed", True),
+        ("prompt_loop_error_class", None, None, True),
         ("tool_results", RECOVERY_TOOL_RESULTS, RECOVERY_TOOL_RESULTS, True),
         ("attempt_status", "PASS", "PASS", True),
         ("public_status", "PASS", "PASS", True),
@@ -158,6 +173,7 @@ def test_load_agent_task_audit_case() -> None:
     assert case.id == "happy_path"
     assert case.expected_agent_run_status == "scored"
     assert case.expected_prompt_loop_status == "completed"
+    assert case.expected_prompt_loop_error_class is None
     assert case.expected_attempt_status == "PASS"
     assert case.expected_public_status == "PASS"
     assert case.expected_hidden_status == "PASS"
@@ -178,6 +194,7 @@ def test_load_agent_task_audit_case() -> None:
     assert malformed_case.id == "malformed_json"
     assert malformed_case.expected_agent_run_status == "agent_loop_failed"
     assert malformed_case.expected_prompt_loop_status == "invalid_model_output"
+    assert malformed_case.expected_prompt_loop_error_class == "MalformedModelOutput"
     assert malformed_case.expected_tool_results == []
     assert malformed_case.expected_attempt_status is None
     assert malformed_case.expected_public_status is None
@@ -190,6 +207,7 @@ def test_load_agent_task_audit_case() -> None:
     assert max_turns_case.id == "max_turns_exceeded"
     assert max_turns_case.expected_agent_run_status == "agent_loop_failed"
     assert max_turns_case.expected_prompt_loop_status == "max_turns_exceeded"
+    assert max_turns_case.expected_prompt_loop_error_class == "MaxTurnsExceeded"
     assert max_turns_case.expected_tool_results is not None
     assert [
         {
@@ -210,6 +228,9 @@ def test_load_agent_task_audit_case() -> None:
     assert model_error_case.id == "model_error"
     assert model_error_case.expected_agent_run_status == "agent_loop_failed"
     assert model_error_case.expected_prompt_loop_status == "model_error"
+    assert model_error_case.expected_prompt_loop_error_class == (
+        "ScriptedProviderError"
+    )
     assert model_error_case.expected_tool_results == []
     assert model_error_case.expected_attempt_status is None
     assert model_error_case.expected_public_status is None
@@ -220,6 +241,7 @@ def test_load_agent_task_audit_case() -> None:
     )
 
     assert recovery_case.id == "tool_recovery"
+    assert recovery_case.expected_prompt_loop_error_class is None
     assert recovery_case.expected_tool_results is not None
     assert [
         {
@@ -309,6 +331,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
     assert "| happy_path | PASS | scored | completed | agent_task_runs/happy_path |" in markdown
     assert "| happy_path | agent_run_status | scored | scored | PASS |" in markdown
     assert "| happy_path | prompt_loop_status | completed | completed | PASS |" in markdown
+    assert "| happy_path | prompt_loop_error_class |  |  | PASS |" in markdown
     assert "| happy_path | attempt_status | PASS | PASS | PASS |" in markdown
     assert (
         "| malformed_json | PASS | agent_loop_failed | invalid_model_output "
@@ -316,15 +339,27 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
     ) in markdown
     assert "| malformed_json | attempt_status |  |  | PASS |" in markdown
     assert (
+        "| malformed_json | prompt_loop_error_class | MalformedModelOutput "
+        "| MalformedModelOutput | PASS |"
+    ) in markdown
+    assert (
         "| max_turns_exceeded | PASS | agent_loop_failed | max_turns_exceeded "
         "| agent_task_runs/max_turns_exceeded |"
     ) in markdown
     assert "| max_turns_exceeded | attempt_status |  |  | PASS |" in markdown
     assert (
+        "| max_turns_exceeded | prompt_loop_error_class | MaxTurnsExceeded "
+        "| MaxTurnsExceeded | PASS |"
+    ) in markdown
+    assert (
         "| model_error | PASS | agent_loop_failed | model_error "
         "| agent_task_runs/model_error |"
     ) in markdown
     assert "| model_error | attempt_status |  |  | PASS |" in markdown
+    assert (
+        "| model_error | prompt_loop_error_class | ScriptedProviderError "
+        "| ScriptedProviderError | PASS |"
+    ) in markdown
     assert (
         "| tool_recovery | PASS | scored | completed "
         "| agent_task_runs/tool_recovery |"
