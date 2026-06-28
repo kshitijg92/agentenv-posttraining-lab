@@ -319,6 +319,8 @@ def _write_manifest(control_run: ControlRun) -> Path:
 
 def _write_markdown(control_run: ControlRun) -> Path:
     path = control_run.out_dir / "control_report.md"
+    scorer_records = _records_for_layer(control_run, "scorer")
+    agent_records = _records_for_layer(control_run, "agent")
     lines = [
         "# Control Calibration",
         "",
@@ -330,61 +332,52 @@ def _write_markdown(control_run: ControlRun) -> Path:
         f"- Records: {len(control_run.records)}",
         f"- Overall: {_match_display(control_run.overall_match)}",
         "",
-        "## Control Overview",
+        "## Scorer Control Overview",
         "",
-        "| layer | control | tasks | records | matches | failures | status |",
-        "| --- | --- | ---: | ---: | ---: | ---: | --- |",
     ]
-    for layer, control_name, task_count, record_count, matches in _overview_rows(
-        control_run
-    ):
-        failures = record_count - matches
-        lines.append(
-            f"| {layer} | {control_name} | {task_count} | {record_count} | "
-            f"{matches}/{record_count} | {failures} | "
-            f"{_match_badge(matches == record_count)} |"
-        )
+    lines.extend(_overview_table(scorer_records))
+    lines.extend(
+        [
+            "",
+            "## Agent Control Overview",
+            "",
+        ]
+    )
+    lines.extend(_overview_table(agent_records))
 
     lines.extend(
         [
             "",
-            "## Control Summary",
+            "## Scorer Control Summary",
             "",
-            "| layer | task_id | control | repeats | matches | expected |",
-            "| --- | --- | --- | --- | --- | --- |",
         ]
     )
-    for control_layer, task_id, control_name in _summary_keys(control_run):
-        records = [
-            record
-            for record in control_run.records
-            if record.control_layer == control_layer
-            and record.task_id == task_id
-            and record.control_name == control_name
+    lines.extend(_scorer_summary_table(scorer_records))
+    lines.extend(
+        [
+            "",
+            "## Agent Control Summary",
+            "",
         ]
-        matches = sum(record.match for record in records)
-        expected = records[0].expected if records else {}
-        lines.append(
-            f"| {control_layer} | {task_id} | {control_name} | {len(records)} | "
-            f"{matches}/{len(records)} | {_json_display(expected)} |"
-        )
+    )
+    lines.extend(_agent_summary_table(agent_records))
 
     lines.extend(
         [
             "",
-            "## Record Details",
+            "## Scorer Record Details",
             "",
-            "| layer | task_id | control | repeat | expected | actual | match | artifact_dir |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
-    for record in control_run.records:
-        lines.append(
-            f"| {record.control_layer} | {record.task_id} | {record.control_name} | "
-            f"{record.repeat_index + 1} | {_json_display(record.expected)} | "
-            f"{_json_display(record.actual)} | {_match_display(record.match)} | "
-            f"{record.artifact_dir.relative_to(control_run.out_dir)} |"
-        )
+    lines.extend(_scorer_detail_table(control_run, scorer_records))
+    lines.extend(
+        [
+            "",
+            "## Agent Record Details",
+            "",
+        ]
+    )
+    lines.extend(_agent_detail_table(control_run, agent_records))
 
     path.write_text("\n".join(lines) + "\n")
     return path
@@ -428,43 +421,205 @@ def _record_json(
     }
 
 
-def _summary_keys(control_run: ControlRun) -> list[tuple[str, str, str]]:
+def _records_for_layer(
+    control_run: ControlRun,
+    control_layer: ControlLayer,
+) -> list[ControlRecord]:
+    return [
+        record
+        for record in control_run.records
+        if record.control_layer == control_layer
+    ]
+
+
+def _overview_table(records: list[ControlRecord]) -> list[str]:
+    if not records:
+        return ["No controls for this layer."]
+
+    rows = [
+        "| control | tasks | records | matches | failures | status |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for control_name, task_count, record_count, matches in _overview_rows(records):
+        failures = record_count - matches
+        rows.append(
+            f"| {control_name} | {task_count} | {record_count} | "
+            f"{matches}/{record_count} | {failures} | "
+            f"{_match_badge(matches == record_count)} |"
+        )
+    return rows
+
+
+def _scorer_summary_table(records: list[ControlRecord]) -> list[str]:
+    if not records:
+        return ["No scorer controls in this run."]
+
+    rows = [
+        (
+            "| task_id | control | repeats | matches | expected_attempt | "
+            "expected_public | expected_hidden |"
+        ),
+        "| --- | --- | ---: | ---: | --- | --- | --- |",
+    ]
+    for task_id, control_name in _summary_keys(records):
+        group = _record_group(records, task_id, control_name)
+        expected = group[0].expected
+        rows.append(
+            f"| {task_id} "
+            f"| {control_name} "
+            f"| {len(group)} "
+            f"| {sum(record.match for record in group)}/{len(group)} "
+            f"| {_display(expected.get('attempt_status'))} "
+            f"| {_display(expected.get('public_status'))} "
+            f"| {_display(expected.get('hidden_status'))} |"
+        )
+    return rows
+
+
+def _agent_summary_table(records: list[ControlRecord]) -> list[str]:
+    if not records:
+        return ["No agent controls in this run."]
+
+    rows = [
+        (
+            "| task_id | control | repeats | matches | expected_prompt_loop | "
+            "expected_tool_results |"
+        ),
+        "| --- | --- | ---: | ---: | --- | --- |",
+    ]
+    for task_id, control_name in _summary_keys(records):
+        group = _record_group(records, task_id, control_name)
+        expected = group[0].expected
+        rows.append(
+            f"| {task_id} "
+            f"| {control_name} "
+            f"| {len(group)} "
+            f"| {sum(record.match for record in group)}/{len(group)} "
+            f"| {_display(expected.get('prompt_loop_status'))} "
+            f"| {_json_display(expected.get('tool_results'))} |"
+        )
+    return rows
+
+
+def _scorer_detail_table(
+    control_run: ControlRun,
+    records: list[ControlRecord],
+) -> list[str]:
+    if not records:
+        return ["No scorer records in this run."]
+
+    rows = [
+        (
+            "| task_id | control | repeat | expected_attempt | actual_attempt | "
+            "expected_public | actual_public | expected_hidden | actual_hidden | "
+            "error_class | final_diff_hash | match | artifact_dir |"
+        ),
+        (
+            "| --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- "
+            "| --- | --- |"
+        ),
+    ]
+    for record in records:
+        expected = record.expected
+        actual = record.actual
+        rows.append(
+            f"| {record.task_id} "
+            f"| {record.control_name} "
+            f"| {record.repeat_index + 1} "
+            f"| {_display(expected.get('attempt_status'))} "
+            f"| {_display(actual.get('attempt_status'))} "
+            f"| {_display(expected.get('public_status'))} "
+            f"| {_display(actual.get('public_status'))} "
+            f"| {_display(expected.get('hidden_status'))} "
+            f"| {_display(actual.get('hidden_status'))} "
+            f"| {_display(actual.get('error_class'))} "
+            f"| {_display(actual.get('final_diff_hash'))} "
+            f"| {_match_display(record.match)} "
+            f"| {record.artifact_dir.relative_to(control_run.out_dir)} |"
+        )
+    return rows
+
+
+def _agent_detail_table(
+    control_run: ControlRun,
+    records: list[ControlRecord],
+) -> list[str]:
+    if not records:
+        return ["No agent records in this run."]
+
+    rows = [
+        (
+            "| task_id | control | repeat | expected_prompt_loop | "
+            "actual_agent_run | actual_prompt_loop | expected_tool_results | "
+            "actual_tool_results | nested_attempt | nested_public | "
+            "nested_hidden | error_class | match | artifact_dir |"
+        ),
+        (
+            "| --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- "
+            "| --- | --- | --- |"
+        ),
+    ]
+    for record in records:
+        expected = record.expected
+        actual = record.actual
+        rows.append(
+            f"| {record.task_id} "
+            f"| {record.control_name} "
+            f"| {record.repeat_index + 1} "
+            f"| {_display(expected.get('prompt_loop_status'))} "
+            f"| {_display(actual.get('agent_run_status'))} "
+            f"| {_display(actual.get('prompt_loop_status'))} "
+            f"| {_json_display(expected.get('tool_results'))} "
+            f"| {_json_display(actual.get('tool_results'))} "
+            f"| {_display(actual.get('attempt_status'))} "
+            f"| {_display(actual.get('public_status'))} "
+            f"| {_display(actual.get('hidden_status'))} "
+            f"| {_display(actual.get('error_class'))} "
+            f"| {_match_display(record.match)} "
+            f"| {record.artifact_dir.relative_to(control_run.out_dir)} |"
+        )
+    return rows
+
+
+def _summary_keys(records: list[ControlRecord]) -> list[tuple[str, str]]:
     return sorted(
         {
-            (record.control_layer, record.task_id, record.control_name)
-            for record in control_run.records
+            (record.task_id, record.control_name)
+            for record in records
         }
     )
 
 
-def _overview_rows(control_run: ControlRun) -> list[tuple[str, str, int, int, int]]:
-    rows: list[tuple[str, str, int, int, int]] = []
-    for control_layer in sorted(
-        {record.control_layer for record in control_run.records}
-    ):
-        layer_records = [
+def _record_group(
+    records: list[ControlRecord],
+    task_id: str,
+    control_name: str,
+) -> list[ControlRecord]:
+    return [
+        record
+        for record in records
+        if record.task_id == task_id and record.control_name == control_name
+    ]
+
+
+def _overview_rows(records: list[ControlRecord]) -> list[tuple[str, int, int, int]]:
+    rows: list[tuple[str, int, int, int]] = []
+    rows.append(_overview_row("all controls", records))
+    for control_name in sorted({record.control_name for record in records}):
+        control_records = [
             record
-            for record in control_run.records
-            if record.control_layer == control_layer
+            for record in records
+            if record.control_name == control_name
         ]
-        rows.append(_overview_row(control_layer, "all controls", layer_records))
-        for control_name in sorted({record.control_name for record in layer_records}):
-            control_records = [
-                record
-                for record in layer_records
-                if record.control_name == control_name
-            ]
-            rows.append(_overview_row(control_layer, control_name, control_records))
+        rows.append(_overview_row(control_name, control_records))
     return rows
 
 
 def _overview_row(
-    control_layer: str,
     control_name: str,
     records: list[ControlRecord],
-) -> tuple[str, str, int, int, int]:
+) -> tuple[str, int, int, int]:
     return (
-        control_layer,
         control_name,
         len({record.task_id for record in records}),
         len(records),
@@ -570,8 +725,16 @@ def _agent_match(
     ]
 
 
-def _json_display(value: JsonObject) -> str:
+def _json_display(value: object) -> str:
+    if value is None:
+        return ""
     return json.dumps(value, sort_keys=True)
+
+
+def _display(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _match_display(match: bool) -> MatchStatus:

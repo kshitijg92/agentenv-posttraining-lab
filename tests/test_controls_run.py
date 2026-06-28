@@ -143,25 +143,46 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
 
     report = (out_dir / "control_report.md").read_text()
     assert "# Control Calibration" in report
-    assert report.index("## Control Overview") < report.index("## Control Summary")
-    assert (
-        "| layer | control | tasks | records | matches | failures | status |" in report
+    assert report.index("## Scorer Control Overview") < report.index(
+        "## Agent Control Overview"
     )
-    assert "| agent | all controls | 4 | 24 | 24/24 | 0 | " in report
-    assert "| agent | malformed | 4 | 8 | 8/8 | 0 | " in report
-    assert "| scorer | all controls | 4 | 24 | 24/24 | 0 | " in report
-    assert "| scorer | oracle | 4 | 8 | 8/8 | 0 | " in report
+    assert report.index("## Scorer Control Summary") < report.index(
+        "## Agent Control Summary"
+    )
+    assert report.index("## Scorer Record Details") < report.index(
+        "## Agent Record Details"
+    )
+    assert (
+        "| control | tasks | records | matches | failures | status |" in report
+    )
+    assert "| all controls | 4 | 24 | 24/24 | 0 | " in report
+    assert "| malformed | 4 | 8 | 8/8 | 0 | " in report
+    assert "| oracle | 4 | 8 | 8/8 | 0 | " in report
     assert "background-color: #dcfce7" in report
     assert (
-        "| scorer | toy_python_fix_001 | oracle | 2 | 2/2 | "
-        '{"attempt_status": "PASS", "hidden_status": "PASS", '
-        '"public_status": "PASS"} |'
+        "| toy_python_fix_001 | oracle | 2 | 2/2 | PASS | PASS | PASS |"
     ) in report
     assert (
-        "| agent | toy_python_fix_001 | malformed | 2 | 2/2 | "
-        '{"prompt_loop_status": "invalid_model_output"} |'
+        "| toy_python_fix_001 | malformed | 2 | 2/2 | invalid_model_output |  |"
     ) in report
-    assert ("| agent | toy_python_fix_001 | recoverable | 2 | 2/2 | ") in report
+    assert ("| toy_python_fix_001 | recoverable | 2 | 2/2 | completed | ") in report
+    assert (
+        "| task_id | control | repeat | expected_attempt | actual_attempt | "
+        "expected_public | actual_public | expected_hidden | actual_hidden | "
+        "error_class | final_diff_hash | match | artifact_dir |"
+    ) in report
+    assert (
+        "| task_id | control | repeat | expected_prompt_loop | actual_agent_run | "
+        "actual_prompt_loop | expected_tool_results | actual_tool_results | "
+        "nested_attempt | nested_public | nested_hidden | error_class | match | "
+        "artifact_dir |"
+    ) in report
+    assert (
+        "| toy_python_fix_001 | malformed | 1 | invalid_model_output | "
+        "agent_loop_failed | invalid_model_output |  | [] |  |  |  | "
+        "MalformedModelOutput | PASS | "
+        "agent_control_scripts/toy_python_fix_001__malformed__repeat_001 |"
+    ) in report
 
     for record in records:
         artifact_dir = out_dir / record["artifact_dir"]

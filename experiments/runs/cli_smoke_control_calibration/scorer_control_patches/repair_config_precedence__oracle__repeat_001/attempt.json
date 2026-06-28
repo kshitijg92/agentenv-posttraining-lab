@@ -1,0 +1,16 @@
+{
+  "run_id": "run_4dd1306b005e4c31bc9c82d862883a90",
+  "task_id": "repair_config_precedence",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml",
+  "attempt_id": "attempt_df444873d7734a8f9086b3c39a40dc06",
+  "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/oracle.patch",
+  "status": "PASS",
+  "public_status": "PASS",
+  "hidden_status": "PASS",
+  "error_class": null,
+  "started_at": "2026-06-28T00:11:41.061574Z",
+  "ended_at": "2026-06-28T00:11:41.518615Z",
+  "duration_ms": 457,
+  "final_diff_hash": "xxh64:187bcea16c66ce96",
+  "orchestrator_version": "attempt_v0"
+}

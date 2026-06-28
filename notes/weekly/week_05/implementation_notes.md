@@ -1877,3 +1877,151 @@ uv run ruff check .
 uv run pyright
 uv run pytest
 ```
+
+## Eval Matrix Report Layer Split Decision
+
+### Decision
+
+Matrix markdown reports now keep scorer-control and agent-control summaries in
+separate sections:
+
+```text
+## Scorer Policy Summary
+## Agent Policy Summary
+```
+
+Calibration checks are also split:
+
+```text
+### Scorer Control Expectations
+### Agent Control Expectations
+### Scorer Aggregate Rates
+### Agent Aggregate Rates
+```
+
+The report no longer computes agent rows through an "effective scorer" view.
+Scorer rows aggregate only top-level `attempt.scorer` fields. Agent rows
+aggregate `attempt.agent`, `attempt.agent.prompt_loop_status`, and nested
+`attempt.agent.scorer_attempt` fields when a nested scorer attempt exists.
+
+Agent-control expectations are explicit for the current deterministic controls:
+
+```text
+happy/recoverable -> agent_status=scored, prompt_loop_status=completed, nested_scorer=PASS
+malformed         -> agent_status=agent_loop_failed, prompt_loop_status=invalid_model_output, nested_scorer=not_run
+```
+
+### Reasoning
+
+The old policy summary made agent controls look like scorer policies because it
+rolled nested scorer results into the same final/public/hidden columns. That
+hid the agent-layer question: did the prompt loop complete, did the agent task
+runner score a candidate patch, and did the nested scorer run when expected?
+
+Keeping the report layer-aware prevents scorer calibration, prompt-loop health,
+and nested scorer outcomes from collapsing into one ambiguous pass rate.
+
+### Smoke Artifact
+
+The dev-baseline matrix report was regenerated:
+
+```text
+experiments/reports/eval_matrices/cli_smoke_dev_baseline.md
+```
+
+It now shows separate scorer and agent policy summaries, explicit agent
+expectation rows, and an agent control expectation pass rate of `3/3`.
+
+### Verification
+
+Final checks passed:
+
+```bash
+uv run ruff check .
+uv run pyright
+uv run pytest -n auto
+```
+
+Result:
+
+```text
+259 passed
+```
+
+## Controls Report Layer Split Decision
+
+### Decision
+
+The controls calibration markdown report now mirrors the eval matrix report's
+layer boundary. It no longer renders scorer-control and agent-control records
+through one shared summary/detail table.
+
+The report sections are:
+
+```text
+## Scorer Control Overview
+## Agent Control Overview
+## Scorer Control Summary
+## Agent Control Summary
+## Scorer Record Details
+## Agent Record Details
+```
+
+The control run manifest and JSONL record stream remain unified:
+
+```text
+control_run_v0
+control_results.jsonl
+control_layer = scorer | agent
+```
+
+The split is report-only. The durable record stream already had the layer tag;
+the problem was the human report forcing different expected/actual shapes into
+generic JSON columns.
+
+### Reasoning
+
+Scorer controls calibrate final/public/hidden scorer outcomes. Agent controls
+calibrate prompt-loop status, tool-result sequences, agent-run status, and
+nested scorer outcomes when the agent produces a candidate patch.
+
+Putting both shapes into one `expected`/`actual` table made the report harder to
+audit and recreated the same layer-conflation risk as the old eval matrix
+report. The new report keeps shared overview counts, but renders each layer with
+the fields that belong to that layer.
+
+### Smoke Artifact
+
+The controls CLI was run into:
+
+```text
+experiments/runs/cli_smoke_control_calibration
+```
+
+Result:
+
+```text
+records=24
+failed=0
+layers=scorer, agent
+matches=24/24
+```
+
+Representative artifact checks:
+
+```text
+agent_control_scripts/toy_python_fix_001__happy__repeat_001/agent_control_script.json
+agent_control_scripts/toy_python_fix_001__happy__repeat_001/decoding_config.json
+```
+
+both exist.
+
+### Verification
+
+Focused checks passed:
+
+```bash
+uv run pytest -n auto tests/test_controls_run.py
+uv run ruff check src/agentenv/controls/controls_run.py tests/test_controls_run.py
+uv run pyright src/agentenv/controls/controls_run.py tests/test_controls_run.py
+```

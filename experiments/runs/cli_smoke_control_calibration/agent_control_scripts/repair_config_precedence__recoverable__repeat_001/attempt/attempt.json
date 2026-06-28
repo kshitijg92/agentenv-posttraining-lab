@@ -1,0 +1,16 @@
+{
+  "run_id": "run_25287d30f4e8459f97c435f02fe59415",
+  "task_id": "repair_config_precedence",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/task.yaml",
+  "attempt_id": "attempt_d322ceaedd534e74b0c638f114588859",
+  "submission_path": "/tmp/agentenv-agent_task_run_f1ba3565fb894af387dae75d684453e0-a29stdu8/candidate.patch",
+  "status": "PASS",
+  "public_status": "PASS",
+  "hidden_status": "PASS",
+  "error_class": null,
+  "started_at": "2026-06-28T00:11:43.560299Z",
+  "ended_at": "2026-06-28T00:11:44.030562Z",
+  "duration_ms": 470,
+  "final_diff_hash": "xxh64:187bcea16c66ce96",
+  "orchestrator_version": "attempt_v0"
+}
