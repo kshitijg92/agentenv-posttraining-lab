@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_013107a4b4584c158e93e46a6e6af625-aljztszf/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_c20389c8beed4f96813142dd38e56c31-zxz73q_z/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 1 item
 

@@ -13,6 +13,7 @@ from agentenv.controls.agent_control_scripts import (
     load_agent_control_script_case,
 )
 from agentenv.models.fake import ScriptedFakeModelClient
+from agentenv.models.schema import ModelFinishReason
 from agentenv.orchestrators.agent_task_run import (
     AgentTaskRun,
     AgentTaskRunStatus,
@@ -26,18 +27,20 @@ AgentAuditField = Literal[
     "agent_error_class",
     "prompt_loop_status",
     "prompt_loop_error_class",
+    "model_finish_reasons",
     "tool_results",
     "attempt_status",
     "public_status",
     "hidden_status",
 ]
-AgentAuditValue = str | None | list[dict[str, object]]
+AgentAuditValue = str | None | list[str] | list[dict[str, object]]
 
 _EXPECTATION_FIELDS = {
     "expected_agent_run_status",
     "expected_agent_error_class",
     "expected_prompt_loop_status",
     "expected_prompt_loop_error_class",
+    "expected_model_finish_reasons",
     "expected_tool_results",
     "expected_attempt_status",
     "expected_public_status",
@@ -56,6 +59,7 @@ class AgentTaskAuditCase(BaseModel):
     expected_agent_error_class: str | None = Field(default=None, min_length=1)
     expected_prompt_loop_status: PromptLoopStatus | None = None
     expected_prompt_loop_error_class: str | None = Field(default=None, min_length=1)
+    expected_model_finish_reasons: list[ModelFinishReason] | None = None
     expected_tool_results: list[ExpectedAgentControlToolResult] | None = None
     expected_attempt_status: AttemptStatus | None = None
     expected_public_status: CheckStatus | None = None
@@ -207,6 +211,13 @@ def _comparisons(
         comparisons,
         case,
         agent_task_run,
+        expected_field="expected_model_finish_reasons",
+        comparison_field="model_finish_reasons",
+    )
+    _append_comparison(
+        comparisons,
+        case,
+        agent_task_run,
         expected_field="expected_tool_results",
         comparison_field="tool_results",
     )
@@ -257,6 +268,10 @@ def _expected_value(
     case: AgentTaskAuditCase,
     expected_field: str,
 ) -> AgentAuditValue:
+    if expected_field == "expected_model_finish_reasons":
+        if case.expected_model_finish_reasons is None:
+            return None
+        return list(case.expected_model_finish_reasons)
     if expected_field == "expected_tool_results":
         tool_results = case.expected_tool_results
         if tool_results is None:
@@ -290,6 +305,14 @@ def _actual_value(
     if field == "prompt_loop_error_class":
         prompt_loop_result = agent_task_run.prompt_loop_result
         return prompt_loop_result.error_class if prompt_loop_result is not None else None
+    if field == "model_finish_reasons":
+        prompt_loop_result = agent_task_run.prompt_loop_result
+        if prompt_loop_result is None:
+            return []
+        return [
+            str(model_response.finish_reason)
+            for model_response in prompt_loop_result.model_responses
+        ]
     if field == "tool_results":
         return _actual_tool_results(agent_task_run)
     if field == "attempt_status":

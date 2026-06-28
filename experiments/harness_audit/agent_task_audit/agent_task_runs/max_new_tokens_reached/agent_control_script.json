@@ -1,0 +1,16 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}",
+        "finish_reason": "max_new_tokens_reached",
+        "error_class": null
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "model_error",
+    "tool_results": []
+  }
+}

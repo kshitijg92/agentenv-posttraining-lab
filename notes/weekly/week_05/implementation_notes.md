@@ -2046,6 +2046,7 @@ agent_run_status
 agent_error_class
 prompt_loop_status
 prompt_loop_error_class
+model_finish_reasons
 tool_results
 attempt_status
 public_status
@@ -2060,8 +2061,10 @@ data/harness_audit/agent_task_cases/completed_invalid_shortcut
 data/harness_audit/agent_task_cases/completed_public_fail
 data/harness_audit/agent_task_cases/happy_path
 data/harness_audit/agent_task_cases/malformed_json
+data/harness_audit/agent_task_cases/max_new_tokens_reached
 data/harness_audit/agent_task_cases/max_turns_exceeded
 data/harness_audit/agent_task_cases/model_error
+data/harness_audit/agent_task_cases/model_timeout
 data/harness_audit/agent_task_cases/orchestrator_error_after_completed_prompt
 data/harness_audit/agent_task_cases/terminal_tool_error
 data/harness_audit/agent_task_cases/tool_recovery
@@ -2078,6 +2081,7 @@ The happy-path case targets `toy_python_fix_001` and expects:
 agent_run_status = scored
 prompt_loop_status = completed
 prompt_loop_error_class = null
+model_finish_reasons = four stop_criteria_met responses
 tool_results = read_file ok, write_file ok, run_tests ok
 attempt_status = PASS
 public_status = PASS
@@ -2091,6 +2095,7 @@ attempt results without duplicating the full scorer audit matrix:
 completed_hidden_fail:
   agent_run_status = scored
   prompt_loop_status = completed
+  model_finish_reasons = four stop_criteria_met responses
   attempt_status = HIDDEN_TEST_FAIL
   public_status = PASS
   hidden_status = FAIL
@@ -2098,6 +2103,7 @@ completed_hidden_fail:
 completed_public_fail:
   agent_run_status = scored
   prompt_loop_status = completed
+  model_finish_reasons = four stop_criteria_met responses
   attempt_status = PUBLIC_TEST_FAIL
   public_status = FAIL
   hidden_status = NOT_RUN
@@ -2105,6 +2111,7 @@ completed_public_fail:
 completed_invalid_shortcut:
   agent_run_status = scored
   prompt_loop_status = completed
+  model_finish_reasons = four stop_criteria_met responses
   attempt_status = INVALID_SHORTCUT
   public_status = NOT_RUN
   hidden_status = NOT_RUN
@@ -2117,6 +2124,7 @@ nested scorer attempt:
 agent_run_status = agent_loop_failed
 prompt_loop_status = invalid_model_output
 prompt_loop_error_class = MalformedModelOutput
+model_finish_reasons = one stop_criteria_met response
 tool_results = []
 attempt_status = null
 public_status = null
@@ -2130,6 +2138,7 @@ without a `final_answer`. It expects the prompt loop to stop before scoring:
 agent_run_status = agent_loop_failed
 prompt_loop_status = max_turns_exceeded
 prompt_loop_error_class = MaxTurnsExceeded
+model_finish_reasons = ten stop_criteria_met responses
 tool_results = ten read_file ok results
 attempt_status = null
 public_status = null
@@ -2144,6 +2153,38 @@ the prompt loop to stop before any tool execution or scoring:
 agent_run_status = agent_loop_failed
 prompt_loop_status = model_error
 prompt_loop_error_class = ScriptedProviderError
+model_finish_reasons = error
+tool_results = []
+attempt_status = null
+public_status = null
+hidden_status = null
+```
+
+The model-timeout case emits `finish_reason = timeout` and
+`error_class = ScriptedModelTimeout`. It expects the same prompt-loop failure
+shape as the provider-error case, but with the timeout-specific error class and
+finish reason:
+
+```text
+agent_run_status = agent_loop_failed
+prompt_loop_status = model_error
+prompt_loop_error_class = ScriptedModelTimeout
+model_finish_reasons = timeout
+tool_results = []
+attempt_status = null
+public_status = null
+hidden_status = null
+```
+
+The max-new-tokens case emits a `final_answer`-shaped payload with
+`finish_reason = max_new_tokens_reached`. It expects the loop to fail before
+parsing the otherwise valid JSON:
+
+```text
+agent_run_status = agent_loop_failed
+prompt_loop_status = model_error
+prompt_loop_error_class = MaxNewTokensReached
+model_finish_reasons = max_new_tokens_reached
 tool_results = []
 attempt_status = null
 public_status = null
@@ -2159,6 +2200,7 @@ agent_run_status = orchestrator_error
 agent_error_class = UnicodeDecodeError
 prompt_loop_status = completed
 prompt_loop_error_class = null
+model_finish_reasons = four stop_criteria_met responses
 tool_results = read_file ok, write_file ok, run_tests ok
 attempt_status = null
 public_status = null
@@ -2173,6 +2215,7 @@ the fourth scripted model response:
 agent_run_status = agent_loop_failed
 prompt_loop_status = terminal_tool_error
 prompt_loop_error_class = UnsafePath
+model_finish_reasons = three stop_criteria_met responses
 tool_results = read_file ok, read_file ok, read_file UnsafePath
 attempt_status = null
 public_status = null
@@ -2187,11 +2230,16 @@ expects:
 agent_run_status = scored
 prompt_loop_status = completed
 prompt_loop_error_class = null
+model_finish_reasons = five stop_criteria_met responses
 tool_results = read_file InvalidToolInput, read_file ok, write_file ok, run_tests ok
 attempt_status = PASS
 public_status = PASS
 hidden_status = PASS
 ```
+
+`model_finish_reasons` is intentionally separate from prompt-loop status. It
+keeps `model_error` cases distinguishable and verifies that token-limit and
+timeout stops are handled before parsing model output or executing tools.
 
 ### Reasoning
 

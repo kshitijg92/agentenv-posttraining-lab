@@ -4,6 +4,11 @@ agent_control_script: agent_control_script.json
 expected_agent_run_status: scored
 expected_prompt_loop_status: completed
 expected_prompt_loop_error_class:
+expected_model_finish_reasons:
+  - stop_criteria_met
+  - stop_criteria_met
+  - stop_criteria_met
+  - stop_criteria_met
 expected_tool_results:
   - tool_name: read_file
     status: ok

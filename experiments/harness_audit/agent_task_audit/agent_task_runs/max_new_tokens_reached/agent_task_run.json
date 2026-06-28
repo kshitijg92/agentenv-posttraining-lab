@@ -1,0 +1,16 @@
+{
+  "run_id": "agent_task_run_aaacc29212b543bcb090a0b70c90853f",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+  "status": "agent_loop_failed",
+  "prompt_loop_status": "model_error",
+  "candidate_patch_path": null,
+  "candidate_patch_hash": null,
+  "attempt_result": null,
+  "error_class": "MaxNewTokensReached",
+  "error_message": "Model generation stopped with finish_reason=max_new_tokens_reached.",
+  "started_at": "2026-06-28T02:09:39.791193Z",
+  "ended_at": "2026-06-28T02:09:39.794742Z",
+  "duration_ms": 3,
+  "orchestrator_version": "agent_task_run_v0"
+}

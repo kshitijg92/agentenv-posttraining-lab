@@ -1,5 +1,5 @@
 {
-  "run_id": "agent_task_run_8f60739754b14b10b99b7375a09b4ec0",
+  "run_id": "agent_task_run_2a725fe756d7419bb6155c0adf17e04a",
   "task_id": "toy_python_fix_001",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
   "status": "orchestrator_error",
@@ -9,8 +9,8 @@
   "attempt_result": null,
   "error_class": "UnicodeDecodeError",
   "error_message": "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte",
-  "started_at": "2026-06-28T01:57:06.094201Z",
-  "ended_at": "2026-06-28T01:57:06.399519Z",
-  "duration_ms": 305,
+  "started_at": "2026-06-28T02:09:39.814532Z",
+  "ended_at": "2026-06-28T02:09:40.117641Z",
+  "duration_ms": 303,
   "orchestrator_version": "agent_task_run_v0"
 }

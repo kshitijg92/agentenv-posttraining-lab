@@ -4,6 +4,10 @@ agent_control_script: agent_control_script.json
 expected_agent_run_status: agent_loop_failed
 expected_prompt_loop_status: terminal_tool_error
 expected_prompt_loop_error_class: UnsafePath
+expected_model_finish_reasons:
+  - stop_criteria_met
+  - stop_criteria_met
+  - stop_criteria_met
 expected_tool_results:
   - tool_name: read_file
     status: ok

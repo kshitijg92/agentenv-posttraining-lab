@@ -1,0 +1,13 @@
+id: model_timeout
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+agent_control_script: agent_control_script.json
+expected_agent_run_status: agent_loop_failed
+expected_prompt_loop_status: model_error
+expected_prompt_loop_error_class: ScriptedModelTimeout
+expected_model_finish_reasons:
+  - timeout
+expected_tool_results: []
+expected_attempt_status:
+expected_public_status:
+expected_hidden_status:
+purpose: Verify a model timeout finish reason fails the prompt loop with the expected timeout error class.
