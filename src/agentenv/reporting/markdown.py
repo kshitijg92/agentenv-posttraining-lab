@@ -38,6 +38,10 @@ def render_eval_report(
         f"- Config path: {_path_display(manifest.get('config_path'))}",
         f"- Config hash: {_display(manifest.get('config_hash'))}",
         f"- Policy: {_display(manifest.get('policy'))}",
+        f"- Policy type: {_display(manifest.get('policy_type'))}",
+        f"- Policy family: {_display(manifest.get('policy_family'))}",
+        f"- Control layer: {_display(manifest.get('control_layer'))}",
+        f"- Control name: {_display(manifest.get('control_name'))}",
         f"- Split: {_display(manifest.get('split'))}",
         f"- Task pack: {_display(manifest.get('task_pack'))}",
         f"- Attempt count: {_display(manifest.get('attempt_count'))}",
@@ -57,9 +61,14 @@ def render_eval_report(
             (
                 "| task_id | attempt_index | artifact_version | scorer_status | "
                 "scorer_public_status | scorer_hidden_status | agent_status | "
-                "prompt_loop_status | error_class | final_diff_hash | artifact_dir |"
+                "prompt_loop_status | agent_scorer_status | "
+                "agent_scorer_public_status | agent_scorer_hidden_status | "
+                "error_class | final_diff_hash | artifact_dir |"
             ),
-            "| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            (
+                "| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+                "| --- | --- | --- |"
+            ),
         ]
     )
 
@@ -83,6 +92,8 @@ def render_eval_matrix_report(
         _matrix_policy_summary(artifact_dir, policy, run_artifact_dir, run_manifest)
         for policy, run_artifact_dir, run_manifest in policy_runs
     ]
+    scorer_policy_summaries = _summaries_for_control_layer(policy_summaries, "scorer")
+    agent_policy_summaries = _summaries_for_control_layer(policy_summaries, "agent")
     replay_match_rate = _matrix_replay_match_rate(manifest)
 
     lines = [
@@ -120,58 +131,65 @@ def render_eval_matrix_report(
     lines.extend(
         [
             "",
-            "## Policy Summary",
+            "## Scorer Policy Summary",
             "",
-            (
-                "| policy | attempts | final_pass_rate | public_pass_rate | "
-                "hidden_pass_rate | public_pass_hidden_fail | env_or_harness_failures | "
-                "scorer_or_orchestrator_failures | median_duration_ms | trace |"
-            ),
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
     )
-    for summary in policy_summaries:
-        lines.append(_matrix_policy_summary_row(summary))
+    lines.extend(_scorer_policy_summary_table(scorer_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "## Agent Policy Summary",
+            "",
+        ]
+    )
+    lines.extend(_agent_policy_summary_table(agent_policy_summaries))
 
     lines.extend(
         [
             "",
             "## Calibration Checks",
             "",
-            "### Control Expectations",
+            "### Scorer Control Expectations",
             "",
-            (
-                "| policy | expected final | observed final | expected public | "
-                "observed public | expected hidden | observed hidden | result |"
-            ),
-            "| --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
-    lines.extend(_matrix_expectation_rows(policy_summaries))
+    lines.extend(_scorer_expectation_table(scorer_policy_summaries))
     lines.extend(
         [
             "",
-            "### Aggregate Rates",
+            "### Scorer Aggregate Rates",
             "",
-            f"- Oracle pass rate: {_rate_display(_oracle_pass_rate(policy_summaries))}",
-            f"- Known-bad final PASS rate: {_rate_display(_known_bad_pass_rate(policy_summaries))}",
-            (
-                "- Known-bad public-pass/hidden-fail rate: "
-                f"{_rate_display(_known_bad_public_hidden_fail_rate(policy_summaries))}"
-            ),
-            f"- Environment/harness failure rate: {_rate_display(_env_failure_rate(policy_summaries))}",
-            (
-                "- Scorer/orchestrator failure rate: "
-                f"{_rate_display(_scorer_or_orchestrator_failure_rate(policy_summaries))}"
-            ),
+        ]
+    )
+    lines.extend(_scorer_aggregate_rate_lines(scorer_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "### Agent Control Expectations",
+            "",
+        ]
+    )
+    lines.extend(_agent_expectation_table(agent_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "### Agent Aggregate Rates",
+            "",
+        ]
+    )
+    lines.extend(_agent_aggregate_rate_lines(agent_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "### Replay Checks",
+            "",
             (
                 f"- Replay match rate: {_rate_display(replay_match_rate)}"
                 if replay_match_rate is not None
                 else "- Replay match rate: not run"
             ),
             "- Task exclusions: none recorded in eval_matrix_v0",
-            "",
-            "### Replay Checks",
             "",
         ]
     )
@@ -184,10 +202,14 @@ def render_eval_matrix_report(
             (
                 "| task_id | policy | artifact_version | scorer_status | "
                 "scorer_public_status | scorer_hidden_status | agent_status | "
-                "prompt_loop_status | error_class | duration_ms | final_diff_hash | "
-                "artifact_dir |"
+                "prompt_loop_status | agent_scorer_status | "
+                "agent_scorer_public_status | agent_scorer_hidden_status | "
+                "error_class | duration_ms | final_diff_hash | artifact_dir |"
             ),
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- |",
+            (
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+                "| --- | ---: | --- | --- |"
+            ),
         ]
     )
     for policy, run_artifact_dir, run_manifest in policy_runs:
@@ -277,11 +299,14 @@ def _attempt_row(artifact_dir: Path, attempt_record: dict[str, object]) -> str:
         f"| {_display(attempt_record.get('task_id'))} "
         f"| {_display(attempt_record.get('attempt_index'))} "
         f"| {_display(attempt_record.get('artifact_version'))} "
-        f"| {_display(_attempt_scorer_field(scorer, agent, 'status'))} "
-        f"| {_display(_attempt_scorer_field(scorer, agent, 'public_status'))} "
-        f"| {_display(_attempt_scorer_field(scorer, agent, 'hidden_status'))} "
+        f"| {_display(_field(scorer, 'status'))} "
+        f"| {_display(_field(scorer, 'public_status'))} "
+        f"| {_display(_field(scorer, 'hidden_status'))} "
         f"| {_display(_field(agent, 'status'))} "
         f"| {_display(_field(agent, 'prompt_loop_status'))} "
+        f"| {_display(_attempt_agent_scorer_field(agent, 'status'))} "
+        f"| {_display(_attempt_agent_scorer_field(agent, 'public_status'))} "
+        f"| {_display(_attempt_agent_scorer_field(agent, 'hidden_status'))} "
         f"| {_display(_attempt_error_class(scorer, agent))} "
         f"| {_display(_attempt_final_diff_hash(scorer, agent))} "
         f"| {attempt_artifact_ref} |"
@@ -344,38 +369,44 @@ def _matrix_policy_summary(
         run_manifest,
     )
     attempt_count = len(attempts)
-    final_passes = sum(
-        _effective_scorer_field(attempt, "status") == "PASS" for attempt in attempts
+    scorer_status_counts = _nested_field_counts(attempts, "scorer", "status")
+    scorer_public_status_counts = _nested_field_counts(
+        attempts,
+        "scorer",
+        "public_status",
     )
-    public_passes = sum(
-        _effective_scorer_field(attempt, "public_status") == "PASS"
-        for attempt in attempts
+    scorer_hidden_status_counts = _nested_field_counts(
+        attempts,
+        "scorer",
+        "hidden_status",
     )
-    hidden_passes = sum(
-        _effective_scorer_field(attempt, "hidden_status") == "PASS"
-        for attempt in attempts
+    agent_status_counts = _nested_field_counts(attempts, "agent", "status")
+    prompt_loop_status_counts = _nested_field_counts(
+        attempts,
+        "agent",
+        "prompt_loop_status",
     )
-    public_pass_hidden_fail = sum(
-        _effective_scorer_field(attempt, "public_status") == "PASS"
-        and _effective_scorer_field(attempt, "hidden_status") == "FAIL"
-        for attempt in attempts
-    )
-    scorer_status_counts = _effective_scorer_field_counts(attempts, "status")
-    scorer_public_status_counts = _effective_scorer_field_counts(
+    agent_scorer_status_counts = _agent_scorer_field_counts(attempts, "status")
+    agent_scorer_public_status_counts = _agent_scorer_field_counts(
         attempts,
         "public_status",
     )
-    scorer_hidden_status_counts = _effective_scorer_field_counts(
+    agent_scorer_hidden_status_counts = _agent_scorer_field_counts(
         attempts,
         "hidden_status",
     )
-    env_or_harness_failures = sum(
-        _effective_scorer_field(attempt, "status")
+    scorer_public_pass_hidden_fail = sum(
+        _scorer_field(attempt, "public_status") == "PASS"
+        and _scorer_field(attempt, "hidden_status") == "FAIL"
+        for attempt in attempts
+    )
+    scorer_env_or_harness_failures = sum(
+        _scorer_field(attempt, "status")
         in {"PATCH_APPLY_ERROR", "TIMEOUT", "ORCHESTRATOR_ERROR"}
         for attempt in attempts
     )
     scorer_or_orchestrator_failures = sum(
-        _effective_scorer_field(attempt, "status") == "ORCHESTRATOR_ERROR"
+        _scorer_field(attempt, "status") == "ORCHESTRATOR_ERROR"
         for attempt in attempts
     )
     duration_values = [
@@ -385,48 +416,144 @@ def _matrix_policy_summary(
     ]
     return {
         "policy": policy,
+        "policy_type": _required_str(run_manifest, "policy_type"),
+        "policy_family": _required_str(run_manifest, "policy_family"),
+        "control_layer": _required_str(run_manifest, "control_layer"),
+        "control_name": _required_str(run_manifest, "control_name"),
         "attempt_count": attempt_count,
-        "final_passes": final_passes,
-        "public_passes": public_passes,
-        "hidden_passes": hidden_passes,
-        "public_pass_hidden_fail": public_pass_hidden_fail,
+        "scorer_final_passes": scorer_status_counts.get("PASS", 0),
+        "scorer_public_passes": scorer_public_status_counts.get("PASS", 0),
+        "scorer_hidden_passes": scorer_hidden_status_counts.get("PASS", 0),
+        "scorer_public_pass_hidden_fail": scorer_public_pass_hidden_fail,
         "scorer_status_counts": scorer_status_counts,
         "scorer_public_status_counts": scorer_public_status_counts,
         "scorer_hidden_status_counts": scorer_hidden_status_counts,
-        "env_or_harness_failures": env_or_harness_failures,
+        "scorer_env_or_harness_failures": scorer_env_or_harness_failures,
         "scorer_or_orchestrator_failures": scorer_or_orchestrator_failures,
+        "agent_scored_count": agent_status_counts.get("scored", 0),
+        "agent_loop_failed_count": agent_status_counts.get("agent_loop_failed", 0),
+        "prompt_loop_completed_count": prompt_loop_status_counts.get("completed", 0),
+        "agent_scorer_run_count": sum(agent_scorer_status_counts.values()),
+        "agent_scorer_final_passes": agent_scorer_status_counts.get("PASS", 0),
+        "agent_scorer_public_passes": agent_scorer_public_status_counts.get("PASS", 0),
+        "agent_scorer_hidden_passes": agent_scorer_hidden_status_counts.get("PASS", 0),
+        "agent_status_counts": agent_status_counts,
+        "prompt_loop_status_counts": prompt_loop_status_counts,
+        "agent_scorer_status_counts": agent_scorer_status_counts,
+        "agent_scorer_public_status_counts": agent_scorer_public_status_counts,
+        "agent_scorer_hidden_status_counts": agent_scorer_hidden_status_counts,
         "median_duration_ms": int(median(duration_values)) if duration_values else None,
         "trace": f"{run_artifact_dir}/trace.jsonl",
     }
 
 
-def _matrix_policy_summary_row(summary: dict[str, object]) -> str:
+def _summaries_for_control_layer(
+    summaries: list[dict[str, object]],
+    control_layer: str,
+) -> list[dict[str, object]]:
+    return [
+        summary
+        for summary in summaries
+        if summary.get("control_layer") == control_layer
+    ]
+
+
+def _scorer_policy_summary_table(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No scorer policies in this eval matrix."]
+
+    return [
+        (
+            "| policy | control | attempts | final_pass_rate | public_pass_rate | "
+            "hidden_pass_rate | public_pass_hidden_fail | env_or_harness_failures | "
+            "scorer_or_orchestrator_failures | median_duration_ms | trace |"
+        ),
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        *[_scorer_policy_summary_row(summary) for summary in summaries],
+    ]
+
+
+def _scorer_policy_summary_row(summary: dict[str, object]) -> str:
     attempt_count = _required_int(summary, "attempt_count")
     trace_ref = _display(summary.get("trace"))
     return (
         f"| {_display(summary.get('policy'))} "
+        f"| {_display(summary.get('control_name'))} "
         f"| {attempt_count} "
-        f"| {_count_rate(summary.get('final_passes'), attempt_count)} "
-        f"| {_count_rate(summary.get('public_passes'), attempt_count)} "
-        f"| {_count_rate(summary.get('hidden_passes'), attempt_count)} "
-        f"| {_display(summary.get('public_pass_hidden_fail'))} "
-        f"| {_display(summary.get('env_or_harness_failures'))} "
+        f"| {_count_rate(summary.get('scorer_final_passes'), attempt_count)} "
+        f"| {_count_rate(summary.get('scorer_public_passes'), attempt_count)} "
+        f"| {_count_rate(summary.get('scorer_hidden_passes'), attempt_count)} "
+        f"| {_display(summary.get('scorer_public_pass_hidden_fail'))} "
+        f"| {_display(summary.get('scorer_env_or_harness_failures'))} "
         f"| {_display(summary.get('scorer_or_orchestrator_failures'))} "
         f"| {_display(summary.get('median_duration_ms'))} "
         f"| {trace_ref} |"
     )
 
 
-def _matrix_expectation_rows(summaries: list[dict[str, object]]) -> list[str]:
-    return [_matrix_expectation_row(summary) for summary in summaries]
+def _agent_policy_summary_table(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No agent policies in this eval matrix."]
+
+    return [
+        (
+            "| policy | control | attempts | agent_scored_rate | "
+            "prompt_loop_completed_rate | agent_loop_failed | "
+            "nested_scorer_run_rate | nested_scorer_pass_rate | "
+            "nested_public_pass_rate | nested_hidden_pass_rate | "
+            "median_duration_ms | trace |"
+        ),
+        (
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: "
+            "| ---: | --- |"
+        ),
+        *[_agent_policy_summary_row(summary) for summary in summaries],
+    ]
 
 
-def _matrix_expectation_row(summary: dict[str, object]) -> str:
-    policy = _display(summary.get("policy"))
+def _agent_policy_summary_row(summary: dict[str, object]) -> str:
     attempt_count = _required_int(summary, "attempt_count")
-    expected = _control_expectation(policy)
+    trace_ref = _display(summary.get("trace"))
+    return (
+        f"| {_display(summary.get('policy'))} "
+        f"| {_display(summary.get('control_name'))} "
+        f"| {attempt_count} "
+        f"| {_count_rate(summary.get('agent_scored_count'), attempt_count)} "
+        f"| {_count_rate(summary.get('prompt_loop_completed_count'), attempt_count)} "
+        f"| {_display(summary.get('agent_loop_failed_count'))} "
+        f"| {_count_rate(summary.get('agent_scorer_run_count'), attempt_count)} "
+        f"| {_count_rate(summary.get('agent_scorer_final_passes'), attempt_count)} "
+        f"| {_count_rate(summary.get('agent_scorer_public_passes'), attempt_count)} "
+        f"| {_count_rate(summary.get('agent_scorer_hidden_passes'), attempt_count)} "
+        f"| {_display(summary.get('median_duration_ms'))} "
+        f"| {trace_ref} |"
+    )
+
+
+def _scorer_expectation_table(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No scorer control policies in this eval matrix."]
+
+    return [
+        (
+            "| policy | control | expected final | observed final | expected public | "
+            "observed public | expected hidden | observed hidden | result |"
+        ),
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        *[_scorer_expectation_row(summary) for summary in summaries],
+    ]
+
+
+def _scorer_expectation_row(summary: dict[str, object]) -> str:
+    policy = _display(summary.get("policy"))
+    control_name = _display(summary.get("control_name"))
+    attempt_count = _required_int(summary, "attempt_count")
+    expected = _scorer_control_expectation(control_name)
     if expected is None:
-        return f"| {policy} |  |  |  |  |  |  | {_colored_label('NOT_CHECKED', 'gray')} |"
+        return (
+            f"| {policy} | {control_name} |  |  |  |  |  |  | "
+            f"{_colored_label('NOT_CHECKED', 'gray')} |"
+        )
 
     final_count = _status_count(summary, "scorer_status_counts", expected["final"])
     public_count = _status_count(
@@ -450,6 +577,7 @@ def _matrix_expectation_row(summary: dict[str, object]) -> str:
     )
     return (
         f"| {policy} "
+        f"| {control_name} "
         f"| {expected['final']} "
         f"| {_count_rate(final_count, attempt_count)} "
         f"| {expected['public']} "
@@ -460,12 +588,180 @@ def _matrix_expectation_row(summary: dict[str, object]) -> str:
     )
 
 
-def _control_expectation(policy: str) -> dict[str, str] | None:
-    if policy == "oracle":
+def _scorer_control_expectation(control_name: str) -> dict[str, str] | None:
+    if control_name == "oracle":
         return {"final": "PASS", "public": "PASS", "hidden": "PASS"}
-    if policy in {"noop", "bad-noop", "public-tests-only", "bad-public-only"}:
+    if control_name in {"bad.noop", "bad.public_only"}:
         return {"final": "HIDDEN_TEST_FAIL", "public": "PASS", "hidden": "FAIL"}
     return None
+
+
+def _agent_expectation_table(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No agent control policies in this eval matrix."]
+
+    return [
+        (
+            "| policy | control | expected agent_status | observed agent_status | "
+            "expected prompt_loop | observed prompt_loop | "
+            "expected nested_scorer | observed nested_scorer | result |"
+        ),
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        *[_agent_expectation_row(summary) for summary in summaries],
+    ]
+
+
+def _agent_expectation_row(summary: dict[str, object]) -> str:
+    policy = _display(summary.get("policy"))
+    control_name = _display(summary.get("control_name"))
+    attempt_count = _required_int(summary, "attempt_count")
+    expected = _agent_control_expectation(control_name)
+    if expected is None:
+        return (
+            f"| {policy} | {control_name} |  |  |  |  |  |  | "
+            f"{_colored_label('NOT_CHECKED', 'gray')} |"
+        )
+
+    expected_agent_status = _required_expected_status(expected, "agent_status")
+    expected_prompt_loop_status = _required_expected_status(
+        expected,
+        "prompt_loop_status",
+    )
+    expected_nested_scorer_status = expected["nested_scorer_status"]
+    agent_count = _status_count(
+        summary,
+        "agent_status_counts",
+        expected_agent_status,
+    )
+    prompt_loop_count = _status_count(
+        summary,
+        "prompt_loop_status_counts",
+        expected_prompt_loop_status,
+    )
+    nested_scorer_count = _expected_nested_scorer_count(
+        summary,
+        expected_nested_scorer_status,
+        attempt_count,
+    )
+    on_track = _agent_expectation_on_track(summary, expected)
+    result = _colored_label(
+        "ON_TRACK" if on_track else "OFF_TRACK",
+        "green" if on_track else "red",
+    )
+    return (
+        f"| {policy} "
+        f"| {control_name} "
+        f"| {expected_agent_status} "
+        f"| {_count_rate(agent_count, attempt_count)} "
+        f"| {expected_prompt_loop_status} "
+        f"| {_count_rate(prompt_loop_count, attempt_count)} "
+        f"| {_expected_nested_scorer_display(expected_nested_scorer_status)} "
+        f"| {_count_rate(nested_scorer_count, attempt_count)} "
+        f"| {result} |"
+    )
+
+
+def _agent_control_expectation(control_name: str) -> dict[str, str | None] | None:
+    if control_name in {"happy", "recoverable"}:
+        return {
+            "agent_status": "scored",
+            "prompt_loop_status": "completed",
+            "nested_scorer_status": "PASS",
+        }
+    if control_name == "malformed":
+        return {
+            "agent_status": "agent_loop_failed",
+            "prompt_loop_status": "invalid_model_output",
+            "nested_scorer_status": None,
+        }
+    return None
+
+
+def _agent_expectation_on_track(
+    summary: dict[str, object],
+    expected: dict[str, str | None],
+) -> bool:
+    attempt_count = _required_int(summary, "attempt_count")
+    expected_agent_status = _required_expected_status(expected, "agent_status")
+    expected_prompt_loop_status = _required_expected_status(
+        expected,
+        "prompt_loop_status",
+    )
+    agent_count = _status_count(
+        summary,
+        "agent_status_counts",
+        expected_agent_status,
+    )
+    prompt_loop_count = _status_count(
+        summary,
+        "prompt_loop_status_counts",
+        expected_prompt_loop_status,
+    )
+    nested_scorer_count = _expected_nested_scorer_count(
+        summary,
+        expected["nested_scorer_status"],
+        attempt_count,
+    )
+    return (
+        agent_count == attempt_count
+        and prompt_loop_count == attempt_count
+        and nested_scorer_count == attempt_count
+    )
+
+
+def _expected_nested_scorer_count(
+    summary: dict[str, object],
+    expected_status: str | None,
+    attempt_count: int,
+) -> int:
+    if expected_status is None:
+        return _missing_status_count(summary, "agent_scorer_status_counts", attempt_count)
+    return _status_count(summary, "agent_scorer_status_counts", expected_status)
+
+
+def _expected_nested_scorer_display(expected_status: str | None) -> str:
+    return "not_run" if expected_status is None else expected_status
+
+
+def _required_expected_status(
+    expected: dict[str, str | None],
+    key: str,
+) -> str:
+    status = expected.get(key)
+    if not isinstance(status, str):
+        raise ValueError(f"Expected string status for {key!r}")
+    return status
+
+
+def _scorer_aggregate_rate_lines(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No scorer aggregate rates for this eval matrix."]
+
+    return [
+        f"- Oracle pass rate: {_rate_display(_oracle_pass_rate(summaries))}",
+        f"- Known-bad final PASS rate: {_rate_display(_known_bad_pass_rate(summaries))}",
+        (
+            "- Known-bad public-pass/hidden-fail rate: "
+            f"{_rate_display(_known_bad_public_hidden_fail_rate(summaries))}"
+        ),
+        f"- Environment/harness failure rate: {_rate_display(_env_failure_rate(summaries))}",
+        (
+            "- Scorer/orchestrator failure rate: "
+            f"{_rate_display(_scorer_or_orchestrator_failure_rate(summaries))}"
+        ),
+    ]
+
+
+def _agent_aggregate_rate_lines(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No agent aggregate rates for this eval matrix."]
+
+    return [
+        (
+            "- Agent control expectation pass rate: "
+            f"{_rate_display(_agent_expectation_pass_rate(summaries))}"
+        )
+    ]
 
 
 def _matrix_replay_rows(manifest: dict[str, object]) -> list[str]:
@@ -549,13 +845,13 @@ def _nested_field_counts(
     return counts
 
 
-def _effective_scorer_field_counts(
+def _agent_scorer_field_counts(
     attempts: list[dict[str, object]],
     field_name: str,
 ) -> dict[str, int]:
     counts: dict[str, int] = {}
     for attempt in attempts:
-        value = _effective_scorer_field(attempt, field_name)
+        value = _agent_scorer_field(attempt, field_name)
         if not isinstance(value, str):
             continue
         counts[value] = counts.get(value, 0) + 1
@@ -572,6 +868,20 @@ def _status_count(
         return 0
     value = raw_counts.get(status)
     return value if isinstance(value, int) else 0
+
+
+def _missing_status_count(
+    summary: dict[str, object],
+    counts_key: str,
+    attempt_count: int,
+) -> int:
+    raw_counts = summary.get(counts_key)
+    if not isinstance(raw_counts, dict):
+        return attempt_count
+    observed_count = sum(
+        count for count in raw_counts.values() if isinstance(count, int)
+    )
+    return max(attempt_count - observed_count, 0)
 
 
 def _optional_object(value: object) -> dict[str, object] | None:
@@ -598,21 +908,10 @@ def _agent_scorer_field(attempt: dict[str, object], key: str) -> object:
     return _field(scorer_attempt, key)
 
 
-def _effective_scorer_field(attempt: dict[str, object], key: str) -> object:
-    value = _scorer_field(attempt, key)
-    if value is not None:
-        return value
-    return _agent_scorer_field(attempt, key)
-
-
-def _attempt_scorer_field(
-    scorer: dict[str, object] | None,
+def _attempt_agent_scorer_field(
     agent: dict[str, object] | None,
     key: str,
 ) -> object:
-    value = _field(scorer, key)
-    if value is not None:
-        return value
     scorer_attempt = _optional_object(_field(agent, "scorer_attempt"))
     return _field(scorer_attempt, key)
 
@@ -670,11 +969,14 @@ def _matrix_attempt_rows(
             f"| {_display(attempt.get('task_id'))} "
             f"| {policy} "
             f"| {_display(attempt.get('artifact_version'))} "
-            f"| {_display(_effective_scorer_field(attempt, 'status'))} "
-            f"| {_display(_effective_scorer_field(attempt, 'public_status'))} "
-            f"| {_display(_effective_scorer_field(attempt, 'hidden_status'))} "
+            f"| {_display(_scorer_field(attempt, 'status'))} "
+            f"| {_display(_scorer_field(attempt, 'public_status'))} "
+            f"| {_display(_scorer_field(attempt, 'hidden_status'))} "
             f"| {_display(_agent_field(attempt, 'status'))} "
             f"| {_display(_agent_field(attempt, 'prompt_loop_status'))} "
+            f"| {_display(_agent_scorer_field(attempt, 'status'))} "
+            f"| {_display(_agent_scorer_field(attempt, 'public_status'))} "
+            f"| {_display(_agent_scorer_field(attempt, 'hidden_status'))} "
             f"| {_display(_attempt_error_class_from_record(attempt))} "
             f"| {_display(_attempt_duration_ms(attempt))} "
             f"| {_display(_attempt_final_diff_hash_from_record(attempt))} "
@@ -834,21 +1136,25 @@ def _rate_display(rate: tuple[int, int] | None) -> str:
 
 
 def _oracle_pass_rate(summaries: list[dict[str, object]]) -> tuple[int, int] | None:
-    return _summary_rate(summaries, {"oracle"}, "final_passes")
+    return _summary_rate(summaries, {"oracle"}, "scorer_final_passes")
 
 
 def _known_bad_pass_rate(summaries: list[dict[str, object]]) -> tuple[int, int] | None:
-    return _summary_rate(_known_bad_summaries(summaries), None, "final_passes")
+    return _summary_rate(_known_bad_summaries(summaries), None, "scorer_final_passes")
 
 
 def _known_bad_public_hidden_fail_rate(
     summaries: list[dict[str, object]],
 ) -> tuple[int, int] | None:
-    return _summary_rate(_known_bad_summaries(summaries), None, "public_pass_hidden_fail")
+    return _summary_rate(
+        _known_bad_summaries(summaries),
+        None,
+        "scorer_public_pass_hidden_fail",
+    )
 
 
 def _env_failure_rate(summaries: list[dict[str, object]]) -> tuple[int, int] | None:
-    return _summary_rate(summaries, None, "env_or_harness_failures")
+    return _summary_rate(summaries, None, "scorer_env_or_harness_failures")
 
 
 def _scorer_or_orchestrator_failure_rate(
@@ -857,13 +1163,31 @@ def _scorer_or_orchestrator_failure_rate(
     return _summary_rate(summaries, None, "scorer_or_orchestrator_failures")
 
 
+def _agent_expectation_pass_rate(
+    summaries: list[dict[str, object]],
+) -> tuple[int, int] | None:
+    total = 0
+    passed = 0
+    for summary in summaries:
+        control_name = _display(summary.get("control_name"))
+        expected = _agent_control_expectation(control_name)
+        if expected is None:
+            continue
+        total += 1
+        if _agent_expectation_on_track(summary, expected):
+            passed += 1
+    if total == 0:
+        return None
+    return passed, total
+
+
 def _known_bad_summaries(
     summaries: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     return [
         summary
         for summary in summaries
-        if summary.get("policy") in {"noop", "public-tests-only", "bad-noop", "bad-public-only"}
+        if summary.get("control_name") in {"bad.noop", "bad.public_only"}
     ]
 
 

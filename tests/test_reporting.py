@@ -55,14 +55,59 @@ def test_write_eval_markdown_report(tmp_path: Path) -> None:
     assert "## Attempts" in report
     assert "- Config name: scorer_control_policies" in report
     assert "- Policy: oracle" in report
+    assert "- Policy type: scorer_control_patch" in report
+    assert "- Control layer: scorer" in report
     assert "- Split: practice" in report
     assert "- Config path: configs/eval/scorer_control_policies.yaml" in report
     assert "| scorer_status | PASS | 1 |" in report
     assert "| scorer_public_status | PASS | 1 |" in report
     assert "| scorer_hidden_status | PASS | 1 |" in report
     assert (
-        "| toy_python_fix_001 | 0 | run_artifacts_v0 | PASS | PASS | PASS |  |  |  | "
-        "xxh64:e3fc746d6fe0786c | attempts/toy_python_fix_001__attempt_001 |"
+        "| toy_python_fix_001 | 0 | run_artifacts_v0 | PASS | PASS | PASS |  |  | "
+        " |  |  |  | xxh64:e3fc746d6fe0786c | "
+        "attempts/toy_python_fix_001__attempt_001 |"
+    ) in report
+
+
+def test_write_agent_eval_markdown_report(tmp_path: Path) -> None:
+    run_eval_config(AGENT_CONTROL_EVAL_CONFIG, "agent-happy", tmp_path / "eval_run")
+
+    report_path = write_markdown_report(
+        tmp_path / "eval_run",
+        tmp_path / "reports/agent_eval_report.md",
+    )
+    report = report_path.read_text()
+
+    assert "- Policy: agent-happy" in report
+    assert "- Policy type: agent_control_script" in report
+    assert "- Control layer: agent" in report
+    assert "| agent_scorer_status | PASS | 1 |" in report
+    assert (
+        "| toy_python_fix_001 | 0 | agent_task_run_artifacts_v0 |  |  |  | scored | "
+        "completed | PASS | PASS | PASS |  | xxh64:e3fc746d6fe0786c | "
+        "attempts/toy_python_fix_001__attempt_001 |"
+    ) in report
+
+
+def test_write_agent_eval_malformed_markdown_report(tmp_path: Path) -> None:
+    run_eval_config(
+        AGENT_CONTROL_EVAL_CONFIG,
+        "agent-malformed",
+        tmp_path / "eval_run",
+    )
+
+    report_path = write_markdown_report(
+        tmp_path / "eval_run",
+        tmp_path / "reports/agent_eval_malformed_report.md",
+    )
+    report = report_path.read_text()
+
+    assert "- Policy: agent-malformed" in report
+    assert "| agent_status | agent_loop_failed | 1 |" in report
+    assert (
+        "| toy_python_fix_001 | 0 | agent_task_run_artifacts_v0 |  |  |  | "
+        "agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | "
+        " | attempts/toy_python_fix_001__attempt_001 |"
     ) in report
 
 
@@ -126,9 +171,13 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
 
     assert report_path == tmp_path / "reports/eval_matrix.md"
     assert "# Eval Matrix Report" in report
-    assert "## Policy Summary" in report
+    assert "## Scorer Policy Summary" in report
+    assert "## Agent Policy Summary" in report
     assert "## Calibration Checks" in report
-    assert "### Control Expectations" in report
+    assert "### Scorer Control Expectations" in report
+    assert "### Agent Control Expectations" in report
+    assert "### Scorer Aggregate Rates" in report
+    assert "### Agent Aggregate Rates" in report
     assert "## Per-Task Outcomes" in report
     assert "- Config name: scorer_control_policies" in report
     assert "- Task count: 1" in report
@@ -139,6 +188,9 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Oracle pass rate: 1/1 (100%)" in report
     assert "- Known-bad final PASS rate: 0/2 (0%)" in report
     assert "- Known-bad public-pass/hidden-fail rate: 2/2 (100%)" in report
+    assert "No agent policies in this eval matrix." in report
+    assert "No agent control policies in this eval matrix." in report
+    assert "No agent aggregate rates for this eval matrix." in report
     assert "### Replay Checks" in report
     assert (
         "| oracle | PASS | 1/1 (100%) | 0 | "
@@ -150,15 +202,22 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
         "replays/bad-public-only__replay_001/replay_result.json |"
     ) in report
     assert (
-        "| oracle | PASS | 1/1 (100%) | PASS | 1/1 (100%) | PASS | 1/1 (100%) | "
+        "| oracle | oracle | PASS | 1/1 (100%) | PASS | 1/1 (100%) | "
+        'PASS | 1/1 (100%) | <span style="color: green">ON_TRACK</span> |'
+    ) in report
+    assert (
+        "| bad-noop | bad.noop | HIDDEN_TEST_FAIL | 1/1 (100%) | "
+        "PASS | 1/1 (100%) | FAIL | 1/1 (100%) | "
         '<span style="color: green">ON_TRACK</span> |'
     ) in report
     assert (
-        "| bad-noop | HIDDEN_TEST_FAIL | 1/1 (100%) | PASS | 1/1 (100%) | "
-        'FAIL | 1/1 (100%) | <span style="color: green">ON_TRACK</span> |'
+        "| oracle | oracle | 1 | 1/1 (100%) | 1/1 (100%) | "
+        "1/1 (100%) | 0 | 0 | 0 |"
     ) in report
-    assert "| oracle | 1 | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 0 | 0 | 0 |" in report
-    assert ("| bad-noop | 1 | 0/1 (0%) | 1/1 (100%) | 0/1 (0%) | 1 | 0 | 0 |") in report
+    assert (
+        "| bad-noop | bad.noop | 1 | 0/1 (0%) | 1/1 (100%) | "
+        "0/1 (0%) | 1 | 0 | 0 |"
+    ) in report
     assert (
         "| toy_python_fix_001 | bad-public-only | run_artifacts_v0 | "
         "HIDDEN_TEST_FAIL | PASS | FAIL |"
@@ -180,17 +239,37 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Config name: agent_control_policies" in report
     assert "- Policy count: 3" in report
     assert "- Replay match rate: 3/3 (100%)" in report
+    assert "## Scorer Policy Summary" in report
+    assert "## Agent Policy Summary" in report
+    assert "### Scorer Control Expectations" in report
+    assert "### Agent Control Expectations" in report
+    assert "No scorer policies in this eval matrix." in report
+    assert "No scorer control policies in this eval matrix." in report
+    assert "No scorer aggregate rates for this eval matrix." in report
+    assert "- Agent control expectation pass rate: 3/3 (100%)" in report
     assert (
-        "| agent-happy | 1 | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 0 | 0 | 0 |"
+        "| agent-happy | happy | 1 | 1/1 (100%) | 1/1 (100%) | 0 | "
+        "1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) |"
     ) in report
     assert (
-        "| agent-malformed | 1 | 0/1 (0%) | 0/1 (0%) | 0/1 (0%) | 0 | 0 | 0 |"
+        "| agent-malformed | malformed | 1 | 0/1 (0%) | 0/1 (0%) | 1 | "
+        "0/1 (0%) | 0/1 (0%) | 0/1 (0%) | 0/1 (0%) |"
+    ) in report
+    assert (
+        "| agent-happy | happy | scored | 1/1 (100%) | completed | 1/1 (100%) | "
+        'PASS | 1/1 (100%) | <span style="color: green">ON_TRACK</span> |'
+    ) in report
+    assert (
+        "| agent-malformed | malformed | agent_loop_failed | 1/1 (100%) | "
+        "invalid_model_output | 1/1 (100%) | not_run | 1/1 (100%) | "
+        '<span style="color: green">ON_TRACK</span> |'
     ) in report
     assert (
         "| toy_python_fix_001 | agent-happy | agent_task_run_artifacts_v0 | "
-        "PASS | PASS | PASS | scored | completed |"
+        " |  |  | scored | completed | PASS | PASS | PASS |"
     ) in report
     assert (
         "| toy_python_fix_001 | agent-malformed | agent_task_run_artifacts_v0 | "
-        " |  |  | agent_loop_failed | invalid_model_output | MalformedModelOutput |"
+        " |  |  | agent_loop_failed | invalid_model_output |  |  |  | "
+        "MalformedModelOutput |"
     ) in report

@@ -24,41 +24,56 @@
 - preserve_cli_error_codes
 - repair_config_precedence
 
-## Policy Summary
+## Scorer Policy Summary
 
-| policy | attempts | final_pass_rate | public_pass_rate | hidden_pass_rate | public_pass_hidden_fail | env_or_harness_failures | scorer_or_orchestrator_failures | median_duration_ms | trace |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| oracle | 3 | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 0 | 0 | 0 | 537 | policies/oracle/trace.jsonl |
-| noop | 3 | 0/3 (0%) | 3/3 (100%) | 0/3 (0%) | 3 | 0 | 0 | 494 | policies/noop/trace.jsonl |
-| public-tests-only | 3 | 0/3 (0%) | 3/3 (100%) | 0/3 (0%) | 3 | 0 | 0 | 499 | policies/public-tests-only/trace.jsonl |
-| agent-happy | 3 | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 0 | 0 | 0 | 875 | policies/agent-happy/trace.jsonl |
-| agent-malformed | 3 | 0/3 (0%) | 0/3 (0%) | 0/3 (0%) | 0 | 0 | 0 | 3 | policies/agent-malformed/trace.jsonl |
-| agent-recoverable | 3 | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 0 | 0 | 0 | 793 | policies/agent-recoverable/trace.jsonl |
+| policy | control | attempts | final_pass_rate | public_pass_rate | hidden_pass_rate | public_pass_hidden_fail | env_or_harness_failures | scorer_or_orchestrator_failures | median_duration_ms | trace |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| oracle | oracle | 3 | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 0 | 0 | 0 | 537 | policies/oracle/trace.jsonl |
+| noop | bad.noop | 3 | 0/3 (0%) | 3/3 (100%) | 0/3 (0%) | 3 | 0 | 0 | 494 | policies/noop/trace.jsonl |
+| public-tests-only | bad.public_only | 3 | 0/3 (0%) | 3/3 (100%) | 0/3 (0%) | 3 | 0 | 0 | 499 | policies/public-tests-only/trace.jsonl |
+
+## Agent Policy Summary
+
+| policy | control | attempts | agent_scored_rate | prompt_loop_completed_rate | agent_loop_failed | nested_scorer_run_rate | nested_scorer_pass_rate | nested_public_pass_rate | nested_hidden_pass_rate | median_duration_ms | trace |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| agent-happy | happy | 3 | 3/3 (100%) | 3/3 (100%) | 0 | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 875 | policies/agent-happy/trace.jsonl |
+| agent-malformed | malformed | 3 | 0/3 (0%) | 0/3 (0%) | 3 | 0/3 (0%) | 0/3 (0%) | 0/3 (0%) | 0/3 (0%) | 3 | policies/agent-malformed/trace.jsonl |
+| agent-recoverable | recoverable | 3 | 3/3 (100%) | 3/3 (100%) | 0 | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 793 | policies/agent-recoverable/trace.jsonl |
 
 ## Calibration Checks
 
-### Control Expectations
+### Scorer Control Expectations
 
-| policy | expected final | observed final | expected public | observed public | expected hidden | observed hidden | result |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| oracle | PASS | 3/3 (100%) | PASS | 3/3 (100%) | PASS | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
-| noop | HIDDEN_TEST_FAIL | 3/3 (100%) | PASS | 3/3 (100%) | FAIL | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
-| public-tests-only | HIDDEN_TEST_FAIL | 3/3 (100%) | PASS | 3/3 (100%) | FAIL | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
-| agent-happy |  |  |  |  |  |  | <span style="color: gray">NOT_CHECKED</span> |
-| agent-malformed |  |  |  |  |  |  | <span style="color: gray">NOT_CHECKED</span> |
-| agent-recoverable |  |  |  |  |  |  | <span style="color: gray">NOT_CHECKED</span> |
+| policy | control | expected final | observed final | expected public | observed public | expected hidden | observed hidden | result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| oracle | oracle | PASS | 3/3 (100%) | PASS | 3/3 (100%) | PASS | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
+| noop | bad.noop | HIDDEN_TEST_FAIL | 3/3 (100%) | PASS | 3/3 (100%) | FAIL | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
+| public-tests-only | bad.public_only | HIDDEN_TEST_FAIL | 3/3 (100%) | PASS | 3/3 (100%) | FAIL | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
 
-### Aggregate Rates
+### Scorer Aggregate Rates
 
 - Oracle pass rate: 3/3 (100%)
 - Known-bad final PASS rate: 0/6 (0%)
 - Known-bad public-pass/hidden-fail rate: 6/6 (100%)
-- Environment/harness failure rate: 0/18 (0%)
-- Scorer/orchestrator failure rate: 0/18 (0%)
-- Replay match rate: 18/18 (100%)
-- Task exclusions: none recorded in eval_matrix_v0
+- Environment/harness failure rate: 0/9 (0%)
+- Scorer/orchestrator failure rate: 0/9 (0%)
+
+### Agent Control Expectations
+
+| policy | control | expected agent_status | observed agent_status | expected prompt_loop | observed prompt_loop | expected nested_scorer | observed nested_scorer | result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| agent-happy | happy | scored | 3/3 (100%) | completed | 3/3 (100%) | PASS | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
+| agent-malformed | malformed | agent_loop_failed | 3/3 (100%) | invalid_model_output | 3/3 (100%) | not_run | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
+| agent-recoverable | recoverable | scored | 3/3 (100%) | completed | 3/3 (100%) | PASS | 3/3 (100%) | <span style="color: green">ON_TRACK</span> |
+
+### Agent Aggregate Rates
+
+- Agent control expectation pass rate: 3/3 (100%)
 
 ### Replay Checks
+
+- Replay match rate: 18/18 (100%)
+- Task exclusions: none recorded in eval_matrix_v0
 
 | policy | status | match_rate | error_count | replay_result |
 | --- | --- | ---: | ---: | --- |
@@ -71,26 +86,26 @@
 
 ## Per-Task Outcomes
 
-| task_id | policy | artifact_version | scorer_status | scorer_public_status | scorer_hidden_status | agent_status | prompt_loop_status | error_class | duration_ms | final_diff_hash | artifact_dir |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- |
-| repair_jsonl_deduper | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  | 537 | xxh64:791a044ad51af90c | policies/oracle/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  | 711 | xxh64:3a6c137988d3cd3a | policies/oracle/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  | 496 | xxh64:187bcea16c66ce96 | policies/oracle/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  | HiddenCheckFailed | 487 | xxh64:ef46db3751d8e999 | policies/noop/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  | HiddenCheckFailed | 671 | xxh64:ef46db3751d8e999 | policies/noop/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  | HiddenCheckFailed | 494 | xxh64:ef46db3751d8e999 | policies/noop/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  | HiddenCheckFailed | 485 | xxh64:83ebe19f1a70c989 | policies/public-tests-only/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  | HiddenCheckFailed | 795 | xxh64:2318ffb1a4be45cf | policies/public-tests-only/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  | HiddenCheckFailed | 499 | xxh64:8ea4a8dafa72fda7 | policies/public-tests-only/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | agent-happy | agent_task_run_artifacts_v0 | PASS | PASS | PASS | scored | completed |  | 756 | xxh64:791a044ad51af90c | policies/agent-happy/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | agent-happy | agent_task_run_artifacts_v0 | PASS | PASS | PASS | scored | completed |  | 989 | xxh64:3a6c137988d3cd3a | policies/agent-happy/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | agent-happy | agent_task_run_artifacts_v0 | PASS | PASS | PASS | scored | completed |  | 875 | xxh64:187bcea16c66ce96 | policies/agent-happy/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output | MalformedModelOutput | 3 |  | policies/agent-malformed/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output | MalformedModelOutput | 3 |  | policies/agent-malformed/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output | MalformedModelOutput | 4 |  | policies/agent-malformed/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | agent-recoverable | agent_task_run_artifacts_v0 | PASS | PASS | PASS | scored | completed |  | 792 | xxh64:791a044ad51af90c | policies/agent-recoverable/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | agent-recoverable | agent_task_run_artifacts_v0 | PASS | PASS | PASS | scored | completed |  | 991 | xxh64:3a6c137988d3cd3a | policies/agent-recoverable/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | agent-recoverable | agent_task_run_artifacts_v0 | PASS | PASS | PASS | scored | completed |  | 793 | xxh64:187bcea16c66ce96 | policies/agent-recoverable/attempts/repair_config_precedence__attempt_001 |
+| task_id | policy | artifact_version | scorer_status | scorer_public_status | scorer_hidden_status | agent_status | prompt_loop_status | agent_scorer_status | agent_scorer_public_status | agent_scorer_hidden_status | error_class | duration_ms | final_diff_hash | artifact_dir |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- |
+| repair_jsonl_deduper | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 537 | xxh64:791a044ad51af90c | policies/oracle/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 711 | xxh64:3a6c137988d3cd3a | policies/oracle/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 496 | xxh64:187bcea16c66ce96 | policies/oracle/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 487 | xxh64:ef46db3751d8e999 | policies/noop/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 671 | xxh64:ef46db3751d8e999 | policies/noop/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 494 | xxh64:ef46db3751d8e999 | policies/noop/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 485 | xxh64:83ebe19f1a70c989 | policies/public-tests-only/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 795 | xxh64:2318ffb1a4be45cf | policies/public-tests-only/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 499 | xxh64:8ea4a8dafa72fda7 | policies/public-tests-only/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 756 | xxh64:791a044ad51af90c | policies/agent-happy/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 989 | xxh64:3a6c137988d3cd3a | policies/agent-happy/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 875 | xxh64:187bcea16c66ce96 | policies/agent-happy/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 3 |  | policies/agent-malformed/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 3 |  | policies/agent-malformed/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 4 |  | policies/agent-malformed/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 792 | xxh64:791a044ad51af90c | policies/agent-recoverable/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 991 | xxh64:3a6c137988d3cd3a | policies/agent-recoverable/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 793 | xxh64:187bcea16c66ce96 | policies/agent-recoverable/attempts/repair_config_precedence__attempt_001 |
 
 ## Known Shortcuts
 
