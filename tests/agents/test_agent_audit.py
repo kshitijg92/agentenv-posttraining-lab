@@ -73,8 +73,51 @@ TERMINAL_TOOL_RESULTS = [
     },
 ]
 ORCHESTRATOR_ERROR_TOOL_RESULTS = HAPPY_TOOL_RESULTS
+SCORER_INTEGRATION_TOOL_RESULTS = HAPPY_TOOL_RESULTS
 TASK_MANIFEST = "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 EXPECTED_COMPARISONS = {
+    "completed_hidden_fail": [
+        ("agent_run_status", "scored", "scored", True),
+        ("prompt_loop_status", "completed", "completed", True),
+        ("prompt_loop_error_class", None, None, True),
+        (
+            "tool_results",
+            SCORER_INTEGRATION_TOOL_RESULTS,
+            SCORER_INTEGRATION_TOOL_RESULTS,
+            True,
+        ),
+        ("attempt_status", "HIDDEN_TEST_FAIL", "HIDDEN_TEST_FAIL", True),
+        ("public_status", "PASS", "PASS", True),
+        ("hidden_status", "FAIL", "FAIL", True),
+    ],
+    "completed_invalid_shortcut": [
+        ("agent_run_status", "scored", "scored", True),
+        ("prompt_loop_status", "completed", "completed", True),
+        ("prompt_loop_error_class", None, None, True),
+        (
+            "tool_results",
+            SCORER_INTEGRATION_TOOL_RESULTS,
+            SCORER_INTEGRATION_TOOL_RESULTS,
+            True,
+        ),
+        ("attempt_status", "INVALID_SHORTCUT", "INVALID_SHORTCUT", True),
+        ("public_status", "NOT_RUN", "NOT_RUN", True),
+        ("hidden_status", "NOT_RUN", "NOT_RUN", True),
+    ],
+    "completed_public_fail": [
+        ("agent_run_status", "scored", "scored", True),
+        ("prompt_loop_status", "completed", "completed", True),
+        ("prompt_loop_error_class", None, None, True),
+        (
+            "tool_results",
+            SCORER_INTEGRATION_TOOL_RESULTS,
+            SCORER_INTEGRATION_TOOL_RESULTS,
+            True,
+        ),
+        ("attempt_status", "PUBLIC_TEST_FAIL", "PUBLIC_TEST_FAIL", True),
+        ("public_status", "FAIL", "FAIL", True),
+        ("hidden_status", "NOT_RUN", "NOT_RUN", True),
+    ],
     "happy_path": [
         ("agent_run_status", "scored", "scored", True),
         ("prompt_loop_status", "completed", "completed", True),
@@ -161,6 +204,34 @@ EXPECTED_COMPARISONS = {
     ],
 }
 EXPECTED_RECORD_FIELDS = {
+    "completed_hidden_fail": {
+        "agent_run_status": "scored",
+        "error_class": None,
+        "prompt_loop_status": "completed",
+        "purpose": (
+            "Verify a completed prompt loop can produce a candidate patch "
+            "whose nested scorer attempt fails hidden tests."
+        ),
+    },
+    "completed_invalid_shortcut": {
+        "agent_run_status": "scored",
+        "error_class": None,
+        "prompt_loop_status": "completed",
+        "purpose": (
+            "Verify a completed prompt loop can produce a "
+            "public-test-modifying candidate patch that the nested scorer "
+            "rejects as an invalid shortcut."
+        ),
+    },
+    "completed_public_fail": {
+        "agent_run_status": "scored",
+        "error_class": None,
+        "prompt_loop_status": "completed",
+        "purpose": (
+            "Verify a completed prompt loop can produce a candidate patch "
+            "whose nested scorer attempt fails public tests."
+        ),
+    },
     "happy_path": {
         "agent_run_status": "scored",
         "error_class": None,
@@ -228,6 +299,69 @@ EXPECTED_RECORD_FIELDS = {
 
 
 def test_load_agent_task_audit_case() -> None:
+    completed_hidden_fail_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "completed_hidden_fail/case.yaml"
+    )
+
+    assert completed_hidden_fail_case.id == "completed_hidden_fail"
+    assert completed_hidden_fail_case.expected_agent_run_status == "scored"
+    assert completed_hidden_fail_case.expected_prompt_loop_status == "completed"
+    assert completed_hidden_fail_case.expected_prompt_loop_error_class is None
+    assert completed_hidden_fail_case.expected_attempt_status == "HIDDEN_TEST_FAIL"
+    assert completed_hidden_fail_case.expected_public_status == "PASS"
+    assert completed_hidden_fail_case.expected_hidden_status == "FAIL"
+    assert completed_hidden_fail_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in completed_hidden_fail_case.expected_tool_results
+    ] == SCORER_INTEGRATION_TOOL_RESULTS
+
+    completed_invalid_shortcut_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "completed_invalid_shortcut/case.yaml"
+    )
+
+    assert completed_invalid_shortcut_case.id == "completed_invalid_shortcut"
+    assert completed_invalid_shortcut_case.expected_agent_run_status == "scored"
+    assert completed_invalid_shortcut_case.expected_prompt_loop_status == "completed"
+    assert completed_invalid_shortcut_case.expected_prompt_loop_error_class is None
+    assert completed_invalid_shortcut_case.expected_attempt_status == "INVALID_SHORTCUT"
+    assert completed_invalid_shortcut_case.expected_public_status == "NOT_RUN"
+    assert completed_invalid_shortcut_case.expected_hidden_status == "NOT_RUN"
+    assert completed_invalid_shortcut_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in completed_invalid_shortcut_case.expected_tool_results
+    ] == SCORER_INTEGRATION_TOOL_RESULTS
+
+    completed_public_fail_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "completed_public_fail/case.yaml"
+    )
+
+    assert completed_public_fail_case.id == "completed_public_fail"
+    assert completed_public_fail_case.expected_agent_run_status == "scored"
+    assert completed_public_fail_case.expected_prompt_loop_status == "completed"
+    assert completed_public_fail_case.expected_prompt_loop_error_class is None
+    assert completed_public_fail_case.expected_attempt_status == "PUBLIC_TEST_FAIL"
+    assert completed_public_fail_case.expected_public_status == "FAIL"
+    assert completed_public_fail_case.expected_hidden_status == "NOT_RUN"
+    assert completed_public_fail_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in completed_public_fail_case.expected_tool_results
+    ] == SCORER_INTEGRATION_TOOL_RESULTS
+
     case = load_agent_task_audit_case(AGENT_CASE_ROOT / "happy_path/case.yaml")
 
     assert case.id == "happy_path"
@@ -400,7 +534,13 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         assert not (artifact_dir / "candidate.patch").exists()
         assert not (artifact_dir / "attempt").exists()
 
-    for case_id in ("happy_path", "tool_recovery"):
+    for case_id in (
+        "completed_hidden_fail",
+        "completed_invalid_shortcut",
+        "completed_public_fail",
+        "happy_path",
+        "tool_recovery",
+    ):
         artifact_dir = out_dir / f"agent_task_runs/{case_id}"
         assert (artifact_dir / "candidate.patch").is_file()
         assert (artifact_dir / "attempt/attempt.json").is_file()
@@ -437,6 +577,43 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
 
     markdown = markdown_path.read_text()
     assert "# Agent Task Audit" in markdown
+    assert (
+        "| completed_hidden_fail | PASS | scored | completed "
+        "| agent_task_runs/completed_hidden_fail |"
+    ) in markdown
+    assert (
+        "| completed_hidden_fail | attempt_status | HIDDEN_TEST_FAIL "
+        "| HIDDEN_TEST_FAIL | PASS |"
+    ) in markdown
+    assert (
+        "| completed_hidden_fail | public_status | PASS | PASS | PASS |"
+    ) in markdown
+    assert (
+        "| completed_hidden_fail | hidden_status | FAIL | FAIL | PASS |"
+    ) in markdown
+    assert (
+        "| completed_invalid_shortcut | PASS | scored | completed "
+        "| agent_task_runs/completed_invalid_shortcut |"
+    ) in markdown
+    assert (
+        "| completed_invalid_shortcut | attempt_status | INVALID_SHORTCUT "
+        "| INVALID_SHORTCUT | PASS |"
+    ) in markdown
+    assert (
+        "| completed_invalid_shortcut | public_status | NOT_RUN "
+        "| NOT_RUN | PASS |"
+    ) in markdown
+    assert (
+        "| completed_public_fail | PASS | scored | completed "
+        "| agent_task_runs/completed_public_fail |"
+    ) in markdown
+    assert (
+        "| completed_public_fail | attempt_status | PUBLIC_TEST_FAIL "
+        "| PUBLIC_TEST_FAIL | PASS |"
+    ) in markdown
+    assert (
+        "| completed_public_fail | public_status | FAIL | FAIL | PASS |"
+    ) in markdown
     assert "| happy_path | PASS | scored | completed | agent_task_runs/happy_path |" in markdown
     assert "| happy_path | agent_run_status | scored | scored | PASS |" in markdown
     assert "| happy_path | prompt_loop_status | completed | completed | PASS |" in markdown

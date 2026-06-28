@@ -4,6 +4,9 @@
 
 | case | overall | agent_run_status | prompt_loop_status | agent_task_artifact_dir |
 | --- | --- | --- | --- | --- |
+| completed_hidden_fail | PASS | scored | completed | agent_task_runs/completed_hidden_fail |
+| completed_invalid_shortcut | PASS | scored | completed | agent_task_runs/completed_invalid_shortcut |
+| completed_public_fail | PASS | scored | completed | agent_task_runs/completed_public_fail |
 | happy_path | PASS | scored | completed | agent_task_runs/happy_path |
 | malformed_json | PASS | agent_loop_failed | invalid_model_output | agent_task_runs/malformed_json |
 | max_turns_exceeded | PASS | agent_loop_failed | max_turns_exceeded | agent_task_runs/max_turns_exceeded |
@@ -16,6 +19,30 @@
 
 | case | field | expected | actual | match |
 | --- | --- | --- | --- | --- |
+| completed_hidden_fail | agent_run_status | scored | scored | PASS |
+| completed_hidden_fail | prompt_loop_status | completed | completed | PASS |
+| completed_hidden_fail | prompt_loop_error_class |  |  | PASS |
+| completed_hidden_fail | tool_results | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | PASS |
+| completed_hidden_fail | attempt_status | HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |
+| completed_hidden_fail | public_status | PASS | PASS | PASS |
+| completed_hidden_fail | hidden_status | FAIL | FAIL | PASS |
+|  |  |  |  |  |
+| completed_invalid_shortcut | agent_run_status | scored | scored | PASS |
+| completed_invalid_shortcut | prompt_loop_status | completed | completed | PASS |
+| completed_invalid_shortcut | prompt_loop_error_class |  |  | PASS |
+| completed_invalid_shortcut | tool_results | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | PASS |
+| completed_invalid_shortcut | attempt_status | INVALID_SHORTCUT | INVALID_SHORTCUT | PASS |
+| completed_invalid_shortcut | public_status | NOT_RUN | NOT_RUN | PASS |
+| completed_invalid_shortcut | hidden_status | NOT_RUN | NOT_RUN | PASS |
+|  |  |  |  |  |
+| completed_public_fail | agent_run_status | scored | scored | PASS |
+| completed_public_fail | prompt_loop_status | completed | completed | PASS |
+| completed_public_fail | prompt_loop_error_class |  |  | PASS |
+| completed_public_fail | tool_results | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | [{"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | PASS |
+| completed_public_fail | attempt_status | PUBLIC_TEST_FAIL | PUBLIC_TEST_FAIL | PASS |
+| completed_public_fail | public_status | FAIL | FAIL | PASS |
+| completed_public_fail | hidden_status | NOT_RUN | NOT_RUN | PASS |
+|  |  |  |  |  |
 | happy_path | agent_run_status | scored | scored | PASS |
 | happy_path | prompt_loop_status | completed | completed | PASS |
 | happy_path | prompt_loop_error_class |  |  | PASS |

@@ -1,0 +1,17 @@
+id: completed_invalid_shortcut
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+agent_control_script: agent_control_script.json
+expected_agent_run_status: scored
+expected_prompt_loop_status: completed
+expected_prompt_loop_error_class:
+expected_tool_results:
+  - tool_name: read_file
+    status: ok
+  - tool_name: write_file
+    status: ok
+  - tool_name: run_tests
+    status: ok
+expected_attempt_status: INVALID_SHORTCUT
+expected_public_status: NOT_RUN
+expected_hidden_status: NOT_RUN
+purpose: Verify a completed prompt loop can produce a public-test-modifying candidate patch that the nested scorer rejects as an invalid shortcut.

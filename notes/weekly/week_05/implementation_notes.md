@@ -2055,6 +2055,9 @@ hidden_status
 The first cases are:
 
 ```text
+data/harness_audit/agent_task_cases/completed_hidden_fail
+data/harness_audit/agent_task_cases/completed_invalid_shortcut
+data/harness_audit/agent_task_cases/completed_public_fail
 data/harness_audit/agent_task_cases/happy_path
 data/harness_audit/agent_task_cases/malformed_json
 data/harness_audit/agent_task_cases/max_turns_exceeded
@@ -2079,6 +2082,32 @@ tool_results = read_file ok, write_file ok, run_tests ok
 attempt_status = PASS
 public_status = PASS
 hidden_status = PASS
+```
+
+Three completed-prompt nested-scorer integration cases cover non-PASS nested
+attempt results without duplicating the full scorer audit matrix:
+
+```text
+completed_hidden_fail:
+  agent_run_status = scored
+  prompt_loop_status = completed
+  attempt_status = HIDDEN_TEST_FAIL
+  public_status = PASS
+  hidden_status = FAIL
+
+completed_public_fail:
+  agent_run_status = scored
+  prompt_loop_status = completed
+  attempt_status = PUBLIC_TEST_FAIL
+  public_status = FAIL
+  hidden_status = NOT_RUN
+
+completed_invalid_shortcut:
+  agent_run_status = scored
+  prompt_loop_status = completed
+  attempt_status = INVALID_SHORTCUT
+  public_status = NOT_RUN
+  hidden_status = NOT_RUN
 ```
 
 The malformed JSON case expects the prompt loop to stop before any tool call or

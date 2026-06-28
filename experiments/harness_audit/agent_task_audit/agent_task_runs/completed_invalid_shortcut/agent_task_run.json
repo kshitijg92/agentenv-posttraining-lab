@@ -1,0 +1,31 @@
+{
+  "run_id": "agent_task_run_44d9f2d0a883453eb3e45098f6393acf",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+  "status": "scored",
+  "prompt_loop_status": "completed",
+  "candidate_patch_path": "/tmp/agentenv-agent_task_run_44d9f2d0a883453eb3e45098f6393acf-327q8lmz/candidate.patch",
+  "candidate_patch_hash": "xxh64:10119bce5dd9e8f5",
+  "attempt_result": {
+    "run_id": "run_c764ed43370345a5b4474dae306b71d4",
+    "task_id": "toy_python_fix_001",
+    "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+    "attempt_id": "attempt_13a7e01346cf42beb3b502eba7ebb814",
+    "submission_path": "/tmp/agentenv-agent_task_run_44d9f2d0a883453eb3e45098f6393acf-327q8lmz/candidate.patch",
+    "status": "INVALID_SHORTCUT",
+    "public_status": "NOT_RUN",
+    "hidden_status": "NOT_RUN",
+    "error_class": "PublicTestModified",
+    "started_at": "2026-06-28T01:57:05.208193Z",
+    "ended_at": "2026-06-28T01:57:05.211760Z",
+    "duration_ms": 3,
+    "final_diff_hash": null,
+    "orchestrator_version": "attempt_v0"
+  },
+  "error_class": null,
+  "error_message": null,
+  "started_at": "2026-06-28T01:57:04.902240Z",
+  "ended_at": "2026-06-28T01:57:05.211791Z",
+  "duration_ms": 309,
+  "orchestrator_version": "agent_task_run_v0"
+}

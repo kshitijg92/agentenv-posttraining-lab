@@ -1,0 +1,31 @@
+{
+  "run_id": "agent_task_run_013107a4b4584c158e93e46a6e6af625",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+  "status": "scored",
+  "prompt_loop_status": "completed",
+  "candidate_patch_path": "/tmp/agentenv-agent_task_run_013107a4b4584c158e93e46a6e6af625-aljztszf/candidate.patch",
+  "candidate_patch_hash": "xxh64:fd6b29d5e1111594",
+  "attempt_result": {
+    "run_id": "run_44eda75383d24774b1c4e8f6d82b9637",
+    "task_id": "toy_python_fix_001",
+    "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+    "attempt_id": "attempt_e23690bd29b947ff9f6fa9b4de57606e",
+    "submission_path": "/tmp/agentenv-agent_task_run_013107a4b4584c158e93e46a6e6af625-aljztszf/candidate.patch",
+    "status": "PUBLIC_TEST_FAIL",
+    "public_status": "FAIL",
+    "hidden_status": "NOT_RUN",
+    "error_class": "PublicCheckFailed",
+    "started_at": "2026-06-28T01:57:05.559389Z",
+    "ended_at": "2026-06-28T01:57:05.255623Z",
+    "duration_ms": 332,
+    "final_diff_hash": "xxh64:fd6b29d5e1111594",
+    "orchestrator_version": "attempt_v0"
+  },
+  "error_class": null,
+  "error_message": null,
+  "started_at": "2026-06-28T01:57:05.214298Z",
+  "ended_at": "2026-06-28T01:57:05.255699Z",
+  "duration_ms": 677,
+  "orchestrator_version": "agent_task_run_v0"
+}

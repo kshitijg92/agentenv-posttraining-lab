@@ -1,7 +1,7 @@
 {
   "task_id": "toy_python_fix_001",
   "instruction": "Fix normalize_ratio so it returns numerator / denominator as a float for int and float inputs, and raises ValueError when denominator is zero.",
-  "workspace_path": "/tmp/agentenv-agent_task_run_b2e118346c9c45909e2a8bf43b93eb45-b_cffycf/agent_interaction_workspace/workspace",
+  "workspace_path": "/tmp/agentenv-agent_task_run_6da1c704c0b9488a946760b150da90c0-jxp_a_dw/agent_interaction_workspace/workspace",
   "allowed_tools": [
     "read_file",
     "write_file",
