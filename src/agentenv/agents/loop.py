@@ -16,6 +16,7 @@ from agentenv.agents.schema import (
 from agentenv.agents.tool_messages import render_tool_result_message
 from agentenv.models.client import ModelClient
 from agentenv.models.schema import DecodingConfig, Message, ModelResponse
+from agentenv.security.secrets import redact_secrets
 from agentenv.tools.local_tools import execute_tool
 from agentenv.tools.schema import ToolResult
 
@@ -176,13 +177,15 @@ def _model_error_message(model_response: ModelResponse) -> str:
     message = f"Model generation stopped with finish_reason={model_response.finish_reason}."
     if model_response.error_message is None:
         return message
-    return f"{message} {model_response.error_message}"
+    return redact_secrets(f"{message} {model_response.error_message}")
 
 
 def _model_exception_message(model_client: ModelClient, exc: Exception) -> str:
     message = str(exc)
     if message:
-        return f"Model {model_client.model_id} generate failed: {message}"
+        return redact_secrets(
+            f"Model {model_client.model_id} generate failed: {message}"
+        )
     return f"Model {model_client.model_id} generate failed."
 
 

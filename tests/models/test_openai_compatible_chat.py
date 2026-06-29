@@ -9,6 +9,10 @@ from agentenv.models.config_schema import (
 )
 from agentenv.models.openai_compatible_chat import OpenAICompatibleChatModelClient
 from agentenv.models.schema import DecodingConfig, Message
+from agentenv.security.secrets import REDACTED_SECRET
+
+
+CANARY = "agentenv-canary-secret-000000000000"
 
 
 def _model_config(
@@ -252,6 +256,38 @@ def test_openai_compatible_chat_maps_http_error(
     assert response.finish_reason == "error"
     assert response.error_class == "ProviderHTTPError"
     assert response.error_message == "HTTP 500 message=boom"
+
+
+def test_openai_compatible_chat_redacts_provider_http_error_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1")
+    monkeypatch.setenv("AGENTENV_MODEL_API_KEY", CANARY)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            429,
+            json={
+                "error": {
+                    "type": "insufficient_quota",
+                    "code": "insufficient_quota",
+                    "message": f"quota body echoed {CANARY}",
+                }
+            },
+        )
+
+    client = OpenAICompatibleChatModelClient(
+        config=_model_config(),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    response = client.generate(_messages(), _decoding_config())
+
+    assert response.finish_reason == "error"
+    assert response.error_class == "ProviderHTTPError"
+    assert response.error_message is not None
+    assert CANARY not in response.error_message
+    assert REDACTED_SECRET in response.error_message
 
 
 def test_openai_compatible_chat_maps_timeout(

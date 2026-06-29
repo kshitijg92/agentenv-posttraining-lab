@@ -4,10 +4,18 @@ from pathlib import Path
 import pytest
 
 import agentenv.orchestrators.attempt as attempt_module
-from agentenv.orchestrators.attempt import run_patch_attempt
+from agentenv.orchestrators.attempt import (
+    AttemptCommand,
+    AttemptErrorDetails,
+    AttemptResult,
+    AttemptRun,
+    run_patch_attempt,
+)
 from agentenv.orchestrators.attempt_io import write_attempt_artifacts
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.runners.diff_runner import hash_diff
+from agentenv.runners.command_runner import CommandResult
+from agentenv.security.secrets import REDACTED_SECRET
 from agentenv.tracing.schema import AttemptTraceProvenance
 from agentenv.tracing.validate import load_trace_events, validate_trace_file
 
@@ -15,6 +23,7 @@ from agentenv.tracing.validate import load_trace_events, validate_trace_file
 TOY_TASK_MANIFEST = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 )
+CANARY = "agentenv-canary-secret-000000000000"
 
 
 def test_write_attempt_artifacts(tmp_path: Path) -> None:
@@ -119,6 +128,68 @@ def test_write_attempt_artifacts_preserves_orchestrator_error_details(
         "error": "error.txt",
         "final_diff": "final.diff",
     }
+
+
+def test_write_attempt_artifacts_redacts_secret_canary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_API_KEY", CANARY)
+    attempt_run = AttemptRun(
+        result=AttemptResult(
+            run_id="run_001",
+            task_id="task_001",
+            task_manifest_path="tasks/task.yaml",
+            attempt_id="attempt_001",
+            submission_path="submissions/attempt.patch",
+            status="ORCHESTRATOR_ERROR",
+            public_status="NOT_RUN",
+            hidden_status="NOT_RUN",
+            error_class="ValueError",
+            started_at="2026-06-19T00:00:00Z",
+            ended_at="2026-06-19T00:00:01Z",
+            duration_ms=1,
+            final_diff_hash=None,
+            orchestrator_version="attempt_v0",
+        ),
+        commands=[
+            AttemptCommand(
+                phase="public_check",
+                name="leaky_check",
+                result=CommandResult(
+                    command=["python", "-c", f"print('{CANARY}')"],
+                    returncode=1,
+                    stdout=f"stdout {CANARY}\n",
+                    stderr=f"stderr {CANARY}\n",
+                ),
+            )
+        ],
+        final_diff="",
+        error_details=AttemptErrorDetails(
+            error_class="ValueError",
+            message=f"message {CANARY}",
+            traceback=f"traceback {CANARY}",
+        ),
+    )
+
+    artifact_paths = write_attempt_artifacts(attempt_run, tmp_path / "out")
+    written_text = "\n".join(
+        path.read_text()
+        for path in [
+            artifact_paths.run_manifest_json,
+            artifact_paths.attempt_json,
+            artifact_paths.stdout_txt,
+            artifact_paths.stderr_txt,
+            artifact_paths.error_txt,
+            artifact_paths.trace_jsonl,
+        ]
+    )
+
+    assert CANARY not in written_text
+    assert REDACTED_SECRET in artifact_paths.stdout_txt.read_text()
+    assert REDACTED_SECRET in artifact_paths.stderr_txt.read_text()
+    assert REDACTED_SECRET in artifact_paths.error_txt.read_text()
+    assert REDACTED_SECRET in artifact_paths.trace_jsonl.read_text()
 
 
 def test_run_and_persist_patch_attempt_to_dir(tmp_path: Path) -> None:

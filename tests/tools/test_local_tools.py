@@ -1,9 +1,15 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from agentenv.agents.schema import AgentTaskView, ToolCallAction
+from agentenv.security.secrets import REDACTED_SECRET
 from agentenv.tools.local_tools import execute_tool
 from agentenv.tools.schema import ReadFileOutput, RunTestsOutput, WriteFileOutput
+
+
+CANARY = "agentenv-canary-secret-000000000000"
 
 
 def _agent_task_view(
@@ -110,6 +116,33 @@ def test_execute_tool_runs_allowed_public_check(tmp_path: Path) -> None:
     assert result.output.passed is True
     assert result.exit_code == 0
     assert result.stdout == "ok\n"
+
+
+def test_execute_tool_run_tests_scrubs_and_redacts_secret_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_API_KEY", CANARY)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    command = (
+        f"{sys.executable} -c 'import os; "
+        f"print(os.getenv(\"AGENTENV_MODEL_API_KEY\", \"missing\")); "
+        f"print(\"{CANARY}\")'"
+    )
+
+    result = execute_tool(
+        ToolCallAction(
+            action="tool_call",
+            tool_name="run_tests",
+            arguments={"command": command},
+        ),
+        _agent_task_view(workspace, public_checks=[command]),
+    )
+
+    assert result.status == "ok"
+    assert result.stdout == f"missing\n{REDACTED_SECRET}\n"
+    assert CANARY not in result.stdout
 
 
 def test_execute_tool_reports_failing_public_check_as_ok_tool_execution(

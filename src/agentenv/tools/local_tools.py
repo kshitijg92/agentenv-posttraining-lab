@@ -1,5 +1,4 @@
 import json
-import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from subprocess import TimeoutExpired
@@ -9,6 +8,8 @@ import xxhash
 from pydantic import ValidationError
 
 from agentenv.agents.schema import AgentTaskView, ToolCallAction
+from agentenv.runners.command_runner import run_shell
+from agentenv.security.secrets import redact_secrets
 from agentenv.tools.schema import (
     TOOL_REGISTRY,
     ReadFileInput,
@@ -120,7 +121,7 @@ def _execute_read_file(
         input_hash=input_hash,
         status="ok",
         output=ReadFileOutput(
-            content=content,
+            content=redact_secrets(content),
             bytes_read=len(content.encode()),
             truncated=False,
         ),
@@ -194,14 +195,10 @@ def _execute_run_tests(
         )
 
     try:
-        completed = subprocess.run(
+        completed = run_shell(
             tool_input.command,
             cwd=agent_task_view.workspace_path,
-            check=False,
-            capture_output=True,
-            shell=True,
-            text=True,
-            timeout=agent_task_view.timeout_seconds,
+            timeout_seconds=agent_task_view.timeout_seconds,
         )
     except TimeoutExpired as exc:
         return ToolResult(
@@ -209,12 +206,14 @@ def _execute_run_tests(
             input_hash=input_hash,
             status="error",
             output=None,
-            stdout=_stream_text(exc.stdout),
-            stderr=_stream_text(exc.stderr),
+            stdout=redact_secrets(_stream_text(exc.stdout)),
+            stderr=redact_secrets(_stream_text(exc.stderr)),
             exit_code=None,
             duration_ms=_duration_ms(started),
             error_class="ToolTimeout",
-            error_message=f"Tool command timed out: {tool_input.command}",
+            error_message=redact_secrets(
+                f"Tool command timed out: {tool_input.command}"
+            ),
         )
     except Exception as exc:
         return _error_result(
@@ -222,7 +221,7 @@ def _execute_run_tests(
             input_hash=input_hash,
             started=started,
             error_class="ToolExecutionError",
-            error_message=str(exc),
+            error_message=redact_secrets(str(exc)),
         )
 
     return ToolResult(
@@ -230,8 +229,8 @@ def _execute_run_tests(
         input_hash=input_hash,
         status="ok",
         output=RunTestsOutput(passed=completed.returncode == 0),
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        stdout=redact_secrets(completed.stdout),
+        stderr=redact_secrets(completed.stderr),
         exit_code=completed.returncode,
         duration_ms=_duration_ms(started),
     )
@@ -252,7 +251,7 @@ def _error_result(
         output=None,
         duration_ms=_duration_ms(started),
         error_class=error_class,
-        error_message=error_message,
+        error_message=redact_secrets(error_message),
     )
 
 

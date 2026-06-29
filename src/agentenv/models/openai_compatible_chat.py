@@ -13,6 +13,7 @@ from agentenv.models.schema import (
     ModelFinishReason,
     ModelResponse,
 )
+from agentenv.security.secrets import redact_secrets
 
 
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
@@ -161,7 +162,7 @@ def _model_response_from_payload(
     if choice is None:
         return _error_response(model_id, started, "MalformedProviderResponse")
 
-    output_text = _choice_output_text(choice)
+    output_text = redact_secrets(_choice_output_text(choice))
     provider_finish_reason = choice.get("finish_reason")
     finish_reason = _local_finish_reason(provider_finish_reason)
     if finish_reason is None:
@@ -268,7 +269,7 @@ def _provider_http_error_message(response: httpx.Response) -> str:
         if field_value is not None:
             parts.append(f"{field_name}={field_value}")
 
-    return _truncate_error_message(" ".join(parts))
+    return redact_secrets(_truncate_error_message(" ".join(parts)))
 
 
 def _clean_error_fragment(value: object) -> str | None:
@@ -359,7 +360,9 @@ def _error_response(
         finish_reason="error",
         latency_ms=_latency_ms(started),
         error_class=error_class,
-        error_message=error_message,
+        error_message=(
+            redact_secrets(error_message) if error_message is not None else None
+        ),
         raw_response_ref=raw_response_ref,
     )
 

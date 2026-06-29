@@ -25,6 +25,7 @@ from agentenv.orchestrators.attempt import (
 from agentenv.orchestrators.attempt_io import AttemptArtifactPaths
 from agentenv.orchestrators.attempt_io import write_attempt_artifacts
 from agentenv.runners.diff_runner import hash_diff, render_directory_diff
+from agentenv.security.secrets import redact_jsonable, redact_secrets
 from agentenv.tasks.validate import load_task_manifest
 
 
@@ -285,7 +286,7 @@ def write_agent_task_run_artifacts(
     error_path = out_dir / "error.txt"
     attempt_dir = out_dir / "attempt" if agent_task_run.attempt_run is not None else None
 
-    agent_task_run_path.write_text(agent_task_run.result.model_dump_json(indent=2) + "\n")
+    agent_task_run_path.write_text(_redacted_model_json(agent_task_run.result))
     if decoding_config_path is not None and decoding_config is not None:
         decoding_artifact = (
             decoding_config_provenance
@@ -293,25 +294,29 @@ def write_agent_task_run_artifacts(
             else generated_decoding_config_provenance_artifact(decoding_config)
         )
         decoding_config_path.write_text(
-            json.dumps(decoding_artifact, indent=2, sort_keys=True) + "\n"
+            json.dumps(redact_jsonable(decoding_artifact), indent=2, sort_keys=True)
+            + "\n"
         )
     if model_config_path is not None and model_config_provenance is not None:
         model_config_path.write_text(
-            json.dumps(model_config_provenance, indent=2, sort_keys=True) + "\n"
+            json.dumps(
+                redact_jsonable(model_config_provenance),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
         )
     if agent_control_script_path is not None and agent_control_script is not None:
         agent_control_script_path.write_text(_json_artifact(agent_control_script))
     agent_task_view = agent_task_run.agent_task_view
     if agent_task_view_path is not None and agent_task_view is not None:
-        agent_task_view_path.write_text(agent_task_view.model_dump_json(indent=2) + "\n")
+        agent_task_view_path.write_text(_redacted_model_json(agent_task_view))
     prompt_loop_result = agent_task_run.prompt_loop_result
     if prompt_loop_result_path is not None and prompt_loop_result is not None:
-        prompt_loop_result_path.write_text(
-            prompt_loop_result.model_dump_json(indent=2) + "\n"
-        )
+        prompt_loop_result_path.write_text(_redacted_model_json(prompt_loop_result))
     if candidate_patch_path is not None:
         candidate_patch_path.write_text(agent_task_run.candidate_patch)
-    error_path.write_text(_error_text(agent_task_run))
+    error_path.write_text(redact_secrets(_error_text(agent_task_run)))
 
     attempt_artifacts = (
         write_attempt_artifacts(agent_task_run.attempt_run, attempt_dir)
@@ -344,8 +349,12 @@ def write_agent_task_run_artifacts(
 
 def _json_artifact(value: BaseModel | dict[str, Any]) -> str:
     if isinstance(value, BaseModel):
-        return value.model_dump_json(indent=2) + "\n"
-    return json.dumps(value, indent=2, sort_keys=True) + "\n"
+        return _redacted_model_json(value)
+    return json.dumps(redact_jsonable(value), indent=2, sort_keys=True) + "\n"
+
+
+def _redacted_model_json(value: BaseModel) -> str:
+    return json.dumps(redact_jsonable(value.model_dump(mode="json")), indent=2) + "\n"
 
 
 def model_config_provenance_artifact(
@@ -357,7 +366,7 @@ def model_config_provenance_artifact(
     return {
         "source_path": str(model_config_path),
         "source_hash": model_config_hash,
-        "config": json.loads(model_config.model_dump_json()),
+        "config": redact_jsonable(json.loads(model_config.model_dump_json())),
     }
 
 
@@ -370,7 +379,7 @@ def decoding_config_provenance_artifact(
     return {
         "source_path": str(decoding_config_path),
         "source_hash": decoding_config_hash,
-        "config": json.loads(decoding_config.model_dump_json()),
+        "config": redact_jsonable(json.loads(decoding_config.model_dump_json())),
     }
 
 
@@ -380,7 +389,7 @@ def generated_decoding_config_provenance_artifact(
     return {
         "source_path": None,
         "source_hash": None,
-        "config": json.loads(decoding_config.model_dump_json()),
+        "config": redact_jsonable(json.loads(decoding_config.model_dump_json())),
     }
 
 
@@ -474,20 +483,18 @@ def _run_manifest_json(
     if agent_task_run.attempt_run is not None:
         artifacts["attempt"] = "attempt/"
 
-    return (
-        AgentTaskRunManifest(
-            artifact_version="agent_task_run_artifacts_v0",
-            orchestrator_version=agent_task_run.result.orchestrator_version,
-            run_id=agent_task_run.result.run_id,
-            task_id=agent_task_run.result.task_id,
-            task_manifest_path=agent_task_run.result.task_manifest_path,
-            status=agent_task_run.result.status,
-            prompt_loop_status=agent_task_run.result.prompt_loop_status,
-            attempt_status=_attempt_status(agent_task_run.result.attempt_result),
-            artifacts=artifacts,
-        ).model_dump_json(indent=2)
-        + "\n"
+    manifest = AgentTaskRunManifest(
+        artifact_version="agent_task_run_artifacts_v0",
+        orchestrator_version=agent_task_run.result.orchestrator_version,
+        run_id=agent_task_run.result.run_id,
+        task_id=agent_task_run.result.task_id,
+        task_manifest_path=agent_task_run.result.task_manifest_path,
+        status=agent_task_run.result.status,
+        prompt_loop_status=agent_task_run.result.prompt_loop_status,
+        attempt_status=_attempt_status(agent_task_run.result.attempt_result),
+        artifacts=artifacts,
     )
+    return _redacted_model_json(manifest)
 
 
 class AgentTaskRunManifest(BaseModel):

@@ -1,6 +1,7 @@
 import json
 
 from agentenv.models.schema import Message
+from agentenv.security.secrets import redact_jsonable
 from agentenv.tools.schema import ToolResult
 
 
@@ -33,7 +34,7 @@ def render_tool_result_message(
         role="tool",
         name=tool_result.tool_name,
         tool_call_id=tool_call_id,
-        content=json.dumps(content, sort_keys=True),
+        content=json.dumps(redact_jsonable(content), sort_keys=True),
         metadata={
             "input_hash": tool_result.input_hash,
         },

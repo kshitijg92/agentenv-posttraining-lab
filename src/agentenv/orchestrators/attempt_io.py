@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agentenv.orchestrators.attempt import AttemptResult, AttemptRun
+from agentenv.security.secrets import redact_jsonable, redact_secrets
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
@@ -25,7 +26,7 @@ class AttemptArtifactPaths:
 def write_attempt_result(result: AttemptResult, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     attempt_path = out_dir / "attempt.json"
-    attempt_path.write_text(result.model_dump_json(indent=2) + "\n")
+    attempt_path.write_text(_redacted_model_json(result))
     return attempt_path
 
 
@@ -42,17 +43,21 @@ def write_attempt_artifacts(
     final_diff_path = out_dir / "final.diff"
 
     stdout_path.write_text(
-        _join_streams(result.stdout for result in attempt_run.command_results)
+        redact_secrets(
+            _join_streams(result.stdout for result in attempt_run.command_results)
+        )
     )
     stderr_path.write_text(
-        _join_streams(result.stderr for result in attempt_run.command_results)
+        redact_secrets(
+            _join_streams(result.stderr for result in attempt_run.command_results)
+        )
     )
-    error_path.write_text(_error_text(attempt_run))
+    error_path.write_text(redact_secrets(_error_text(attempt_run)))
     trace_path.write_text(_trace_jsonl(attempt_run))
     final_diff_path.write_text(attempt_run.final_diff)
     run_manifest_path.write_text(
         json.dumps(
-            _run_manifest(attempt_run),
+            redact_jsonable(_run_manifest(attempt_run)),
             indent=2,
             sort_keys=True,
         )
@@ -148,7 +153,16 @@ def _trace_jsonl(attempt_run: AttemptRun) -> str:
             else None
         ),
     )
-    return "\n".join(json.dumps(event, sort_keys=True) for event in events) + "\n"
+    return (
+        "\n".join(
+            json.dumps(redact_jsonable(event), sort_keys=True) for event in events
+        )
+        + "\n"
+    )
+
+
+def _redacted_model_json(result: AttemptResult) -> str:
+    return json.dumps(redact_jsonable(result.model_dump(mode="json")), indent=2) + "\n"
 
 
 def _append_trace(

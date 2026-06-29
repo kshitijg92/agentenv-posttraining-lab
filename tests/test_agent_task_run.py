@@ -1,20 +1,30 @@
 import json
 from pathlib import Path
 
+import pytest
+
+from agentenv.agents.schema import AgentTaskView, PromptLoopResult, TokenUsage
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
-from agentenv.models.schema import DecodingConfig
+from agentenv.models.schema import DecodingConfig, Message, ModelResponse
 from agentenv.orchestrators.agent_task_run import (
+    AGENT_RUN_ORCHESTRATOR_VERSION,
+    AgentTaskRun,
+    AgentTaskRunErrorDetails,
+    AgentTaskRunResult,
     run_and_persist_agent_task_attempt_to_dir,
     run_agent_task_attempt,
     write_agent_task_run_artifacts,
 )
 from agentenv.runners.diff_runner import hash_diff
+from agentenv.security.secrets import REDACTED_SECRET
+from agentenv.tools.schema import ToolResult
 
 
 TOY_TASK_MANIFEST = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 )
 PUBLIC_CHECK_COMMAND = "uv run pytest tests/test_public.py"
+CANARY = "agentenv-canary-secret-000000000000"
 FIXED_MATHLIB = (
     "def normalize_ratio(numerator: int | float, denominator: int | float) -> float:\n"
     "    \"\"\"Return numerator divided by denominator as a normalized ratio.\"\"\"\n"
@@ -217,6 +227,109 @@ def test_run_agent_task_attempt_does_not_score_failed_prompt_loop(
     assert "attempt" not in run_manifest["artifacts"]
     assert agent_task_result["attempt_result"] is None
     assert prompt_loop_result["status"] == "invalid_model_output"
+
+
+def test_write_agent_task_run_artifacts_redacts_secret_canary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_API_KEY", CANARY)
+    agent_task_run = AgentTaskRun(
+        result=AgentTaskRunResult(
+            run_id="agent_task_run_001",
+            task_id="task_001",
+            task_manifest_path=f"tasks/{CANARY}/task.yaml",
+            status="agent_loop_failed",
+            prompt_loop_status="model_error",
+            candidate_patch_path=None,
+            candidate_patch_hash=None,
+            attempt_result=None,
+            error_class="ProviderHTTPError",
+            error_message=f"agent result {CANARY}",
+            started_at="2026-06-19T00:00:00Z",
+            ended_at="2026-06-19T00:00:01Z",
+            duration_ms=1,
+            orchestrator_version=AGENT_RUN_ORCHESTRATOR_VERSION,
+        ),
+        agent_task_view=AgentTaskView(
+            task_id="task_001",
+            instruction=f"instruction {CANARY}",
+            workspace_path=tmp_path / "workspace",
+            allowed_tools=["run_tests"],
+            public_checks=[f"python -c 'print(\"{CANARY}\")'"],
+            max_turns=1,
+            timeout_seconds=5,
+            network="off",
+        ),
+        prompt_loop_result=PromptLoopResult(
+            task_id="task_001",
+            status="model_error",
+            turns_executed=1,
+            duration_ms=1,
+            token_usage=TokenUsage(),
+            messages=[
+                Message(
+                    role="assistant",
+                    content=f"assistant {CANARY}",
+                    name="fake-model",
+                )
+            ],
+            model_responses=[
+                ModelResponse(
+                    model_id="fake-model",
+                    output_text=f"model output {CANARY}",
+                    finish_reason="error",
+                    latency_ms=1,
+                    error_class="ProviderHTTPError",
+                    error_message=f"model error {CANARY}",
+                    raw_response_ref="provider_response/not_persisted",
+                )
+            ],
+            tool_results=[
+                ToolResult(
+                    tool_name="run_tests",
+                    input_hash="xxh64:abc123",
+                    status="error",
+                    stdout=f"stdout {CANARY}",
+                    stderr=f"stderr {CANARY}",
+                    exit_code=1,
+                    duration_ms=1,
+                    error_class="ToolExecutionError",
+                    error_message=f"tool error {CANARY}",
+                )
+            ],
+            error_class="ProviderHTTPError",
+            error_message=f"prompt loop {CANARY}",
+        ),
+        candidate_patch="",
+        attempt_run=None,
+        error_details=AgentTaskRunErrorDetails(
+            error_class="ProviderHTTPError",
+            message=f"agent details {CANARY}",
+            traceback=f"traceback {CANARY}",
+        ),
+    )
+
+    artifact_paths = write_agent_task_run_artifacts(agent_task_run, tmp_path / "out")
+    written_text = "\n".join(
+        path.read_text()
+        for path in [
+            artifact_paths.run_manifest_json,
+            artifact_paths.agent_task_run_json,
+            artifact_paths.agent_task_view_json,
+            artifact_paths.prompt_loop_result_json,
+            artifact_paths.error_txt,
+        ]
+        if path is not None
+    )
+
+    assert CANARY not in written_text
+    assert REDACTED_SECRET in artifact_paths.agent_task_run_json.read_text()
+    assert artifact_paths.agent_task_view_json is not None
+    assert REDACTED_SECRET in artifact_paths.agent_task_view_json.read_text()
+    assert artifact_paths.prompt_loop_result_json is not None
+    assert REDACTED_SECRET in artifact_paths.prompt_loop_result_json.read_text()
+    assert REDACTED_SECRET in artifact_paths.error_txt.read_text()
 
 
 def test_run_and_persist_agent_task_attempt_keeps_scratch_out_of_artifacts(

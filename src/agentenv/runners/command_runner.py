@@ -2,6 +2,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from agentenv.security.secrets import redact_secrets, scrubbed_subprocess_env
+
 
 @dataclass(frozen=True)
 class CommandResult:
@@ -21,14 +23,15 @@ def run_process(
         cwd=cwd,
         check=False,
         capture_output=True,
+        env=scrubbed_subprocess_env(),
         text=True,
         timeout=timeout_seconds,
     )
     return CommandResult(
-        command=command,
+        command=[redact_secrets(part) for part in command],
         returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        stdout=redact_secrets(completed.stdout),
+        stderr=redact_secrets(completed.stderr),
     )
 
 
@@ -42,13 +45,14 @@ def run_shell(
         cwd=cwd,
         check=False,
         capture_output=True,
+        env=scrubbed_subprocess_env(),
         shell=True,
         text=True,
         timeout=timeout_seconds,
     )
     return CommandResult(
-        command=[command],
+        command=[redact_secrets(command)],
         returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        stdout=redact_secrets(completed.stdout),
+        stderr=redact_secrets(completed.stderr),
     )
