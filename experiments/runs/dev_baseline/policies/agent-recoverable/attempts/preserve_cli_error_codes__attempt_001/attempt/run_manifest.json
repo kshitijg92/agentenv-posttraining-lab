@@ -1,0 +1,18 @@
+{
+  "artifact_version": "run_artifacts_v0",
+  "artifacts": {
+    "attempt": "attempt.json",
+    "error": "error.txt",
+    "final_diff": "final.diff",
+    "stderr": "stderr.txt",
+    "stdout": "stdout.txt",
+    "trace": "trace.jsonl"
+  },
+  "attempt_id": "attempt_e745f2e216704bc8b1afa39eb4c4418b",
+  "orchestrator_version": "attempt_v0",
+  "run_id": "run_14e1e2eda21c47aea20e6a6207b63ad9",
+  "status": "PASS",
+  "submission_path": "/tmp/agentenv-agent_task_run_edfefcef48ea4ae3a33d852fe69ab490-8jj3cjn1/candidate.patch",
+  "task_id": "preserve_cli_error_codes",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml"
+}

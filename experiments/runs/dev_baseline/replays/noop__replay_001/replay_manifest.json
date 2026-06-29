@@ -1,0 +1,14 @@
+{
+  "artifact_version": "replay_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "replay_result": "replay_result.json",
+    "replay_results": "replay_results.jsonl",
+    "trace": "trace.jsonl"
+  },
+  "created_at": "2026-06-28T02:58:25.472013Z",
+  "replay_id": "replay_68dd7122e6c94023a2b91d1942301aca",
+  "source_artifact_version": "eval_run_v0",
+  "source_eval_run_id": "eval_8d1ae75869cc412aae61044dca3a23b6",
+  "source_run_dir": "/home/kshitij/agentenv-posttraining-lab/experiments/runs/dev_baseline/policies/noop"
+}

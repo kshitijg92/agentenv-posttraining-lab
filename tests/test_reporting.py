@@ -173,6 +173,7 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "# Eval Matrix Report" in report
     assert "## Scorer Policy Summary" in report
     assert "## Agent Policy Summary" in report
+    assert "## Agent Model And Budget Summary" in report
     assert "## Calibration Checks" in report
     assert "### Scorer Control Expectations" in report
     assert "### Agent Control Expectations" in report
@@ -189,6 +190,7 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Known-bad final PASS rate: 0/2 (0%)" in report
     assert "- Known-bad public-pass/hidden-fail rate: 2/2 (100%)" in report
     assert "No agent policies in this eval matrix." in report
+    assert "No agent model or budget metadata in this eval matrix." in report
     assert "No agent control policies in this eval matrix." in report
     assert "No agent aggregate rates for this eval matrix." in report
     assert "### Replay Checks" in report
@@ -241,6 +243,7 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Replay match rate: 3/3 (100%)" in report
     assert "## Scorer Policy Summary" in report
     assert "## Agent Policy Summary" in report
+    assert "## Agent Model And Budget Summary" in report
     assert "### Scorer Control Expectations" in report
     assert "### Agent Control Expectations" in report
     assert "No scorer policies in this eval matrix." in report
@@ -254,6 +257,20 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert (
         "| agent-malformed | malformed | 1 | 0/1 (0%) | 0/1 (0%) | 1 | "
         "0/1 (0%) | 0/1 (0%) | 0/1 (0%) | 0/1 (0%) |"
+    ) in report
+    assert (
+        "| agent-happy | agent-control-scripted-v0 | greedy | 0.0 | 512 | 30 | "
+        "10 | not_recorded | not_recorded | not_recorded | not_recorded | 0 | 0 |"
+    ) in report
+    assert (
+        "| agent-malformed | agent-control-scripted-v0 | greedy | 0.0 | 512 | "
+        "30 | 10 | not_recorded | not_recorded | not_recorded | not_recorded | "
+        "0 | 0 |"
+    ) in report
+    assert (
+        "| agent-recoverable | agent-control-scripted-v0 | greedy | 0.0 | 512 | "
+        "30 | 10 | not_recorded | not_recorded | not_recorded | not_recorded | "
+        "1 | 1 |"
     ) in report
     assert (
         "| agent-happy | happy | scored | 1/1 (100%) | completed | 1/1 (100%) | "

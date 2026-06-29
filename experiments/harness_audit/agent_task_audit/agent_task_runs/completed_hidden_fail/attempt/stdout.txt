@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_ed7e7abbeed24a5cb1818bbcbea53e21-tnm8pndg/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_83a10fc4d54a4b70931617f07ce6453b-8cj0rcjo/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,7 +10,7 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_ed7e7abbeed24a5cb1818bbcbea53e21-tnm8pndg/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_83a10fc4d54a4b70931617f07ce6453b-8cj0rcjo/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 7 items
 
@@ -49,5 +49,5 @@ E         Expected: 0.5 ± 5.0e-07
 =========================== short test summary info ============================
 FAILED test_behavior.py::test_zero_denominator_raises_value_error - ZeroDivis...
 FAILED test_behavior.py::test_non_integer_ratio_preserves_precision - assert ...
-========================= 2 failed, 5 passed in 0.03s ==========================
+========================= 2 failed, 5 passed in 0.02s ==========================
 

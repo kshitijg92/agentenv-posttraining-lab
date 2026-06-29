@@ -1,4 +1,5 @@
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from statistics import median
 
@@ -144,6 +145,14 @@ def render_eval_matrix_report(
         ]
     )
     lines.extend(_agent_policy_summary_table(agent_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "## Agent Model And Budget Summary",
+            "",
+        ]
+    )
+    lines.extend(_agent_model_budget_table(agent_policy_summaries))
 
     lines.extend(
         [
@@ -442,6 +451,33 @@ def _matrix_policy_summary(
         "agent_scorer_status_counts": agent_scorer_status_counts,
         "agent_scorer_public_status_counts": agent_scorer_public_status_counts,
         "agent_scorer_hidden_status_counts": agent_scorer_hidden_status_counts,
+        "agent_model_ids": _agent_artifact_unique_values(attempts, "model_ids"),
+        "agent_decoding_strategies": _agent_artifact_unique_values(
+            attempts,
+            "decoding_strategy",
+        ),
+        "agent_temperatures": _agent_artifact_unique_values(
+            attempts,
+            "temperature",
+        ),
+        "agent_max_new_tokens": _agent_artifact_unique_values(
+            attempts,
+            "max_new_tokens",
+        ),
+        "agent_model_timeout_seconds": _agent_artifact_unique_values(
+            attempts,
+            "model_timeout_seconds",
+        ),
+        "agent_max_turns": _agent_artifact_unique_values(attempts, "max_turns"),
+        "agent_prompt_tokens": _agent_token_sum(attempts, "prompt_tokens"),
+        "agent_completion_tokens": _agent_token_sum(attempts, "completion_tokens"),
+        "agent_total_tokens": _agent_token_sum(attempts, "total_tokens"),
+        "agent_invalid_tool_calls": _agent_artifact_int_sum(
+            attempts,
+            "invalid_tool_calls",
+        ),
+        "agent_tool_errors": _agent_artifact_int_sum(attempts, "tool_errors"),
+        "agent_cost": "not_recorded",
         "median_duration_ms": int(median(duration_values)) if duration_values else None,
         "trace": f"{run_artifact_dir}/trace.jsonl",
     }
@@ -527,6 +563,43 @@ def _agent_policy_summary_row(summary: dict[str, object]) -> str:
         f"| {_count_rate(summary.get('agent_scorer_hidden_passes'), attempt_count)} "
         f"| {_display(summary.get('median_duration_ms'))} "
         f"| {trace_ref} |"
+    )
+
+
+def _agent_model_budget_table(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No agent model or budget metadata in this eval matrix."]
+
+    return [
+        (
+            "| policy | model_ids | strategy | temperature | max_new_tokens | "
+            "model_timeout_seconds | max_turns | prompt_tokens | "
+            "completion_tokens | total_tokens | cost | invalid_tool_calls | "
+            "tool_errors |"
+        ),
+        (
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: "
+            "| --- | ---: | ---: |"
+        ),
+        *[_agent_model_budget_row(summary) for summary in summaries],
+    ]
+
+
+def _agent_model_budget_row(summary: dict[str, object]) -> str:
+    return (
+        f"| {_display(summary.get('policy'))} "
+        f"| {_value_set_display(summary.get('agent_model_ids'))} "
+        f"| {_value_set_display(summary.get('agent_decoding_strategies'))} "
+        f"| {_value_set_display(summary.get('agent_temperatures'))} "
+        f"| {_value_set_display(summary.get('agent_max_new_tokens'))} "
+        f"| {_value_set_display(summary.get('agent_model_timeout_seconds'))} "
+        f"| {_value_set_display(summary.get('agent_max_turns'))} "
+        f"| {_known_int_display(summary.get('agent_prompt_tokens'))} "
+        f"| {_known_int_display(summary.get('agent_completion_tokens'))} "
+        f"| {_known_int_display(summary.get('agent_total_tokens'))} "
+        f"| {_display(summary.get('agent_cost'))} "
+        f"| {_display(summary.get('agent_invalid_tool_calls'))} "
+        f"| {_display(summary.get('agent_tool_errors'))} |"
     )
 
 
@@ -908,6 +981,10 @@ def _agent_scorer_field(attempt: dict[str, object], key: str) -> object:
     return _field(scorer_attempt, key)
 
 
+def _agent_artifact_field(attempt: dict[str, object], key: str) -> object:
+    return _field(_optional_object(attempt.get("agent_artifact")), key)
+
+
 def _attempt_agent_scorer_field(
     agent: dict[str, object] | None,
     key: str,
@@ -1009,8 +1086,109 @@ def _matrix_attempts_with_artifacts(
         attempt_record["artifact_dir"] = str(
             (run_dir / attempt_artifact_ref).relative_to(artifact_dir)
         )
+        if attempt_record.get("artifact_version") == "agent_task_run_artifacts_v0":
+            attempt_record["agent_artifact"] = _agent_artifact_summary(
+                run_dir / attempt_artifact_ref
+            )
         records.append(attempt_record)
     return records
+
+
+def _agent_artifact_summary(artifact_dir: Path) -> dict[str, object]:
+    prompt_loop = _load_optional_json_object(artifact_dir / "prompt_loop_result.json")
+    decoding_config = _load_optional_json_object(artifact_dir / "decoding_config.json")
+    agent_task_view = _load_optional_json_object(artifact_dir / "agent_task_view.json")
+    model_responses = _object_list(_field(prompt_loop, "model_responses"))
+    tool_results = _object_list(_field(prompt_loop, "tool_results"))
+
+    return {
+        "model_ids": _unique_values(
+            response.get("model_id")
+            for response in model_responses
+            if isinstance(response.get("model_id"), str)
+        ),
+        "decoding_strategy": _field(decoding_config, "strategy"),
+        "temperature": _field(decoding_config, "temperature"),
+        "max_new_tokens": _field(decoding_config, "max_new_tokens"),
+        "model_timeout_seconds": _field(decoding_config, "timeout_seconds"),
+        "max_turns": _field(agent_task_view, "max_turns"),
+        "turns_executed": _field(prompt_loop, "turns_executed"),
+        "token_usage": _optional_object(_field(prompt_loop, "token_usage")),
+        "invalid_tool_calls": sum(
+            result.get("status") == "error"
+            and result.get("error_class") == "InvalidToolInput"
+            for result in tool_results
+        ),
+        "tool_errors": sum(result.get("status") == "error" for result in tool_results),
+    }
+
+
+def _load_optional_json_object(path: Path) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    return _load_json_object(path)
+
+
+def _object_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _agent_artifact_unique_values(
+    attempts: list[dict[str, object]],
+    key: str,
+) -> list[object]:
+    values: list[object] = []
+    for attempt in attempts:
+        value = _agent_artifact_field(attempt, key)
+        if isinstance(value, list):
+            raw_values = value
+        else:
+            raw_values = [value]
+        for raw_value in raw_values:
+            if (
+                isinstance(raw_value, (str, int, float))
+                and not isinstance(raw_value, bool)
+                and raw_value not in values
+            ):
+                values.append(raw_value)
+    return values
+
+
+def _agent_artifact_int_sum(
+    attempts: list[dict[str, object]],
+    key: str,
+) -> int:
+    return sum(
+        value
+        for attempt in attempts
+        if isinstance((value := _agent_artifact_field(attempt, key)), int)
+        and not isinstance(value, bool)
+    )
+
+
+def _agent_token_sum(
+    attempts: list[dict[str, object]],
+    key: str,
+) -> int | None:
+    total = 0
+    observed = False
+    for attempt in attempts:
+        token_usage = _optional_object(_agent_artifact_field(attempt, "token_usage"))
+        value = _field(token_usage, key)
+        if isinstance(value, int):
+            total += value
+            observed = True
+    return total if observed else None
+
+
+def _unique_values(values: Iterable[object]) -> list[object]:
+    unique: list[object] = []
+    for value in values:
+        if value not in unique:
+            unique.append(value)
+    return unique
 
 
 def _comparison_row(comparison: dict[str, object]) -> str:
@@ -1081,6 +1259,18 @@ def _display(value: object) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _known_int_display(value: object) -> str:
+    if value is None:
+        return "not_recorded"
+    return _display(value)
+
+
+def _value_set_display(value: object) -> str:
+    if not isinstance(value, list):
+        return _display(value)
+    return ", ".join(_display(item) for item in value)
 
 
 def _relative_or_absolute(path: Path) -> str:

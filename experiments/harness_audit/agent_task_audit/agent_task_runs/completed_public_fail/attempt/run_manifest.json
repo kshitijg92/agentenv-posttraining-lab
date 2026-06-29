@@ -8,11 +8,11 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_58a6971e1e0d49e591117ef8d7ddf80c",
+  "attempt_id": "attempt_401aaacb0eee4d77aebbd5a21f289286",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_0f3251e2b66d472e993acf52b2c63164",
+  "run_id": "run_6b6e2292ef064ce4a9edd2833b150ac5",
   "status": "PUBLIC_TEST_FAIL",
-  "submission_path": "/tmp/agentenv-agent_task_run_c20389c8beed4f96813142dd38e56c31-zxz73q_z/candidate.patch",
+  "submission_path": "/tmp/agentenv-agent_task_run_e3bb96d91a684b96a0155fb277fecef5-m_t38i8e/candidate.patch",
   "task_id": "toy_python_fix_001",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 }

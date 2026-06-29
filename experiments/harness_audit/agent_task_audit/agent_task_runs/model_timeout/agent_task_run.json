@@ -1,5 +1,5 @@
 {
-  "run_id": "agent_task_run_0326ea76fa0643029444c606e0b2d1a8",
+  "run_id": "agent_task_run_2448567c7f644ee1980c1c86dccfab68",
   "task_id": "toy_python_fix_001",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
   "status": "agent_loop_failed",
@@ -9,8 +9,8 @@
   "attempt_result": null,
   "error_class": "ScriptedModelTimeout",
   "error_message": "Model generation stopped with finish_reason=timeout.",
-  "started_at": "2026-06-28T02:09:39.808195Z",
-  "ended_at": "2026-06-28T02:09:39.812851Z",
-  "duration_ms": 4,
+  "started_at": "2026-06-28T03:00:44.526509Z",
+  "ended_at": "2026-06-28T03:00:44.530392Z",
+  "duration_ms": 3,
   "orchestrator_version": "agent_task_run_v0"
 }

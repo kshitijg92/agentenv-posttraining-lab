@@ -1,0 +1,9 @@
+{
+  "artifact_version": "replay_v0",
+  "attempt_count": 3,
+  "error_count": 0,
+  "matched_attempts": 3,
+  "mismatched_attempts": 0,
+  "replay_id": "replay_68dd7122e6c94023a2b91d1942301aca",
+  "status": "PASS"
+}

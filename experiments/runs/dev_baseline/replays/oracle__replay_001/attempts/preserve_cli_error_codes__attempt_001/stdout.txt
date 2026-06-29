@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-preserve_cli_error_codes-6vetqjo_/workspace
+configfile: pyproject.toml
+collected 1 item
+
+tests/test_public.py .                                                   [100%]
+
+============================== 1 passed in 0.03s ===============================
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-preserve_cli_error_codes-6vetqjo_/workspace
+configfile: pyproject.toml
+collected 8 items
+
+test_cli_behavior.py ........                                            [100%]
+
+============================== 8 passed in 0.17s ===============================
+
