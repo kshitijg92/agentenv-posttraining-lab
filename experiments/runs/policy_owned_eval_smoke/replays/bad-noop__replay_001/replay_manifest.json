@@ -1,0 +1,14 @@
+{
+  "artifact_version": "replay_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "replay_result": "replay_result.json",
+    "replay_results": "replay_results.jsonl",
+    "trace": "trace.jsonl"
+  },
+  "created_at": "2026-06-29T04:30:02.910257Z",
+  "replay_id": "replay_107acf7e3a1444d28473d4cabf657733",
+  "source_artifact_version": "eval_run_v0",
+  "source_eval_run_id": "eval_3914e83223094e599af84d220fdfab2f",
+  "source_run_dir": "/home/kshitij/agentenv-posttraining-lab/experiments/runs/policy_owned_eval_smoke/policies/bad-noop"
+}

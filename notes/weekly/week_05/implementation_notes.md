@@ -1691,21 +1691,24 @@ uv run pyright src/agentenv/replay/runner.py src/agentenv/reporting/markdown.py 
 
 ### Decision
 
-Move replay orchestration from a CLI flag into the eval config:
+Move replay orchestration from a CLI flag into each eval policy:
 
 ```yaml
-replay:
-  enabled: true
-  scope: control_policies
-  repeats: 1
+policies:
+  oracle:
+    type: scorer_control_patch
+    control: oracle
+    attempts: 1
+    replay:
+      repeats: 1
 ```
 
-For v0, `scope: control_policies` means replay every control policy in the eval
-matrix. This includes both scorer-control policies and agent-control policies
-once agent-control eval execution is wired.
+For v0, the matrix runner replays every policy whose `replay.repeats` is greater
+than zero. This works for any mix of scorer controls, agent controls, and future
+real agent policies without a second top-level policy-selection mechanism.
 
 The `--replay-control-policies` CLI option was removed. `agentenv eval
---all-policies` now follows the config-owned replay contract.
+--all-policies` now follows the policy-owned replay contract.
 
 `ControlName` in the eval schema was renamed to `ScorerControlName` so the
 schema boundary no longer conflates scorer controls with agent controls.
@@ -1713,15 +1716,14 @@ schema boundary no longer conflates scorer controls with agent controls.
 ### Reasoning
 
 Replay is now measurement evidence, not a reporting convenience. Whether replay
-is run, which policy family it covers, and how many replay passes are required
-should be hashed with the eval config instead of living in an untracked CLI
-switch.
+is run and how many replay passes are required should be hashed with the policy
+definition instead of living in an untracked CLI switch or a top-level selector.
 
 This also keeps the future eval-matrix contract cleaner:
 
 ```text
-attempts = fresh policy attempts per task
-replay.repeats = reproducibility checks over the produced policy-run artifacts
+policy.attempts = fresh policy attempts per task
+policy.replay.repeats = reproducibility checks over that policy-run artifact
 ```
 
 The next eval-design checkpoint can assume replay dispatch is already

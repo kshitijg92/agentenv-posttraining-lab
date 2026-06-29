@@ -21,10 +21,11 @@ def test_control_eval_config_loads() -> None:
     assert config.name == "scorer_control_policies"
     assert config.task_pack == "data/task_packs/repo_patch_python_v0"
     assert config.tasks == ["toy_python_fix_001"]
-    assert config.replay.enabled is True
-    assert config.replay.scope == "control_policies"
-    assert config.replay.repeats == 1
     assert sorted(config.policies) == ["bad-noop", "bad-public-only", "oracle"]
+    assert config.policies["oracle"].attempts == 1
+    assert config.policies["oracle"].replay.repeats == 1
+    assert config.policies["bad-noop"].attempts == 1
+    assert config.policies["bad-noop"].replay.repeats == 1
 
 
 def test_control_eval_config_paths_are_valid() -> None:
@@ -60,6 +61,8 @@ def test_agent_control_eval_config_loads() -> None:
     ]
     assert config.policies["agent-happy"].type == "agent_control_script"
     assert config.policies["agent-happy"].control == "happy"
+    assert config.policies["agent-happy"].attempts == 1
+    assert config.policies["agent-happy"].replay.repeats == 1
     assert config.policies["agent-malformed"].control == "malformed"
     assert config.policies["agent-recoverable"].control == "recoverable"
 
@@ -92,6 +95,8 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
     assert run_manifest["policy_family"] == "control"
     assert run_manifest["control_layer"] == "agent"
     assert run_manifest["control_name"] == "happy"
+    assert run_manifest["attempts_per_task"] == 1
+    assert run_manifest["replay_repeats"] == 1
     assert run_manifest["layer_counts"] == {
         "agent_scorer_hidden_status": {"PASS": 1},
         "agent_scorer_public_status": {"PASS": 1},
@@ -185,6 +190,8 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert run_manifest["policy_family"] == "control"
     assert run_manifest["control_layer"] == "scorer"
     assert run_manifest["control_name"] == "oracle"
+    assert run_manifest["attempts_per_task"] == 1
+    assert run_manifest["replay_repeats"] == 1
     assert run_manifest["attempt_count"] == 1
     assert "status_counts" not in run_manifest
     assert run_manifest["layer_counts"] == {
@@ -300,6 +307,8 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "policy_family": "control",
             "control_layer": "scorer",
             "control_name": "oracle",
+            "attempts_per_task": 1,
+            "replay_repeats": 1,
             "eval_run_id": eval_matrix.policy_runs[0].eval_run_id,
             "artifact_dir": "policies/oracle",
             "run_manifest": "policies/oracle/run_manifest.json",
@@ -316,6 +325,8 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "policy_family": "control",
             "control_layer": "scorer",
             "control_name": "bad.noop",
+            "attempts_per_task": 1,
+            "replay_repeats": 1,
             "eval_run_id": eval_matrix.policy_runs[1].eval_run_id,
             "artifact_dir": "policies/bad-noop",
             "run_manifest": "policies/bad-noop/run_manifest.json",
@@ -332,6 +343,8 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "policy_family": "control",
             "control_layer": "scorer",
             "control_name": "bad.public_only",
+            "attempts_per_task": 1,
+            "replay_repeats": 1,
             "eval_run_id": eval_matrix.policy_runs[2].eval_run_id,
             "artifact_dir": "policies/bad-public-only",
             "run_manifest": "policies/bad-public-only/run_manifest.json",
@@ -348,8 +361,8 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     assert (
         tmp_path / "eval_matrix/policies/bad-public-only/run_manifest.json"
     ).is_file()
-    assert matrix_manifest["replay_policy_scope"] == "control_policies"
-    assert matrix_manifest["replay_repeats"] == 1
+    assert matrix_manifest["replay_policy_count"] == 3
+    assert matrix_manifest["replay_run_count"] == 3
     assert matrix_manifest["replay_run_success_summary"] == "3/3"
     assert len(matrix_manifest["replay_runs"]) == 3
 
@@ -370,8 +383,8 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
         "policies": "policies",
         "replays": "replays",
     }
-    assert matrix_manifest["replay_policy_scope"] == "control_policies"
-    assert matrix_manifest["replay_repeats"] == 1
+    assert matrix_manifest["replay_policy_count"] == 3
+    assert matrix_manifest["replay_run_count"] == 3
     assert matrix_manifest["replay_run_success_summary"] == "3/3"
     assert matrix_manifest["replay_runs"] == [
         {

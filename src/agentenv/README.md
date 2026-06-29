@@ -103,9 +103,9 @@ uv run agentenv eval \
   --out experiments/runs/dev_baseline
 ```
 
-`--all-policies` writes an eval matrix. Replay is config-owned through the
-config `replay:` block; for `dev_baseline`, scorer and agent control policies
-are replayed automatically.
+`--all-policies` writes an eval matrix. Replay is policy-owned through each
+policy's `replay.repeats`; for `dev_baseline`, scorer and agent control
+policies each request one replay run.
 
 Main eval matrix outputs:
 

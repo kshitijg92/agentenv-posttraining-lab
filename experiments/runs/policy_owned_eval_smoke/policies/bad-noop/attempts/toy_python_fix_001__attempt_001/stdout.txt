@@ -1,0 +1,53 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-toy_python_fix_001-vbtx1uqg/workspace
+configfile: pyproject.toml
+collected 1 item
+
+tests/test_public.py .                                                   [100%]
+
+============================== 1 passed in 0.01s ===============================
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-toy_python_fix_001-vbtx1uqg/workspace
+configfile: pyproject.toml
+collected 7 items
+
+test_behavior.py FF.....                                                 [100%]
+
+=================================== FAILURES ===================================
+___________________ test_zero_denominator_raises_value_error ___________________
+
+    def test_zero_denominator_raises_value_error() -> None:
+        with pytest.raises(ValueError, match="denominator"):
+>           normalize_ratio(1, 0)
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/hidden_tests/test_behavior.py:8: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+numerator = 1, denominator = 0
+
+    def normalize_ratio(numerator: int | float, denominator: int | float) -> float:
+        """Return numerator divided by denominator as a normalized ratio."""
+>       return numerator // denominator
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+E       ZeroDivisionError: integer division or modulo by zero
+
+src/mathlib.py:3: ZeroDivisionError
+__________________ test_non_integer_ratio_preserves_precision __________________
+
+    def test_non_integer_ratio_preserves_precision() -> None:
+>       assert normalize_ratio(1, 2) == pytest.approx(0.5)
+E       assert 0 == 0.5 ± 5.0e-07
+E         
+E         comparison failed
+E         Obtained: 0
+E         Expected: 0.5 ± 5.0e-07
+
+/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/hidden_tests/test_behavior.py:12: AssertionError
+=========================== short test summary info ============================
+FAILED test_behavior.py::test_zero_denominator_raises_value_error - ZeroDivis...
+FAILED test_behavior.py::test_non_integer_ratio_preserves_precision - assert ...
+========================= 2 failed, 5 passed in 0.02s ==========================
+

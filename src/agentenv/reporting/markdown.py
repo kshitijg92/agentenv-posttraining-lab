@@ -45,7 +45,9 @@ def render_eval_report(
         f"- Control name: {_display(manifest.get('control_name'))}",
         f"- Split: {_display(manifest.get('split'))}",
         f"- Task pack: {_display(manifest.get('task_pack'))}",
+        f"- Attempts per task: {_display(manifest.get('attempts_per_task'))}",
         f"- Attempt count: {_display(manifest.get('attempt_count'))}",
+        f"- Replay repeats: {_display(manifest.get('replay_repeats'))}",
         "",
         "## Layer Counts",
         "",
@@ -117,8 +119,12 @@ def render_eval_matrix_report(
             "- Hidden-validator version/hash: not captured in eval_matrix_v0; "
             f"current substitute is config hash {_display(manifest.get('config_hash'))}"
         ),
-        f"- Replay scope: {_display(manifest.get('replay_policy_scope'))}",
-        f"- Replay repeats: {_display(manifest.get('replay_repeats'))}",
+        f"- Replay policy count: {_display(manifest.get('replay_policy_count'))}",
+        f"- Replay run count: {_display(manifest.get('replay_run_count'))}",
+        (
+            "- Replay run success summary: "
+            f"{_display(manifest.get('replay_run_success_summary'))}"
+        ),
         (
             f"- Replay match rate: {_rate_display(replay_match_rate)}"
             if replay_match_rate is not None

@@ -10,7 +10,7 @@ from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     load_agent_control_script_case,
 )
-from agentenv.evals.schema import EvalConfig, EvalPolicy
+from agentenv.evals.schema import EvalConfig
 from agentenv.evals.resolve import (
     agent_control_script_path,
     ResolvedEvalTask,
@@ -131,7 +131,7 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
             "policy": policy,
             "split": config.split,
             "task_count": len(resolved_tasks),
-            "attempts_per_task": config.attempts,
+            "attempts_per_task": selected_policy.attempts,
         },
     )
 
@@ -155,7 +155,7 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
         )
         task_attempt_records: list[EvalAttemptRecord] = []
 
-        for attempt_index in range(config.attempts):
+        for attempt_index in range(selected_policy.attempts):
             attempt_dir = (
                 attempts_dir / f"{task.task_id}__attempt_{attempt_index + 1:03d}"
             )
@@ -322,16 +322,11 @@ def _replay_configured_policy_runs(
     policy_runs: list[EvalRun],
     out_dir: Path,
 ) -> list[EvalMatrixReplayRecord]:
-    if not config.replay.enabled:
-        return []
-
     replays_dir = out_dir / "replays"
     replay_records: list[EvalMatrixReplayRecord] = []
     for policy_run in policy_runs:
         policy = config.policies[policy_run.policy]
-        if not _should_replay_policy(config, policy):
-            continue
-        for replay_index in range(config.replay.repeats):
+        for replay_index in range(policy.replay.repeats):
             replay_dir = (
                 replays_dir
                 / f"{policy_run.policy}__replay_{replay_index + 1:03d}"
@@ -346,12 +341,6 @@ def _replay_configured_policy_runs(
                 )
             )
     return replay_records
-
-
-def _should_replay_policy(config: EvalConfig, policy: EvalPolicy) -> bool:
-    if config.replay.scope == "control_policies":
-        return policy.type in {"scorer_control_patch", "agent_control_script"}
-    return False
 
 
 def _write_eval_trace(eval_run: EvalRun, trace_events: list[TraceEvent]) -> Path:
@@ -454,16 +443,8 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
             }
             for policy_run in eval_matrix.policy_runs
         ],
-        "replay_policy_scope": (
-            eval_matrix.config.replay.scope
-            if eval_matrix.config.replay.enabled
-            else "not_run"
-        ),
-        "replay_repeats": (
-            eval_matrix.config.replay.repeats
-            if eval_matrix.config.replay.enabled
-            else 0
-        ),
+        "replay_run_count": len(eval_matrix.replay_runs),
+        "replay_policy_count": _replayed_policy_count(eval_matrix.config),
         "replay_run_success_summary": _replay_run_success_summary(
             eval_matrix.replay_runs
         ),
@@ -514,6 +495,10 @@ def _replay_run_success_summary(
     )
     total = len(replay_records)
     return f"{passed}/{total}"
+
+
+def _replayed_policy_count(config: EvalConfig) -> int:
+    return sum(1 for policy in config.policies.values() if policy.replay.repeats > 0)
 
 
 def _run_scorer_eval_attempt(
@@ -589,18 +574,24 @@ def _agent_eval_attempt_payload_refs(
 
 def _policy_metadata(config: EvalConfig, policy_name: str) -> dict[str, object]:
     policy = config.policies[policy_name]
+    common_metadata: dict[str, object] = {
+        "attempts_per_task": policy.attempts,
+        "replay_repeats": policy.replay.repeats,
+    }
     if policy.type == "scorer_control_patch":
         return {
             "policy_type": policy.type,
             "policy_family": "control",
             "control_layer": "scorer",
             "control_name": policy.control,
+            **common_metadata,
         }
     return {
         "policy_type": policy.type,
         "policy_family": "control",
         "control_layer": "agent",
         "control_name": policy.control,
+        **common_metadata,
     }
 
 

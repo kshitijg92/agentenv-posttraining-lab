@@ -5,30 +5,43 @@ tasks:
   - preserve_cli_error_codes
   - repair_config_precedence
 split: dev
-attempts: 1
-replay:
-  enabled: true
-  scope: control_policies
-  repeats: 1
 policies:
   oracle:
     type: scorer_control_patch
     control: oracle
+    attempts: 1
+    replay:
+      repeats: 1
   noop:
     type: scorer_control_patch
     control: bad.noop
+    attempts: 1
+    replay:
+      repeats: 1
   public-tests-only:
     type: scorer_control_patch
     control: bad.public_only
+    attempts: 1
+    replay:
+      repeats: 1
   agent-happy:
     type: agent_control_script
     control: happy
+    attempts: 1
+    replay:
+      repeats: 1
   agent-malformed:
     type: agent_control_script
     control: malformed
+    attempts: 1
+    replay:
+      repeats: 1
   agent-recoverable:
     type: agent_control_script
     control: recoverable
+    attempts: 1
+    replay:
+      repeats: 1
 trace:
   version: trace_v0
   capture_stdout: true

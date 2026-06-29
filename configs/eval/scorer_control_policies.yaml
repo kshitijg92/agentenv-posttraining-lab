@@ -3,21 +3,25 @@ task_pack: data/task_packs/repo_patch_python_v0
 tasks:
   - toy_python_fix_001
 split: practice
-attempts: 1
-replay:
-  enabled: true
-  scope: control_policies
-  repeats: 1
 policies:
   oracle:
     type: scorer_control_patch
     control: oracle
+    attempts: 1
+    replay:
+      repeats: 1
   bad-noop:
     type: scorer_control_patch
     control: bad.noop
+    attempts: 1
+    replay:
+      repeats: 1
   bad-public-only:
     type: scorer_control_patch
     control: bad.public_only
+    attempts: 1
+    replay:
+      repeats: 1
 trace:
   version: trace_v0
   capture_stdout: true

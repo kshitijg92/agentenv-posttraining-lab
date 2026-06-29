@@ -183,8 +183,9 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Config name: scorer_control_policies" in report
     assert "- Task count: 1" in report
     assert "- Policy count: 3" in report
-    assert "- Replay scope: control_policies" in report
-    assert "- Replay repeats: 1" in report
+    assert "- Replay policy count: 3" in report
+    assert "- Replay run count: 3" in report
+    assert "- Replay run success summary: 3/3" in report
     assert "- Replay match rate: 3/3 (100%)" in report
     assert "- Oracle pass rate: 1/1 (100%)" in report
     assert "- Known-bad final PASS rate: 0/2 (0%)" in report
