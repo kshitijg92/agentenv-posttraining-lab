@@ -126,12 +126,62 @@ def test_agent_model_eval_config_loads_and_validates_paths(tmp_path: Path) -> No
     validate_eval_config_paths(config, config_path)
 
 
-def test_agent_model_eval_execution_is_not_wired_yet(tmp_path: Path) -> None:
+def test_agent_model_eval_records_missing_model_env_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config_path = tmp_path / "agent_model_eval.yaml"
     _write_agent_model_eval_config(config_path)
+    monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1")
+    monkeypatch.delenv("AGENTENV_MODEL_API_KEY", raising=False)
 
-    with pytest.raises(NotImplementedError, match="agent_model eval execution"):
-        run_eval_config(config_path, "real-agent-smoke", tmp_path / "eval")
+    eval_run = run_eval_config(config_path, "real-agent-smoke", tmp_path / "eval")
+
+    run_manifest = json.loads((tmp_path / "eval/run_manifest.json").read_text())
+
+    assert len(eval_run.attempts) == 2
+    assert run_manifest["policy_type"] == "agent_model"
+    assert run_manifest["policy_family"] == "agent"
+    assert run_manifest["model_config"] == (
+        "configs/models/openai_compatible_chat_placeholder.yaml"
+    )
+    assert run_manifest["decoding_config"] == "configs/decoding/greedy_1024.yaml"
+    assert run_manifest["layer_counts"] == {
+        "agent_status": {"agent_loop_failed": 2},
+        "prompt_loop_status": {"model_error": 2},
+    }
+    first_attempt = run_manifest["attempts"][0]
+    assert first_attempt["artifact_version"] == "agent_task_run_artifacts_v0"
+    assert first_attempt["scorer"] is None
+    assert first_attempt["agent"]["status"] == "agent_loop_failed"
+    assert first_attempt["agent"]["prompt_loop_status"] == "model_error"
+    assert first_attempt["agent"]["error_class"] == "MissingModelApiKeyEnvVar"
+    assert first_attempt["agent"]["scorer_attempt"] is None
+    attempt_dir = tmp_path / "eval" / first_attempt["artifact_dir"]
+    assert (attempt_dir / "agent_task_run.json").is_file()
+    assert (attempt_dir / "agent_task_view.json").is_file()
+    assert (attempt_dir / "decoding_config.json").is_file()
+    assert (attempt_dir / "prompt_loop_result.json").is_file()
+    assert not (attempt_dir / "agent_control_script.json").exists()
+    assert not (attempt_dir / "candidate.patch").exists()
+    assert not (attempt_dir / "attempt").exists()
+    prompt_loop_result = json.loads(
+        (attempt_dir / "prompt_loop_result.json").read_text()
+    )
+    assert prompt_loop_result["model_responses"][0]["finish_reason"] == "error"
+    assert (
+        prompt_loop_result["model_responses"][0]["error_class"]
+        == "MissingModelApiKeyEnvVar"
+    )
+    validate_trace_file(tmp_path / "eval/trace.jsonl")
+    trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
+    assert trace_events[3].payload_refs == {
+        "agent_task_run": "attempts/toy_python_fix_001__attempt_001/agent_task_run.json",
+        "decoding_config": "attempts/toy_python_fix_001__attempt_001/decoding_config.json",
+        "prompt_loop_result": (
+            "attempts/toy_python_fix_001__attempt_001/prompt_loop_result.json"
+        ),
+    }
 
 
 def test_run_eval_config_writes_agent_control_happy_manifest(

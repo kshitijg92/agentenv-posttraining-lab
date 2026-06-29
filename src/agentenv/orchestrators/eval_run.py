@@ -14,11 +14,14 @@ from agentenv.evals.schema import EvalConfig
 from agentenv.evals.resolve import (
     agent_control_script_path,
     ResolvedEvalTask,
+    resolve_config_file_ref,
     resolve_eval_tasks,
     scorer_control_patch_path,
     select_policy,
 )
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
+from agentenv.models.config import load_decoding_config, load_model_config
+from agentenv.models.factory import build_model_client
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_run import (
     AgentTaskRunResult,
@@ -106,8 +109,6 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     selected_policy = select_policy(config, policy)
-    if selected_policy.type == "agent_model":
-        raise NotImplementedError("agent_model eval execution is not implemented yet")
     config_hash = _hash_file(config_path)
     eval_run_id = f"eval_{uuid4().hex}"
     created_at = _utc_now()
@@ -198,7 +199,7 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
                     "attempt": f"{artifact_dir_ref}/attempt.json",
                     "attempt_trace": f"{artifact_dir_ref}/trace.jsonl",
                 }
-            else:
+            elif selected_policy.type == "agent_control_script":
                 script_path = agent_control_script_path(
                     task.manifest_path.parent,
                     task.manifest,
@@ -225,6 +226,46 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
                 payload_refs = _agent_eval_attempt_payload_refs(
                     artifact_dir_ref,
                     attempt_dir,
+                )
+            elif selected_policy.type == "agent_model":
+                model_config_path = resolve_config_file_ref(
+                    config_path,
+                    selected_policy.model_config_path,
+                    field_name="model_config",
+                )
+                decoding_config_path = resolve_config_file_ref(
+                    config_path,
+                    selected_policy.decoding_config_path,
+                    field_name="decoding_config",
+                )
+                started_payload = {
+                    "attempt_artifact_dir": artifact_dir_ref,
+                    "model_config_path": str(model_config_path),
+                    "model_config_hash": _hash_file(model_config_path),
+                    "decoding_config_path": str(decoding_config_path),
+                    "decoding_config_hash": _hash_file(decoding_config_path),
+                }
+                _append_trace(
+                    trace_events,
+                    attempt_provenance,
+                    "eval_attempt_started",
+                    input_payload=started_payload,
+                )
+                attempt_record = _run_agent_model_eval_attempt(
+                    task=task,
+                    model_config_path=model_config_path,
+                    decoding_config_path=decoding_config_path,
+                    attempt_index=attempt_index,
+                    attempt_dir=attempt_dir,
+                )
+                attempt_id = _required_agent(attempt_record).run_id
+                payload_refs = _agent_eval_attempt_payload_refs(
+                    artifact_dir_ref,
+                    attempt_dir,
+                )
+            else:
+                raise AssertionError(
+                    f"Unhandled eval policy type: {selected_policy.type}"
                 )
             attempt_records.append(attempt_record)
             task_attempt_records.append(attempt_record)
@@ -554,15 +595,45 @@ def _run_agent_control_eval_attempt(
     )
 
 
+def _run_agent_model_eval_attempt(
+    *,
+    task: ResolvedEvalTask,
+    model_config_path: Path,
+    decoding_config_path: Path,
+    attempt_index: int,
+    attempt_dir: Path,
+) -> EvalAttemptRecord:
+    model_config = load_model_config(model_config_path)
+    decoding_config = load_decoding_config(decoding_config_path)
+    model_client = build_model_client(model_config)
+    agent_task_run = run_and_persist_agent_task_attempt_to_dir(
+        task.manifest_path,
+        model_client,
+        decoding_config,
+        attempt_dir,
+    )
+    return EvalAttemptRecord(
+        task_id=task.task_id,
+        attempt_index=attempt_index,
+        attempt_dir=attempt_dir,
+        artifact_version=_child_artifact_version(attempt_dir),
+        scorer=None,
+        agent=_agent_summary(agent_task_run.result),
+    )
+
+
 def _agent_eval_attempt_payload_refs(
     artifact_dir_ref: str,
     attempt_dir: Path,
 ) -> dict[str, str]:
     payload_refs = {
         "agent_task_run": f"{artifact_dir_ref}/agent_task_run.json",
-        "agent_control_script": f"{artifact_dir_ref}/agent_control_script.json",
         "decoding_config": f"{artifact_dir_ref}/decoding_config.json",
     }
+    if (attempt_dir / "agent_control_script.json").is_file():
+        payload_refs["agent_control_script"] = (
+            f"{artifact_dir_ref}/agent_control_script.json"
+        )
     if (attempt_dir / "prompt_loop_result.json").is_file():
         payload_refs["prompt_loop_result"] = (
             f"{artifact_dir_ref}/prompt_loop_result.json"

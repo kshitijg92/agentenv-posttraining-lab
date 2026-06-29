@@ -4,7 +4,8 @@ from agentenv.models.schema import DecodingConfig, Message, ModelResponse
 
 
 class ModelClient(Protocol):
-    model_id: str
+    @property
+    def model_id(self) -> str: ...
 
     def generate(
         self,
