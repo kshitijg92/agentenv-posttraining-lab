@@ -14,6 +14,7 @@ from agentenv.agents.loop import run_prompt_loop
 from agentenv.agents.schema import AgentTaskView, PromptLoopResult, PromptLoopStatus
 from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.models.client import ModelClient
+from agentenv.models.config_schema import ModelConfig
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.attempt import (
     AttemptResult,
@@ -73,6 +74,7 @@ class AgentTaskRunArtifactPaths:
     run_manifest_json: Path
     agent_task_run_json: Path
     decoding_config_json: Path | None
+    model_config_json: Path | None
     agent_control_script_json: Path | None
     agent_task_view_json: Path | None
     prompt_loop_result_json: Path | None
@@ -221,6 +223,7 @@ def run_and_persist_agent_task_attempt_to_dir(
     out_dir: Path,
     *,
     agent_control_script: BaseModel | dict[str, Any] | None = None,
+    model_config_provenance: dict[str, Any] | None = None,
 ) -> AgentTaskRun:
     agent_task_run = run_agent_task_attempt(
         task_manifest_path,
@@ -232,6 +235,7 @@ def run_and_persist_agent_task_attempt_to_dir(
         out_dir,
         decoding_config=decoding_config,
         agent_control_script=agent_control_script,
+        model_config_provenance=model_config_provenance,
     )
     return agent_task_run
 
@@ -242,12 +246,18 @@ def write_agent_task_run_artifacts(
     *,
     decoding_config: DecodingConfig | None = None,
     agent_control_script: BaseModel | dict[str, Any] | None = None,
+    model_config_provenance: dict[str, Any] | None = None,
 ) -> AgentTaskRunArtifactPaths:
     out_dir.mkdir(parents=True, exist_ok=True)
     run_manifest_path = out_dir / "run_manifest.json"
     agent_task_run_path = out_dir / "agent_task_run.json"
     decoding_config_path = (
         out_dir / "decoding_config.json" if decoding_config is not None else None
+    )
+    model_config_path = (
+        out_dir / "model_config.json"
+        if model_config_provenance is not None
+        else None
     )
     agent_control_script_path = (
         out_dir / "agent_control_script.json"
@@ -275,6 +285,10 @@ def write_agent_task_run_artifacts(
     agent_task_run_path.write_text(agent_task_run.result.model_dump_json(indent=2) + "\n")
     if decoding_config_path is not None and decoding_config is not None:
         decoding_config_path.write_text(decoding_config.model_dump_json(indent=2) + "\n")
+    if model_config_path is not None and model_config_provenance is not None:
+        model_config_path.write_text(
+            json.dumps(model_config_provenance, indent=2, sort_keys=True) + "\n"
+        )
     if agent_control_script_path is not None and agent_control_script is not None:
         agent_control_script_path.write_text(_json_artifact(agent_control_script))
     agent_task_view = agent_task_run.agent_task_view
@@ -298,6 +312,7 @@ def write_agent_task_run_artifacts(
         _run_manifest_json(
             agent_task_run,
             include_decoding_config=decoding_config is not None,
+            include_model_config=model_config_provenance is not None,
             include_agent_control_script=agent_control_script is not None,
         )
     )
@@ -306,6 +321,7 @@ def write_agent_task_run_artifacts(
         run_manifest_json=run_manifest_path,
         agent_task_run_json=agent_task_run_path,
         decoding_config_json=decoding_config_path,
+        model_config_json=model_config_path,
         agent_control_script_json=agent_control_script_path,
         agent_task_view_json=agent_task_view_path,
         prompt_loop_result_json=prompt_loop_result_path,
@@ -320,6 +336,19 @@ def _json_artifact(value: BaseModel | dict[str, Any]) -> str:
     if isinstance(value, BaseModel):
         return value.model_dump_json(indent=2) + "\n"
     return json.dumps(value, indent=2, sort_keys=True) + "\n"
+
+
+def model_config_provenance_artifact(
+    *,
+    model_config: ModelConfig,
+    model_config_path: Path,
+    model_config_hash: str,
+) -> dict[str, Any]:
+    return {
+        "source_path": str(model_config_path),
+        "source_hash": model_config_hash,
+        "config": json.loads(model_config.model_dump_json()),
+    }
 
 
 def _run_root(workspace_parent: Path | None, run_id: str) -> Path:
@@ -390,6 +419,7 @@ def _run_manifest_json(
     agent_task_run: AgentTaskRun,
     *,
     include_decoding_config: bool,
+    include_model_config: bool,
     include_agent_control_script: bool,
 ) -> str:
     artifacts: dict[str, str] = {
@@ -398,6 +428,8 @@ def _run_manifest_json(
     }
     if include_decoding_config:
         artifacts["decoding_config"] = "decoding_config.json"
+    if include_model_config:
+        artifacts["model_config"] = "model_config.json"
     if include_agent_control_script:
         artifacts["agent_control_script"] = "agent_control_script.json"
     if agent_task_run.agent_task_view is not None:

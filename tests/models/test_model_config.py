@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from agentenv.models.config import load_decoding_config, load_model_config
 from agentenv.models.config_schema import OpenAICompatibleChatModelConfig
+from agentenv.orchestrators.agent_task_run import model_config_provenance_artifact
 
 
 MODEL_CONFIG = Path("configs/models/openai_compatible_chat_placeholder.yaml")
@@ -37,6 +38,32 @@ def test_load_decoding_config_reads_generation_config() -> None:
     assert config.seed is None
     assert config.stop == []
     assert config.timeout_seconds == 60
+
+
+def test_model_config_provenance_artifact_records_sanitized_config() -> None:
+    config = load_model_config(MODEL_CONFIG)
+
+    artifact = model_config_provenance_artifact(
+        model_config=config,
+        model_config_path=MODEL_CONFIG,
+        model_config_hash="xxh64:testhash",
+    )
+
+    assert artifact["source_path"] == str(MODEL_CONFIG)
+    assert artifact["source_hash"] == "xxh64:testhash"
+    assert artifact["config"] == {
+        "api_key_env": "AGENTENV_MODEL_API_KEY",
+        "base_url_env": "AGENTENV_MODEL_BASE_URL",
+        "capabilities": {
+            "supports_seed": False,
+            "supports_stop": True,
+            "supports_top_k": False,
+            "token_usage": "native",
+        },
+        "model_id": "placeholder-model",
+        "provider": "openai_compatible_chat",
+        "version": "model_config_v0",
+    }
 
 
 @pytest.mark.parametrize("env_var_name", ["1BAD", "BAD-NAME", "BAD NAME"])

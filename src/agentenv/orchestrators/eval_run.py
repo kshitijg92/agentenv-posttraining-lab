@@ -25,6 +25,7 @@ from agentenv.models.factory import build_model_client
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_run import (
     AgentTaskRunResult,
+    model_config_provenance_artifact,
     run_and_persist_agent_task_attempt_to_dir,
 )
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
@@ -611,6 +612,11 @@ def _run_agent_model_eval_attempt(
         model_client,
         decoding_config,
         attempt_dir,
+        model_config_provenance=model_config_provenance_artifact(
+            model_config=model_config,
+            model_config_path=model_config_path,
+            model_config_hash=_hash_file(model_config_path),
+        ),
     )
     return EvalAttemptRecord(
         task_id=task.task_id,
@@ -630,6 +636,8 @@ def _agent_eval_attempt_payload_refs(
         "agent_task_run": f"{artifact_dir_ref}/agent_task_run.json",
         "decoding_config": f"{artifact_dir_ref}/decoding_config.json",
     }
+    if (attempt_dir / "model_config.json").is_file():
+        payload_refs["model_config"] = f"{artifact_dir_ref}/model_config.json"
     if (attempt_dir / "agent_control_script.json").is_file():
         payload_refs["agent_control_script"] = (
             f"{artifact_dir_ref}/agent_control_script.json"

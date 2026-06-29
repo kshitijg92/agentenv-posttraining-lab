@@ -158,8 +158,12 @@ def test_agent_model_eval_records_missing_model_env_failure(
     assert first_attempt["agent"]["error_class"] == "MissingModelApiKeyEnvVar"
     assert first_attempt["agent"]["scorer_attempt"] is None
     attempt_dir = tmp_path / "eval" / first_attempt["artifact_dir"]
+    attempt_manifest = json.loads((attempt_dir / "run_manifest.json").read_text())
+    assert attempt_manifest["artifacts"]["model_config"] == "model_config.json"
+    assert attempt_manifest["artifacts"]["decoding_config"] == "decoding_config.json"
     assert (attempt_dir / "agent_task_run.json").is_file()
     assert (attempt_dir / "agent_task_view.json").is_file()
+    assert (attempt_dir / "model_config.json").is_file()
     assert (attempt_dir / "decoding_config.json").is_file()
     assert (attempt_dir / "prompt_loop_result.json").is_file()
     assert not (attempt_dir / "agent_control_script.json").exists()
@@ -173,11 +177,33 @@ def test_agent_model_eval_records_missing_model_env_failure(
         prompt_loop_result["model_responses"][0]["error_class"]
         == "MissingModelApiKeyEnvVar"
     )
+    model_config_provenance = json.loads(
+        (attempt_dir / "model_config.json").read_text()
+    )
+    assert model_config_provenance["source_path"].endswith(
+        "configs/models/openai_compatible_chat_placeholder.yaml"
+    )
+    assert model_config_provenance["source_hash"].startswith("xxh64:")
+    assert model_config_provenance["config"] == {
+        "api_key_env": "AGENTENV_MODEL_API_KEY",
+        "base_url_env": "AGENTENV_MODEL_BASE_URL",
+        "capabilities": {
+            "supports_seed": False,
+            "supports_stop": True,
+            "supports_top_k": False,
+            "token_usage": "native",
+        },
+        "model_id": "placeholder-model",
+        "provider": "openai_compatible_chat",
+        "version": "model_config_v0",
+    }
+    assert "secret-token" not in (attempt_dir / "model_config.json").read_text()
     validate_trace_file(tmp_path / "eval/trace.jsonl")
     trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
     assert trace_events[3].payload_refs == {
         "agent_task_run": "attempts/toy_python_fix_001__attempt_001/agent_task_run.json",
         "decoding_config": "attempts/toy_python_fix_001__attempt_001/decoding_config.json",
+        "model_config": "attempts/toy_python_fix_001__attempt_001/model_config.json",
         "prompt_loop_result": (
             "attempts/toy_python_fix_001__attempt_001/prompt_loop_result.json"
         ),
