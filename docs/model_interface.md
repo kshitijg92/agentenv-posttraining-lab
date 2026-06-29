@@ -24,13 +24,17 @@ Current implementation:
 src/agentenv/models/schema.py
 src/agentenv/models/client.py
 src/agentenv/models/fake.py
+src/agentenv/models/config_schema.py
+src/agentenv/models/config.py
+src/agentenv/models/openai_compatible_chat.py
 src/agentenv/agents/loop.py
 src/agentenv/agents/prompts.py
 src/agentenv/agents/tool_messages.py
 src/agentenv/orchestrators/agent_task_run.py
 ```
 
-The real/API provider adapter is not implemented yet.
+The OpenAI-compatible chat provider adapter is implemented as a `ModelClient`,
+but `agent_model` eval execution is not wired yet.
 
 ## Message Contract
 
@@ -247,6 +251,11 @@ The adapter should:
 - convert provider exceptions into typed model errors,
 - avoid logging secrets or full private credentials in artifacts.
 
+The provider adapter is allowed to access network as an inference backend. That
+does not grant network access to task tools, public checks, hidden validators,
+or scorer execution. Future networked tools such as browser/API tools should be
+introduced as explicit tool capabilities with their own audit coverage.
+
 The adapter must not:
 
 - receive hidden validators or controls,
@@ -257,6 +266,7 @@ The adapter must not:
 
 ## Current Real-Model Status
 
-The real/API model path is not implemented yet. Closing Week 5 requires either
-running a real model path or writing an explicit blocker note that records why it
-is deferred.
+The OpenAI-compatible chat client is implemented, but the real-model eval path
+is not wired into `agent_model` execution yet. Closing Week 5 requires either
+running that path or writing an explicit blocker note that records why it is
+deferred.
