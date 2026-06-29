@@ -16,7 +16,7 @@ class PolicyReplayConfig(BaseModel):
 
 
 class EvalPolicyBase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     attempts: int = Field(gt=0)
     replay: PolicyReplayConfig
@@ -32,7 +32,13 @@ class AgentControlScriptPolicy(EvalPolicyBase):
     control: AgentControlName
 
 
-EvalPolicy = ScorerControlPatchPolicy | AgentControlScriptPolicy
+class AgentModelPolicy(EvalPolicyBase):
+    type: Literal["agent_model"]
+    model_config_path: str = Field(alias="model_config", min_length=1)
+    decoding_config_path: str = Field(alias="decoding_config", min_length=1)
+
+
+EvalPolicy = ScorerControlPatchPolicy | AgentControlScriptPolicy | AgentModelPolicy
 
 
 class TraceCaptureConfig(BaseModel):

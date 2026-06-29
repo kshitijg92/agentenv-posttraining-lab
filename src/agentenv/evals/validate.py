@@ -4,10 +4,12 @@ import yaml
 
 from agentenv.evals.resolve import (
     agent_control_script_path,
+    resolve_config_file_ref,
     scorer_control_patch_path,
     resolve_eval_tasks,
 )
 from agentenv.evals.schema import EvalConfig
+from agentenv.models.config import load_decoding_config, load_model_config
 from agentenv.tasks.validate import validate_task_manifest_paths
 
 
@@ -29,12 +31,34 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
                     task.manifest,
                     policy.control,
                 )
-            else:
+            elif policy.type == "agent_control_script":
                 agent_control_script_path(
                     task.manifest_path.parent,
                     task.manifest,
                     policy.control,
                 )
+            elif policy.type == "agent_model":
+                pass
+            else:
+                raise AssertionError(f"Unhandled eval policy type: {policy.type}")
+
+    for policy in config.policies.values():
+        if policy.type != "agent_model":
+            continue
+        load_model_config(
+            resolve_config_file_ref(
+                config_path,
+                policy.model_config_path,
+                field_name="model_config",
+            )
+        )
+        load_decoding_config(
+            resolve_config_file_ref(
+                config_path,
+                policy.decoding_config_path,
+                field_name="decoding_config",
+            )
+        )
 
     configured_task_ids = set(config.tasks)
     resolved_task_ids = {task.task_id for task in resolved_tasks}

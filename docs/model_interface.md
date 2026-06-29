@@ -79,6 +79,31 @@ Current invariants:
 Agent task limits such as `max_turns`, workspace timeout, allowed tools, and
 network mode live in `AgentTaskView`; they are not model decoding settings.
 
+Reusable decoding configs live under `configs/decoding/` and use the same
+schema as `DecodingConfig`. Eval configs reference them by path from
+`agent_model` policies.
+
+## Model Config
+
+Model configs describe provider identity and adapter capabilities, not decoding
+behavior:
+
+```text
+version: model_config_v0
+provider: openai_compatible_chat
+model_id: str
+api_key_env: str | None
+base_url_env: str | None
+capabilities:
+  token_usage: native | unavailable
+  supports_seed: bool
+  supports_stop: bool
+  supports_top_k: bool
+```
+
+The config stores environment variable names, never secret values. Eval configs
+reference model configs by path from `agent_model` policies.
+
 ## Model Response
 
 `ModelResponse` records one provider generation result:

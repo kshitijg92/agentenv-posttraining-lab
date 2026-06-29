@@ -106,6 +106,8 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     selected_policy = select_policy(config, policy)
+    if selected_policy.type == "agent_model":
+        raise NotImplementedError("agent_model eval execution is not implemented yet")
     config_hash = _hash_file(config_path)
     eval_run_id = f"eval_{uuid4().hex}"
     created_at = _utc_now()
@@ -586,13 +588,25 @@ def _policy_metadata(config: EvalConfig, policy_name: str) -> dict[str, object]:
             "control_name": policy.control,
             **common_metadata,
         }
-    return {
-        "policy_type": policy.type,
-        "policy_family": "control",
-        "control_layer": "agent",
-        "control_name": policy.control,
-        **common_metadata,
-    }
+    if policy.type == "agent_control_script":
+        return {
+            "policy_type": policy.type,
+            "policy_family": "control",
+            "control_layer": "agent",
+            "control_name": policy.control,
+            **common_metadata,
+        }
+    if policy.type == "agent_model":
+        return {
+            "policy_type": policy.type,
+            "policy_family": "agent",
+            "control_layer": None,
+            "control_name": None,
+            "model_config": policy.model_config_path,
+            "decoding_config": policy.decoding_config_path,
+            **common_metadata,
+        }
+    raise AssertionError(f"Unhandled eval policy type: {policy.type}")
 
 
 def _eval_attempt_record(

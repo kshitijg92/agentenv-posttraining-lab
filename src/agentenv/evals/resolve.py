@@ -85,6 +85,28 @@ def agent_control_script_path(
     return script_path
 
 
+def resolve_config_file_ref(
+    config_path: Path,
+    ref: str,
+    *,
+    field_name: str,
+) -> Path:
+    relative_to_config = (config_path.parent / ref).resolve()
+    relative_to_cwd = Path(ref).resolve()
+    candidate_paths = _unique_paths([relative_to_config, relative_to_cwd])
+
+    for candidate_path in candidate_paths:
+        if candidate_path.is_file():
+            return candidate_path
+        if candidate_path.exists():
+            raise ValueError(
+                f"{field_name} path is not a file: {candidate_path}"
+            )
+
+    candidates = ", ".join(str(path) for path in candidate_paths)
+    raise ValueError(f"{field_name} path does not exist: {ref} ({candidates})")
+
+
 def _resolve_eval_task(
     task_pack_path: Path,
     config: EvalConfig,
@@ -113,3 +135,11 @@ def _find_task_manifest(
         if manifest.id == task_id:
             return manifest_path, manifest
     raise ValueError(f"Task id {task_id!r} not found in task pack {task_pack_path}")
+
+
+def _unique_paths(paths: list[Path]) -> list[Path]:
+    unique_paths: list[Path] = []
+    for path in paths:
+        if path not in unique_paths:
+            unique_paths.append(path)
+    return unique_paths

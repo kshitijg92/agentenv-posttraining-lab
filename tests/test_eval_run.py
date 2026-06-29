@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.eval_run import (
     run_eval_config,
@@ -13,6 +15,34 @@ from agentenv.tracing.validate import load_trace_events, validate_trace_file
 CONTROL_EVAL_CONFIG = Path("configs/eval/scorer_control_policies.yaml")
 AGENT_CONTROL_EVAL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
 DEV_BASELINE_EVAL_CONFIG = Path("configs/eval/dev_baseline.yaml")
+
+
+def _write_agent_model_eval_config(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "name: agent_model_smoke",
+                "task_pack: data/task_packs/repo_patch_python_v0",
+                "tasks:",
+                "  - toy_python_fix_001",
+                "split: practice",
+                "policies:",
+                "  real-agent-smoke:",
+                "    type: agent_model",
+                "    model_config: configs/models/openai_compatible_chat_placeholder.yaml",
+                "    decoding_config: configs/decoding/greedy_1024.yaml",
+                "    attempts: 2",
+                "    replay:",
+                "      repeats: 0",
+                "trace:",
+                "  version: trace_v0",
+                "  capture_stdout: true",
+                "  capture_stderr: true",
+                "  capture_diff: true",
+                "",
+            ]
+        )
+    )
 
 
 def test_control_eval_config_loads() -> None:
@@ -59,18 +89,49 @@ def test_agent_control_eval_config_loads() -> None:
         "agent-malformed",
         "agent-recoverable",
     ]
-    assert config.policies["agent-happy"].type == "agent_control_script"
-    assert config.policies["agent-happy"].control == "happy"
-    assert config.policies["agent-happy"].attempts == 1
-    assert config.policies["agent-happy"].replay.repeats == 1
-    assert config.policies["agent-malformed"].control == "malformed"
-    assert config.policies["agent-recoverable"].control == "recoverable"
+    happy_policy = config.policies["agent-happy"]
+    malformed_policy = config.policies["agent-malformed"]
+    recoverable_policy = config.policies["agent-recoverable"]
+    assert happy_policy.type == "agent_control_script"
+    assert malformed_policy.type == "agent_control_script"
+    assert recoverable_policy.type == "agent_control_script"
+    assert happy_policy.control == "happy"
+    assert happy_policy.attempts == 1
+    assert happy_policy.replay.repeats == 1
+    assert malformed_policy.control == "malformed"
+    assert recoverable_policy.control == "recoverable"
 
 
 def test_agent_control_eval_config_paths_are_valid() -> None:
     config = load_eval_config(AGENT_CONTROL_EVAL_CONFIG)
 
     validate_eval_config_paths(config, AGENT_CONTROL_EVAL_CONFIG)
+
+
+def test_agent_model_eval_config_loads_and_validates_paths(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent_model_eval.yaml"
+    _write_agent_model_eval_config(config_path)
+
+    config = load_eval_config(config_path)
+
+    policy = config.policies["real-agent-smoke"]
+    assert policy.type == "agent_model"
+    assert (
+        policy.model_config_path
+        == "configs/models/openai_compatible_chat_placeholder.yaml"
+    )
+    assert policy.decoding_config_path == "configs/decoding/greedy_1024.yaml"
+    assert policy.attempts == 2
+    assert policy.replay.repeats == 0
+    validate_eval_config_paths(config, config_path)
+
+
+def test_agent_model_eval_execution_is_not_wired_yet(tmp_path: Path) -> None:
+    config_path = tmp_path / "agent_model_eval.yaml"
+    _write_agent_model_eval_config(config_path)
+
+    with pytest.raises(NotImplementedError, match="agent_model eval execution"):
+        run_eval_config(config_path, "real-agent-smoke", tmp_path / "eval")
 
 
 def test_run_eval_config_writes_agent_control_happy_manifest(
