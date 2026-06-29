@@ -60,11 +60,13 @@ def test_model_response_accepts_error_with_error_class() -> None:
         finish_reason="error",
         latency_ms=0,
         error_class="ProviderError",
+        error_message="HTTP 429 code=insufficient_quota",
         raw_response_ref="raw_response.json",
     )
 
     assert response.finish_reason == "error"
     assert response.error_class == "ProviderError"
+    assert response.error_message == "HTTP 429 code=insufficient_quota"
 
 
 def test_model_response_requires_error_class_for_timeout_or_error() -> None:
@@ -90,7 +92,7 @@ def test_model_response_requires_error_class_for_timeout_or_error() -> None:
 def test_model_response_rejects_error_class_for_successful_finish_reason() -> None:
     with pytest.raises(
         ValidationError,
-        match="stop_criteria_met responses cannot include error_class",
+        match="stop_criteria_met responses cannot include error details",
     ):
         ModelResponse(
             model_id="fake-scripted-v0",
@@ -103,7 +105,7 @@ def test_model_response_rejects_error_class_for_successful_finish_reason() -> No
 
     with pytest.raises(
         ValidationError,
-        match="max_new_tokens_reached responses cannot include error_class",
+        match="max_new_tokens_reached responses cannot include error details",
     ):
         ModelResponse(
             model_id="fake-scripted-v0",
@@ -158,6 +160,7 @@ def test_model_response_requires_total_tokens_when_prompt_and_completion_are_kno
         ("completion_tokens", -1),
         ("total_tokens", -1),
         ("error_class", ""),
+        ("error_message", ""),
         ("raw_response_ref", ""),
     ],
 )
@@ -175,6 +178,9 @@ def test_model_response_rejects_invalid_field_values(
     payload[field_name] = value
     if field_name == "error_class":
         payload["finish_reason"] = "error"
+    if field_name == "error_message":
+        payload["finish_reason"] = "error"
+        payload["error_class"] = "ProviderError"
 
     with pytest.raises(ValidationError):
         ModelResponse.model_validate(payload)

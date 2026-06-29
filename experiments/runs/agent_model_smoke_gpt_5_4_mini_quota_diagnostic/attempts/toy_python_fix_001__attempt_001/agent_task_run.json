@@ -1,0 +1,16 @@
+{
+  "run_id": "agent_task_run_761e38e51a8a46d3b07cbded57f79a02",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+  "status": "agent_loop_failed",
+  "prompt_loop_status": "model_error",
+  "candidate_patch_path": null,
+  "candidate_patch_hash": null,
+  "attempt_result": null,
+  "error_class": "ProviderHTTPError",
+  "error_message": "Model generation stopped with finish_reason=error. HTTP 429 type=insufficient_quota code=insufficient_quota message=You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.",
+  "started_at": "2026-06-29T05:53:36.022567Z",
+  "ended_at": "2026-06-29T05:53:36.416762Z",
+  "duration_ms": 394,
+  "orchestrator_version": "agent_task_run_v0"
+}

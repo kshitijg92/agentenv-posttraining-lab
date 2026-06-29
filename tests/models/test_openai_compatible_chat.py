@@ -251,6 +251,7 @@ def test_openai_compatible_chat_maps_http_error(
 
     assert response.finish_reason == "error"
     assert response.error_class == "ProviderHTTPError"
+    assert response.error_message == "HTTP 500 message=boom"
 
 
 def test_openai_compatible_chat_maps_timeout(

@@ -79,6 +79,7 @@ class ModelResponse(BaseModel):
     completion_tokens: int | None = Field(default=None, ge=0)
     total_tokens: int | None = Field(default=None, ge=0)
     error_class: str | None = Field(default=None, min_length=1)
+    error_message: str | None = Field(default=None, min_length=1)
     raw_response_ref: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -98,8 +99,8 @@ class ModelResponse(BaseModel):
                 )
             return self
 
-        if self.error_class is not None:
+        if self.error_class is not None or self.error_message is not None:
             raise ValueError(
-                f"{self.finish_reason} responses cannot include error_class"
+                f"{self.finish_reason} responses cannot include error details"
             )
         return self

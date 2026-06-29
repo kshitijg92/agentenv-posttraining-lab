@@ -1,0 +1,18 @@
+name: agent_model_smoke_gpt_5_4_mini
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - toy_python_fix_001
+split: practice
+policies:
+  real-agent-smoke:
+    type: agent_model
+    model_config: configs/models/openai_compatible_chat_gpt_5_4_mini.yaml
+    decoding_config: configs/decoding/greedy_1024.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

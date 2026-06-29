@@ -67,7 +67,12 @@ class OpenAICompatibleChatModelClient:
             return _error_response(self.model_id, started, "ProviderRequestError")
 
         if response.status_code >= 400:
-            return _error_response(self.model_id, started, "ProviderHTTPError")
+            return _error_response(
+                self.model_id,
+                started,
+                "ProviderHTTPError",
+                error_message=_provider_http_error_message(response),
+            )
 
         try:
             payload = response.json()
@@ -245,6 +250,44 @@ def _token_usage(
     }
 
 
+def _provider_http_error_message(response: httpx.Response) -> str:
+    parts = [f"HTTP {response.status_code}"]
+    try:
+        payload = response.json()
+    except ValueError:
+        return " ".join(parts)
+
+    if not isinstance(payload, dict):
+        return " ".join(parts)
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return " ".join(parts)
+
+    for field_name in ("type", "code", "param", "message"):
+        field_value = _clean_error_fragment(error.get(field_name))
+        if field_value is not None:
+            parts.append(f"{field_name}={field_value}")
+
+    return _truncate_error_message(" ".join(parts))
+
+
+def _clean_error_fragment(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    text = " ".join(text.split())
+    if not text:
+        return None
+    return text
+
+
+def _truncate_error_message(message: str) -> str:
+    max_length = 1000
+    if len(message) <= max_length:
+        return message
+    return f"{message[:max_length - 3]}..."
+
+
 def _optional_int(value: object) -> int | None:
     if value is None:
         return None
@@ -307,6 +350,7 @@ def _error_response(
     started: float,
     error_class: str,
     *,
+    error_message: str | None = None,
     raw_response_ref: str = _RAW_RESPONSE_REF,
 ) -> ModelResponse:
     return ModelResponse(
@@ -315,6 +359,7 @@ def _error_response(
         finish_reason="error",
         latency_ms=_latency_ms(started),
         error_class=error_class,
+        error_message=error_message,
         raw_response_ref=raw_response_ref,
     )
 
