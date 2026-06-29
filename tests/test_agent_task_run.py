@@ -272,6 +272,11 @@ def test_run_and_persist_agent_task_attempt_keeps_scratch_out_of_artifacts(
         run_manifest["artifacts"]["agent_control_script"]
         == "agent_control_script.json"
     )
+    decoding_artifact = json.loads((out_dir / "decoding_config.json").read_text())
+    assert decoding_artifact["source_path"] is None
+    assert decoding_artifact["source_hash"] is None
+    assert decoding_artifact["config"]["max_new_tokens"] == 512
+    assert decoding_artifact["config"]["timeout_seconds"] == 30
     assert json.loads((out_dir / "agent_control_script.json").read_text()) == (
         agent_control_script
     )

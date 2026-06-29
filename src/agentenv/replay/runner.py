@@ -406,7 +406,7 @@ def _replay_agent_task_run_artifact(
         source_run_dir / AGENT_CONTROL_SCRIPT_ARTIFACT
     )
     decoding_config = DecodingConfig.model_validate(
-        _load_json_object(source_run_dir / DECODING_CONFIG_ARTIFACT)
+        _config_payload(_load_json_object(source_run_dir / DECODING_CONFIG_ARTIFACT))
     )
     model_client = ScriptedFakeModelClient(
         model_id=_source_agent_model_id(source_run_dir),
@@ -812,6 +812,13 @@ def _load_json_object(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         raise ValueError(f"Expected JSON object at {path}")
     return raw
+
+
+def _config_payload(value: dict[str, object]) -> dict[str, object]:
+    config = value.get("config")
+    if isinstance(config, dict):
+        return config
+    return value
 
 
 def _require_supported_source_manifest(

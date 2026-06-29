@@ -1102,7 +1102,9 @@ def _matrix_attempts_with_artifacts(
 
 def _agent_artifact_summary(artifact_dir: Path) -> dict[str, object]:
     prompt_loop = _load_optional_json_object(artifact_dir / "prompt_loop_result.json")
-    decoding_config = _load_optional_json_object(artifact_dir / "decoding_config.json")
+    decoding_config = _config_payload(
+        _load_optional_json_object(artifact_dir / "decoding_config.json")
+    )
     agent_task_view = _load_optional_json_object(artifact_dir / "agent_task_view.json")
     model_responses = _object_list(_field(prompt_loop, "model_responses"))
     tool_results = _object_list(_field(prompt_loop, "tool_results"))
@@ -1133,6 +1135,15 @@ def _load_optional_json_object(path: Path) -> dict[str, object] | None:
     if not path.is_file():
         return None
     return _load_json_object(path)
+
+
+def _config_payload(value: dict[str, object] | None) -> dict[str, object] | None:
+    if value is None:
+        return None
+    config = value.get("config")
+    if isinstance(config, dict):
+        return config
+    return value
 
 
 def _object_list(value: object) -> list[dict[str, object]]:

@@ -25,6 +25,7 @@ from agentenv.models.factory import build_model_client
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_run import (
     AgentTaskRunResult,
+    decoding_config_provenance_artifact,
     model_config_provenance_artifact,
     run_and_persist_agent_task_attempt_to_dir,
 )
@@ -616,6 +617,11 @@ def _run_agent_model_eval_attempt(
             model_config=model_config,
             model_config_path=model_config_path,
             model_config_hash=_hash_file(model_config_path),
+        ),
+        decoding_config_provenance=decoding_config_provenance_artifact(
+            decoding_config=decoding_config,
+            decoding_config_path=decoding_config_path,
+            decoding_config_hash=_hash_file(decoding_config_path),
         ),
     )
     return EvalAttemptRecord(

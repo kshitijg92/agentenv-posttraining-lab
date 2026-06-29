@@ -224,6 +224,7 @@ def run_and_persist_agent_task_attempt_to_dir(
     *,
     agent_control_script: BaseModel | dict[str, Any] | None = None,
     model_config_provenance: dict[str, Any] | None = None,
+    decoding_config_provenance: dict[str, Any] | None = None,
 ) -> AgentTaskRun:
     agent_task_run = run_agent_task_attempt(
         task_manifest_path,
@@ -236,6 +237,7 @@ def run_and_persist_agent_task_attempt_to_dir(
         decoding_config=decoding_config,
         agent_control_script=agent_control_script,
         model_config_provenance=model_config_provenance,
+        decoding_config_provenance=decoding_config_provenance,
     )
     return agent_task_run
 
@@ -247,6 +249,7 @@ def write_agent_task_run_artifacts(
     decoding_config: DecodingConfig | None = None,
     agent_control_script: BaseModel | dict[str, Any] | None = None,
     model_config_provenance: dict[str, Any] | None = None,
+    decoding_config_provenance: dict[str, Any] | None = None,
 ) -> AgentTaskRunArtifactPaths:
     out_dir.mkdir(parents=True, exist_ok=True)
     run_manifest_path = out_dir / "run_manifest.json"
@@ -284,7 +287,14 @@ def write_agent_task_run_artifacts(
 
     agent_task_run_path.write_text(agent_task_run.result.model_dump_json(indent=2) + "\n")
     if decoding_config_path is not None and decoding_config is not None:
-        decoding_config_path.write_text(decoding_config.model_dump_json(indent=2) + "\n")
+        decoding_artifact = (
+            decoding_config_provenance
+            if decoding_config_provenance is not None
+            else generated_decoding_config_provenance_artifact(decoding_config)
+        )
+        decoding_config_path.write_text(
+            json.dumps(decoding_artifact, indent=2, sort_keys=True) + "\n"
+        )
     if model_config_path is not None and model_config_provenance is not None:
         model_config_path.write_text(
             json.dumps(model_config_provenance, indent=2, sort_keys=True) + "\n"
@@ -348,6 +358,29 @@ def model_config_provenance_artifact(
         "source_path": str(model_config_path),
         "source_hash": model_config_hash,
         "config": json.loads(model_config.model_dump_json()),
+    }
+
+
+def decoding_config_provenance_artifact(
+    *,
+    decoding_config: DecodingConfig,
+    decoding_config_path: Path,
+    decoding_config_hash: str,
+) -> dict[str, Any]:
+    return {
+        "source_path": str(decoding_config_path),
+        "source_hash": decoding_config_hash,
+        "config": json.loads(decoding_config.model_dump_json()),
+    }
+
+
+def generated_decoding_config_provenance_artifact(
+    decoding_config: DecodingConfig,
+) -> dict[str, Any]:
+    return {
+        "source_path": None,
+        "source_hash": None,
+        "config": json.loads(decoding_config.model_dump_json()),
     }
 
 

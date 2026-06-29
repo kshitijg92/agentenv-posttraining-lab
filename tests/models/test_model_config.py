@@ -5,7 +5,11 @@ from pydantic import ValidationError
 
 from agentenv.models.config import load_decoding_config, load_model_config
 from agentenv.models.config_schema import OpenAICompatibleChatModelConfig
-from agentenv.orchestrators.agent_task_run import model_config_provenance_artifact
+from agentenv.orchestrators.agent_task_run import (
+    decoding_config_provenance_artifact,
+    generated_decoding_config_provenance_artifact,
+    model_config_provenance_artifact,
+)
 
 
 MODEL_CONFIG = Path("configs/models/openai_compatible_chat_placeholder.yaml")
@@ -64,6 +68,32 @@ def test_model_config_provenance_artifact_records_sanitized_config() -> None:
         "provider": "openai_compatible_chat",
         "version": "model_config_v0",
     }
+
+
+def test_file_backed_decoding_config_provenance_artifact_records_source() -> None:
+    config = load_decoding_config(DECODING_CONFIG)
+
+    artifact = decoding_config_provenance_artifact(
+        decoding_config=config,
+        decoding_config_path=DECODING_CONFIG,
+        decoding_config_hash="xxh64:testhash",
+    )
+
+    assert artifact["source_path"] == str(DECODING_CONFIG)
+    assert artifact["source_hash"] == "xxh64:testhash"
+    assert artifact["config"]["max_new_tokens"] == 1024
+    assert artifact["config"]["timeout_seconds"] == 60
+
+
+def test_generated_decoding_config_provenance_artifact_records_null_source() -> None:
+    config = load_decoding_config(DECODING_CONFIG)
+
+    artifact = generated_decoding_config_provenance_artifact(config)
+
+    assert artifact["source_path"] is None
+    assert artifact["source_hash"] is None
+    assert artifact["config"]["max_new_tokens"] == 1024
+    assert artifact["config"]["timeout_seconds"] == 60
 
 
 @pytest.mark.parametrize("env_var_name", ["1BAD", "BAD-NAME", "BAD NAME"])

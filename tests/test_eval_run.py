@@ -169,6 +169,15 @@ def test_agent_model_eval_records_missing_model_env_failure(
     assert not (attempt_dir / "agent_control_script.json").exists()
     assert not (attempt_dir / "candidate.patch").exists()
     assert not (attempt_dir / "attempt").exists()
+    decoding_config_provenance = json.loads(
+        (attempt_dir / "decoding_config.json").read_text()
+    )
+    assert decoding_config_provenance["source_path"].endswith(
+        "configs/decoding/greedy_1024.yaml"
+    )
+    assert decoding_config_provenance["source_hash"].startswith("xxh64:")
+    assert decoding_config_provenance["config"]["max_new_tokens"] == 1024
+    assert decoding_config_provenance["config"]["timeout_seconds"] == 60
     prompt_loop_result = json.loads(
         (attempt_dir / "prompt_loop_result.json").read_text()
     )
@@ -259,6 +268,11 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
     assert (attempt_dir / "attempt/attempt.json").is_file()
     assert (attempt_dir / "decoding_config.json").is_file()
     assert (attempt_dir / "agent_control_script.json").is_file()
+    decoding_config = json.loads((attempt_dir / "decoding_config.json").read_text())
+    assert decoding_config["source_path"] is None
+    assert decoding_config["source_hash"] is None
+    assert decoding_config["config"]["max_new_tokens"] == 512
+    assert decoding_config["config"]["timeout_seconds"] == 30
     validate_trace_file(tmp_path / "eval/trace.jsonl")
     trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
     assert trace_events[3].output_payload is not None
