@@ -19,6 +19,7 @@ uv run agentenv report --help
 uv run agentenv scorers --help
 uv run agentenv controls --help
 uv run agentenv sandbox --help
+uv run agentenv local-model --help
 ```
 
 ## Validate A Task Pack Or Task
@@ -231,6 +232,48 @@ configured image.
 
 This is only a smoke check for Docker startup and `--network none`; it is not a
 production sandbox guarantee.
+
+## Set Up A Local Ollama Model
+
+Print the recommended local Qwen/Ollama setup plan:
+
+```bash
+uv run agentenv local-model ollama plan
+```
+
+Probe whether Ollama is installed and whether its local API is running:
+
+```bash
+uv run agentenv local-model ollama probe
+```
+
+Download the default local model through Ollama:
+
+```bash
+uv run agentenv local-model ollama pull
+```
+
+Run a direct OpenAI-compatible local API smoke:
+
+```bash
+uv run agentenv local-model ollama smoke
+```
+
+Once Ollama is running, point the eval adapter at its OpenAI-compatible
+endpoint:
+
+```bash
+export AGENTENV_MODEL_BASE_URL=http://localhost:11434/v1
+```
+
+Then run the local Qwen agent-model smoke:
+
+```bash
+uv run agentenv eval \
+  --config configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml \
+  --policy local-qwen-smoke \
+  --out experiments/runs/agent_model_smoke_ollama_qwen3_14b
+```
 
 ## Run Repo Checks
 

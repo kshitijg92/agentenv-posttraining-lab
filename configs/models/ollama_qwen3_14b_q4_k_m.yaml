@@ -1,0 +1,10 @@
+version: model_config_v0
+provider: openai_compatible_chat
+model_id: hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
+api_key_env: null
+base_url_env: AGENTENV_MODEL_BASE_URL
+capabilities:
+  token_usage: native
+  supports_seed: false
+  supports_stop: true
+  supports_top_k: false

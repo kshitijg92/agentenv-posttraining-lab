@@ -6,6 +6,15 @@ from rich.console import Console
 from agentenv.agents.audit import run_agent_task_audit
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.controls.controls_run import run_controls
+from agentenv.local_model_setup.ollama import (
+    DEFAULT_MODEL_ID,
+    DEFAULT_OPENAI_BASE_URL,
+    DEFAULT_SERVER_URL,
+    pull_model,
+    render_setup_plan,
+    run_chat_smoke,
+    serve_command,
+)
 from agentenv.orchestrators.eval_run import (
     EvalMatrixRun,
     EvalRun,
@@ -30,12 +39,16 @@ agents_app = typer.Typer(no_args_is_help=True)
 controls_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
+local_model_app = typer.Typer(no_args_is_help=True)
+ollama_app = typer.Typer(no_args_is_help=True)
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(attempt_app, name="attempt")
 app.add_typer(agents_app, name="agents")
 app.add_typer(controls_app, name="controls")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
+app.add_typer(local_model_app, name="local-model")
+local_model_app.add_typer(ollama_app, name="ollama")
 
 console = Console()
 
@@ -130,6 +143,99 @@ def smoke_sandbox(
     style = "green" if result.status == "PASS" else "red"
     console.print(f"[{style}]docker smoke {result.status}[/{style}]")
     console.print(f"wrote {result.out_dir / 'docker_smoke.md'}")
+
+
+@ollama_app.command("plan")
+def plan_ollama(
+    model_id: str = typer.Option(
+        DEFAULT_MODEL_ID,
+        "--model",
+        help="Ollama/Hugging Face model id.",
+    ),
+) -> None:
+    console.print(render_setup_plan(model_id=model_id))
+
+
+@ollama_app.command("probe")
+def probe_ollama_server(
+    server_url: str = typer.Option(
+        DEFAULT_SERVER_URL,
+        "--server-url",
+        help="Ollama server URL.",
+    ),
+) -> None:
+    from agentenv.local_model_setup.ollama import probe_ollama
+
+    probe = probe_ollama(server_url=server_url)
+    installed = "yes" if probe.ollama_path is not None else "no"
+    running = "yes" if probe.server_running else "no"
+    console.print(f"ollama_installed={installed}")
+    if probe.ollama_path is not None:
+        console.print(f"ollama_path={probe.ollama_path}")
+    console.print(f"server_url={probe.server_url}")
+    console.print(f"server_running={running}")
+    if probe.version is not None:
+        console.print(f"version={probe.version}")
+    if probe.model_ids:
+        console.print("models=" + ",".join(probe.model_ids))
+    if probe.error_class is not None:
+        console.print(f"error_class={probe.error_class}")
+        console.print(f"error_message={probe.error_message}")
+
+
+@ollama_app.command("pull")
+def pull_ollama_model(
+    model_id: str = typer.Option(
+        DEFAULT_MODEL_ID,
+        "--model",
+        help="Ollama/Hugging Face model id.",
+    ),
+    timeout_seconds: int = typer.Option(
+        3600,
+        "--timeout-seconds",
+        help="Download timeout.",
+    ),
+) -> None:
+    result = pull_model(model_id=model_id, timeout_seconds=timeout_seconds)
+    style = "green" if result.returncode == 0 else "red"
+    console.print(f"[{style}]ollama pull exited {result.returncode}[/{style}]")
+    console.print("command=" + " ".join(result.command))
+    if result.stdout:
+        console.print(result.stdout)
+    if result.stderr:
+        console.print(result.stderr)
+
+
+@ollama_app.command("smoke")
+def smoke_ollama_openai_api(
+    model_id: str = typer.Option(
+        DEFAULT_MODEL_ID,
+        "--model",
+        help="Ollama/Hugging Face model id.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_OPENAI_BASE_URL,
+        "--base-url",
+        help="OpenAI-compatible base URL.",
+    ),
+) -> None:
+    result = run_chat_smoke(model_id=model_id, base_url=base_url)
+    style = "green" if result.status == "ok" else "red"
+    console.print(f"[{style}]ollama smoke {result.status}[/{style}]")
+    console.print(f"model_id={result.model_id}")
+    console.print(f"base_url={result.base_url}")
+    if result.finish_reason is not None:
+        console.print(f"finish_reason={result.finish_reason}")
+    if result.output_text:
+        console.print(result.output_text)
+    if result.error_class is not None:
+        console.print(f"error_class={result.error_class}")
+        console.print(f"error_message={result.error_message}")
+
+
+@ollama_app.command("serve-command")
+def print_ollama_serve_command() -> None:
+    console.print(" ".join(serve_command()))
 
 
 @app.command("eval")
