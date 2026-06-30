@@ -1,12 +1,28 @@
 import pytest
 from pydantic import ValidationError
 
+from agentenv.tools.schema import ListFilesInput, ListFilesOutput
 from agentenv.tools.schema import ReadFileInput, ReadFileOutput
 from agentenv.tools.schema import RunTestsInput, RunTestsOutput
 from agentenv.tools.schema import TOOL_REGISTRY
 from agentenv.tools.schema import ToolResult
 from agentenv.tools.schema import WriteFileInput, WriteFileOutput
 from agentenv.tools.schema import validate_tool_input
+
+
+def test_validate_tool_input_accepts_list_files() -> None:
+    tool_input = validate_tool_input(
+        "list_files",
+        {"path": ".", "max_depth": 2, "max_files": 50},
+    )
+
+    assert tool_input == ListFilesInput(path=".", max_depth=2, max_files=50)
+
+
+def test_validate_tool_input_accepts_list_files_defaults() -> None:
+    tool_input = validate_tool_input("list_files", {})
+
+    assert tool_input == ListFilesInput()
 
 
 def test_validate_tool_input_accepts_read_file() -> None:
@@ -42,6 +58,12 @@ def test_validate_tool_input_accepts_run_tests() -> None:
 @pytest.mark.parametrize(
     ("tool_name", "arguments"),
     [
+        ("list_files", {"path": ""}),
+        ("list_files", {"path": ".", "max_depth": -1}),
+        ("list_files", {"path": ".", "max_depth": 21}),
+        ("list_files", {"path": ".", "max_files": 0}),
+        ("list_files", {"path": ".", "max_files": 1001}),
+        ("list_files", {"path": ".", "include_dirs": True}),
         ("read_file", {}),
         ("read_file", {"path": ""}),
         ("read_file", {"path": "src/foo.py", "content": "not allowed"}),
@@ -67,8 +89,15 @@ def test_validate_tool_input_rejects_unknown_tool_name() -> None:
 
 
 def test_tool_registry_links_names_to_input_and_output_models() -> None:
-    assert sorted(TOOL_REGISTRY) == ["read_file", "run_tests", "write_file"]
+    assert sorted(TOOL_REGISTRY) == [
+        "list_files",
+        "read_file",
+        "run_tests",
+        "write_file",
+    ]
 
+    assert TOOL_REGISTRY["list_files"].input_model is ListFilesInput
+    assert TOOL_REGISTRY["list_files"].output_model is ListFilesOutput
     assert TOOL_REGISTRY["read_file"].input_model is ReadFileInput
     assert TOOL_REGISTRY["read_file"].output_model is ReadFileOutput
     assert TOOL_REGISTRY["write_file"].input_model is WriteFileInput
@@ -102,6 +131,10 @@ def test_write_file_tool_is_described_as_full_file_replacement() -> None:
 
 
 def test_tool_output_schemas_accept_valid_outputs() -> None:
+    list_output = ListFilesOutput(
+        files=["pyproject.toml", "src/mathlib.py"],
+        truncated=False,
+    )
     read_output = ReadFileOutput(
         content="file contents",
         bytes_read=13,
@@ -110,6 +143,7 @@ def test_tool_output_schemas_accept_valid_outputs() -> None:
     write_output = WriteFileOutput(bytes_written=18)
     run_tests_output = RunTestsOutput(passed=True)
 
+    assert list_output.files == ["pyproject.toml", "src/mathlib.py"]
     assert read_output.content == "file contents"
     assert read_output.bytes_read == 13
     assert write_output.bytes_written == 18
@@ -119,6 +153,7 @@ def test_tool_output_schemas_accept_valid_outputs() -> None:
 @pytest.mark.parametrize(
     ("output_model", "payload"),
     [
+        (ListFilesOutput, {"files": ["x.py"], "extra": "not allowed"}),
         (ReadFileOutput, {"content": "x", "bytes_read": -1}),
         (ReadFileOutput, {"content": "x", "bytes_read": 1, "path": "src/foo.py"}),
         (WriteFileOutput, {"bytes_written": -1}),
@@ -127,7 +162,12 @@ def test_tool_output_schemas_accept_valid_outputs() -> None:
     ],
 )
 def test_tool_output_schemas_reject_invalid_outputs(
-    output_model: type[ReadFileOutput] | type[WriteFileOutput] | type[RunTestsOutput],
+    output_model: (
+        type[ListFilesOutput]
+        | type[ReadFileOutput]
+        | type[WriteFileOutput]
+        | type[RunTestsOutput]
+    ),
     payload: dict[str, object],
 ) -> None:
     with pytest.raises(ValidationError):
@@ -157,6 +197,22 @@ def test_tool_result_accepts_successful_read_file_result() -> None:
     assert result.stdout == ""
     assert result.stderr == ""
     assert result.error_class is None
+
+
+def test_tool_result_accepts_successful_list_files_result() -> None:
+    result = ToolResult(
+        tool_name="list_files",
+        input_hash="xxh64:list123",
+        status="ok",
+        output=ListFilesOutput(files=["src/mathlib.py"], truncated=False),
+        duration_ms=2,
+    )
+
+    assert result.status == "ok"
+    assert result.output == ListFilesOutput(
+        files=["src/mathlib.py"],
+        truncated=False,
+    )
 
 
 def test_tool_result_accepts_successful_run_tests_result() -> None:

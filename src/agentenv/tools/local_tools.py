@@ -12,6 +12,8 @@ from agentenv.runners.command_runner import run_shell
 from agentenv.security.secrets import redact_secrets
 from agentenv.tools.schema import (
     TOOL_REGISTRY,
+    ListFilesInput,
+    ListFilesOutput,
     ReadFileInput,
     ReadFileOutput,
     RunTestsInput,
@@ -62,6 +64,14 @@ def execute_tool(
         )
 
     input_hash = _validated_input_hash(tool_input)
+    if tool_name == "list_files":
+        return _execute_list_files(
+            tool_name=tool_name,
+            tool_input=tool_input,
+            agent_task_view=agent_task_view,
+            input_hash=input_hash,
+            started=started,
+        )
     if tool_name == "read_file":
         return _execute_read_file(
             tool_name=tool_name,
@@ -84,6 +94,70 @@ def execute_tool(
         agent_task_view=agent_task_view,
         input_hash=input_hash,
         started=started,
+    )
+
+
+_NOISY_DIRECTORY_NAMES = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+}
+
+
+def _execute_list_files(
+    *,
+    tool_name: str,
+    tool_input: ToolInput,
+    agent_task_view: AgentTaskView,
+    input_hash: str,
+    started: float,
+) -> ToolResult:
+    if not isinstance(tool_input, ListFilesInput):
+        return _unexpected_input_result(tool_name, input_hash, started)
+
+    resolved_path = _resolve_workspace_path(
+        agent_task_view.workspace_path,
+        tool_input.path,
+    )
+    if resolved_path is None:
+        return _unsafe_path_result(tool_name, input_hash, started, tool_input.path)
+    if not resolved_path.is_dir():
+        return _error_result(
+            tool_name=tool_name,
+            input_hash=input_hash,
+            started=started,
+            error_class="ToolExecutionError",
+            error_message=f"Path is not a directory: {tool_input.path}",
+        )
+
+    try:
+        files, truncated = _list_workspace_files(
+            root=agent_task_view.workspace_path.resolve(),
+            start=resolved_path,
+            max_depth=tool_input.max_depth,
+            max_files=tool_input.max_files,
+        )
+    except Exception as exc:
+        return _error_result(
+            tool_name=tool_name,
+            input_hash=input_hash,
+            started=started,
+            error_class="ToolExecutionError",
+            error_message=str(exc),
+        )
+
+    return ToolResult(
+        tool_name=tool_name,
+        input_hash=input_hash,
+        status="ok",
+        output=ListFilesOutput(files=files, truncated=truncated),
+        duration_ms=_duration_ms(started),
     )
 
 
@@ -282,6 +356,40 @@ def _unsafe_path_result(
         error_class="UnsafePath",
         error_message=f"Path is outside the workspace: {path}",
     )
+
+
+def _list_workspace_files(
+    *,
+    root: Path,
+    start: Path,
+    max_depth: int,
+    max_files: int,
+) -> tuple[list[str], bool]:
+    files: list[str] = []
+    truncated = False
+
+    def visit(directory: Path, depth: int) -> None:
+        nonlocal truncated
+        if len(files) >= max_files:
+            truncated = True
+            return
+
+        entries = sorted(directory.iterdir(), key=lambda path: path.name)
+        for entry in entries:
+            if len(files) >= max_files:
+                truncated = True
+                return
+            if entry.is_dir():
+                if entry.name in _NOISY_DIRECTORY_NAMES:
+                    continue
+                if depth < max_depth:
+                    visit(entry, depth + 1)
+                continue
+            if entry.is_file():
+                files.append(entry.relative_to(root).as_posix())
+
+    visit(start, 0)
+    return files, truncated
 
 
 def _resolve_workspace_path(workspace_path: Path, requested_path: str) -> Path | None:

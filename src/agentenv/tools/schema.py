@@ -4,8 +4,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
-ToolName = Literal["read_file", "write_file", "run_tests"]
+ToolName = Literal["list_files", "read_file", "write_file", "run_tests"]
 ToolResultStatus = Literal["ok", "error"]
+
+
+class ListFilesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(default=".", min_length=1)
+    max_depth: int = Field(default=4, ge=0, le=20)
+    max_files: int = Field(default=200, ge=1, le=1000)
 
 
 class ReadFileInput(BaseModel):
@@ -25,6 +33,13 @@ class RunTestsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     command: str = Field(min_length=1)
+
+
+class ListFilesOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    files: list[str]
+    truncated: bool = False
 
 
 class ReadFileOutput(BaseModel):
@@ -47,8 +62,8 @@ class RunTestsOutput(BaseModel):
     passed: bool
 
 
-ToolInput = ReadFileInput | WriteFileInput | RunTestsInput
-ToolOutput = ReadFileOutput | WriteFileOutput | RunTestsOutput
+ToolInput = ListFilesInput | ReadFileInput | WriteFileInput | RunTestsInput
+ToolOutput = ListFilesOutput | ReadFileOutput | WriteFileOutput | RunTestsOutput
 
 
 class ToolResult(BaseModel):
@@ -91,6 +106,16 @@ class ToolDefinition:
     example_arguments: Mapping[str, object]
 
 
+LIST_FILES_TOOL = ToolDefinition(
+    name="list_files",
+    description=(
+        "List files under a workspace-relative directory, with max_depth and "
+        "max_files limits."
+    ),
+    input_model=ListFilesInput,
+    output_model=ListFilesOutput,
+    example_arguments={"path": ".", "max_depth": 4, "max_files": 200},
+)
 READ_FILE_TOOL = ToolDefinition(
     name="read_file",
     description="Read a text file from the prepared task workspace.",
@@ -120,17 +145,21 @@ RUN_TESTS_TOOL = ToolDefinition(
     example_arguments={"command": "uv run pytest tests/test_public.py"},
 )
 TOOL_REGISTRY: dict[ToolName, ToolDefinition] = {
+    "list_files": LIST_FILES_TOOL,
     "read_file": READ_FILE_TOOL,
     "write_file": WRITE_FILE_TOOL,
     "run_tests": RUN_TESTS_TOOL,
 }
 
+_LIST_FILES_ADAPTER = TypeAdapter(ListFilesInput)
 _READ_FILE_ADAPTER = TypeAdapter(ReadFileInput)
 _WRITE_FILE_ADAPTER = TypeAdapter(WriteFileInput)
 _RUN_TESTS_ADAPTER = TypeAdapter(RunTestsInput)
 
 
 def validate_tool_input(tool_name: str, arguments: Mapping[str, object]) -> ToolInput:
+    if tool_name == "list_files":
+        return _LIST_FILES_ADAPTER.validate_python(arguments)
     if tool_name == "read_file":
         return _READ_FILE_ADAPTER.validate_python(arguments)
     if tool_name == "write_file":
@@ -141,6 +170,8 @@ def validate_tool_input(tool_name: str, arguments: Mapping[str, object]) -> Tool
 
 
 def _validate_output_matches_tool(tool_name: str, output: ToolOutput) -> None:
+    if tool_name == "list_files" and isinstance(output, ListFilesOutput):
+        return
     if tool_name == "read_file" and isinstance(output, ReadFileOutput):
         return
     if tool_name == "write_file" and isinstance(output, WriteFileOutput):

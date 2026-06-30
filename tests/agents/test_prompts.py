@@ -9,7 +9,7 @@ def _agent_task_view(tmp_path: Path) -> AgentTaskView:
         task_id="repair_jsonl_deduper",
         instruction="Fix the JSONL deduper.",
         workspace_path=tmp_path / "workspace",
-        allowed_tools=["read_file", "write_file", "run_tests"],
+        allowed_tools=["list_files", "read_file", "write_file", "run_tests"],
         public_checks=["uv run pytest tests/test_public.py"],
         max_turns=8,
         timeout_seconds=30,
@@ -44,9 +44,12 @@ def test_system_message_defines_strict_json_action_protocol(
     )
     assert '"action":"tool_call"' in system_message.content
     assert '"action":"final_answer"' in system_message.content
+    assert "- list_files: List files under" in system_message.content
     assert "- read_file: Read a text file" in system_message.content
     assert "- write_file: Replace the entire contents" in system_message.content
     assert "- run_tests: Run a test command" in system_message.content
+    assert '"max_depth":4' in system_message.content
+    assert '"max_files":200' in system_message.content
     assert '"arguments":{"path":"src/file.py"}' in system_message.content
     assert '"content":"entire replacement file contents..."' in system_message.content
     assert "Public checks are diagnostic only" in system_message.content

@@ -103,6 +103,7 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
     assert agent_task_run.result.attempt_result.hidden_status == "PASS"
     assert agent_task_run.agent_task_view is not None
     assert agent_task_run.agent_task_view.allowed_tools == [
+        "list_files",
         "read_file",
         "write_file",
         "run_tests",
@@ -168,7 +169,12 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
     assert agent_task_result["candidate_patch_hash"] == hash_diff(
         artifact_paths.candidate_patch.read_text()
     )
-    assert agent_task_view["allowed_tools"] == ["read_file", "write_file", "run_tests"]
+    assert agent_task_view["allowed_tools"] == [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+    ]
     assert prompt_loop_result["status"] == "completed"
     assert attempt_result["status"] == "PASS"
     assert artifact_paths.candidate_patch.read_text() == agent_task_run.candidate_patch

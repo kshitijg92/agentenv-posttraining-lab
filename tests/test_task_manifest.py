@@ -23,7 +23,12 @@ def test_toy_python_fix_manifest_loads() -> None:
     assert manifest.id == "toy_python_fix_001"
     assert manifest.domain == "repo_patch_python"
     assert manifest.split == "practice"
-    assert manifest.allowed_tools == ["read_file", "write_file", "run_tests"]
+    assert manifest.allowed_tools == [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+    ]
     assert manifest.controls.scorer_control_patches.bad.noop == (
         "controls/scorer_control_patches/bad_noop.patch"
     )
@@ -103,7 +108,7 @@ def test_task_pack_validation_rejects_legacy_allowed_tools(
     manifest_path = task_pack / "tasks/toy_python_fix/task.yaml"
     manifest_path.write_text(
         manifest_path.read_text().replace(
-            'allowed_tools: ["read_file", "write_file", "run_tests"]',
+            'allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]',
             'allowed_tools: ["shell", "edit", "pytest"]',
         )
     )

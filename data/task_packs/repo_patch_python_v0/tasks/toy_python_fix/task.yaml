@@ -3,7 +3,7 @@ domain: repo_patch_python
 split: practice
 instruction: "Fix normalize_ratio so it returns numerator / denominator as a float for int and float inputs, and raises ValueError when denominator is zero."
 seed_workspace: seed_workspace
-allowed_tools: ["read_file", "write_file", "run_tests"]
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
 public_checks:
   - command: "uv run pytest tests/test_public.py"
 hidden_validators:

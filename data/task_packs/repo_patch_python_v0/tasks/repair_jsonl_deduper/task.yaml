@@ -3,7 +3,7 @@ domain: repo_patch_python
 split: dev
 instruction: "Fix dedupe_jsonl so it removes duplicate JSON object lines by the caller-supplied dedupe_key, preserves the first-seen record for each key value, returns a JSONL blob, and raises ValueError for malformed JSONL, non-object lines, or records missing the dedupe key."
 seed_workspace: seed_workspace
-allowed_tools: ["read_file", "write_file", "run_tests"]
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
 public_checks:
   - command: "uv run pytest tests/test_public.py"
 hidden_validators:
