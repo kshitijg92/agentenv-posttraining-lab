@@ -1,0 +1,68 @@
+{
+  "artifact_version": "eval_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "trace": "trace.jsonl"
+  },
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "agent": {
+        "candidate_patch_hash": "xxh64:ef46db3751d8e999",
+        "duration_ms": 3166,
+        "error_class": null,
+        "prompt_loop_status": "completed",
+        "run_id": "agent_task_run_6ed4818b60c74e6e99b6b8c056ef70a0",
+        "scorer_attempt": {
+          "attempt_id": "attempt_cb139f9e7a8946159cbcf49741b34d88",
+          "duration_ms": 461,
+          "error_class": "HiddenCheckFailed",
+          "final_diff_hash": "xxh64:ef46db3751d8e999",
+          "hidden_status": "FAIL",
+          "public_status": "PASS",
+          "run_id": "run_5a3cd0e3e9e4462388acdb13ebd1a379",
+          "status": "HIDDEN_TEST_FAIL"
+        },
+        "status": "scored"
+      },
+      "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
+      "artifact_version": "agent_task_run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": null,
+      "task_id": "toy_python_fix_001"
+    }
+  ],
+  "attempts_per_task": 1,
+  "config_hash": "xxh64:c4186d7dbcb37777",
+  "config_name": "agent_model_smoke_ollama_qwen3_14b",
+  "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml",
+  "control_layer": null,
+  "control_name": null,
+  "created_at": "2026-06-29T06:39:37.884335Z",
+  "decoding_config": "configs/decoding/greedy_1024.yaml",
+  "eval_run_id": "eval_356f82da316e45f5b5d92d67ee294287",
+  "layer_counts": {
+    "agent_scorer_hidden_status": {
+      "FAIL": 1
+    },
+    "agent_scorer_public_status": {
+      "PASS": 1
+    },
+    "agent_scorer_status": {
+      "HIDDEN_TEST_FAIL": 1
+    },
+    "agent_status": {
+      "scored": 1
+    },
+    "prompt_loop_status": {
+      "completed": 1
+    }
+  },
+  "model_config": "configs/models/ollama_qwen3_14b_q4_k_m.yaml",
+  "policy": "local-qwen-smoke",
+  "policy_family": "agent",
+  "policy_type": "agent_model",
+  "replay_repeats": 0,
+  "split": "practice",
+  "task_pack": "data/task_packs/repo_patch_python_v0"
+}

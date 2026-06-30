@@ -17,6 +17,12 @@ class ModelCapabilities(BaseModel):
     supports_top_k: bool
 
 
+class PromptAdapterConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    system_suffix: str | None = Field(default=None, min_length=1)
+
+
 class OpenAICompatibleChatModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -26,6 +32,7 @@ class OpenAICompatibleChatModelConfig(BaseModel):
     api_key_env: str | None = Field(default=None, min_length=1)
     base_url_env: str | None = Field(default=None, min_length=1)
     capabilities: ModelCapabilities
+    prompt_adapter: PromptAdapterConfig | None = None
 
     @field_validator("api_key_env", "base_url_env")
     @classmethod

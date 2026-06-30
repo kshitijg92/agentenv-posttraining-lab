@@ -235,28 +235,31 @@ production sandbox guarantee.
 
 ## Set Up A Local Ollama Model
 
-Print the recommended local Qwen/Ollama setup plan:
+Print the recommended local model setup plan:
 
 ```bash
-uv run agentenv local-model ollama plan
+uv run agentenv local-model ollama plan --model-id hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
 ```
 
-Probe whether Ollama is installed and whether its local API is running:
+Download the model and smoke test the OpenAI-compatible local API:
+
+```bash
+uv run agentenv local-model ollama setup --model-id hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
+```
+
+The setup script is also runnable directly:
+
+```bash
+uv run python -m agentenv.local_model_setup.setup_ollama_model \
+  --model-id hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
+```
+
+Lower-level probe, pull, and smoke commands are available for debugging:
 
 ```bash
 uv run agentenv local-model ollama probe
-```
-
-Download the default local model through Ollama:
-
-```bash
-uv run agentenv local-model ollama pull
-```
-
-Run a direct OpenAI-compatible local API smoke:
-
-```bash
-uv run agentenv local-model ollama smoke
+uv run agentenv local-model ollama pull --model-id hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
+uv run agentenv local-model ollama smoke --model-id hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
 ```
 
 Once Ollama is running, point the eval adapter at its OpenAI-compatible

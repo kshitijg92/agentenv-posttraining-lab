@@ -6,6 +6,7 @@ import pytest
 from agentenv.models.config_schema import (
     ModelCapabilities,
     OpenAICompatibleChatModelConfig,
+    PromptAdapterConfig,
 )
 from agentenv.models.openai_compatible_chat import OpenAICompatibleChatModelClient
 from agentenv.models.schema import DecodingConfig, Message
@@ -22,6 +23,7 @@ def _model_config(
     supports_top_k: bool = False,
     api_key_env: str | None = "AGENTENV_MODEL_API_KEY",
     base_url_env: str | None = "AGENTENV_MODEL_BASE_URL",
+    prompt_adapter: PromptAdapterConfig | None = None,
 ) -> OpenAICompatibleChatModelConfig:
     return OpenAICompatibleChatModelConfig(
         version="model_config_v0",
@@ -35,6 +37,7 @@ def _model_config(
             supports_stop=supports_stop,
             supports_top_k=supports_top_k,
         ),
+        prompt_adapter=prompt_adapter,
     )
 
 
@@ -125,6 +128,43 @@ def test_openai_compatible_chat_sends_chat_completion_request(
     assert response.total_tokens == 18
     assert response.error_class is None
     assert response.raw_response_ref == "provider_response/not_persisted"
+
+
+def test_openai_compatible_chat_applies_system_prompt_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1/")
+    monkeypatch.setenv("AGENTENV_MODEL_API_KEY", "secret-token")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["messages"][0] == {
+            "role": "system",
+            "content": "Return one JSON action.\n\n/no_think",
+        }
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"content": '{"action":"final_answer"}'},
+                        "finish_reason": "stop",
+                    }
+                ]
+            },
+        )
+
+    client = OpenAICompatibleChatModelClient(
+        config=_model_config(
+            prompt_adapter=PromptAdapterConfig(system_suffix="/no_think")
+        ),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    response = client.generate(_messages(), _decoding_config())
+
+    assert response.finish_reason == "stop_criteria_met"
+    assert response.output_text == '{"action":"final_answer"}'
 
 
 def test_openai_compatible_chat_maps_length_finish_reason(

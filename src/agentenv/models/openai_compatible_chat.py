@@ -123,7 +123,10 @@ def _request_payload(
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "model": config.model_id,
-        "messages": [_message_payload(message) for message in messages],
+        "messages": [
+            _message_payload(message)
+            for message in _adapt_messages_for_model(config, messages)
+        ],
         "temperature": decoding_config.temperature,
         "top_p": decoding_config.top_p,
         "max_tokens": decoding_config.max_new_tokens,
@@ -135,6 +138,26 @@ def _request_payload(
     if decoding_config.top_k is not None:
         payload["top_k"] = decoding_config.top_k
     return payload
+
+
+def _adapt_messages_for_model(
+    config: OpenAICompatibleChatModelConfig,
+    messages: list[Message],
+) -> list[Message]:
+    prompt_adapter = config.prompt_adapter
+    if prompt_adapter is None or prompt_adapter.system_suffix is None:
+        return messages
+
+    suffix = prompt_adapter.system_suffix
+    adapted_messages = list(messages)
+    for index, message in enumerate(adapted_messages):
+        if message.role == "system":
+            adapted_messages[index] = message.model_copy(
+                update={"content": f"{message.content}\n\n{suffix}"}
+            )
+            return adapted_messages
+
+    return [Message(role="system", content=suffix), *adapted_messages]
 
 
 def _message_payload(message: Message) -> dict[str, object]:

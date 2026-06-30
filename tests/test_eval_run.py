@@ -203,6 +203,7 @@ def test_agent_model_eval_records_missing_model_env_failure(
             "token_usage": "native",
         },
         "model_id": "placeholder-model",
+        "prompt_adapter": None,
         "provider": "openai_compatible_chat",
         "version": "model_config_v0",
     }

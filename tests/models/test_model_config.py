@@ -28,6 +28,7 @@ def test_load_model_config_reads_openai_compatible_chat_config() -> None:
     assert config.capabilities.supports_seed is False
     assert config.capabilities.supports_stop is True
     assert config.capabilities.supports_top_k is False
+    assert config.prompt_adapter is None
 
 
 def test_load_decoding_config_reads_generation_config() -> None:
@@ -65,6 +66,7 @@ def test_model_config_provenance_artifact_records_sanitized_config() -> None:
             "token_usage": "native",
         },
         "model_id": "placeholder-model",
+        "prompt_adapter": None,
         "provider": "openai_compatible_chat",
         "version": "model_config_v0",
     }

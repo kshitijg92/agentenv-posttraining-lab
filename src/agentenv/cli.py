@@ -10,10 +10,15 @@ from agentenv.local_model_setup.ollama import (
     DEFAULT_MODEL_ID,
     DEFAULT_OPENAI_BASE_URL,
     DEFAULT_SERVER_URL,
+    DEFAULT_SMOKE_PROMPT,
+    DEFAULT_SMOKE_SYSTEM_SUFFIX,
+    FALLBACK_MODEL_ID,
     pull_model,
+    render_setup_result,
     render_setup_plan,
     run_chat_smoke,
     serve_command,
+    setup_ollama_model,
 )
 from agentenv.orchestrators.eval_run import (
     EvalMatrixRun,
@@ -149,11 +154,22 @@ def smoke_sandbox(
 def plan_ollama(
     model_id: str = typer.Option(
         DEFAULT_MODEL_ID,
+        "--model-id",
         "--model",
         help="Ollama/Hugging Face model id.",
     ),
+    fallback_model_id: str = typer.Option(
+        FALLBACK_MODEL_ID,
+        "--fallback-model-id",
+        help="Fallback model id shown in the setup plan.",
+    ),
 ) -> None:
-    console.print(render_setup_plan(model_id=model_id))
+    console.print(
+        render_setup_plan(
+            model_id=model_id,
+            fallback_model_id=fallback_model_id,
+        )
+    )
 
 
 @ollama_app.command("probe")
@@ -187,6 +203,7 @@ def probe_ollama_server(
 def pull_ollama_model(
     model_id: str = typer.Option(
         DEFAULT_MODEL_ID,
+        "--model-id",
         "--model",
         help="Ollama/Hugging Face model id.",
     ),
@@ -210,6 +227,7 @@ def pull_ollama_model(
 def smoke_ollama_openai_api(
     model_id: str = typer.Option(
         DEFAULT_MODEL_ID,
+        "--model-id",
         "--model",
         help="Ollama/Hugging Face model id.",
     ),
@@ -218,8 +236,23 @@ def smoke_ollama_openai_api(
         "--base-url",
         help="OpenAI-compatible base URL.",
     ),
+    smoke_prompt: str = typer.Option(
+        DEFAULT_SMOKE_PROMPT,
+        "--smoke-prompt",
+        help="Prompt used for the chat-completions smoke test.",
+    ),
+    system_suffix: str = typer.Option(
+        DEFAULT_SMOKE_SYSTEM_SUFFIX,
+        "--system-suffix",
+        help='Optional system message for smoke testing. Use "" to disable.',
+    ),
 ) -> None:
-    result = run_chat_smoke(model_id=model_id, base_url=base_url)
+    result = run_chat_smoke(
+        model_id=model_id,
+        base_url=base_url,
+        prompt=smoke_prompt,
+        system_suffix=system_suffix or None,
+    )
     style = "green" if result.status == "ok" else "red"
     console.print(f"[{style}]ollama smoke {result.status}[/{style}]")
     console.print(f"model_id={result.model_id}")
@@ -231,6 +264,77 @@ def smoke_ollama_openai_api(
     if result.error_class is not None:
         console.print(f"error_class={result.error_class}")
         console.print(f"error_message={result.error_message}")
+
+
+@ollama_app.command("setup")
+def setup_ollama_model_command(
+    model_id: str = typer.Option(
+        DEFAULT_MODEL_ID,
+        "--model-id",
+        "--model",
+        help="Ollama/Hugging Face model id.",
+    ),
+    server_url: str = typer.Option(
+        DEFAULT_SERVER_URL,
+        "--server-url",
+        help="Ollama server URL.",
+    ),
+    base_url: str | None = typer.Option(
+        None,
+        "--base-url",
+        help="OpenAI-compatible base URL. Defaults to SERVER_URL/v1.",
+    ),
+    smoke_prompt: str = typer.Option(
+        DEFAULT_SMOKE_PROMPT,
+        "--smoke-prompt",
+        help="Prompt used for the chat-completions smoke test.",
+    ),
+    system_suffix: str = typer.Option(
+        DEFAULT_SMOKE_SYSTEM_SUFFIX,
+        "--system-suffix",
+        help='Optional system message for smoke testing. Use "" to disable.',
+    ),
+    pull_timeout_seconds: int = typer.Option(
+        3600,
+        "--pull-timeout-seconds",
+        help="Download timeout.",
+    ),
+    smoke_timeout_seconds: float = typer.Option(
+        120.0,
+        "--smoke-timeout-seconds",
+        help="Smoke request timeout.",
+    ),
+    server_start_timeout_seconds: float = typer.Option(
+        30.0,
+        "--server-start-timeout-seconds",
+        help="Time to wait after starting ollama serve.",
+    ),
+    start_server: bool = typer.Option(
+        True,
+        "--start-server/--no-start-server",
+        help="Start ollama serve if the server is not already running.",
+    ),
+    keep_server_running: bool = typer.Option(
+        True,
+        "--keep-server-running/--stop-started-server",
+        help="Keep a server started by this command running after setup.",
+    ),
+) -> None:
+    result = setup_ollama_model(
+        model_id=model_id,
+        server_url=server_url,
+        base_url=base_url,
+        smoke_prompt=smoke_prompt,
+        smoke_system_suffix=system_suffix or None,
+        pull_timeout_seconds=pull_timeout_seconds,
+        smoke_timeout_seconds=smoke_timeout_seconds,
+        start_server=start_server,
+        keep_server_running=keep_server_running,
+        server_start_timeout_seconds=server_start_timeout_seconds,
+    )
+    console.print(render_setup_result(result), end="")
+    if result.status != "ok":
+        raise typer.Exit(1)
 
 
 @ollama_app.command("serve-command")

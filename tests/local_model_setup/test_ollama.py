@@ -1,10 +1,13 @@
+import json
 import subprocess
 from pathlib import Path
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
 from agentenv.local_model_setup import ollama
+from agentenv.local_model_setup import setup_ollama_model as setup_script
 from agentenv.security.secrets import REDACTED_SECRET
 
 
@@ -12,9 +15,10 @@ CANARY = "agentenv-canary-secret-000000000000"
 
 
 def test_render_setup_plan_contains_eval_smoke_command() -> None:
-    plan = ollama.render_setup_plan()
+    plan = ollama.render_setup_plan(model_id="custom-model")
 
-    assert "ollama run hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M" in plan
+    assert "uv run agentenv local-model ollama setup" in plan
+    assert "--model-id custom-model" in plan
     assert "AGENTENV_MODEL_BASE_URL=http://localhost:11434/v1" in plan
     assert "configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml" in plan
 
@@ -73,7 +77,7 @@ def test_pull_model_scrubs_sensitive_env_and_redacts_output(
         del text
         del timeout
         captured_env.update(env)
-        assert command == ["ollama", "pull", ollama.DEFAULT_MODEL_ID]
+        assert command == ["ollama", "pull", "custom-model"]
         return subprocess.CompletedProcess(
             command,
             0,
@@ -83,7 +87,7 @@ def test_pull_model_scrubs_sensitive_env_and_redacts_output(
 
     monkeypatch.setattr(ollama.subprocess, "run", fake_run)
 
-    result = ollama.pull_model()
+    result = ollama.pull_model(model_id="custom-model")
 
     assert "HF_TOKEN" not in captured_env
     assert result.returncode == 0
@@ -108,7 +112,11 @@ def test_run_chat_smoke_uses_openai_compatible_endpoint() -> None:
         )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    result = ollama.run_chat_smoke(http_client=client)
+    result = ollama.run_chat_smoke(
+        model_id="custom-model",
+        system_suffix="/no_think",
+        http_client=client,
+    )
 
     assert result.status == "ok"
     assert result.output_text == '{"action":"final_answer","text":"ok"}'
@@ -117,6 +125,12 @@ def test_run_chat_smoke_uses_openai_compatible_endpoint() -> None:
         "POST",
         "http://localhost:11434/v1/chat/completions",
     ).url == requests[0].url
+    payload = json.loads(requests[0].content)
+    assert payload["model"] == "custom-model"
+    assert payload["messages"] == [
+        {"role": "system", "content": "/no_think"},
+        {"role": "user", "content": ollama.DEFAULT_SMOKE_PROMPT},
+    ]
 
 
 def test_run_chat_smoke_redacts_provider_error(
@@ -138,3 +152,139 @@ def test_run_chat_smoke_redacts_provider_error(
     assert result.error_message is not None
     assert CANARY not in result.error_message
     assert REDACTED_SECRET in result.error_message
+
+
+def test_setup_ollama_model_pulls_and_smokes_requested_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probe = ollama.OllamaProbe(
+        ollama_path="/usr/bin/ollama",
+        server_url=ollama.DEFAULT_SERVER_URL,
+        server_running=True,
+        version="1.2.3",
+        model_ids=["custom-model"],
+    )
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(ollama, "probe_ollama", lambda **kwargs: probe)
+
+    def fake_pull_model(
+        *,
+        model_id: str,
+        timeout_seconds: int,
+    ) -> ollama.CommandResult:
+        calls["pull"] = (model_id, timeout_seconds)
+        return ollama.CommandResult(
+            command=["ollama", "pull", model_id],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+    def fake_run_chat_smoke(
+        *,
+        model_id: str,
+        base_url: str,
+        prompt: str,
+        system_suffix: str | None,
+        timeout_seconds: float,
+        http_client: httpx.Client | None = None,
+    ) -> ollama.ChatSmokeResult:
+        del http_client
+        calls["smoke"] = (
+            model_id,
+            base_url,
+            prompt,
+            system_suffix,
+            timeout_seconds,
+        )
+        return ollama.ChatSmokeResult(
+            model_id=model_id,
+            base_url=base_url,
+            status="ok",
+            output_text='{"action":"final_answer","text":"ok"}',
+            finish_reason="stop",
+        )
+
+    monkeypatch.setattr(ollama, "pull_model", fake_pull_model)
+    monkeypatch.setattr(ollama, "run_chat_smoke", fake_run_chat_smoke)
+
+    result = ollama.setup_ollama_model(
+        model_id="custom-model",
+        smoke_system_suffix=None,
+    )
+
+    assert result.status == "ok"
+    assert result.started_server is False
+    assert calls["pull"] == ("custom-model", 3600)
+    assert calls["smoke"] == (
+        "custom-model",
+        "http://localhost:11434/v1",
+        ollama.DEFAULT_SMOKE_PROMPT,
+        None,
+        120.0,
+    )
+
+
+def test_setup_ollama_model_reports_missing_server_when_not_starting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probe = ollama.OllamaProbe(
+        ollama_path="/usr/bin/ollama",
+        server_url=ollama.DEFAULT_SERVER_URL,
+        server_running=False,
+        version=None,
+        model_ids=[],
+        error_class="ConnectError",
+        error_message="connection refused",
+    )
+    monkeypatch.setattr(ollama, "probe_ollama", lambda **kwargs: probe)
+
+    result = ollama.setup_ollama_model(start_server=False)
+
+    assert result.status == "error"
+    assert result.error_class == "OllamaServerNotRunning"
+
+
+def test_setup_script_parses_model_id_and_empty_system_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_setup_ollama_model(**kwargs: object) -> ollama.OllamaModelSetupResult:
+        captured.update(kwargs)
+        probe = ollama.OllamaProbe(
+            ollama_path="/usr/bin/ollama",
+            server_url=ollama.DEFAULT_SERVER_URL,
+            server_running=True,
+            version="1.2.3",
+            model_ids=["custom-model"],
+        )
+        return ollama.OllamaModelSetupResult(
+            model_id=str(kwargs["model_id"]),
+            server_url=str(kwargs["server_url"]),
+            base_url="http://localhost:11434/v1",
+            started_server=False,
+            server_kept_running=False,
+            probe_before=probe,
+            probe_after=probe,
+            pull_result=None,
+            smoke_result=None,
+        )
+
+    monkeypatch.setattr(setup_script, "setup_ollama_model", fake_setup_ollama_model)
+
+    result = CliRunner().invoke(
+        setup_script.app,
+        [
+            "--model-id",
+            "custom-model",
+            "--system-suffix",
+            "",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["model_id"] == "custom-model"
+    assert captured["smoke_system_suffix"] is None
+    assert "ollama_setup=ok" in result.output
