@@ -2,7 +2,9 @@ import json
 import shutil
 import subprocess
 from dataclasses import dataclass
+from time import perf_counter, sleep
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -14,9 +16,9 @@ FALLBACK_MODEL_ID = "hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M"
 DEFAULT_SERVER_URL = "http://localhost:11434"
 DEFAULT_OPENAI_BASE_URL = f"{DEFAULT_SERVER_URL}/v1"
 DEFAULT_SMOKE_PROMPT = (
-    'Return exactly this JSON and nothing else: {"action":"final_answer","text":"ok"} '
-    "/no_think"
+    'Return exactly this JSON and nothing else: {"action":"final_answer","text":"ok"}'
 )
+DEFAULT_SMOKE_SYSTEM_SUFFIX = "/no_think"
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,25 @@ class ChatSmokeResult:
     error_message: str | None = None
 
 
+@dataclass(frozen=True)
+class OllamaModelSetupResult:
+    model_id: str
+    server_url: str
+    base_url: str
+    started_server: bool
+    server_kept_running: bool
+    probe_before: OllamaProbe
+    probe_after: OllamaProbe | None
+    pull_result: CommandResult | None
+    smoke_result: ChatSmokeResult | None
+    error_class: str | None = None
+    error_message: str | None = None
+
+    @property
+    def status(self) -> str:
+        return "ok" if self.error_class is None else "error"
+
+
 def render_setup_plan(
     *,
     model_id: str = DEFAULT_MODEL_ID,
@@ -58,11 +79,13 @@ def render_setup_plan(
         "Install Ollama:",
         "  curl -fsSL https://ollama.com/install.sh | sh",
         "",
-        "Start or pull the first-choice model:",
-        f"  ollama run {model_id}",
+        "Download and smoke test a model:",
+        "  uv run agentenv local-model ollama setup \\",
+        f"    --model-id {model_id}",
         "",
         "If VRAM is too tight, use the fallback model:",
-        f"  ollama run {fallback_model_id}",
+        "  uv run agentenv local-model ollama setup \\",
+        f"    --model-id {fallback_model_id}",
         "",
         "Use the OpenAI-compatible local endpoint for evals:",
         f"  export AGENTENV_MODEL_BASE_URL={DEFAULT_OPENAI_BASE_URL}",
@@ -71,7 +94,8 @@ def render_setup_plan(
         "  uv run agentenv local-model ollama probe",
         "",
         "Run a direct chat-completions smoke:",
-        "  uv run agentenv local-model ollama smoke",
+        "  uv run agentenv local-model ollama smoke \\",
+        f"    --model-id {model_id}",
         "",
         "Run the eval smoke after the server is healthy:",
         "  uv run agentenv eval \\",
@@ -95,6 +119,22 @@ def pull_command(model_id: str = DEFAULT_MODEL_ID) -> list[str]:
 
 def run_command(model_id: str = DEFAULT_MODEL_ID) -> list[str]:
     return ["ollama", "run", model_id]
+
+
+def start_ollama_server(
+    *,
+    server_url: str = DEFAULT_SERVER_URL,
+) -> subprocess.Popen[bytes]:
+    env = scrubbed_subprocess_env()
+    ollama_host = _ollama_host_from_server_url(server_url)
+    if ollama_host is not None:
+        env["OLLAMA_HOST"] = ollama_host
+    return subprocess.Popen(
+        serve_command(),
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def probe_ollama(
@@ -140,17 +180,160 @@ def pull_model(
     return _run_local_command(pull_command(model_id), timeout_seconds=timeout_seconds)
 
 
+def setup_ollama_model(
+    *,
+    model_id: str = DEFAULT_MODEL_ID,
+    server_url: str = DEFAULT_SERVER_URL,
+    base_url: str | None = None,
+    smoke_prompt: str = DEFAULT_SMOKE_PROMPT,
+    smoke_system_suffix: str | None = DEFAULT_SMOKE_SYSTEM_SUFFIX,
+    pull_timeout_seconds: int = 3600,
+    smoke_timeout_seconds: float = 120.0,
+    start_server: bool = True,
+    keep_server_running: bool = True,
+    server_start_timeout_seconds: float = 30.0,
+) -> OllamaModelSetupResult:
+    resolved_base_url = base_url or f"{server_url.rstrip('/')}/v1"
+    probe_before = probe_ollama(server_url=server_url)
+    if probe_before.ollama_path is None:
+        return _setup_error(
+            model_id=model_id,
+            server_url=server_url,
+            base_url=resolved_base_url,
+            probe_before=probe_before,
+            error_class="MissingOllamaBinary",
+            error_message="ollama was not found on PATH",
+        )
+
+    server_process: subprocess.Popen[bytes] | None = None
+    started_server = False
+    try:
+        ready_probe = probe_before
+        if not ready_probe.server_running:
+            if not start_server:
+                return _setup_error(
+                    model_id=model_id,
+                    server_url=server_url,
+                    base_url=resolved_base_url,
+                    probe_before=probe_before,
+                    error_class="OllamaServerNotRunning",
+                    error_message="ollama server is not running",
+                )
+            try:
+                server_process = start_ollama_server(server_url=server_url)
+            except OSError as exc:
+                return _setup_error(
+                    model_id=model_id,
+                    server_url=server_url,
+                    base_url=resolved_base_url,
+                    probe_before=probe_before,
+                    error_class=exc.__class__.__name__,
+                    error_message=redact_secrets(str(exc)),
+                )
+            started_server = True
+            ready_probe = wait_for_ollama(
+                server_url=server_url,
+                timeout_seconds=server_start_timeout_seconds,
+            )
+            if not ready_probe.server_running:
+                return _setup_error(
+                    model_id=model_id,
+                    server_url=server_url,
+                    base_url=resolved_base_url,
+                    probe_before=probe_before,
+                    error_class="OllamaServerStartTimeout",
+                    error_message=ready_probe.error_message,
+                )
+
+        pull_result = pull_model(
+            model_id=model_id,
+            timeout_seconds=pull_timeout_seconds,
+        )
+        if pull_result.returncode != 0:
+            return _setup_error(
+                model_id=model_id,
+                server_url=server_url,
+                base_url=resolved_base_url,
+                probe_before=probe_before,
+                probe_after=ready_probe,
+                pull_result=pull_result,
+                started_server=started_server,
+                server_kept_running=started_server and keep_server_running,
+                error_class="OllamaPullFailed",
+                error_message=pull_result.stderr or pull_result.stdout,
+            )
+
+        smoke_result = run_chat_smoke(
+            model_id=model_id,
+            base_url=resolved_base_url,
+            prompt=smoke_prompt,
+            system_suffix=smoke_system_suffix,
+            timeout_seconds=smoke_timeout_seconds,
+        )
+        probe_after = probe_ollama(server_url=server_url)
+        if smoke_result.status != "ok":
+            return _setup_error(
+                model_id=model_id,
+                server_url=server_url,
+                base_url=resolved_base_url,
+                probe_before=probe_before,
+                probe_after=probe_after,
+                pull_result=pull_result,
+                smoke_result=smoke_result,
+                started_server=started_server,
+                server_kept_running=started_server and keep_server_running,
+                error_class="OllamaSmokeFailed",
+                error_message=smoke_result.error_message,
+            )
+
+        return OllamaModelSetupResult(
+            model_id=model_id,
+            server_url=server_url,
+            base_url=resolved_base_url,
+            started_server=started_server,
+            server_kept_running=started_server and keep_server_running,
+            probe_before=probe_before,
+            probe_after=probe_after,
+            pull_result=pull_result,
+            smoke_result=smoke_result,
+        )
+    finally:
+        if server_process is not None and not keep_server_running:
+            _terminate_process(server_process)
+
+
+def wait_for_ollama(
+    *,
+    server_url: str = DEFAULT_SERVER_URL,
+    timeout_seconds: float = 30.0,
+    poll_interval_seconds: float = 0.5,
+) -> OllamaProbe:
+    deadline = perf_counter() + timeout_seconds
+    last_probe = probe_ollama(server_url=server_url)
+    while perf_counter() < deadline:
+        if last_probe.server_running:
+            return last_probe
+        sleep(poll_interval_seconds)
+        last_probe = probe_ollama(server_url=server_url)
+    return last_probe
+
+
 def run_chat_smoke(
     *,
     model_id: str = DEFAULT_MODEL_ID,
     base_url: str = DEFAULT_OPENAI_BASE_URL,
     prompt: str = DEFAULT_SMOKE_PROMPT,
+    system_suffix: str | None = None,
     timeout_seconds: float = 120.0,
     http_client: httpx.Client | None = None,
 ) -> ChatSmokeResult:
+    messages: list[dict[str, str]] = []
+    if system_suffix:
+        messages.append({"role": "system", "content": system_suffix})
+    messages.append({"role": "user", "content": prompt})
     payload: dict[str, object] = {
         "model": model_id,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "temperature": 0.0,
         "max_tokens": 128,
     }
@@ -221,6 +404,32 @@ def run_chat_smoke(
     )
 
 
+def render_setup_result(result: OllamaModelSetupResult) -> str:
+    lines = [
+        f"ollama_setup={result.status}",
+        f"model_id={result.model_id}",
+        f"server_url={result.server_url}",
+        f"base_url={result.base_url}",
+        f"started_server={'yes' if result.started_server else 'no'}",
+        f"server_kept_running={'yes' if result.server_kept_running else 'no'}",
+    ]
+    if result.pull_result is not None:
+        lines.append(f"pull_exit={result.pull_result.returncode}")
+    if result.smoke_result is not None:
+        lines.append(f"smoke_status={result.smoke_result.status}")
+        if result.smoke_result.finish_reason is not None:
+            lines.append(f"smoke_finish_reason={result.smoke_result.finish_reason}")
+        if result.smoke_result.output_text:
+            lines.append(f"smoke_output={result.smoke_result.output_text}")
+    if result.probe_after is not None and result.probe_after.model_ids:
+        lines.append("models=" + ",".join(result.probe_after.model_ids))
+    if result.error_class is not None:
+        lines.append(f"error_class={result.error_class}")
+    if result.error_message is not None:
+        lines.append(f"error_message={result.error_message}")
+    return "\n".join(lines) + "\n"
+
+
 def _run_local_command(
     command: list[str],
     *,
@@ -241,6 +450,13 @@ def _run_local_command(
             returncode=124,
             stdout=redact_secrets(_stream_text(exc.stdout)),
             stderr=redact_secrets(_stream_text(exc.stderr)),
+        )
+    except OSError as exc:
+        return CommandResult(
+            command=[redact_secrets(part) for part in command],
+            returncode=127,
+            stdout="",
+            stderr=redact_secrets(str(exc)),
         )
 
     return CommandResult(
@@ -275,6 +491,53 @@ def _model_ids(payload: dict[str, Any]) -> list[str]:
 
 def _optional_str(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _setup_error(
+    *,
+    model_id: str,
+    server_url: str,
+    base_url: str,
+    probe_before: OllamaProbe,
+    error_class: str,
+    error_message: str | None,
+    probe_after: OllamaProbe | None = None,
+    pull_result: CommandResult | None = None,
+    smoke_result: ChatSmokeResult | None = None,
+    started_server: bool = False,
+    server_kept_running: bool = False,
+) -> OllamaModelSetupResult:
+    return OllamaModelSetupResult(
+        model_id=model_id,
+        server_url=server_url,
+        base_url=base_url,
+        started_server=started_server,
+        server_kept_running=server_kept_running,
+        probe_before=probe_before,
+        probe_after=probe_after,
+        pull_result=pull_result,
+        smoke_result=smoke_result,
+        error_class=error_class,
+        error_message=redact_secrets(error_message) if error_message else None,
+    )
+
+
+def _ollama_host_from_server_url(server_url: str) -> str | None:
+    parsed = urlparse(server_url)
+    if parsed.hostname is None:
+        return None
+    if parsed.port is None:
+        return parsed.hostname
+    return f"{parsed.hostname}:{parsed.port}"
+
+
+def _terminate_process(process: subprocess.Popen[bytes]) -> None:
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=10)
 
 
 def _provider_error_message(status_code: int, payload: object) -> str:
