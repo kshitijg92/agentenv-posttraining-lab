@@ -19,6 +19,9 @@ DEV_BASELINE_EVAL_CONFIG = Path("configs/eval/dev_baseline.yaml")
 AGENT_MODEL_DEV_QWEN_EVAL_CONFIG = Path(
     "configs/eval/agent_model_dev_ollama_qwen3_14b.yaml"
 )
+AGENT_MODEL_DEV_DEEPSEEK_R1_DISTILL_QWEN_EVAL_CONFIG = Path(
+    "configs/eval/agent_model_dev_ollama_deepseek_r1_distill_qwen_14b.yaml"
+)
 
 
 def _write_agent_model_eval_config(path: Path) -> None:
@@ -97,6 +100,26 @@ def test_agent_model_dev_qwen_eval_config_paths_are_valid() -> None:
     ]
     assert config.policies["local-qwen-dev"].type == "agent_model"
     validate_eval_config_paths(config, AGENT_MODEL_DEV_QWEN_EVAL_CONFIG)
+
+
+def test_agent_model_dev_deepseek_eval_config_paths_are_valid() -> None:
+    config = load_eval_config(AGENT_MODEL_DEV_DEEPSEEK_R1_DISTILL_QWEN_EVAL_CONFIG)
+
+    assert config.name == "agent_model_dev_ollama_deepseek_r1_distill_qwen_14b"
+    assert sorted(config.policies) == [
+        "agent-happy",
+        "agent-malformed",
+        "agent-recoverable",
+        "local-deepseek-r1-distill-qwen-dev",
+        "noop",
+        "oracle",
+        "public-tests-only",
+    ]
+    assert config.policies["local-deepseek-r1-distill-qwen-dev"].type == "agent_model"
+    validate_eval_config_paths(
+        config,
+        AGENT_MODEL_DEV_DEEPSEEK_R1_DISTILL_QWEN_EVAL_CONFIG,
+    )
 
 
 def test_agent_control_eval_config_loads() -> None:

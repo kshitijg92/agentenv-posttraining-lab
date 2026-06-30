@@ -169,7 +169,8 @@ def plan_ollama(
         render_setup_plan(
             model_id=model_id,
             fallback_model_id=fallback_model_id,
-        )
+        ),
+        soft_wrap=True,
     )
 
 
@@ -194,7 +195,7 @@ def probe_ollama_server(
     if probe.version is not None:
         console.print(f"version={probe.version}")
     if probe.model_ids:
-        console.print("models=" + ",".join(probe.model_ids))
+        console.print("models=" + ",".join(probe.model_ids), soft_wrap=True)
     if probe.error_class is not None:
         console.print(f"error_class={probe.error_class}")
         console.print(f"error_message={probe.error_message}")
@@ -333,7 +334,7 @@ def setup_ollama_model_command(
         keep_server_running=keep_server_running,
         server_start_timeout_seconds=server_start_timeout_seconds,
     )
-    console.print(render_setup_result(result), end="")
+    console.print(render_setup_result(result), end="", soft_wrap=True)
     if result.status != "ok":
         raise typer.Exit(1)
 

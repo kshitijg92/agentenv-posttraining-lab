@@ -71,6 +71,29 @@ uv run agentenv local-model ollama serve-command
 The default model is currently `hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M`, but every
 command accepts `--model-id`.
 
+## Additional Local Models
+
+DeepSeek R1 Distill Qwen 14B can be pulled and smoke tested through the same
+Ollama setup path:
+
+```bash
+uv run agentenv local-model ollama setup \
+  --model-id hf.co/unsloth/DeepSeek-R1-Distill-Qwen-14B-GGUF:Q4_K_M \
+  --system-suffix ""
+```
+
+The matching model and eval configs are:
+
+```text
+configs/models/ollama_deepseek_r1_distill_qwen_14b_q4_k_m.yaml
+configs/eval/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b.yaml
+configs/eval/agent_model_dev_ollama_deepseek_r1_distill_qwen_14b.yaml
+```
+
+The DeepSeek config does not add the Qwen3 `/no_think` prompt adapter. Week 6
+should probe whether this reasoning model needs a larger decoding budget or a
+separate prompt adapter before using it as a serious eval baseline.
+
 ## Eval Smoke
 
 After setup succeeds:
@@ -82,4 +105,13 @@ uv run agentenv eval \
   --config configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml \
   --policy local-qwen-smoke \
   --out experiments/runs/agent_model_smoke_ollama_qwen3_14b
+```
+
+For the DeepSeek R1 Distill Qwen smoke:
+
+```bash
+uv run agentenv eval \
+  --config configs/eval/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b.yaml \
+  --policy local-deepseek-r1-distill-qwen-smoke \
+  --out experiments/runs/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b
 ```

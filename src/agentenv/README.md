@@ -274,6 +274,22 @@ uv run agentenv local-model ollama pull --model-id hf.co/Qwen/Qwen3-14B-GGUF:Q4_
 uv run agentenv local-model ollama smoke --model-id hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
 ```
 
+To pre-download DeepSeek R1 Distill Qwen 14B for Week 6:
+
+```bash
+uv run agentenv local-model ollama setup \
+  --model-id hf.co/unsloth/DeepSeek-R1-Distill-Qwen-14B-GGUF:Q4_K_M \
+  --system-suffix ""
+```
+
+The matching configs are:
+
+```text
+configs/models/ollama_deepseek_r1_distill_qwen_14b_q4_k_m.yaml
+configs/eval/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b.yaml
+configs/eval/agent_model_dev_ollama_deepseek_r1_distill_qwen_14b.yaml
+```
+
 Once Ollama is running, point the eval adapter at its OpenAI-compatible
 endpoint:
 
@@ -288,6 +304,15 @@ uv run agentenv eval \
   --config configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml \
   --policy local-qwen-smoke \
   --out experiments/runs/agent_model_smoke_ollama_qwen3_14b
+```
+
+Run the DeepSeek R1 Distill Qwen smoke with:
+
+```bash
+uv run agentenv eval \
+  --config configs/eval/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b.yaml \
+  --policy local-deepseek-r1-distill-qwen-smoke \
+  --out experiments/runs/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b
 ```
 
 ## Run Repo Checks

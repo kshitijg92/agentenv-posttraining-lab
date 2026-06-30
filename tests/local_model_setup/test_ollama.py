@@ -14,13 +14,36 @@ from agentenv.security.secrets import REDACTED_SECRET
 CANARY = "agentenv-canary-secret-000000000000"
 
 
-def test_render_setup_plan_contains_eval_smoke_command() -> None:
-    plan = ollama.render_setup_plan(model_id="custom-model")
+def test_render_setup_plan_contains_known_eval_smoke_command() -> None:
+    plan = ollama.render_setup_plan(model_id=ollama.DEFAULT_MODEL_ID)
 
     assert "uv run agentenv local-model ollama setup" in plan
-    assert "--model-id custom-model" in plan
+    assert f"--model-id {ollama.DEFAULT_MODEL_ID}" in plan
     assert "AGENTENV_MODEL_BASE_URL=http://localhost:11434/v1" in plan
     assert "configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml" in plan
+
+
+def test_render_setup_plan_contains_deepseek_eval_smoke_command() -> None:
+    plan = ollama.render_setup_plan(
+        model_id=ollama.DEEPSEEK_R1_DISTILL_QWEN_14B_MODEL_ID
+    )
+
+    assert f"--model-id {ollama.DEEPSEEK_R1_DISTILL_QWEN_14B_MODEL_ID}" in plan
+    assert (
+        "configs/eval/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b.yaml"
+        in plan
+    )
+    assert '--system-suffix ""' in plan
+    assert "local-deepseek-r1-distill-qwen-smoke" in plan
+
+
+def test_render_setup_plan_uses_generic_eval_smoke_guidance_for_unknown_model() -> None:
+    plan = ollama.render_setup_plan(model_id="custom-model")
+
+    assert "--model-id custom-model" in plan
+    assert "agent_model_smoke_ollama_*.yaml" in plan
+    assert "<matching-policy>" in plan
+    assert "configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml" not in plan
 
 
 def test_probe_ollama_reads_version_and_models(

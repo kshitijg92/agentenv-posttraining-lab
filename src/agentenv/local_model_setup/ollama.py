@@ -12,6 +12,9 @@ from agentenv.security.secrets import redact_secrets, scrubbed_subprocess_env
 
 
 DEFAULT_MODEL_ID = "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M"
+DEEPSEEK_R1_DISTILL_QWEN_14B_MODEL_ID = (
+    "hf.co/unsloth/DeepSeek-R1-Distill-Qwen-14B-GGUF:Q4_K_M"
+)
 FALLBACK_MODEL_ID = "hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M"
 DEFAULT_SERVER_URL = "http://localhost:11434"
 DEFAULT_OPENAI_BASE_URL = f"{DEFAULT_SERVER_URL}/v1"
@@ -70,18 +73,47 @@ class OllamaModelSetupResult:
         return "ok" if self.error_class is None else "error"
 
 
+@dataclass(frozen=True)
+class EvalSmokeProfile:
+    config_path: str
+    policy: str
+    out_dir: str
+    smoke_system_suffix: str | None = None
+
+
+EVAL_SMOKE_PROFILES: dict[str, EvalSmokeProfile] = {
+    DEFAULT_MODEL_ID: EvalSmokeProfile(
+        config_path="configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml",
+        policy="local-qwen-smoke",
+        out_dir="experiments/runs/agent_model_smoke_ollama_qwen3_14b",
+    ),
+    DEEPSEEK_R1_DISTILL_QWEN_14B_MODEL_ID: EvalSmokeProfile(
+        config_path=(
+            "configs/eval/"
+            "agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b.yaml"
+        ),
+        policy="local-deepseek-r1-distill-qwen-smoke",
+        out_dir=(
+            "experiments/runs/"
+            "agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b"
+        ),
+        smoke_system_suffix="",
+    ),
+}
+
+
 def render_setup_plan(
     *,
     model_id: str = DEFAULT_MODEL_ID,
     fallback_model_id: str = FALLBACK_MODEL_ID,
 ) -> str:
-    return "\n".join([
+    profile = EVAL_SMOKE_PROFILES.get(model_id)
+    lines = [
         "Install Ollama:",
         "  curl -fsSL https://ollama.com/install.sh | sh",
         "",
         "Download and smoke test a model:",
-        "  uv run agentenv local-model ollama setup \\",
-        f"    --model-id {model_id}",
+        *_model_command_lines("setup", model_id, profile),
         "",
         "If VRAM is too tight, use the fallback model:",
         "  uv run agentenv local-model ollama setup \\",
@@ -94,15 +126,44 @@ def render_setup_plan(
         "  uv run agentenv local-model ollama probe",
         "",
         "Run a direct chat-completions smoke:",
-        "  uv run agentenv local-model ollama smoke \\",
-        f"    --model-id {model_id}",
+        *_model_command_lines("smoke", model_id, profile),
         "",
         "Run the eval smoke after the server is healthy:",
-        "  uv run agentenv eval \\",
-        "    --config configs/eval/agent_model_smoke_ollama_qwen3_14b.yaml \\",
-        "    --policy local-qwen-smoke \\",
-        "    --out experiments/runs/agent_model_smoke_ollama_qwen3_14b",
-    ]) + "\n"
+    ]
+    if profile is None:
+        lines.extend([
+            "  # Add or choose a matching config under configs/eval/",
+            "  # agent_model_smoke_ollama_*.yaml, then run:",
+            "  uv run agentenv eval \\",
+            "    --config <matching-eval-config.yaml> \\",
+            "    --policy <matching-policy> \\",
+            "    --out experiments/runs/<matching-run-name>",
+        ])
+    else:
+        lines.extend([
+            "  uv run agentenv eval \\",
+            f"    --config {profile.config_path} \\",
+            f"    --policy {profile.policy} \\",
+            f"    --out {profile.out_dir}",
+        ])
+    return "\n".join(lines) + "\n"
+
+
+def _model_command_lines(
+    command: str,
+    model_id: str,
+    profile: EvalSmokeProfile | None,
+) -> list[str]:
+    lines = [
+        f"  uv run agentenv local-model ollama {command} \\",
+        f"    --model-id {model_id}",
+    ]
+    if profile is not None and profile.smoke_system_suffix is not None:
+        lines[-1] += " \\"
+        lines.append(
+            f"    --system-suffix {json.dumps(profile.smoke_system_suffix)}"
+        )
+    return lines
 
 
 def install_command() -> str:
