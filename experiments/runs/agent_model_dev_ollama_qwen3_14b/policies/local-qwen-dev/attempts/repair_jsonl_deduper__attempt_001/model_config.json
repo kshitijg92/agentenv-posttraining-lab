@@ -1,0 +1,20 @@
+{
+  "config": {
+    "api_key_env": null,
+    "base_url_env": "AGENTENV_MODEL_BASE_URL",
+    "capabilities": {
+      "supports_seed": false,
+      "supports_stop": true,
+      "supports_top_k": false,
+      "token_usage": "native"
+    },
+    "model_id": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
+    "prompt_adapter": {
+      "system_suffix": "/no_think"
+    },
+    "provider": "openai_compatible_chat",
+    "version": "model_config_v0"
+  },
+  "source_hash": "xxh64:8537acb3d5467979",
+  "source_path": "/home/kshitij/agentenv-posttraining-lab/configs/models/ollama_qwen3_14b_q4_k_m.yaml"
+}

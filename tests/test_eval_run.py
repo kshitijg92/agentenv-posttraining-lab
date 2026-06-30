@@ -15,6 +15,9 @@ from agentenv.tracing.validate import load_trace_events, validate_trace_file
 CONTROL_EVAL_CONFIG = Path("configs/eval/scorer_control_policies.yaml")
 AGENT_CONTROL_EVAL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
 DEV_BASELINE_EVAL_CONFIG = Path("configs/eval/dev_baseline.yaml")
+AGENT_MODEL_DEV_QWEN_EVAL_CONFIG = Path(
+    "configs/eval/agent_model_dev_ollama_qwen3_14b.yaml"
+)
 
 
 def _write_agent_model_eval_config(path: Path) -> None:
@@ -76,6 +79,23 @@ def test_dev_baseline_eval_config_paths_are_valid() -> None:
         "public-tests-only",
     ]
     validate_eval_config_paths(config, DEV_BASELINE_EVAL_CONFIG)
+
+
+def test_agent_model_dev_qwen_eval_config_paths_are_valid() -> None:
+    config = load_eval_config(AGENT_MODEL_DEV_QWEN_EVAL_CONFIG)
+
+    assert config.name == "agent_model_dev_ollama_qwen3_14b"
+    assert sorted(config.policies) == [
+        "agent-happy",
+        "agent-malformed",
+        "agent-recoverable",
+        "local-qwen-dev",
+        "noop",
+        "oracle",
+        "public-tests-only",
+    ]
+    assert config.policies["local-qwen-dev"].type == "agent_model"
+    validate_eval_config_paths(config, AGENT_MODEL_DEV_QWEN_EVAL_CONFIG)
 
 
 def test_agent_control_eval_config_loads() -> None:

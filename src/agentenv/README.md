@@ -73,7 +73,8 @@ Single scorer-control policy:
 uv run agentenv eval \
   --config configs/eval/scorer_control_policies.yaml \
   --policy oracle \
-  --out experiments/runs/scorer_control_policies_oracle
+  --out experiments/runs/scorer_control_policies_oracle \
+  --report-out experiments/reports/evals/scorer_control_policies_oracle.md
 
 uv run agentenv eval \
   --config configs/eval/scorer_control_policies.yaml \
@@ -92,7 +93,8 @@ Single agent-control policy:
 uv run agentenv eval \
   --config configs/eval/agent_control_policies.yaml \
   --policy agent-happy \
-  --out experiments/runs/agent_control_policies_agent_happy
+  --out experiments/runs/agent_control_policies_agent_happy \
+  --report-out experiments/reports/evals/agent_control_policies_agent_happy.md
 ```
 
 All policies from one config:
@@ -101,7 +103,8 @@ All policies from one config:
 uv run agentenv eval \
   --config configs/eval/dev_baseline.yaml \
   --all-policies \
-  --out experiments/runs/dev_baseline
+  --out experiments/runs/dev_baseline \
+  --report-out experiments/reports/eval_matrices/dev_baseline.md
 ```
 
 `--all-policies` writes an eval matrix. Replay is policy-owned through each
@@ -138,6 +141,9 @@ Replay accepts source artifact directories such as `eval_run_v0` policy runs
 and direct `agent_task_run_artifacts_v0` agent task run artifacts.
 
 ## Write Markdown Reports
+
+Eval commands can write reports directly with `--report-out`. To regenerate a
+report from an existing artifact directory, use `agentenv report`.
 
 Eval report:
 

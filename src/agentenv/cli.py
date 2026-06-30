@@ -356,6 +356,11 @@ def run_eval(
         help="Run every policy defined by the config.",
     ),
     out: Path = typer.Option(..., "--out", help="Directory for eval artifacts."),
+    report_out: Path | None = typer.Option(
+        None,
+        "--report-out",
+        help="Optional Markdown report path to write after the eval completes.",
+    ),
 ) -> None:
     if all_policies:
         if policy is not None:
@@ -373,6 +378,9 @@ def run_eval(
             f"{layer_counts}"
         )
         console.print(f"wrote {eval_matrix.out_dir / 'eval_matrix_manifest.json'}")
+        if report_out is not None:
+            report_path = write_markdown_report(eval_matrix.out_dir, report_out)
+            console.print(f"wrote {report_path}")
         return
 
     if policy is None:
@@ -386,6 +394,9 @@ def run_eval(
         f"{layer_counts}"
     )
     console.print(f"wrote {eval_run.out_dir / 'run_manifest.json'}")
+    if report_out is not None:
+        report_path = write_markdown_report(eval_run.out_dir, report_out)
+        console.print(f"wrote {report_path}")
 
 
 @app.command("replay")

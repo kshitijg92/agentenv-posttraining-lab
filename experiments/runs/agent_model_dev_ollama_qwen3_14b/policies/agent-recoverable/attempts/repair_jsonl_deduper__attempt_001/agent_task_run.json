@@ -1,0 +1,31 @@
+{
+  "run_id": "agent_task_run_ab772af550c848a8b39e1579ec1881db",
+  "task_id": "repair_jsonl_deduper",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml",
+  "status": "scored",
+  "prompt_loop_status": "completed",
+  "candidate_patch_path": "/tmp/agentenv-agent_task_run_ab772af550c848a8b39e1579ec1881db-uqtzrfyh/candidate.patch",
+  "candidate_patch_hash": "xxh64:791a044ad51af90c",
+  "attempt_result": {
+    "run_id": "run_a4010d56eb0f4ecb9b338c9cb136f73f",
+    "task_id": "repair_jsonl_deduper",
+    "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_jsonl_deduper/task.yaml",
+    "attempt_id": "attempt_9973bfd4e7dc46619cd4b466c2971308",
+    "submission_path": "/tmp/agentenv-agent_task_run_ab772af550c848a8b39e1579ec1881db-uqtzrfyh/candidate.patch",
+    "status": "PASS",
+    "public_status": "PASS",
+    "hidden_status": "PASS",
+    "error_class": null,
+    "started_at": "2026-06-30T05:37:03.376385Z",
+    "ended_at": "2026-06-30T05:37:03.811230Z",
+    "duration_ms": 434,
+    "final_diff_hash": "xxh64:791a044ad51af90c",
+    "orchestrator_version": "attempt_v0"
+  },
+  "error_class": null,
+  "error_message": null,
+  "started_at": "2026-06-30T05:37:03.078565Z",
+  "ended_at": "2026-06-30T05:37:03.811287Z",
+  "duration_ms": 732,
+  "orchestrator_version": "agent_task_run_v0"
+}

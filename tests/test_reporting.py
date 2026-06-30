@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_run import (
@@ -215,15 +217,19 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
 
     assert report_path == tmp_path / "reports/eval_matrix.md"
     assert "# Eval Matrix Report" in report
-    assert "## Scorer Policy Summary" in report
-    assert "## Agent Policy Summary" in report
-    assert "## Agent Model And Budget Summary" in report
-    assert "## Calibration Checks" in report
+    assert "## Control Calibration" in report
+    assert "### Scorer Control Summary" in report
+    assert "### Agent Control Summary" in report
+    assert "### Agent Control Budget Summary" in report
     assert "### Scorer Control Expectations" in report
     assert "### Agent Control Expectations" in report
     assert "### Scorer Aggregate Rates" in report
-    assert "### Agent Aggregate Rates" in report
-    assert "## Per-Task Outcomes" in report
+    assert "### Agent Control Aggregate Rates" in report
+    assert "### Control Per-Task Outcomes" in report
+    assert "## Agent Model Results" in report
+    assert "### Agent Model Outcome Summary" in report
+    assert "### Agent Model Budget Summary" in report
+    assert "### Agent Model Per-Task Outcomes" in report
     assert "- Config name: scorer_control_policies" in report
     assert "- Task count: 1" in report
     assert "- Policy count: 3" in report
@@ -234,9 +240,10 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Oracle pass rate: 1/1 (100%)" in report
     assert "- Known-bad final PASS rate: 0/2 (0%)" in report
     assert "- Known-bad public-pass/hidden-fail rate: 2/2 (100%)" in report
-    assert "No agent policies in this eval matrix." in report
-    assert "No agent model or budget metadata in this eval matrix." in report
     assert "No agent control policies in this eval matrix." in report
+    assert "No agent budget metadata in this eval matrix." in report
+    assert "No agent model policies in this eval matrix." in report
+    assert "No agent model policy attempts in this eval matrix." in report
     assert "No agent aggregate rates for this eval matrix." in report
     assert "### Replay Checks" in report
     assert (
@@ -286,12 +293,15 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Config name: agent_control_policies" in report
     assert "- Policy count: 3" in report
     assert "- Replay match rate: 3/3 (100%)" in report
-    assert "## Scorer Policy Summary" in report
-    assert "## Agent Policy Summary" in report
-    assert "## Agent Model And Budget Summary" in report
+    assert "## Control Calibration" in report
+    assert "### Scorer Control Summary" in report
+    assert "### Agent Control Summary" in report
+    assert "### Agent Control Budget Summary" in report
+    assert "## Agent Model Results" in report
+    assert "### Agent Model Outcome Summary" in report
+    assert "### Agent Model Budget Summary" in report
     assert "### Scorer Control Expectations" in report
     assert "### Agent Control Expectations" in report
-    assert "No scorer policies in this eval matrix." in report
     assert "No scorer control policies in this eval matrix." in report
     assert "No scorer aggregate rates for this eval matrix." in report
     assert "- Agent control expectation pass rate: 3/3 (100%)" in report
@@ -335,3 +345,82 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
         " |  |  | agent_loop_failed | invalid_model_output |  |  |  | "
         "MalformedModelOutput |"
     ) in report
+
+
+def test_write_mixed_agent_control_and_model_eval_matrix_report(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1")
+    monkeypatch.delenv("AGENTENV_MODEL_API_KEY", raising=False)
+    config_path = tmp_path / "mixed_agent_model_eval.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: mixed_agent_model_eval",
+                "task_pack: data/task_packs/repo_patch_python_v0",
+                "tasks:",
+                "  - toy_python_fix_001",
+                "split: practice",
+                "policies:",
+                "  agent-happy:",
+                "    type: agent_control_script",
+                "    control: happy",
+                "    attempts: 1",
+                "    replay:",
+                "      repeats: 0",
+                "  real-agent-smoke:",
+                "    type: agent_model",
+                "    model_config: configs/models/openai_compatible_chat_placeholder.yaml",
+                "    decoding_config: configs/decoding/greedy_1024.yaml",
+                "    attempts: 1",
+                "    replay:",
+                "      repeats: 0",
+                "trace:",
+                "  version: trace_v0",
+                "  capture_stdout: true",
+                "  capture_stderr: true",
+                "  capture_diff: true",
+                "",
+            ]
+        )
+    )
+    run_eval_config_all_policies(config_path, tmp_path / "eval_matrix")
+
+    report_path = write_markdown_report(
+        tmp_path / "eval_matrix",
+        tmp_path / "reports/mixed_agent_model_eval_matrix.md",
+    )
+    report = report_path.read_text()
+
+    assert report_path == tmp_path / "reports/mixed_agent_model_eval_matrix.md"
+    agent_control_summary = report.split("### Agent Control Summary", 1)[1].split(
+        "### Agent Control Budget Summary",
+        1,
+    )[0]
+    agent_model_summary = report.split("### Agent Model Outcome Summary", 1)[1].split(
+        "### Agent Model Budget Summary",
+        1,
+    )[0]
+    control_per_task = report.split("### Control Per-Task Outcomes", 1)[1].split(
+        "### Replay Checks",
+        1,
+    )[0]
+    agent_model_per_task = report.split("### Agent Model Per-Task Outcomes", 1)[
+        1
+    ].split("## Known Shortcuts", 1)[0]
+
+    assert "| agent-happy | happy | 1 | 1/1 (100%)" in agent_control_summary
+    assert "real-agent-smoke" not in agent_control_summary
+    assert "| real-agent-smoke | 1 | 0/1 (0%)" in agent_model_summary
+    assert "agent-happy" not in agent_model_summary
+    assert (
+        "| real-agent-smoke | placeholder-model | greedy | 0.0 | 1024 | "
+        "60 | 10 | not_recorded | not_recorded | not_recorded | not_recorded | "
+        "0 | 0 |"
+    ) in report
+    assert "| toy_python_fix_001 | agent-happy |" in control_per_task
+    assert "real-agent-smoke" not in control_per_task
+    assert "| toy_python_fix_001 | real-agent-smoke |" in agent_model_per_task
+    assert "agent-happy" not in agent_model_per_task
+    assert "- Agent control expectation pass rate: 1/1 (100%)" in report

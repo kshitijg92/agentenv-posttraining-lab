@@ -1,0 +1,67 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{}}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/config_loader.py\"}}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/settings.py\",\"content\":\"from dataclasses import dataclass\\n\\n\\n@dataclass(frozen=True)\\nclass Settings:\\n    \\\"\\\"\\\"Application settings returned by config_loader.load_settings.\\\"\\\"\\\"\\n\\n    host: str = \\\"localhost\\\"\\n    port: int = 8080\\n    debug: bool = False\\n\\n\\nDEFAULT_SETTINGS = Settings()\\nCONFIG_KEYS = {\\\"host\\\", \\\"port\\\", \\\"debug\\\"}\\nENV_TO_FIELD = {\\n    \\\"APP_HOST\\\": \\\"host\\\",\\n    \\\"APP_PORT\\\": \\\"port\\\",\\n    \\\"APP_DEBUG\\\": \\\"debug\\\",\\n}\\n\"}}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/config_loader.py\",\"content\":\"import json\\nimport os\\nfrom collections.abc import Mapping\\nfrom pathlib import Path\\nfrom typing import Any\\n\\nfrom settings import CONFIG_KEYS, DEFAULT_SETTINGS, ENV_TO_FIELD, Settings\\n\\n\\ndef load_settings(\\n    config_path: Path | None = None,\\n    environ: Mapping[str, str] | None = None,\\n) -> Settings:\\n    \\\"\\\"\\\"Load application settings.\\n\\n    Settings are resolved in precedence order: environment variables override\\n    JSON config values, which override defaults. The supported JSON config keys\\n    are host, port, and debug. Unknown JSON config keys are invalid.\\n\\n    Environment overrides use APP_HOST, APP_PORT, and APP_DEBUG.\\n\\n    host must be a string. port must be an int or numeric string in the range\\n    1..65535; booleans are not valid ports. debug must be a bool or one of the\\n    exact strings \\\"true\\\" or \\\"false\\\"; strings such as \\\"1\\\", \\\"0\\\", \\\"yes\\\", and\\n    \\\"no\\\" are invalid.\\n\\n    Passing None for config_path means no config file is read. Passing an\\n    explicit path that does not exist should raise FileNotFoundError. Invalid\\n    config contents or invalid values should raise ValueError. Each call should\\n    return a fresh Settings object and must not mutate shared defaults.\\n    \\\"\\\"\\\"\\n    raw_settings: dict[str, Any] = {\\n        \\\"host\\\": DEFAULT_SETTINGS.host,\\n        \\\"port\\\": DEFAULT_SETTINGS.port,\\n        \\\"debug\\\": DEFAULT_SETTINGS.debug,\\n    }\\n\\n    if config_path is not None:\\n        loaded = json.loads(Path(config_path).read_text())\\n        if not isinstance(loaded, dict):\\n            raise ValueError(\\\"config must be a JSON object\\\")\\n        unknown_keys = set(loaded) - CONFIG_KEYS\\n        if unknown_keys:\\n            unknown_key = sorted(unknown_keys)[0]\\n            raise ValueError(f\\\"unknown config key: {unknown_key}\\\")\\n        raw_settings.update(loaded)\\n\\n    env = os.environ if environ is None else environ\\n    for env_name, field_name in ENV_TO_FIELD.items():\\n        if env_name in env:\\n            raw_settings[field_name] = env[env_name]\\n\\n    return Settings(\\n        host=_parse_host(raw_settings[\\\"host\\\"]),\\n        port=_parse_port(raw_settings[\\\"port\\\"]),\\n        debug=_parse_debug(raw_settings[\\\"debug\\\"]),\\n    )\\n\\n\\ndef _parse_host(value: Any) -> str:\\n    if not isinstance(value, str):\\n        raise ValueError(\\\"host must be a string\\\")\\n    return value\\n\\n\\ndef _parse_port(value: Any) -> int:\\n    if isinstance(value, bool):\\n        raise ValueError(\\\"port must be an int or numeric string\\\")\\n    if isinstance(value, int):\\n        port = value\\n    elif isinstance(value, str) and value.isdigit():\\n        port = int(value)\\n    else:\\n        raise ValueError(\\\"port must be an int or numeric string\\\")\\n\\n    if not 1 <= port <= 65535:\\n        raise ValueError(\\\"port must be in the range 1..65535\\\")\\n    return port\\n\\n\\ndef _parse_debug(value: Any) -> bool:\\n    if isinstance(value, bool):\\n        return value\\n    if value == \\\"true\\\":\\n        return True\\n    if value == \\\"false\\\":\\n        return False\\n    raise ValueError(\\\"debug must be a boolean or true/false string\\\")\\n\"}}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run pytest tests/test_public.py\"}}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}",
+        "finish_reason": "stop_criteria_met",
+        "error_class": null
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed",
+    "tool_results": [
+      {
+        "tool_name": "read_file",
+        "status": "error",
+        "error_class": "InvalidToolInput"
+      },
+      {
+        "tool_name": "read_file",
+        "status": "ok",
+        "error_class": null
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok",
+        "error_class": null
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok",
+        "error_class": null
+      },
+      {
+        "tool_name": "run_tests",
+        "status": "ok",
+        "error_class": null
+      }
+    ]
+  }
+}

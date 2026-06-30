@@ -107,8 +107,20 @@ def render_eval_matrix_report(
         _matrix_policy_summary(artifact_dir, policy, run_artifact_dir, run_manifest)
         for policy, run_artifact_dir, run_manifest in policy_runs
     ]
-    scorer_policy_summaries = _summaries_for_control_layer(policy_summaries, "scorer")
-    agent_policy_summaries = _summaries_for_control_layer(policy_summaries, "agent")
+    scorer_control_policy_summaries = _summaries_for_control_layer(
+        policy_summaries,
+        "scorer",
+    )
+    agent_control_policy_summaries = _summaries_for_control_layer(
+        policy_summaries,
+        "agent",
+    )
+    agent_model_policy_summaries = _summaries_for_policy_type(
+        policy_summaries,
+        "agent_model",
+    )
+    control_policy_runs = _policy_runs_for_control_policies(policy_runs)
+    agent_model_policy_runs = _policy_runs_for_policy_type(policy_runs, "agent_model")
     replay_match_rate = _matrix_replay_match_rate(manifest)
 
     lines = [
@@ -150,38 +162,21 @@ def render_eval_matrix_report(
     lines.extend(
         [
             "",
-            "## Scorer Policy Summary",
+            "## Control Calibration",
+            "",
+            "### Scorer Control Summary",
             "",
         ]
     )
-    lines.extend(_scorer_policy_summary_table(scorer_policy_summaries))
+    lines.extend(_scorer_policy_summary_table(scorer_control_policy_summaries))
     lines.extend(
         [
-            "",
-            "## Agent Policy Summary",
-            "",
-        ]
-    )
-    lines.extend(_agent_policy_summary_table(agent_policy_summaries))
-    lines.extend(
-        [
-            "",
-            "## Agent Model And Budget Summary",
-            "",
-        ]
-    )
-    lines.extend(_agent_model_budget_table(agent_policy_summaries))
-
-    lines.extend(
-        [
-            "",
-            "## Calibration Checks",
             "",
             "### Scorer Control Expectations",
             "",
         ]
     )
-    lines.extend(_scorer_expectation_table(scorer_policy_summaries))
+    lines.extend(_scorer_expectation_table(scorer_control_policy_summaries))
     lines.extend(
         [
             "",
@@ -189,7 +184,23 @@ def render_eval_matrix_report(
             "",
         ]
     )
-    lines.extend(_scorer_aggregate_rate_lines(scorer_policy_summaries))
+    lines.extend(_scorer_aggregate_rate_lines(scorer_control_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "### Agent Control Summary",
+            "",
+        ]
+    )
+    lines.extend(_agent_policy_summary_table(agent_control_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "### Agent Control Budget Summary",
+            "",
+        ]
+    )
+    lines.extend(_agent_model_budget_table(agent_control_policy_summaries))
     lines.extend(
         [
             "",
@@ -197,15 +208,29 @@ def render_eval_matrix_report(
             "",
         ]
     )
-    lines.extend(_agent_expectation_table(agent_policy_summaries))
+    lines.extend(_agent_expectation_table(agent_control_policy_summaries))
     lines.extend(
         [
             "",
-            "### Agent Aggregate Rates",
+            "### Agent Control Aggregate Rates",
             "",
         ]
     )
-    lines.extend(_agent_aggregate_rate_lines(agent_policy_summaries))
+    lines.extend(_agent_aggregate_rate_lines(agent_control_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "### Control Per-Task Outcomes",
+            "",
+        ]
+    )
+    lines.extend(
+        _matrix_attempt_table(
+            artifact_dir,
+            control_policy_runs,
+            empty_message="No control policy attempts in this eval matrix.",
+        )
+    )
     lines.extend(
         [
             "",
@@ -224,25 +249,35 @@ def render_eval_matrix_report(
     lines.extend(
         [
             "",
-            "## Per-Task Outcomes",
+            "## Agent Model Results",
             "",
-            (
-                "| task_id | policy | artifact_version | scorer_status | "
-                "scorer_public_status | scorer_hidden_status | agent_status | "
-                "prompt_loop_status | agent_scorer_status | "
-                "agent_scorer_public_status | agent_scorer_hidden_status | "
-                "error_class | duration_ms | final_diff_hash | artifact_dir |"
-            ),
-            (
-                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
-                "| --- | ---: | --- | --- |"
-            ),
+            "### Agent Model Outcome Summary",
+            "",
         ]
     )
-    for policy, run_artifact_dir, run_manifest in policy_runs:
-        lines.extend(
-            _matrix_attempt_rows(artifact_dir, policy, run_artifact_dir, run_manifest)
+    lines.extend(_agent_model_outcome_table(agent_model_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "### Agent Model Budget Summary",
+            "",
+        ]
+    )
+    lines.extend(_agent_model_budget_table(agent_model_policy_summaries))
+    lines.extend(
+        [
+            "",
+            "### Agent Model Per-Task Outcomes",
+            "",
+        ]
+    )
+    lines.extend(
+        _matrix_attempt_table(
+            artifact_dir,
+            agent_model_policy_runs,
+            empty_message="No agent model policy attempts in this eval matrix.",
         )
+    )
 
     lines.extend(
         [
@@ -445,8 +480,8 @@ def _matrix_policy_summary(
         "policy": policy,
         "policy_type": _required_str(run_manifest, "policy_type"),
         "policy_family": _required_str(run_manifest, "policy_family"),
-        "control_layer": _required_str(run_manifest, "control_layer"),
-        "control_name": _required_str(run_manifest, "control_name"),
+        "control_layer": _optional_str(run_manifest, "control_layer"),
+        "control_name": _optional_str(run_manifest, "control_name"),
         "attempt_count": attempt_count,
         "scorer_final_passes": scorer_status_counts.get("PASS", 0),
         "scorer_public_passes": scorer_public_status_counts.get("PASS", 0),
@@ -512,9 +547,41 @@ def _summaries_for_control_layer(
     ]
 
 
+def _summaries_for_policy_type(
+    summaries: list[dict[str, object]],
+    policy_type: str,
+) -> list[dict[str, object]]:
+    return [
+        summary
+        for summary in summaries
+        if summary.get("policy_type") == policy_type
+    ]
+
+
+def _policy_runs_for_control_policies(
+    policy_runs: list[tuple[str, str, dict[str, object]]],
+) -> list[tuple[str, str, dict[str, object]]]:
+    return [
+        policy_run
+        for policy_run in policy_runs
+        if _optional_str(policy_run[2], "control_layer") is not None
+    ]
+
+
+def _policy_runs_for_policy_type(
+    policy_runs: list[tuple[str, str, dict[str, object]]],
+    policy_type: str,
+) -> list[tuple[str, str, dict[str, object]]]:
+    return [
+        policy_run
+        for policy_run in policy_runs
+        if _required_str(policy_run[2], "policy_type") == policy_type
+    ]
+
+
 def _scorer_policy_summary_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No scorer policies in this eval matrix."]
+        return ["No scorer control policies in this eval matrix."]
 
     return [
         (
@@ -547,7 +614,7 @@ def _scorer_policy_summary_row(summary: dict[str, object]) -> str:
 
 def _agent_policy_summary_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No agent policies in this eval matrix."]
+        return ["No agent control policies in this eval matrix."]
 
     return [
         (
@@ -584,9 +651,45 @@ def _agent_policy_summary_row(summary: dict[str, object]) -> str:
     )
 
 
+def _agent_model_outcome_table(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No agent model policies in this eval matrix."]
+
+    return [
+        (
+            "| policy | attempts | agent_scored_rate | prompt_loop_completed_rate | "
+            "agent_loop_failed | scorer_run_rate | final_pass_rate | "
+            "public_pass_rate | hidden_pass_rate | median_duration_ms | trace |"
+        ),
+        (
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: "
+            "| ---: | --- |"
+        ),
+        *[_agent_model_outcome_row(summary) for summary in summaries],
+    ]
+
+
+def _agent_model_outcome_row(summary: dict[str, object]) -> str:
+    attempt_count = _required_int(summary, "attempt_count")
+    trace_ref = _display(summary.get("trace"))
+    return (
+        f"| {_display(summary.get('policy'))} "
+        f"| {attempt_count} "
+        f"| {_count_rate(summary.get('agent_scored_count'), attempt_count)} "
+        f"| {_count_rate(summary.get('prompt_loop_completed_count'), attempt_count)} "
+        f"| {_display(summary.get('agent_loop_failed_count'))} "
+        f"| {_count_rate(summary.get('agent_scorer_run_count'), attempt_count)} "
+        f"| {_count_rate(summary.get('agent_scorer_final_passes'), attempt_count)} "
+        f"| {_count_rate(summary.get('agent_scorer_public_passes'), attempt_count)} "
+        f"| {_count_rate(summary.get('agent_scorer_hidden_passes'), attempt_count)} "
+        f"| {_display(summary.get('median_duration_ms'))} "
+        f"| {trace_ref} |"
+    )
+
+
 def _agent_model_budget_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No agent model or budget metadata in this eval matrix."]
+        return ["No agent budget metadata in this eval matrix."]
 
     return [
         (
@@ -1085,6 +1188,35 @@ def _matrix_attempt_rows(
     ]
 
 
+def _matrix_attempt_table(
+    artifact_dir: Path,
+    policy_runs: list[tuple[str, str, dict[str, object]]],
+    *,
+    empty_message: str,
+) -> list[str]:
+    if not policy_runs:
+        return [empty_message]
+
+    rows = [
+        (
+            "| task_id | policy | artifact_version | scorer_status | "
+            "scorer_public_status | scorer_hidden_status | agent_status | "
+            "prompt_loop_status | agent_scorer_status | "
+            "agent_scorer_public_status | agent_scorer_hidden_status | "
+            "error_class | duration_ms | final_diff_hash | artifact_dir |"
+        ),
+        (
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+            "| --- | ---: | --- | --- |"
+        ),
+    ]
+    for policy, run_artifact_dir, run_manifest in policy_runs:
+        rows.extend(
+            _matrix_attempt_rows(artifact_dir, policy, run_artifact_dir, run_manifest)
+        )
+    return rows
+
+
 def _matrix_attempts_with_artifacts(
     artifact_dir: Path,
     run_artifact_dir: str,
@@ -1274,6 +1406,15 @@ def _required_str(data: dict[str, object], key: str) -> str:
     value = data.get(key)
     if not isinstance(value, str):
         raise ValueError(f"Expected string field {key!r}")
+    return value
+
+
+def _optional_str(data: dict[str, object], key: str) -> str | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Expected string or null field {key!r}")
     return value
 
 

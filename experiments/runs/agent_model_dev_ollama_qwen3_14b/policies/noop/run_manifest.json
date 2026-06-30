@@ -1,0 +1,86 @@
+{
+  "artifact_version": "eval_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "trace": "trace.jsonl"
+  },
+  "attempt_count": 3,
+  "attempts": [
+    {
+      "agent": null,
+      "artifact_dir": "attempts/repair_jsonl_deduper__attempt_001",
+      "artifact_version": "run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": {
+        "attempt_id": "attempt_f9383dca741843738eb2ae9bbcd72251",
+        "duration_ms": 447,
+        "error_class": "HiddenCheckFailed",
+        "final_diff_hash": "xxh64:ef46db3751d8e999",
+        "hidden_status": "FAIL",
+        "public_status": "PASS",
+        "run_id": "run_ef884c1bf8214ad1af7d67a3dafbbc44",
+        "status": "HIDDEN_TEST_FAIL"
+      },
+      "task_id": "repair_jsonl_deduper"
+    },
+    {
+      "agent": null,
+      "artifact_dir": "attempts/preserve_cli_error_codes__attempt_001",
+      "artifact_version": "run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": {
+        "attempt_id": "attempt_0746920722ad42a2970a9aa9571e96ce",
+        "duration_ms": 605,
+        "error_class": "HiddenCheckFailed",
+        "final_diff_hash": "xxh64:ef46db3751d8e999",
+        "hidden_status": "FAIL",
+        "public_status": "PASS",
+        "run_id": "run_a03b71cb02e1453693960503f7317d77",
+        "status": "HIDDEN_TEST_FAIL"
+      },
+      "task_id": "preserve_cli_error_codes"
+    },
+    {
+      "agent": null,
+      "artifact_dir": "attempts/repair_config_precedence__attempt_001",
+      "artifact_version": "run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": {
+        "attempt_id": "attempt_61f4c27da64b44e7bae766481b35514d",
+        "duration_ms": 459,
+        "error_class": "HiddenCheckFailed",
+        "final_diff_hash": "xxh64:ef46db3751d8e999",
+        "hidden_status": "FAIL",
+        "public_status": "PASS",
+        "run_id": "run_31b22dcef878409380174f94a8065ea0",
+        "status": "HIDDEN_TEST_FAIL"
+      },
+      "task_id": "repair_config_precedence"
+    }
+  ],
+  "attempts_per_task": 1,
+  "config_hash": "xxh64:7bcc52485e45ef59",
+  "config_name": "agent_model_dev_ollama_qwen3_14b",
+  "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/agent_model_dev_ollama_qwen3_14b.yaml",
+  "control_layer": "scorer",
+  "control_name": "bad.noop",
+  "created_at": "2026-06-30T05:36:57.155683Z",
+  "eval_run_id": "eval_2a62b85ff1d344ee965b1d075b650308",
+  "layer_counts": {
+    "scorer_hidden_status": {
+      "FAIL": 3
+    },
+    "scorer_public_status": {
+      "PASS": 3
+    },
+    "scorer_status": {
+      "HIDDEN_TEST_FAIL": 3
+    }
+  },
+  "policy": "noop",
+  "policy_family": "control",
+  "policy_type": "scorer_control_patch",
+  "replay_repeats": 0,
+  "split": "dev",
+  "task_pack": "data/task_packs/repo_patch_python_v0"
+}

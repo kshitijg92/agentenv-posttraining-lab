@@ -1,0 +1,56 @@
+name: agent_model_dev_ollama_qwen3_14b
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_jsonl_deduper
+  - preserve_cli_error_codes
+  - repair_config_precedence
+split: dev
+policies:
+  oracle:
+    type: scorer_control_patch
+    control: oracle
+    attempts: 1
+    replay:
+      repeats: 0
+  noop:
+    type: scorer_control_patch
+    control: bad.noop
+    attempts: 1
+    replay:
+      repeats: 0
+  public-tests-only:
+    type: scorer_control_patch
+    control: bad.public_only
+    attempts: 1
+    replay:
+      repeats: 0
+  agent-happy:
+    type: agent_control_script
+    control: happy
+    attempts: 1
+    replay:
+      repeats: 0
+  agent-malformed:
+    type: agent_control_script
+    control: malformed
+    attempts: 1
+    replay:
+      repeats: 0
+  agent-recoverable:
+    type: agent_control_script
+    control: recoverable
+    attempts: 1
+    replay:
+      repeats: 0
+  local-qwen-dev:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/greedy_1024.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

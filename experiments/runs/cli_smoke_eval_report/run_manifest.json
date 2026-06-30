@@ -1,0 +1,52 @@
+{
+  "artifact_version": "eval_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "trace": "trace.jsonl"
+  },
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "agent": null,
+      "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
+      "artifact_version": "run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": {
+        "attempt_id": "attempt_6e48dfa286314666a79c6b871d29e674",
+        "duration_ms": 426,
+        "error_class": null,
+        "final_diff_hash": "xxh64:e3fc746d6fe0786c",
+        "hidden_status": "PASS",
+        "public_status": "PASS",
+        "run_id": "run_2408be4c165e4b3cb23223b605619cbc",
+        "status": "PASS"
+      },
+      "task_id": "toy_python_fix_001"
+    }
+  ],
+  "attempts_per_task": 1,
+  "config_hash": "xxh64:be1a25b6a52abf58",
+  "config_name": "scorer_control_policies",
+  "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/scorer_control_policies.yaml",
+  "control_layer": "scorer",
+  "control_name": "oracle",
+  "created_at": "2026-06-30T05:31:27.065074Z",
+  "eval_run_id": "eval_2358beec0d1b4bb78c8bcb198e580d2d",
+  "layer_counts": {
+    "scorer_hidden_status": {
+      "PASS": 1
+    },
+    "scorer_public_status": {
+      "PASS": 1
+    },
+    "scorer_status": {
+      "PASS": 1
+    }
+  },
+  "policy": "oracle",
+  "policy_family": "control",
+  "policy_type": "scorer_control_patch",
+  "replay_repeats": 1,
+  "split": "practice",
+  "task_pack": "data/task_packs/repo_patch_python_v0"
+}

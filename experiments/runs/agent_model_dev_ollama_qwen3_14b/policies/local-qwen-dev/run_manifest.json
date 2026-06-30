@@ -1,0 +1,111 @@
+{
+  "artifact_version": "eval_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "trace": "trace.jsonl"
+  },
+  "attempt_count": 3,
+  "attempts": [
+    {
+      "agent": {
+        "candidate_patch_hash": "xxh64:ef46db3751d8e999",
+        "duration_ms": 9922,
+        "error_class": null,
+        "prompt_loop_status": "completed",
+        "run_id": "agent_task_run_75654d8984ff4f3580bb2e34364f3875",
+        "scorer_attempt": {
+          "attempt_id": "attempt_7db299fe2da44f2ca473e0194b2a5a24",
+          "duration_ms": 434,
+          "error_class": "HiddenCheckFailed",
+          "final_diff_hash": "xxh64:ef46db3751d8e999",
+          "hidden_status": "FAIL",
+          "public_status": "PASS",
+          "run_id": "run_4d22b2e184af48b686aac770c1e7e9f5",
+          "status": "HIDDEN_TEST_FAIL"
+        },
+        "status": "scored"
+      },
+      "artifact_dir": "attempts/repair_jsonl_deduper__attempt_001",
+      "artifact_version": "agent_task_run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": null,
+      "task_id": "repair_jsonl_deduper"
+    },
+    {
+      "agent": {
+        "candidate_patch_hash": null,
+        "duration_ms": 31083,
+        "error_class": "MaxTurnsExceeded",
+        "prompt_loop_status": "max_turns_exceeded",
+        "run_id": "agent_task_run_84323a6f7b1d447aaef586ca591e652b",
+        "scorer_attempt": null,
+        "status": "agent_loop_failed"
+      },
+      "artifact_dir": "attempts/preserve_cli_error_codes__attempt_001",
+      "artifact_version": "agent_task_run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": null,
+      "task_id": "preserve_cli_error_codes"
+    },
+    {
+      "agent": {
+        "candidate_patch_hash": "xxh64:ef46db3751d8e999",
+        "duration_ms": 6681,
+        "error_class": null,
+        "prompt_loop_status": "completed",
+        "run_id": "agent_task_run_25830779eb88482399103bf62a49c7ff",
+        "scorer_attempt": {
+          "attempt_id": "attempt_22b80a18bf1e4773b44baef74bab7159",
+          "duration_ms": 463,
+          "error_class": "HiddenCheckFailed",
+          "final_diff_hash": "xxh64:ef46db3751d8e999",
+          "hidden_status": "FAIL",
+          "public_status": "PASS",
+          "run_id": "run_ac9030d5eb6948f7b5356e1bea92f47f",
+          "status": "HIDDEN_TEST_FAIL"
+        },
+        "status": "scored"
+      },
+      "artifact_dir": "attempts/repair_config_precedence__attempt_001",
+      "artifact_version": "agent_task_run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": null,
+      "task_id": "repair_config_precedence"
+    }
+  ],
+  "attempts_per_task": 1,
+  "config_hash": "xxh64:7bcc52485e45ef59",
+  "config_name": "agent_model_dev_ollama_qwen3_14b",
+  "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/agent_model_dev_ollama_qwen3_14b.yaml",
+  "control_layer": null,
+  "control_name": null,
+  "created_at": "2026-06-30T05:37:05.671023Z",
+  "decoding_config": "configs/decoding/greedy_1024.yaml",
+  "eval_run_id": "eval_22f44917b91e4d1ebcb6612c0a736454",
+  "layer_counts": {
+    "agent_scorer_hidden_status": {
+      "FAIL": 2
+    },
+    "agent_scorer_public_status": {
+      "PASS": 2
+    },
+    "agent_scorer_status": {
+      "HIDDEN_TEST_FAIL": 2
+    },
+    "agent_status": {
+      "agent_loop_failed": 1,
+      "scored": 2
+    },
+    "prompt_loop_status": {
+      "completed": 2,
+      "max_turns_exceeded": 1
+    }
+  },
+  "model_config": "configs/models/ollama_qwen3_14b_q4_k_m.yaml",
+  "policy": "local-qwen-dev",
+  "policy_family": "agent",
+  "policy_type": "agent_model",
+  "replay_repeats": 0,
+  "split": "dev",
+  "task_pack": "data/task_packs/repo_patch_python_v0"
+}

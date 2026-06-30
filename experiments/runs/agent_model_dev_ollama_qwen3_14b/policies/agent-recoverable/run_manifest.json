@@ -1,0 +1,116 @@
+{
+  "artifact_version": "eval_run_v0",
+  "artifacts": {
+    "attempts": "attempts",
+    "trace": "trace.jsonl"
+  },
+  "attempt_count": 3,
+  "attempts": [
+    {
+      "agent": {
+        "candidate_patch_hash": "xxh64:791a044ad51af90c",
+        "duration_ms": 732,
+        "error_class": null,
+        "prompt_loop_status": "completed",
+        "run_id": "agent_task_run_ab772af550c848a8b39e1579ec1881db",
+        "scorer_attempt": {
+          "attempt_id": "attempt_9973bfd4e7dc46619cd4b466c2971308",
+          "duration_ms": 434,
+          "error_class": null,
+          "final_diff_hash": "xxh64:791a044ad51af90c",
+          "hidden_status": "PASS",
+          "public_status": "PASS",
+          "run_id": "run_a4010d56eb0f4ecb9b338c9cb136f73f",
+          "status": "PASS"
+        },
+        "status": "scored"
+      },
+      "artifact_dir": "attempts/repair_jsonl_deduper__attempt_001",
+      "artifact_version": "agent_task_run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": null,
+      "task_id": "repair_jsonl_deduper"
+    },
+    {
+      "agent": {
+        "candidate_patch_hash": "xxh64:3a6c137988d3cd3a",
+        "duration_ms": 936,
+        "error_class": null,
+        "prompt_loop_status": "completed",
+        "run_id": "agent_task_run_73398bc051f5423cac18a45b3f563582",
+        "scorer_attempt": {
+          "attempt_id": "attempt_76f8e9f54c03486d991701d04e292d64",
+          "duration_ms": 598,
+          "error_class": null,
+          "final_diff_hash": "xxh64:3a6c137988d3cd3a",
+          "hidden_status": "PASS",
+          "public_status": "PASS",
+          "run_id": "run_2c451b0bf32645849b6a84fb4077cbfc",
+          "status": "PASS"
+        },
+        "status": "scored"
+      },
+      "artifact_dir": "attempts/preserve_cli_error_codes__attempt_001",
+      "artifact_version": "agent_task_run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": null,
+      "task_id": "preserve_cli_error_codes"
+    },
+    {
+      "agent": {
+        "candidate_patch_hash": "xxh64:187bcea16c66ce96",
+        "duration_ms": 755,
+        "error_class": null,
+        "prompt_loop_status": "completed",
+        "run_id": "agent_task_run_c40ea68136be445cb8faa5a6a4ce3013",
+        "scorer_attempt": {
+          "attempt_id": "attempt_d68f19667fa94b47baddd50a679f33c3",
+          "duration_ms": 451,
+          "error_class": null,
+          "final_diff_hash": "xxh64:187bcea16c66ce96",
+          "hidden_status": "PASS",
+          "public_status": "PASS",
+          "run_id": "run_50460dc6e6a340498506a2f967e1abf7",
+          "status": "PASS"
+        },
+        "status": "scored"
+      },
+      "artifact_dir": "attempts/repair_config_precedence__attempt_001",
+      "artifact_version": "agent_task_run_artifacts_v0",
+      "attempt_index": 0,
+      "scorer": null,
+      "task_id": "repair_config_precedence"
+    }
+  ],
+  "attempts_per_task": 1,
+  "config_hash": "xxh64:7bcc52485e45ef59",
+  "config_name": "agent_model_dev_ollama_qwen3_14b",
+  "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/agent_model_dev_ollama_qwen3_14b.yaml",
+  "control_layer": "agent",
+  "control_name": "recoverable",
+  "created_at": "2026-06-30T05:37:03.070704Z",
+  "eval_run_id": "eval_989a6ae16a4341be824c34a11779c64d",
+  "layer_counts": {
+    "agent_scorer_hidden_status": {
+      "PASS": 3
+    },
+    "agent_scorer_public_status": {
+      "PASS": 3
+    },
+    "agent_scorer_status": {
+      "PASS": 3
+    },
+    "agent_status": {
+      "scored": 3
+    },
+    "prompt_loop_status": {
+      "completed": 3
+    }
+  },
+  "policy": "agent-recoverable",
+  "policy_family": "control",
+  "policy_type": "agent_control_script",
+  "replay_repeats": 0,
+  "split": "dev",
+  "task_pack": "data/task_packs/repo_patch_python_v0"
+}
