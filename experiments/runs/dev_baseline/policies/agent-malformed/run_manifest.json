@@ -9,10 +9,10 @@
     {
       "agent": {
         "candidate_patch_hash": null,
-        "duration_ms": 4,
+        "duration_ms": 3,
         "error_class": "MalformedModelOutput",
         "prompt_loop_status": "invalid_model_output",
-        "run_id": "agent_task_run_d87cb6230c7d4036a37c38531f1dd8d1",
+        "run_id": "agent_task_run_164abf5f86714dada5ee2fc9ad12cf76",
         "scorer_attempt": null,
         "status": "agent_loop_failed"
       },
@@ -28,7 +28,7 @@
         "duration_ms": 3,
         "error_class": "MalformedModelOutput",
         "prompt_loop_status": "invalid_model_output",
-        "run_id": "agent_task_run_2ab3753ac0ef46c48105f109000d7165",
+        "run_id": "agent_task_run_ce21884d98824e389ef4cff45b6c05df",
         "scorer_attempt": null,
         "status": "agent_loop_failed"
       },
@@ -44,7 +44,7 @@
         "duration_ms": 3,
         "error_class": "MalformedModelOutput",
         "prompt_loop_status": "invalid_model_output",
-        "run_id": "agent_task_run_bb71036c21a34d409f4ba0b333f4a515",
+        "run_id": "agent_task_run_f96e5c2185aa4c878e617b675746363f",
         "scorer_attempt": null,
         "status": "agent_loop_failed"
       },
@@ -55,13 +55,14 @@
       "task_id": "repair_config_precedence"
     }
   ],
-  "config_hash": "xxh64:7d0070161dcfb5d0",
+  "attempts_per_task": 1,
+  "config_hash": "xxh64:00db51e25e3a97e4",
   "config_name": "dev_baseline",
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
   "control_layer": "agent",
   "control_name": "malformed",
-  "created_at": "2026-06-28T02:58:21.273519Z",
-  "eval_run_id": "eval_ca2d8fb4a24041bcb33dfcd89104c621",
+  "created_at": "2026-06-30T06:22:29.424518Z",
+  "eval_run_id": "eval_ca71fd1e217742e9879d963928337050",
   "layer_counts": {
     "agent_status": {
       "agent_loop_failed": 3
@@ -73,6 +74,7 @@
   "policy": "agent-malformed",
   "policy_family": "control",
   "policy_type": "agent_control_script",
+  "replay_repeats": 1,
   "split": "dev",
   "task_pack": "data/task_packs/repo_patch_python_v0"
 }

@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_e4ecb297687146c28e6a0a2f315a7852",
+  "attempt_id": "attempt_4b447ad7fabf418aa47c5c2726f93e16",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_04685325aa4c44faa3cc6f98e4d697d8",
+  "run_id": "run_3e4ab47b99dd42cfa007d771d36bb231",
   "status": "HIDDEN_TEST_FAIL",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/repair_config_precedence/controls/scorer_control_patches/bad_noop.patch",
   "task_id": "repair_config_precedence",

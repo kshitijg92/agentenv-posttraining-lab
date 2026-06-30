@@ -12,13 +12,13 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_3150c7f5d97c4bb89a23ac28704b07ed",
-        "duration_ms": 575,
+        "attempt_id": "attempt_3668a1a66e4940cf9502ee5a5efeb0d8",
+        "duration_ms": 597,
         "error_class": null,
         "final_diff_hash": "xxh64:791a044ad51af90c",
         "hidden_status": "PASS",
         "public_status": "PASS",
-        "run_id": "run_d29f3274409749a7ab5c8ef6ccf07372",
+        "run_id": "run_3422b114e5524549bba29781fc28a8f6",
         "status": "PASS"
       },
       "task_id": "repair_jsonl_deduper"
@@ -29,13 +29,13 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_84593fadaf5c4760bc82fe7c1ff699c5",
-        "duration_ms": 1551,
+        "attempt_id": "attempt_45f20d600b1e4993ad33551429924c39",
+        "duration_ms": 997,
         "error_class": null,
         "final_diff_hash": "xxh64:3a6c137988d3cd3a",
         "hidden_status": "PASS",
         "public_status": "PASS",
-        "run_id": "run_37117f8824504e9e83653cc04a3c13db",
+        "run_id": "run_aae33aa8bbfe4ddb853f5757eb598224",
         "status": "PASS"
       },
       "task_id": "preserve_cli_error_codes"
@@ -46,25 +46,26 @@
       "artifact_version": "run_artifacts_v0",
       "attempt_index": 0,
       "scorer": {
-        "attempt_id": "attempt_5c0e700798ec45c9a5382e9f8654851e",
-        "duration_ms": 490,
+        "attempt_id": "attempt_ccd36db44f3c4350bc3e7787cff64d2f",
+        "duration_ms": 442,
         "error_class": null,
         "final_diff_hash": "xxh64:187bcea16c66ce96",
         "hidden_status": "PASS",
         "public_status": "PASS",
-        "run_id": "run_f11d4e21cf9b42c3b3da0f26060168fb",
+        "run_id": "run_da4fd07ac32a4567856e85e8a690f8b0",
         "status": "PASS"
       },
       "task_id": "repair_config_precedence"
     }
   ],
-  "config_hash": "xxh64:7d0070161dcfb5d0",
+  "attempts_per_task": 1,
+  "config_hash": "xxh64:00db51e25e3a97e4",
   "config_name": "dev_baseline",
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
   "control_layer": "scorer",
   "control_name": "oracle",
-  "created_at": "2026-06-28T02:58:12.703453Z",
-  "eval_run_id": "eval_122cc86cd30645068c0c15c751f41e5f",
+  "created_at": "2026-06-30T06:22:21.606545Z",
+  "eval_run_id": "eval_6a754c31bbda40f499cfea80d6657c18",
   "layer_counts": {
     "scorer_hidden_status": {
       "PASS": 3
@@ -79,6 +80,7 @@
   "policy": "oracle",
   "policy_family": "control",
   "policy_type": "scorer_control_patch",
+  "replay_repeats": 1,
   "split": "dev",
   "task_pack": "data/task_packs/repo_patch_python_v0"
 }

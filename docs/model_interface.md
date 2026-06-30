@@ -27,14 +27,17 @@ src/agentenv/models/fake.py
 src/agentenv/models/config_schema.py
 src/agentenv/models/config.py
 src/agentenv/models/openai_compatible_chat.py
+src/agentenv/models/factory.py
 src/agentenv/agents/loop.py
 src/agentenv/agents/prompts.py
 src/agentenv/agents/tool_messages.py
 src/agentenv/orchestrators/agent_task_run.py
+src/agentenv/orchestrators/eval_run.py
 ```
 
-The OpenAI-compatible chat provider adapter is implemented as a `ModelClient`,
-but `agent_model` eval execution is not wired yet.
+The OpenAI-compatible chat provider adapter is implemented as a `ModelClient`
+and is wired into `agent_model` eval policies. The same path supports local
+OpenAI-compatible endpoints such as Ollama.
 
 ## Message Contract
 
@@ -147,6 +150,7 @@ The current v0 prompt loop expects one JSON action per model turn:
 Supported tools:
 
 ```text
+list_files(path, max_depth, max_files)
 read_file(path)
 write_file(path, content)
 run_tests(command)
@@ -195,6 +199,7 @@ Agent task artifacts use `agent_task_run_artifacts_v0` and include:
 run_manifest.json
 agent_task_run.json
 decoding_config.json
+model_config.json           # only for real agent_model policies
 agent_control_script.json   # only for scripted controls
 agent_task_view.json
 prompt_loop_result.json
@@ -208,8 +213,11 @@ The matrix report reads model and budget metadata from these artifacts:
 - model ids from `prompt_loop_result.json`
 - token fields from `prompt_loop_result.json`
 - decoding budget from `decoding_config.json`
+- model config provenance from `model_config.json`
 - max turns from `agent_task_view.json`
-- tool invalidity from `prompt_loop_result.json`
+- candidate patch size from `candidate.patch`
+- prompt-loop statuses, nested scorer statuses, and tool invalidity from
+  `prompt_loop_result.json` and `agent_task_run.json`
 
 Unknown token or cost data must be reported as not recorded, not as zero.
 
@@ -237,8 +245,8 @@ It does not prove:
 
 ## Real Provider Adapter Requirements
 
-A future real provider adapter must implement `ModelClient` and return
-`ModelResponse` without changing the prompt loop contract.
+A real provider adapter must implement `ModelClient` and return `ModelResponse`
+without changing the prompt loop contract.
 
 The adapter should:
 
@@ -266,7 +274,26 @@ The adapter must not:
 
 ## Current Real-Model Status
 
-The OpenAI-compatible chat client is implemented, but the real-model eval path
-is not wired into `agent_model` execution yet. Closing Week 5 requires either
-running that path or writing an explicit blocker note that records why it is
-deferred.
+The real-model path has been run through an OpenAI-compatible local Ollama
+endpoint with Qwen:
+
+```text
+config: configs/eval/agent_model_dev_ollama_qwen3_14b.yaml
+model: hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
+report: experiments/reports/eval_matrices/agent_model_dev_ollama_qwen3_14b.md
+```
+
+The run is useful as an integration baseline, not a model-quality claim. The
+configured controls stayed on track, while the real model finished with:
+
+```text
+final pass rate: 0/3
+public-pass/hidden-fail: 2
+empty candidate patches: 2
+max-turn failures: 1
+invalid tool calls: 1
+```
+
+This proves the real provider path can execute through typed tools, persist
+model/decoding provenance, generate agent-task artifacts, and hand completed
+candidate patches to the existing scorer without changing scorer semantics.

@@ -8,11 +8,11 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_a86ea33b085f4613865ace6bfe76efa2",
+  "attempt_id": "attempt_e220f81a088f4d47b98a58f99ecde02e",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_102182129b77421fa99f2af3e4311642",
+  "run_id": "run_d779424da33d46a5ae5d7d44b18dbae5",
   "status": "PASS",
-  "submission_path": "/tmp/agentenv-agent_task_run_f07ffdd903d34303abfddac9a045380d-jhxqud0s/candidate.patch",
+  "submission_path": "/tmp/agentenv-agent_task_run_873c3955b7dc466ba1c6b23a653a405d-wdisr7dh/candidate.patch",
   "task_id": "preserve_cli_error_codes",
   "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/preserve_cli_error_codes/task.yaml"
 }

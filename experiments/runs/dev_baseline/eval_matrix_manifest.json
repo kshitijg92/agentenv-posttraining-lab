@@ -5,11 +5,11 @@
     "replays": "replays"
   },
   "attempt_count": 18,
-  "config_hash": "xxh64:7d0070161dcfb5d0",
+  "config_hash": "xxh64:00db51e25e3a97e4",
   "config_name": "dev_baseline",
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
-  "created_at": "2026-06-28T02:58:12.691018Z",
-  "eval_matrix_id": "eval_matrix_cf398a3be21e4277835f74117bd9871b",
+  "created_at": "2026-06-30T06:22:21.563146Z",
+  "eval_matrix_id": "eval_matrix_f8631e165a47473c969302cb5bd81695",
   "layer_counts": {
     "agent_scorer_hidden_status": {
       "PASS": 6
@@ -45,9 +45,10 @@
     {
       "artifact_dir": "policies/oracle",
       "attempt_count": 3,
+      "attempts_per_task": 1,
       "control_layer": "scorer",
       "control_name": "oracle",
-      "eval_run_id": "eval_122cc86cd30645068c0c15c751f41e5f",
+      "eval_run_id": "eval_6a754c31bbda40f499cfea80d6657c18",
       "layer_counts": {
         "scorer_hidden_status": {
           "PASS": 3
@@ -62,14 +63,16 @@
       "policy": "oracle",
       "policy_family": "control",
       "policy_type": "scorer_control_patch",
+      "replay_repeats": 1,
       "run_manifest": "policies/oracle/run_manifest.json"
     },
     {
       "artifact_dir": "policies/noop",
       "attempt_count": 3,
+      "attempts_per_task": 1,
       "control_layer": "scorer",
       "control_name": "bad.noop",
-      "eval_run_id": "eval_8d1ae75869cc412aae61044dca3a23b6",
+      "eval_run_id": "eval_3b8a0fc8a23f4f23980854752536d0b2",
       "layer_counts": {
         "scorer_hidden_status": {
           "FAIL": 3
@@ -84,14 +87,16 @@
       "policy": "noop",
       "policy_family": "control",
       "policy_type": "scorer_control_patch",
+      "replay_repeats": 1,
       "run_manifest": "policies/noop/run_manifest.json"
     },
     {
       "artifact_dir": "policies/public-tests-only",
       "attempt_count": 3,
+      "attempts_per_task": 1,
       "control_layer": "scorer",
       "control_name": "bad.public_only",
-      "eval_run_id": "eval_f6e9186d885441659870f26bea219280",
+      "eval_run_id": "eval_b3d35e8995ba437a996cab5664b40007",
       "layer_counts": {
         "scorer_hidden_status": {
           "FAIL": 3
@@ -106,14 +111,16 @@
       "policy": "public-tests-only",
       "policy_family": "control",
       "policy_type": "scorer_control_patch",
+      "replay_repeats": 1,
       "run_manifest": "policies/public-tests-only/run_manifest.json"
     },
     {
       "artifact_dir": "policies/agent-happy",
       "attempt_count": 3,
+      "attempts_per_task": 1,
       "control_layer": "agent",
       "control_name": "happy",
-      "eval_run_id": "eval_ab511af24de04d0890904c27aab7386b",
+      "eval_run_id": "eval_03ba86382ba74e64919eda526ab8947e",
       "layer_counts": {
         "agent_scorer_hidden_status": {
           "PASS": 3
@@ -134,14 +141,16 @@
       "policy": "agent-happy",
       "policy_family": "control",
       "policy_type": "agent_control_script",
+      "replay_repeats": 1,
       "run_manifest": "policies/agent-happy/run_manifest.json"
     },
     {
       "artifact_dir": "policies/agent-malformed",
       "attempt_count": 3,
+      "attempts_per_task": 1,
       "control_layer": "agent",
       "control_name": "malformed",
-      "eval_run_id": "eval_ca2d8fb4a24041bcb33dfcd89104c621",
+      "eval_run_id": "eval_ca71fd1e217742e9879d963928337050",
       "layer_counts": {
         "agent_status": {
           "agent_loop_failed": 3
@@ -153,14 +162,16 @@
       "policy": "agent-malformed",
       "policy_family": "control",
       "policy_type": "agent_control_script",
+      "replay_repeats": 1,
       "run_manifest": "policies/agent-malformed/run_manifest.json"
     },
     {
       "artifact_dir": "policies/agent-recoverable",
       "attempt_count": 3,
+      "attempts_per_task": 1,
       "control_layer": "agent",
       "control_name": "recoverable",
-      "eval_run_id": "eval_ccf4154eb08d4283a32dd35fbc0b3fa2",
+      "eval_run_id": "eval_56c6b87f04de4193867bf2e6865e966b",
       "layer_counts": {
         "agent_scorer_hidden_status": {
           "PASS": 3
@@ -181,11 +192,12 @@
       "policy": "agent-recoverable",
       "policy_family": "control",
       "policy_type": "agent_control_script",
+      "replay_repeats": 1,
       "run_manifest": "policies/agent-recoverable/run_manifest.json"
     }
   ],
-  "replay_policy_scope": "control_policies",
-  "replay_repeats": 1,
+  "replay_policy_count": 6,
+  "replay_run_count": 6,
   "replay_run_success_summary": "6/6",
   "replay_runs": [
     {

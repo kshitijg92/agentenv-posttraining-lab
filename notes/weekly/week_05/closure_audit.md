@@ -10,12 +10,12 @@ This audit checks the current repo against:
 
 ## Verdict
 
-Week 5 is functionally close, but not closed.
+Week 5 is closed.
 
-The fake/scripted model-agent path now runs end to end through eval, replay,
-reporting, and agent-task harness audit. The remaining closure gaps are the
-explicit real-model decision required by the Week 5 done criteria and the final
-week-close learnings/limitations.
+The scripted-control agent path runs end to end through eval, replay, reporting,
+and agent-task harness audit. The real-model path was also run through a local
+OpenAI-compatible Ollama endpoint, satisfying the Week 5 "run or explicitly
+block real model" criterion.
 
 ## Fresh Evidence
 
@@ -25,131 +25,184 @@ Regenerated canonical dev-baseline eval matrix:
 uv run agentenv eval \
   --config configs/eval/dev_baseline.yaml \
   --all-policies \
-  --out experiments/runs/dev_baseline
+  --out experiments/runs/dev_baseline \
+  --report-out experiments/reports/eval_matrices/dev_baseline.md \
+  --overwrite
 ```
 
 Observed:
 
 ```text
-policies=6
-attempts=18
-replays=6
+config: dev_baseline
+tasks: 3
+policies: 6
+attempts: 18
+replay runs: 6
+replay run success summary: 6/6
+replay match rate: 18/18 (100%)
 ```
 
-Regenerated canonical matrix report:
-
-```bash
-uv run agentenv report \
-  experiments/runs/dev_baseline \
-  --out experiments/reports/eval_matrices/dev_baseline.md
-```
-
-The report now shows:
+Report:
 
 ```text
-Task count: 3
-Policy count: 6
-Attempt count: 18
-Replay match rate: 18/18 (100%)
-Agent Model And Budget Summary
+experiments/reports/eval_matrices/dev_baseline.md
 ```
 
-Validated generated dev-baseline traces:
+The dev-baseline report shows:
+
+- scorer controls are calibrated: oracle `3/3` PASS;
+- known-bad scorer controls are `0/6` final PASS with public PASS and hidden
+  FAIL;
+- agent controls are calibrated: `agent-happy` and `agent-recoverable` score
+  `3/3` PASS, while `agent-malformed` fails before scoring as expected;
+- all configured control-policy replay runs pass.
+
+Real-model dev matrix:
+
+```text
+config: configs/eval/agent_model_dev_ollama_qwen3_14b.yaml
+model: hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
+run: experiments/runs/agent_model_dev_ollama_qwen3_14b
+report: experiments/reports/eval_matrices/agent_model_dev_ollama_qwen3_14b.md
+```
+
+Observed:
+
+```text
+tasks: 3
+policies: 7
+attempts: 21
+replay runs: 0
+control expectations: on track
+real-model final pass rate: 0/3
+prompt-loop completed: 2/3
+nested scorer run: 2/3
+public pass: 2/3
+hidden pass: 0/3
+empty candidate patches: 2
+missing candidate patches: 1
+max-turn failures: 1
+invalid tool calls: 1
+```
+
+This is not a model-quality claim. It is evidence that a real model policy can
+run through the same typed-tool, artifact, and scorer path as scripted controls.
+
+Trace validation:
 
 ```text
 validated 42 trace files under experiments/runs/dev_baseline
+validated 24 trace files under experiments/runs/agent_model_dev_ollama_qwen3_14b
 ```
 
-Regenerated agent-task harness audit:
-
-```bash
-uv run agentenv agents audit \
-  --cases data/harness_audit/agent_task_cases \
-  --out experiments/harness_audit/agent_task_audit
-```
-
-Observed:
+Harness audit coverage:
 
 ```text
-cases=12
-failed=0
+scorer audit cases: 11
+agent task audit cases: 13
 ```
 
-Repo checks:
+Repo checks from the final Week 5 implementation pass:
 
 ```text
 uv run ruff check . -> passed
 uv run pyright -> 0 errors
 git diff --check -> passed
-uv run pytest -n auto -> 264 passed
+uv run pytest -n auto -> 340 passed
 ```
 
 ## Passing Criteria
 
-The current implementation satisfies these Week 5 criteria:
+The current implementation satisfies the Week 5 minimum criteria:
 
-- Fake/scripted model path runs end to end through eval.
-- Agent controls interact with restricted task workspaces through typed tools.
-- Completed agent prompt loops materialize candidate patches.
-- Candidate patches are scored through the existing attempt/scorer path.
-- Prompt-loop failures stay separate from nested scorer outcomes.
-- Invalid model JSON, model errors, max-token stops, timeouts, max turns,
-  terminal tool errors, recoverable tool errors, public failures, hidden
-  failures, invalid shortcuts, and orchestrator errors are covered by
-  agent-task harness audit cases.
-- Fixed decoding budget is persisted in each agent task artifact through
-  `decoding_config.json`.
-- Agent task limits and allowed tools are persisted in `agent_task_view.json`.
-- Dev-baseline matrix separates scorer control policies from agent control
-  policies.
-- Dev-baseline replay now covers all six control policies and reports `18/18`
-  artifact comparisons matched.
-- The matrix report surfaces model id, decoding strategy, temperature,
-  max-new-token budget, model timeout, max turns, token/cost availability, and
-  tool invalidity counts for agent policies.
-- `docs/model_interface.md` documents the current model boundary and the
-  requirements for a future real provider adapter.
-- Scorer control behavior remains calibrated: oracle passes, known-bad controls
-  pass public checks and fail hidden validators.
+- fake/scripted model path runs end to end;
+- tool calls are persisted and trace-linked through prompt-loop artifacts;
+- invalid tool calls produce typed errors;
+- fixed inference budget is recorded in `decoding_config.json`;
+- agent task limits and allowed tools are recorded in `agent_task_view.json`;
+- completed candidate patches are scored through the existing attempt/scorer
+  path;
+- real model path was run through `agent_model` using a local
+  OpenAI-compatible endpoint.
 
-## Remaining Gaps
+The implementation also satisfies the quality bar:
 
-1. Real model path is not yet run or explicitly blocked.
+- `scorer_control_patch` evals still work and remain calibrated;
+- existing dev-baseline scoring semantics are not weakened;
+- reports separate control calibration from real agent-model results;
+- reports separate prompt-loop failure, task failure, scorer failure, and
+  infrastructure/orchestrator failure;
+- Week 5 notes record non-claims and limitations.
 
-   Week 5 done criteria require the real model path to be either run or blocked
-   with a reason. There is no `docs/week05_model_blocker.md`, and there is no
-   real model run artifact.
+## Current Artifacts
 
-2. Real/API model config files and implementation are absent.
+Model interface documentation:
 
-   `src/agentenv/models/openai_compatible.py`,
-   `configs/models/fake.yaml`, and
-   `configs/models/local_or_api_placeholder.yaml` do not exist. This is only a
-   closure blocker if we choose to run a real model path. If we choose the
-   fallback, the blocker doc should explicitly say these are deferred.
+```text
+docs/model_interface.md
+```
 
-3. Week 5 learnings and limitations are not closed.
+Week 5 learning summary:
 
-   `notes/weekly/week_05/learnings.md` does not exist yet. The implementation
-   notes are detailed, but the week still needs a short closure summary with
-   non-claims and limitations.
+```text
+notes/weekly/week_05/learnings.md
+```
+
+Canonical control matrix:
+
+```text
+experiments/runs/dev_baseline
+experiments/reports/eval_matrices/dev_baseline.md
+```
+
+Real-model matrix:
+
+```text
+configs/eval/agent_model_dev_ollama_qwen3_14b.yaml
+experiments/runs/agent_model_dev_ollama_qwen3_14b
+experiments/reports/eval_matrices/agent_model_dev_ollama_qwen3_14b.md
+```
+
+Local-model setup:
+
+```text
+src/agentenv/local_model_setup/
+src/agentenv/local_model_setup/README.md
+configs/models/ollama_qwen3_14b_q4_k_m.yaml
+configs/decoding/greedy_1024.yaml
+```
 
 ## Not Gaps
 
-These differ from the original manual names but are intentional:
+These differ from the original plan/manual names but are intentional:
 
 - There is no `configs/eval/week05_agent_baseline.yaml`; reusable configs use
-  schedule-agnostic names such as `configs/eval/agent_control_policies.yaml`
-  and `configs/eval/dev_baseline.yaml`.
+  schedule-agnostic names such as `configs/eval/agent_control_policies.yaml`,
+  `configs/eval/dev_baseline.yaml`, and
+  `configs/eval/agent_model_dev_ollama_qwen3_14b.yaml`.
 - There is no `src/agentenv/agents/prompt_loop.py`; the implemented prompt loop
   lives in `src/agentenv/agents/loop.py`.
-- The current Week 5 fake-agent baseline is deterministic agent-control based,
-  not a non-control model-quality baseline. The reports correctly state that it
-  is not evidence of broad coding-agent capability.
+- There is no `src/agentenv/models/openai_compatible.py`; the implemented
+  adapter is `src/agentenv/models/openai_compatible_chat.py`.
+- There is no fake-model YAML config. Scripted controls are persisted per
+  artifact as `agent_control_script.json`, which is the relevant replayable
+  control artifact.
 
-## Recommended Closure Path
+## Remaining Limitations
 
-1. Decide whether to run a real model path now.
-2. If not, write `docs/week05_model_blocker.md` with the exact reason and what
-   remains deferred.
-3. Write `notes/weekly/week_05/learnings.md` and close Week 5.
+These are limitations, not Week 5 blockers:
+
+- hidden-validator file hashes are still not captured in `eval_matrix_v0`;
+- raw provider responses are not persisted;
+- cost is reported as `not_recorded`;
+- the prompt loop supports one JSON action per model turn;
+- prompt quality has not been optimized;
+- local real-model execution depends on an external Ollama server and local
+  machine capacity;
+- public checks are weak on some dev tasks, by design, and hidden validators
+  remain the task-success authority.
+
+## Closure Decision
+
+Week 5 should be treated as closed. Week 6 can start from a real, inspectable
+model-agent baseline rather than from interface scaffolding.

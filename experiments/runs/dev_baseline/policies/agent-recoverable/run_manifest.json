@@ -9,18 +9,18 @@
     {
       "agent": {
         "candidate_patch_hash": "xxh64:791a044ad51af90c",
-        "duration_ms": 764,
+        "duration_ms": 720,
         "error_class": null,
         "prompt_loop_status": "completed",
-        "run_id": "agent_task_run_9d2a01beb8e64f5e82769eff270f58b3",
+        "run_id": "agent_task_run_4d9431d94a48426ba934e9180b142f34",
         "scorer_attempt": {
-          "attempt_id": "attempt_1cc78a8910ce458c91b01b0456ee03dd",
-          "duration_ms": 453,
+          "attempt_id": "attempt_0024e9de84204fc193a1e8a72ceabb61",
+          "duration_ms": 426,
           "error_class": null,
           "final_diff_hash": "xxh64:791a044ad51af90c",
           "hidden_status": "PASS",
           "public_status": "PASS",
-          "run_id": "run_344593541d67426fbea3d343da699057",
+          "run_id": "run_b46366fccc1a4237a114fd34bf4b69d2",
           "status": "PASS"
         },
         "status": "scored"
@@ -34,18 +34,18 @@
     {
       "agent": {
         "candidate_patch_hash": "xxh64:3a6c137988d3cd3a",
-        "duration_ms": 981,
+        "duration_ms": 932,
         "error_class": null,
         "prompt_loop_status": "completed",
-        "run_id": "agent_task_run_edfefcef48ea4ae3a33d852fe69ab490",
+        "run_id": "agent_task_run_e4c6365435d749e48edcd85f7729fc78",
         "scorer_attempt": {
-          "attempt_id": "attempt_e745f2e216704bc8b1afa39eb4c4418b",
-          "duration_ms": 640,
+          "attempt_id": "attempt_de3f168fd9fb4c1c98d258bdb6762207",
+          "duration_ms": 601,
           "error_class": null,
           "final_diff_hash": "xxh64:3a6c137988d3cd3a",
           "hidden_status": "PASS",
           "public_status": "PASS",
-          "run_id": "run_14e1e2eda21c47aea20e6a6207b63ad9",
+          "run_id": "run_5d3d3a3e923c408b9a01516eebbf927e",
           "status": "PASS"
         },
         "status": "scored"
@@ -59,18 +59,18 @@
     {
       "agent": {
         "candidate_patch_hash": "xxh64:187bcea16c66ce96",
-        "duration_ms": 805,
+        "duration_ms": 753,
         "error_class": null,
         "prompt_loop_status": "completed",
-        "run_id": "agent_task_run_dfa2aace43734f308a4b803ba0cc802c",
+        "run_id": "agent_task_run_f6ac9039a3e940389027fe99e439011e",
         "scorer_attempt": {
-          "attempt_id": "attempt_314aeff39ca447eeab09b19ee081cda9",
-          "duration_ms": 479,
+          "attempt_id": "attempt_8a2bf32350d24279a7ed93a5e166eb30",
+          "duration_ms": 447,
           "error_class": null,
           "final_diff_hash": "xxh64:187bcea16c66ce96",
           "hidden_status": "PASS",
           "public_status": "PASS",
-          "run_id": "run_f4610fd5ccf940e6a4a1740b8160987b",
+          "run_id": "run_f1ffff33334b4052a85b12e7085ec582",
           "status": "PASS"
         },
         "status": "scored"
@@ -82,13 +82,14 @@
       "task_id": "repair_config_precedence"
     }
   ],
-  "config_hash": "xxh64:7d0070161dcfb5d0",
+  "attempts_per_task": 1,
+  "config_hash": "xxh64:00db51e25e3a97e4",
   "config_name": "dev_baseline",
   "config_path": "/home/kshitij/agentenv-posttraining-lab/configs/eval/dev_baseline.yaml",
   "control_layer": "agent",
   "control_name": "recoverable",
-  "created_at": "2026-06-28T02:58:21.309220Z",
-  "eval_run_id": "eval_ccf4154eb08d4283a32dd35fbc0b3fa2",
+  "created_at": "2026-06-30T06:22:29.491762Z",
+  "eval_run_id": "eval_56c6b87f04de4193867bf2e6865e966b",
   "layer_counts": {
     "agent_scorer_hidden_status": {
       "PASS": 3
@@ -109,6 +110,7 @@
   "policy": "agent-recoverable",
   "policy_family": "control",
   "policy_type": "agent_control_script",
+  "replay_repeats": 1,
   "split": "dev",
   "task_pack": "data/task_packs/repo_patch_python_v0"
 }
