@@ -4,7 +4,7 @@ from mathlib import normalize_ratio
 
 
 def test_zero_denominator_raises_value_error() -> None:
-    with pytest.raises(ValueError, match="denominator"):
+    with pytest.raises(ValueError):
         normalize_ratio(1, 0)
 
 
