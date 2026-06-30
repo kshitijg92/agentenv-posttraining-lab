@@ -81,26 +81,26 @@
 
 ### Control Per-Task Outcomes
 
-| task_id | policy | artifact_version | scorer_status | scorer_public_status | scorer_hidden_status | agent_status | prompt_loop_status | agent_scorer_status | agent_scorer_public_status | agent_scorer_hidden_status | error_class | duration_ms | final_diff_hash | artifact_dir |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- |
-| repair_jsonl_deduper | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 470 | xxh64:791a044ad51af90c | policies/oracle/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 1026 | xxh64:3a6c137988d3cd3a | policies/oracle/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 447 | xxh64:187bcea16c66ce96 | policies/oracle/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 447 | xxh64:ef46db3751d8e999 | policies/noop/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 605 | xxh64:ef46db3751d8e999 | policies/noop/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 459 | xxh64:ef46db3751d8e999 | policies/noop/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 434 | xxh64:83ebe19f1a70c989 | policies/public-tests-only/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 612 | xxh64:2318ffb1a4be45cf | policies/public-tests-only/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 459 | xxh64:8ea4a8dafa72fda7 | policies/public-tests-only/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 719 | xxh64:791a044ad51af90c | policies/agent-happy/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 969 | xxh64:3a6c137988d3cd3a | policies/agent-happy/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 824 | xxh64:187bcea16c66ce96 | policies/agent-happy/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 3 |  | policies/agent-malformed/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 3 |  | policies/agent-malformed/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 4 |  | policies/agent-malformed/attempts/repair_config_precedence__attempt_001 |
-| repair_jsonl_deduper | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 732 | xxh64:791a044ad51af90c | policies/agent-recoverable/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 936 | xxh64:3a6c137988d3cd3a | policies/agent-recoverable/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 755 | xxh64:187bcea16c66ce96 | policies/agent-recoverable/attempts/repair_config_precedence__attempt_001 |
+| task_id | policy | artifact_version | scorer_status | scorer_public_status | scorer_hidden_status | agent_status | prompt_loop_status | agent_scorer_status | agent_scorer_public_status | agent_scorer_hidden_status | error_class | duration_ms | candidate_patch_bytes | final_diff_hash | artifact_dir |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
+| repair_jsonl_deduper | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 470 |  | xxh64:791a044ad51af90c | policies/oracle/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 1026 |  | xxh64:3a6c137988d3cd3a | policies/oracle/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | oracle | run_artifacts_v0 | PASS | PASS | PASS |  |  |  |  |  |  | 447 |  | xxh64:187bcea16c66ce96 | policies/oracle/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 447 |  | xxh64:ef46db3751d8e999 | policies/noop/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 605 |  | xxh64:ef46db3751d8e999 | policies/noop/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | noop | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 459 |  | xxh64:ef46db3751d8e999 | policies/noop/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 434 |  | xxh64:83ebe19f1a70c989 | policies/public-tests-only/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 612 |  | xxh64:2318ffb1a4be45cf | policies/public-tests-only/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | public-tests-only | run_artifacts_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |  |  |  |  |  | HiddenCheckFailed | 459 |  | xxh64:8ea4a8dafa72fda7 | policies/public-tests-only/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 719 | 1241 | xxh64:791a044ad51af90c | policies/agent-happy/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 969 | 2111 | xxh64:3a6c137988d3cd3a | policies/agent-happy/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | agent-happy | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 824 | 1611 | xxh64:187bcea16c66ce96 | policies/agent-happy/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 3 |  |  | policies/agent-malformed/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 3 |  |  | policies/agent-malformed/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | agent-malformed | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | 4 |  |  | policies/agent-malformed/attempts/repair_config_precedence__attempt_001 |
+| repair_jsonl_deduper | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 732 | 1241 | xxh64:791a044ad51af90c | policies/agent-recoverable/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 936 | 2111 | xxh64:3a6c137988d3cd3a | policies/agent-recoverable/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | agent-recoverable | agent_task_run_artifacts_v0 |  |  |  | scored | completed | PASS | PASS | PASS |  | 755 | 1611 | xxh64:187bcea16c66ce96 | policies/agent-recoverable/attempts/repair_config_precedence__attempt_001 |
 
 ### Replay Checks
 
@@ -117,6 +117,12 @@ Replay was not run for this eval matrix.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | local-qwen-dev | 3 | 2/3 (67%) | 2/3 (67%) | 1 | 2/3 (67%) | 0/3 (0%) | 2/3 (67%) | 0/3 (0%) | 9922 | policies/local-qwen-dev/trace.jsonl |
 
+### Agent Model Debug Signals
+
+| policy | prompt_loop_statuses | agent_error_classes | nested_scorer_statuses | nested_scorer_error_classes | public_pass_hidden_fail | empty_patch | missing_patch | invalid_tool_calls | tool_errors |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| local-qwen-dev | completed=2, max_turns_exceeded=1 | MaxTurnsExceeded=1 | HIDDEN_TEST_FAIL=2 | HiddenCheckFailed=2 | 2 | 2 | 1 | 1 | 1 |
+
 ### Agent Model Budget Summary
 
 | policy | model_ids | strategy | temperature | max_new_tokens | model_timeout_seconds | max_turns | prompt_tokens | completion_tokens | total_tokens | cost | invalid_tool_calls | tool_errors |
@@ -125,11 +131,11 @@ Replay was not run for this eval matrix.
 
 ### Agent Model Per-Task Outcomes
 
-| task_id | policy | artifact_version | scorer_status | scorer_public_status | scorer_hidden_status | agent_status | prompt_loop_status | agent_scorer_status | agent_scorer_public_status | agent_scorer_hidden_status | error_class | duration_ms | final_diff_hash | artifact_dir |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- |
-| repair_jsonl_deduper | local-qwen-dev | agent_task_run_artifacts_v0 |  |  |  | scored | completed | HIDDEN_TEST_FAIL | PASS | FAIL |  | 9922 | xxh64:ef46db3751d8e999 | policies/local-qwen-dev/attempts/repair_jsonl_deduper__attempt_001 |
-| preserve_cli_error_codes | local-qwen-dev | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | max_turns_exceeded |  |  |  | MaxTurnsExceeded | 31083 |  | policies/local-qwen-dev/attempts/preserve_cli_error_codes__attempt_001 |
-| repair_config_precedence | local-qwen-dev | agent_task_run_artifacts_v0 |  |  |  | scored | completed | HIDDEN_TEST_FAIL | PASS | FAIL |  | 6681 | xxh64:ef46db3751d8e999 | policies/local-qwen-dev/attempts/repair_config_precedence__attempt_001 |
+| task_id | policy | artifact_version | scorer_status | scorer_public_status | scorer_hidden_status | agent_status | prompt_loop_status | agent_scorer_status | agent_scorer_public_status | agent_scorer_hidden_status | error_class | duration_ms | candidate_patch_bytes | final_diff_hash | artifact_dir |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
+| repair_jsonl_deduper | local-qwen-dev | agent_task_run_artifacts_v0 |  |  |  | scored | completed | HIDDEN_TEST_FAIL | PASS | FAIL |  | 9922 | 0 | xxh64:ef46db3751d8e999 | policies/local-qwen-dev/attempts/repair_jsonl_deduper__attempt_001 |
+| preserve_cli_error_codes | local-qwen-dev | agent_task_run_artifacts_v0 |  |  |  | agent_loop_failed | max_turns_exceeded |  |  |  | MaxTurnsExceeded | 31083 |  |  | policies/local-qwen-dev/attempts/preserve_cli_error_codes__attempt_001 |
+| repair_config_precedence | local-qwen-dev | agent_task_run_artifacts_v0 |  |  |  | scored | completed | HIDDEN_TEST_FAIL | PASS | FAIL |  | 6681 | 0 | xxh64:ef46db3751d8e999 | policies/local-qwen-dev/attempts/repair_config_precedence__attempt_001 |
 
 ## Known Shortcuts
 

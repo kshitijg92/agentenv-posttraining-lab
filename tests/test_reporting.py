@@ -228,8 +228,10 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "### Control Per-Task Outcomes" in report
     assert "## Agent Model Results" in report
     assert "### Agent Model Outcome Summary" in report
+    assert "### Agent Model Debug Signals" in report
     assert "### Agent Model Budget Summary" in report
     assert "### Agent Model Per-Task Outcomes" in report
+    assert "candidate_patch_bytes" in report
     assert "- Config name: scorer_control_policies" in report
     assert "- Task count: 1" in report
     assert "- Policy count: 3" in report
@@ -243,6 +245,7 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "No agent control policies in this eval matrix." in report
     assert "No agent budget metadata in this eval matrix." in report
     assert "No agent model policies in this eval matrix." in report
+    assert "No agent model debug signals in this eval matrix." in report
     assert "No agent model policy attempts in this eval matrix." in report
     assert "No agent aggregate rates for this eval matrix." in report
     assert "### Replay Checks" in report
@@ -299,6 +302,7 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "### Agent Control Budget Summary" in report
     assert "## Agent Model Results" in report
     assert "### Agent Model Outcome Summary" in report
+    assert "### Agent Model Debug Signals" in report
     assert "### Agent Model Budget Summary" in report
     assert "### Scorer Control Expectations" in report
     assert "### Agent Control Expectations" in report
@@ -399,6 +403,10 @@ def test_write_mixed_agent_control_and_model_eval_matrix_report(
         1,
     )[0]
     agent_model_summary = report.split("### Agent Model Outcome Summary", 1)[1].split(
+        "### Agent Model Debug Signals",
+        1,
+    )[0]
+    agent_model_debug = report.split("### Agent Model Debug Signals", 1)[1].split(
         "### Agent Model Budget Summary",
         1,
     )[0]
@@ -414,6 +422,11 @@ def test_write_mixed_agent_control_and_model_eval_matrix_report(
     assert "real-agent-smoke" not in agent_control_summary
     assert "| real-agent-smoke | 1 | 0/1 (0%)" in agent_model_summary
     assert "agent-happy" not in agent_model_summary
+    assert (
+        "| real-agent-smoke | model_error=1 | MissingModelApiKeyEnvVar=1 | "
+        "none | none | 0 | 0 | 1 | 0 | 0 |"
+    ) in agent_model_debug
+    assert "agent-happy" not in agent_model_debug
     assert (
         "| real-agent-smoke | placeholder-model | greedy | 0.0 | 1024 | "
         "60 | 10 | not_recorded | not_recorded | not_recorded | not_recorded | "

@@ -259,6 +259,14 @@ def render_eval_matrix_report(
     lines.extend(
         [
             "",
+            "### Agent Model Debug Signals",
+            "",
+        ]
+    )
+    lines.extend(_agent_model_debug_table(agent_model_policy_summaries))
+    lines.extend(
+        [
+            "",
             "### Agent Model Budget Summary",
             "",
         ]
@@ -457,6 +465,8 @@ def _matrix_policy_summary(
         attempts,
         "hidden_status",
     )
+    agent_error_class_counts = _nested_field_counts(attempts, "agent", "error_class")
+    agent_scorer_error_class_counts = _agent_scorer_field_counts(attempts, "error_class")
     scorer_public_pass_hidden_fail = sum(
         _scorer_field(attempt, "public_status") == "PASS"
         and _scorer_field(attempt, "hidden_status") == "FAIL"
@@ -469,6 +479,19 @@ def _matrix_policy_summary(
     )
     scorer_or_orchestrator_failures = sum(
         _scorer_field(attempt, "status") == "ORCHESTRATOR_ERROR"
+        for attempt in attempts
+    )
+    agent_scorer_public_pass_hidden_fail = sum(
+        _agent_scorer_field(attempt, "public_status") == "PASS"
+        and _agent_scorer_field(attempt, "hidden_status") == "FAIL"
+        for attempt in attempts
+    )
+    agent_empty_patch_count = sum(
+        _agent_artifact_field(attempt, "candidate_patch_bytes") == 0
+        for attempt in attempts
+    )
+    agent_missing_patch_count = sum(
+        _agent_field(attempt, "candidate_patch_hash") is None
         for attempt in attempts
     )
     duration_values = [
@@ -504,6 +527,13 @@ def _matrix_policy_summary(
         "agent_scorer_status_counts": agent_scorer_status_counts,
         "agent_scorer_public_status_counts": agent_scorer_public_status_counts,
         "agent_scorer_hidden_status_counts": agent_scorer_hidden_status_counts,
+        "agent_error_class_counts": agent_error_class_counts,
+        "agent_scorer_error_class_counts": agent_scorer_error_class_counts,
+        "agent_scorer_public_pass_hidden_fail": (
+            agent_scorer_public_pass_hidden_fail
+        ),
+        "agent_empty_patch_count": agent_empty_patch_count,
+        "agent_missing_patch_count": agent_missing_patch_count,
         "agent_model_ids": _agent_artifact_unique_values(attempts, "model_ids"),
         "agent_decoding_strategies": _agent_artifact_unique_values(
             attempts,
@@ -684,6 +714,37 @@ def _agent_model_outcome_row(summary: dict[str, object]) -> str:
         f"| {_count_rate(summary.get('agent_scorer_hidden_passes'), attempt_count)} "
         f"| {_display(summary.get('median_duration_ms'))} "
         f"| {trace_ref} |"
+    )
+
+
+def _agent_model_debug_table(summaries: list[dict[str, object]]) -> list[str]:
+    if not summaries:
+        return ["No agent model debug signals in this eval matrix."]
+
+    return [
+        (
+            "| policy | prompt_loop_statuses | agent_error_classes | "
+            "nested_scorer_statuses | nested_scorer_error_classes | "
+            "public_pass_hidden_fail | empty_patch | missing_patch | "
+            "invalid_tool_calls | tool_errors |"
+        ),
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        *[_agent_model_debug_row(summary) for summary in summaries],
+    ]
+
+
+def _agent_model_debug_row(summary: dict[str, object]) -> str:
+    return (
+        f"| {_display(summary.get('policy'))} "
+        f"| {_counts_display(summary.get('prompt_loop_status_counts'))} "
+        f"| {_counts_display(summary.get('agent_error_class_counts'))} "
+        f"| {_counts_display(summary.get('agent_scorer_status_counts'))} "
+        f"| {_counts_display(summary.get('agent_scorer_error_class_counts'))} "
+        f"| {_display(summary.get('agent_scorer_public_pass_hidden_fail'))} "
+        f"| {_display(summary.get('agent_empty_patch_count'))} "
+        f"| {_display(summary.get('agent_missing_patch_count'))} "
+        f"| {_display(summary.get('agent_invalid_tool_calls'))} "
+        f"| {_display(summary.get('agent_tool_errors'))} |"
     )
 
 
@@ -1149,6 +1210,10 @@ def _attempt_final_diff_hash_from_record(attempt: dict[str, object]) -> object:
     return _attempt_final_diff_hash(scorer, agent)
 
 
+def _attempt_candidate_patch_bytes_from_record(attempt: dict[str, object]) -> object:
+    return _agent_artifact_field(attempt, "candidate_patch_bytes")
+
+
 def _attempt_duration_ms(attempt: dict[str, object]) -> object:
     duration_ms = _scorer_field(attempt, "duration_ms")
     if duration_ms is not None:
@@ -1177,6 +1242,7 @@ def _matrix_attempt_rows(
             f"| {_display(_agent_scorer_field(attempt, 'hidden_status'))} "
             f"| {_display(_attempt_error_class_from_record(attempt))} "
             f"| {_display(_attempt_duration_ms(attempt))} "
+            f"| {_display(_attempt_candidate_patch_bytes_from_record(attempt))} "
             f"| {_display(_attempt_final_diff_hash_from_record(attempt))} "
             f"| {_display(attempt.get('artifact_dir'))} |"
         )
@@ -1203,11 +1269,12 @@ def _matrix_attempt_table(
             "scorer_public_status | scorer_hidden_status | agent_status | "
             "prompt_loop_status | agent_scorer_status | "
             "agent_scorer_public_status | agent_scorer_hidden_status | "
-            "error_class | duration_ms | final_diff_hash | artifact_dir |"
+            "error_class | duration_ms | candidate_patch_bytes | final_diff_hash | "
+            "artifact_dir |"
         ),
         (
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
-            "| --- | ---: | --- | --- |"
+            "| --- | ---: | ---: | --- | --- |"
         ),
     ]
     for policy, run_artifact_dir, run_manifest in policy_runs:
@@ -1250,6 +1317,7 @@ def _agent_artifact_summary(artifact_dir: Path) -> dict[str, object]:
         _load_optional_json_object(artifact_dir / "decoding_config.json")
     )
     agent_task_view = _load_optional_json_object(artifact_dir / "agent_task_view.json")
+    candidate_patch_path = artifact_dir / "candidate.patch"
     model_responses = _object_list(_field(prompt_loop, "model_responses"))
     tool_results = _object_list(_field(prompt_loop, "tool_results"))
 
@@ -1265,6 +1333,11 @@ def _agent_artifact_summary(artifact_dir: Path) -> dict[str, object]:
         "model_timeout_seconds": _field(decoding_config, "timeout_seconds"),
         "max_turns": _field(agent_task_view, "max_turns"),
         "turns_executed": _field(prompt_loop, "turns_executed"),
+        "candidate_patch_bytes": (
+            candidate_patch_path.stat().st_size
+            if candidate_patch_path.is_file()
+            else None
+        ),
         "token_usage": _optional_object(_field(prompt_loop, "token_usage")),
         "invalid_tool_calls": sum(
             result.get("status") == "error"
@@ -1441,6 +1514,16 @@ def _value_set_display(value: object) -> str:
     if not isinstance(value, list):
         return _display(value)
     return ", ".join(_display(item) for item in value)
+
+
+def _counts_display(value: object) -> str:
+    if not isinstance(value, dict) or not value:
+        return "none"
+    parts: list[str] = []
+    for key, count in sorted(value.items(), key=lambda item: str(item[0])):
+        if isinstance(count, int) and not isinstance(count, bool):
+            parts.append(f"{_display(key)}={count}")
+    return ", ".join(parts) if parts else "none"
 
 
 def _relative_or_absolute(path: Path) -> str:
