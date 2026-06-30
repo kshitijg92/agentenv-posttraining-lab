@@ -111,6 +111,10 @@ uv run agentenv eval \
 policy's `replay.repeats`; for `dev_baseline`, scorer and agent control
 policies each request one replay run.
 
+Eval artifact directories must be new or empty. To intentionally rerun into an
+existing directory, pass `--overwrite`; this deletes and recreates `--out`
+before the eval starts.
+
 Main eval matrix outputs:
 
 ```text
@@ -139,6 +143,8 @@ uv run agentenv replay \
 
 Replay accepts source artifact directories such as `eval_run_v0` policy runs
 and direct `agent_task_run_artifacts_v0` agent task run artifacts.
+Replay artifact directories follow the same rule: use a new/empty `--out`, or
+pass `--overwrite` to recreate it.
 
 ## Write Markdown Reports
 

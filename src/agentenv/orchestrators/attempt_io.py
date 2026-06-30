@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from agentenv.artifacts import prepare_artifact_output_dir
 from agentenv.orchestrators.attempt import AttemptResult, AttemptRun
 from agentenv.security.secrets import redact_jsonable, redact_secrets
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
@@ -33,7 +34,7 @@ def write_attempt_result(result: AttemptResult, out_dir: Path) -> Path:
 def write_attempt_artifacts(
     attempt_run: AttemptRun, out_dir: Path
 ) -> AttemptArtifactPaths:
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = prepare_artifact_output_dir(out_dir)
     run_manifest_path = out_dir / "run_manifest.json"
     attempt_path = write_attempt_result(attempt_run.result, out_dir)
     stdout_path = out_dir / "stdout.txt"

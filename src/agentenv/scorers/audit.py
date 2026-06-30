@@ -80,11 +80,18 @@ def run_scorer_audit(case_root: Path, out_dir: Path) -> list[ScorerAuditResult]:
         effective_task_manifest_path = _materialize_effective_manifest(
             case,
             task_manifest_path,
-            attempt_artifact_dir,
         )
         attempt_run = run_and_persist_patch_attempt_to_dir(
             effective_task_manifest_path,
             (case_dir / case.submission).resolve(),
+            attempt_artifact_dir,
+        )
+        manifest_override_record = _manifest_override_record(
+            case,
+            task_manifest_path,
+        )
+        _write_manifest_override_artifact(
+            manifest_override_record,
             attempt_artifact_dir,
         )
         results.append(
@@ -94,10 +101,7 @@ def run_scorer_audit(case_root: Path, out_dir: Path) -> list[ScorerAuditResult]:
                 attempt_artifact_dir=attempt_artifact_dir,
                 attempt_result=attempt_run.result,
                 comparisons=_comparisons(case, attempt_run.result),
-                manifest_override_record=_manifest_override_record(
-                    case,
-                    task_manifest_path,
-                ),
+                manifest_override_record=manifest_override_record,
             )
         )
 
@@ -131,7 +135,6 @@ def _resolve_repo_relative_path(path_text: str) -> Path:
 def _materialize_effective_manifest(
     case: ScorerAuditCase,
     task_manifest_path: Path,
-    attempt_artifact_dir: Path,
 ) -> Path:
     if case.manifest_overrides is None:
         return task_manifest_path
@@ -144,16 +147,18 @@ def _materialize_effective_manifest(
     _apply_nested_overrides(raw_manifest, _manifest_override_data(case))
     effective_manifest_path.write_text(yaml.safe_dump(raw_manifest, sort_keys=False))
 
-    override_record = _manifest_override_record(
-        case,
-        task_manifest_path,
-    )
-    if override_record is not None:
-        attempt_artifact_dir.mkdir(parents=True, exist_ok=True)
-        (attempt_artifact_dir / "manifest_override.json").write_text(
-            json.dumps(override_record, indent=2, sort_keys=True) + "\n"
-        )
     return effective_manifest_path
+
+
+def _write_manifest_override_artifact(
+    override_record: dict[str, object] | None,
+    attempt_artifact_dir: Path,
+) -> None:
+    if override_record is None:
+        return
+    (attempt_artifact_dir / "manifest_override.json").write_text(
+        json.dumps(override_record, indent=2, sort_keys=True) + "\n"
+    )
 
 
 def _manifest_override_record(

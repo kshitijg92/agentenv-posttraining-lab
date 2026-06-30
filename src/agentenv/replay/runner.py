@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from agentenv.artifacts import prepare_artifact_output_dir
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig
@@ -99,12 +100,16 @@ class ReplayRun:
     comparisons: list[ReplayComparison]
 
 
-def run_replay(source_run_dir: Path, out_dir: Path) -> ReplayRun:
+def run_replay(
+    source_run_dir: Path,
+    out_dir: Path,
+    *,
+    overwrite: bool = False,
+) -> ReplayRun:
     source_run_dir = source_run_dir.resolve()
-    out_dir = out_dir.resolve()
     replay_id = f"replay_{uuid4().hex}"
     created_at = _utc_now()
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
 
     trace_events: list[dict[str, object]] = []
     base_provenance: dict[str, object] = {"replay_id": replay_id}

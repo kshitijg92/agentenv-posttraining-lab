@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import xxhash
 
+from agentenv.artifacts import prepare_artifact_output_dir
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     load_agent_control_script_case,
@@ -105,9 +106,14 @@ class EvalMatrixReplayRecord:
     replay_run: ReplayRun
 
 
-def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
+def run_eval_config(
+    config_path: Path,
+    policy: str,
+    out_dir: Path,
+    *,
+    overwrite: bool = False,
+) -> EvalRun:
     config_path = config_path.resolve()
-    out_dir = out_dir.resolve()
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     selected_policy = select_policy(config, policy)
@@ -115,7 +121,7 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
     eval_run_id = f"eval_{uuid4().hex}"
     created_at = _utc_now()
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
     attempts_dir = out_dir / "attempts"
     attempts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -330,16 +336,17 @@ def run_eval_config(config_path: Path, policy: str, out_dir: Path) -> EvalRun:
 def run_eval_config_all_policies(
     config_path: Path,
     out_dir: Path,
+    *,
+    overwrite: bool = False,
 ) -> EvalMatrixRun:
     config_path = config_path.resolve()
-    out_dir = out_dir.resolve()
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     config_hash = _hash_file(config_path)
     eval_matrix_id = f"eval_matrix_{uuid4().hex}"
     created_at = _utc_now()
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
     policies_dir = out_dir / "policies"
     policies_dir.mkdir(parents=True, exist_ok=True)
 

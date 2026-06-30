@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agentenv.agents.loop import run_prompt_loop
 from agentenv.agents.schema import AgentTaskView, PromptLoopResult, PromptLoopStatus
+from agentenv.artifacts import prepare_artifact_output_dir
 from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.models.client import ModelClient
 from agentenv.models.config_schema import ModelConfig
@@ -252,7 +253,7 @@ def write_agent_task_run_artifacts(
     model_config_provenance: dict[str, Any] | None = None,
     decoding_config_provenance: dict[str, Any] | None = None,
 ) -> AgentTaskRunArtifactPaths:
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = prepare_artifact_output_dir(out_dir)
     run_manifest_path = out_dir / "run_manifest.json"
     agent_task_run_path = out_dir / "agent_task_run.json"
     decoding_config_path = (

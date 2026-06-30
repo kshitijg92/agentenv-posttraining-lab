@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from agentenv.artifacts import ArtifactDirectoryError
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.eval_run import (
     run_eval_config,
@@ -438,6 +439,39 @@ def test_run_eval_config_distinguishes_bad_noop(tmp_path: Path) -> None:
     assert scorer.status == "HIDDEN_TEST_FAIL"
     assert scorer.public_status == "PASS"
     assert scorer.hidden_status == "FAIL"
+
+
+def test_run_eval_config_rejects_non_empty_output_dir(tmp_path: Path) -> None:
+    out_dir = tmp_path / "eval"
+    out_dir.mkdir()
+    stale_file = out_dir / "candidate.patch"
+    stale_file.write_text("stale\n")
+
+    with pytest.raises(ArtifactDirectoryError, match="Output directory is not empty"):
+        run_eval_config(CONTROL_EVAL_CONFIG, "oracle", out_dir)
+
+    assert stale_file.read_text() == "stale\n"
+    assert not (out_dir / "run_manifest.json").exists()
+
+
+def test_run_eval_config_overwrite_clears_non_empty_output_dir(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "eval"
+    out_dir.mkdir()
+    stale_file = out_dir / "candidate.patch"
+    stale_file.write_text("stale\n")
+
+    eval_run = run_eval_config(
+        CONTROL_EVAL_CONFIG,
+        "oracle",
+        out_dir,
+        overwrite=True,
+    )
+
+    assert eval_run.out_dir == out_dir.resolve()
+    assert not stale_file.exists()
+    assert (out_dir / "run_manifest.json").is_file()
 
 
 def test_run_eval_config_all_policies_writes_matrix_manifest(

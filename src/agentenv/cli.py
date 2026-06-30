@@ -4,7 +4,7 @@ import typer
 from rich.console import Console
 
 from agentenv.agents.audit import run_agent_task_audit
-from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
+from agentenv.artifacts import ArtifactDirectoryError
 from agentenv.controls.controls_run import run_controls
 from agentenv.local_model_setup.ollama import (
     DEFAULT_MODEL_ID,
@@ -26,6 +26,7 @@ from agentenv.orchestrators.eval_run import (
     run_eval_config,
     run_eval_config_all_policies,
 )
+from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
 from agentenv.sandbox.docker_smoke import run_docker_smoke
@@ -361,14 +362,23 @@ def run_eval(
         "--report-out",
         help="Optional Markdown report path to write after the eval completes.",
     ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before running.",
+    ),
 ) -> None:
     if all_policies:
         if policy is not None:
             raise typer.BadParameter("--all-policies cannot be combined with --policy")
-        eval_matrix = run_eval_config_all_policies(
-            config,
-            out,
-        )
+        try:
+            eval_matrix = run_eval_config_all_policies(
+                config,
+                out,
+                overwrite=overwrite,
+            )
+        except ArtifactDirectoryError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--out") from exc
         layer_counts = _format_layer_counts(_matrix_layer_counts(eval_matrix))
         console.print(
             f"[green]eval complete[/green] {eval_matrix.config.name} "
@@ -386,7 +396,10 @@ def run_eval(
     if policy is None:
         raise typer.BadParameter("Provide --policy or --all-policies")
 
-    eval_run = run_eval_config(config, policy, out)
+    try:
+        eval_run = run_eval_config(config, policy, out, overwrite=overwrite)
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
     layer_counts = _format_layer_counts(_layer_counts(eval_run))
     console.print(
         f"[green]eval complete[/green] {eval_run.config.name} "
@@ -406,8 +419,16 @@ def replay_run(
         help="Source artifact directory to replay.",
     ),
     out: Path = typer.Option(..., "--out", help="Directory for replay artifacts."),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before replaying.",
+    ),
 ) -> None:
-    replay = run_replay(source_run_dir, out)
+    try:
+        replay = run_replay(source_run_dir, out, overwrite=overwrite)
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
     style = "green" if replay.status == "PASS" else "red"
     console.print(
         f"[{style}]{replay.status}[/{style}] "
