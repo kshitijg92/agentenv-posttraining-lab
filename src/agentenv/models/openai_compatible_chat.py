@@ -64,8 +64,13 @@ class OpenAICompatibleChatModelClient:
             response = self._post_chat_completion(messages, decoding_config)
         except httpx.TimeoutException:
             return _timeout_response(self.model_id, started, "ProviderTimeout")
-        except httpx.RequestError:
-            return _error_response(self.model_id, started, "ProviderRequestError")
+        except httpx.RequestError as exc:
+            return _error_response(
+                self.model_id,
+                started,
+                "ProviderRequestError",
+                error_message=_provider_request_error_message(exc),
+            )
 
         if response.status_code >= 400:
             return _error_response(
@@ -293,6 +298,15 @@ def _provider_http_error_message(response: httpx.Response) -> str:
             parts.append(f"{field_name}={field_value}")
 
     return redact_secrets(_truncate_error_message(" ".join(parts)))
+
+
+def _provider_request_error_message(exc: httpx.RequestError) -> str:
+    message = _clean_error_fragment(str(exc))
+    if message is None:
+        message = "<empty>"
+    return redact_secrets(
+        _truncate_error_message(f"{exc.__class__.__name__}: {message}")
+    )
 
 
 def _clean_error_fragment(value: object) -> str | None:

@@ -1,0 +1,25 @@
+id: completed_no_final_newline
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+agent_control_script: agent_control_script.json
+expected_agent_run_status: scored
+expected_prompt_loop_status: completed
+expected_prompt_loop_error_class:
+expected_model_finish_reasons:
+  - stop_criteria_met
+  - stop_criteria_met
+  - stop_criteria_met
+  - stop_criteria_met
+  - stop_criteria_met
+expected_tool_results:
+  - tool_name: list_files
+    status: ok
+  - tool_name: read_file
+    status: ok
+  - tool_name: write_file
+    status: ok
+  - tool_name: run_tests
+    status: ok
+expected_attempt_status: PASS
+expected_public_status: PASS
+expected_hidden_status: PASS
+purpose: Verify a completed prompt loop whose write_file content lacks a final newline still produces a git-apply-compatible candidate patch and scores PASS.

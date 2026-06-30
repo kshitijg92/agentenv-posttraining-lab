@@ -330,6 +330,50 @@ def test_openai_compatible_chat_redacts_provider_http_error_body(
     assert REDACTED_SECRET in response.error_message
 
 
+def test_openai_compatible_chat_records_request_error_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1")
+    monkeypatch.setenv("AGENTENV_MODEL_API_KEY", "secret-token")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    client = OpenAICompatibleChatModelClient(
+        config=_model_config(),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    response = client.generate(_messages(), _decoding_config())
+
+    assert response.finish_reason == "error"
+    assert response.error_class == "ProviderRequestError"
+    assert response.error_message == "ConnectError: connection refused"
+
+
+def test_openai_compatible_chat_redacts_provider_request_error_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1")
+    monkeypatch.setenv("AGENTENV_MODEL_API_KEY", CANARY)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(f"connection failed with token {CANARY}")
+
+    client = OpenAICompatibleChatModelClient(
+        config=_model_config(),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    response = client.generate(_messages(), _decoding_config())
+
+    assert response.finish_reason == "error"
+    assert response.error_class == "ProviderRequestError"
+    assert response.error_message is not None
+    assert CANARY not in response.error_message
+    assert REDACTED_SECRET in response.error_message
+
+
 def test_openai_compatible_chat_maps_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -1,4 +1,5 @@
 import difflib
+from collections.abc import Iterable
 from pathlib import Path
 
 import xxhash
@@ -27,11 +28,13 @@ def render_directory_diff(before_dir: Path, after_dir: Path) -> str:
             continue
 
         diff_chunks.extend(
-            difflib.unified_diff(
-                before_lines,
-                after_lines,
-                fromfile=f"a/{relative_file.as_posix()}",
-                tofile=f"b/{relative_file.as_posix()}",
+            _git_apply_compatible_lines(
+                difflib.unified_diff(
+                    before_lines,
+                    after_lines,
+                    fromfile=f"a/{relative_file.as_posix()}",
+                    tofile=f"b/{relative_file.as_posix()}",
+                )
             )
         )
 
@@ -60,6 +63,25 @@ def _after_files_to_diff(before_files: set[Path], after_files: set[Path]) -> set
 
 def _read_lines(path: Path) -> list[str]:
     return path.read_text().splitlines(keepends=True)
+
+
+def _git_apply_compatible_lines(lines: Iterable[str]) -> list[str]:
+    compatible_lines: list[str] = []
+    for line in lines:
+        if line.endswith("\n"):
+            compatible_lines.append(line)
+            continue
+
+        compatible_lines.append(f"{line}\n")
+        if _is_unified_diff_content_line(line):
+            compatible_lines.append("\\ No newline at end of file\n")
+    return compatible_lines
+
+
+def _is_unified_diff_content_line(line: str) -> bool:
+    if line.startswith(("--- ", "+++ ")):
+        return False
+    return line.startswith((" ", "-", "+"))
 
 
 def _is_ignored_path(path: Path) -> bool:

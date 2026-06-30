@@ -1,0 +1,31 @@
+{
+  "run_id": "agent_task_run_86002b8154b040babbd7bd695f142188",
+  "task_id": "toy_python_fix_001",
+  "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+  "status": "scored",
+  "prompt_loop_status": "completed",
+  "candidate_patch_path": "/tmp/agentenv-agent_task_run_86002b8154b040babbd7bd695f142188-9orh9i0i/candidate.patch",
+  "candidate_patch_hash": "xxh64:f7df83e4e593672d",
+  "attempt_result": {
+    "run_id": "run_7bc521af524f4886abaf1f1e019506c8",
+    "task_id": "toy_python_fix_001",
+    "task_manifest_path": "/home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
+    "attempt_id": "attempt_b10791aa7daf431b8325e537a4a87a7f",
+    "submission_path": "/tmp/agentenv-agent_task_run_86002b8154b040babbd7bd695f142188-9orh9i0i/candidate.patch",
+    "status": "HIDDEN_TEST_FAIL",
+    "public_status": "PASS",
+    "hidden_status": "FAIL",
+    "error_class": "HiddenCheckFailed",
+    "started_at": "2026-06-30T05:11:32.556159Z",
+    "ended_at": "2026-06-30T05:11:33.029252Z",
+    "duration_ms": 473,
+    "final_diff_hash": "xxh64:f7df83e4e593672d",
+    "orchestrator_version": "attempt_v0"
+  },
+  "error_class": null,
+  "error_message": null,
+  "started_at": "2026-06-30T05:11:15.816558Z",
+  "ended_at": "2026-06-30T05:11:33.029311Z",
+  "duration_ms": 17212,
+  "orchestrator_version": "agent_task_run_v0"
+}
