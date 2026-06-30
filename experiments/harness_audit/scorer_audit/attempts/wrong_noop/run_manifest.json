@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_28946e2cddec48158c286bb916d0abc4",
+  "attempt_id": "attempt_c27052ff23834f168b56a532acb0e316",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_ce848bda8aad446a9f99808dc21258ed",
+  "run_id": "run_b2cbbbda69c94037811610bf2d2dafa9",
   "status": "HIDDEN_TEST_FAIL",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/harness_audit/scorer_cases/wrong_noop/submission.patch",
   "task_id": "toy_python_fix_001",

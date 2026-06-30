@@ -8,11 +8,11 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_f618298c58c04fcba3f2f4c1ae548802",
+  "attempt_id": "attempt_119b338a86ba499b8ec526de7ce20905",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_77eca5b08c1c4dd99a63e5fcb3a18d09",
+  "run_id": "run_3cd8aff2f43441bdb662e38f4f9ae59b",
   "status": "TIMEOUT",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/harness_audit/scorer_cases/hidden_check_timeout/submission.patch",
   "task_id": "toy_python_fix_001",
-  "task_manifest_path": "/tmp/agentenv-audit-hidden_check_timeout-51r4fpya/task.yaml"
+  "task_manifest_path": "/tmp/agentenv-audit-hidden_check_timeout-1rfwgplh/task.yaml"
 }

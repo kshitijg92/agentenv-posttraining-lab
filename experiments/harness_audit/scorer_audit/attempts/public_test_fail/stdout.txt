@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
-platform linux -- Python 3.11.14, pytest-9.1.0, pluggy-1.6.0
-rootdir: /tmp/agentenv-toy_python_fix_001-8demg7vu/workspace
+platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /tmp/agentenv-toy_python_fix_001-0hhdwoac/workspace
 configfile: pyproject.toml
 collected 1 item
 

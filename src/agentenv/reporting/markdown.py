@@ -27,7 +27,7 @@ def render_eval_report(
     artifact_dir: Path,
     manifest: dict[str, object],
 ) -> str:
-    lines = [
+    run_detail_lines = [
         "# Eval Report",
         "",
         "## Run Details",
@@ -38,6 +38,18 @@ def render_eval_report(
         f"- Config name: {_display(manifest.get('config_name'))}",
         f"- Config path: {_path_display(manifest.get('config_path'))}",
         f"- Config hash: {_display(manifest.get('config_hash'))}",
+    ]
+    if "model_config" in manifest:
+        run_detail_lines.append(
+            f"- Model config: {_path_display(manifest.get('model_config'))}"
+        )
+    if "decoding_config" in manifest:
+        run_detail_lines.append(
+            f"- Decoding config: {_path_display(manifest.get('decoding_config'))}"
+        )
+
+    lines = [
+        *run_detail_lines,
         f"- Policy: {_display(manifest.get('policy'))}",
         f"- Policy type: {_display(manifest.get('policy_type'))}",
         f"- Policy family: {_display(manifest.get('policy_family'))}",

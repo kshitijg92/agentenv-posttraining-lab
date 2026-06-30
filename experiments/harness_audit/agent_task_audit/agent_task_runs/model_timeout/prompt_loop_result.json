@@ -11,7 +11,7 @@
   "messages": [
     {
       "role": "system",
-      "content": "You are a coding agent operating through a restricted tool interface.\nDo not output free-form chat, markdown, or multiple actions.\nOnly interact through tool_call or final_answer actions.\n\nAllowed tool-call actions:\n- read_file: Read a text file from the prepared task workspace.\n  Example: {\"action\":\"tool_call\",\"arguments\":{\"path\":\"src/file.py\"},\"tool_name\":\"read_file\"}\n- write_file: Replace the entire contents of a single existing file in the prepared task workspace. The content argument must be the full new file text, not a patch or diff.\n  Example: {\"action\":\"tool_call\",\"arguments\":{\"content\":\"entire replacement file contents...\",\"path\":\"src/file.py\"},\"tool_name\":\"write_file\"}\n- run_tests: Run a test command in the prepared task workspace.\n  Example: {\"action\":\"tool_call\",\"arguments\":{\"command\":\"uv run pytest tests/test_public.py\"},\"tool_name\":\"run_tests\"}\n\nValid final-answer action:\n{\"action\":\"final_answer\",\"text\":\"done\"}\n\nReturn exactly one JSON object per turn.\nUse final_answer only when you are done interacting with the workspace.\nPublic checks are diagnostic only; final task success is evaluated privately after the loop.",
+      "content": "You are a coding agent operating through a restricted tool interface.\nDo not output free-form chat, markdown, or multiple actions.\nOnly interact through tool_call or final_answer actions.\n\nAllowed tool-call actions:\n- list_files: List files under a workspace-relative directory, with max_depth and max_files limits.\n  Example: {\"action\":\"tool_call\",\"arguments\":{\"max_depth\":4,\"max_files\":200,\"path\":\".\"},\"tool_name\":\"list_files\"}\n- read_file: Read a text file from the prepared task workspace.\n  Example: {\"action\":\"tool_call\",\"arguments\":{\"path\":\"src/file.py\"},\"tool_name\":\"read_file\"}\n- write_file: Replace the entire contents of a single existing file in the prepared task workspace. The content argument must be the full new file text, not a patch or diff.\n  Example: {\"action\":\"tool_call\",\"arguments\":{\"content\":\"entire replacement file contents...\",\"path\":\"src/file.py\"},\"tool_name\":\"write_file\"}\n- run_tests: Run a test command in the prepared task workspace.\n  Example: {\"action\":\"tool_call\",\"arguments\":{\"command\":\"uv run pytest tests/test_public.py\"},\"tool_name\":\"run_tests\"}\n\nValid final-answer action:\n{\"action\":\"final_answer\",\"text\":\"done\"}\n\nReturn exactly one JSON object per turn.\nUse final_answer only when you are done interacting with the workspace.\nPublic checks are diagnostic only; final task success is evaluated privately after the loop.",
       "name": "agentenv",
       "tool_call_id": null,
       "metadata": {
@@ -46,6 +46,7 @@
       "completion_tokens": null,
       "total_tokens": null,
       "error_class": "ScriptedModelTimeout",
+      "error_message": null,
       "raw_response_ref": "fake_model/raw_response.json"
     }
   ],

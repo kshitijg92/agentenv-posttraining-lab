@@ -6,6 +6,7 @@
 | --- | --- | --- | --- | --- |
 | completed_hidden_fail | PASS | scored | completed | agent_task_runs/completed_hidden_fail |
 | completed_invalid_shortcut | PASS | scored | completed | agent_task_runs/completed_invalid_shortcut |
+| completed_no_final_newline | PASS | scored | completed | agent_task_runs/completed_no_final_newline |
 | completed_public_fail | PASS | scored | completed | agent_task_runs/completed_public_fail |
 | happy_path | PASS | scored | completed | agent_task_runs/happy_path |
 | malformed_json | PASS | agent_loop_failed | invalid_model_output | agent_task_runs/malformed_json |
@@ -38,6 +39,15 @@
 | completed_invalid_shortcut | attempt_status | INVALID_SHORTCUT | INVALID_SHORTCUT | PASS |
 | completed_invalid_shortcut | public_status | NOT_RUN | NOT_RUN | PASS |
 | completed_invalid_shortcut | hidden_status | NOT_RUN | NOT_RUN | PASS |
+|  |  |  |  |  |
+| completed_no_final_newline | agent_run_status | scored | scored | PASS |
+| completed_no_final_newline | prompt_loop_status | completed | completed | PASS |
+| completed_no_final_newline | prompt_loop_error_class |  |  | PASS |
+| completed_no_final_newline | model_finish_reasons | ["stop_criteria_met", "stop_criteria_met", "stop_criteria_met", "stop_criteria_met", "stop_criteria_met"] | ["stop_criteria_met", "stop_criteria_met", "stop_criteria_met", "stop_criteria_met", "stop_criteria_met"] | PASS |
+| completed_no_final_newline | tool_results | [{"error_class": null, "status": "ok", "tool_name": "list_files"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | [{"error_class": null, "status": "ok", "tool_name": "list_files"}, {"error_class": null, "status": "ok", "tool_name": "read_file"}, {"error_class": null, "status": "ok", "tool_name": "write_file"}, {"error_class": null, "status": "ok", "tool_name": "run_tests"}] | PASS |
+| completed_no_final_newline | attempt_status | PASS | PASS | PASS |
+| completed_no_final_newline | public_status | PASS | PASS | PASS |
+| completed_no_final_newline | hidden_status | PASS | PASS | PASS |
 |  |  |  |  |  |
 | completed_public_fail | agent_run_status | scored | scored | PASS |
 | completed_public_fail | prompt_loop_status | completed | completed | PASS |

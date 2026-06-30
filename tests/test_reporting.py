@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
@@ -87,6 +88,49 @@ def test_write_agent_eval_markdown_report(tmp_path: Path) -> None:
         "completed | PASS | PASS | PASS |  | xxh64:e3fc746d6fe0786c | "
         "attempts/toy_python_fix_001__attempt_001 |"
     ) in report
+
+
+def test_write_agent_model_eval_report_includes_model_and_decoding_config(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "agent_model_eval"
+    artifact_dir.mkdir()
+    (artifact_dir / "run_manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_version": "eval_run_v0",
+                "artifacts": {"attempts": "attempts", "trace": "trace.jsonl"},
+                "attempt_count": 0,
+                "attempts": [],
+                "attempts_per_task": 1,
+                "config_hash": "xxh64:test",
+                "config_name": "agent_model_smoke",
+                "config_path": "configs/eval/agent_model_smoke.yaml",
+                "created_at": "2026-06-30T00:00:00Z",
+                "decoding_config": "configs/decoding/greedy_1024.yaml",
+                "eval_run_id": "eval_test",
+                "layer_counts": {},
+                "model_config": "configs/models/openai_compatible_chat_placeholder.yaml",
+                "policy": "local-model-smoke",
+                "policy_family": "agent",
+                "policy_type": "agent_model",
+                "replay_repeats": 0,
+                "split": "practice",
+                "task_pack": "data/task_packs/repo_patch_python_v0",
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+
+    report_path = write_markdown_report(
+        artifact_dir,
+        tmp_path / "reports/agent_model_eval_report.md",
+    )
+    report = report_path.read_text()
+
+    assert "- Model config: configs/models/openai_compatible_chat_placeholder.yaml" in report
+    assert "- Decoding config: configs/decoding/greedy_1024.yaml" in report
 
 
 def test_write_agent_eval_malformed_markdown_report(tmp_path: Path) -> None:

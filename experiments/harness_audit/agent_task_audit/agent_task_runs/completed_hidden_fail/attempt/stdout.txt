@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_83a10fc4d54a4b70931617f07ce6453b-8cj0rcjo/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_260edd3ff8324268931ae1feb75dfb10-xa__otrf/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 1 item
 
@@ -10,7 +10,7 @@ tests/test_public.py .                                                   [100%]
 
 ============================= test session starts ==============================
 platform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0
-rootdir: /tmp/agentenv-agent_task_run_83a10fc4d54a4b70931617f07ce6453b-8cj0rcjo/scoring_workspace/workspace
+rootdir: /tmp/agentenv-agent_task_run_260edd3ff8324268931ae1feb75dfb10-xa__otrf/scoring_workspace/workspace
 configfile: pyproject.toml
 collected 7 items
 
@@ -20,7 +20,7 @@ test_behavior.py FF.....                                                 [100%]
 ___________________ test_zero_denominator_raises_value_error ___________________
 
     def test_zero_denominator_raises_value_error() -> None:
-        with pytest.raises(ValueError, match="denominator"):
+        with pytest.raises(ValueError):
 >           normalize_ratio(1, 0)
 
 /home/kshitij/agentenv-posttraining-lab/data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/hidden_tests/test_behavior.py:8: 

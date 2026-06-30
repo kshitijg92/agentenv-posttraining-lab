@@ -8,9 +8,9 @@
     "stdout": "stdout.txt",
     "trace": "trace.jsonl"
   },
-  "attempt_id": "attempt_eaf538956b9a488da350fcb028639684",
+  "attempt_id": "attempt_670c1e91248e4f10a3cc626c7c7c8d1f",
   "orchestrator_version": "attempt_v0",
-  "run_id": "run_e9d6b5e6fcf9498e9be7248d1d7efe87",
+  "run_id": "run_7f7e1d82e9d44ba1b8df292be3568abd",
   "status": "PASS",
   "submission_path": "/home/kshitij/agentenv-posttraining-lab/data/harness_audit/scorer_cases/correct_oracle/submission.patch",
   "task_id": "toy_python_fix_001",

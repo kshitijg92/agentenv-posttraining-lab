@@ -2,11 +2,11 @@
   "task_id": "toy_python_fix_001",
   "status": "completed",
   "turns_executed": 5,
-  "duration_ms": 16516,
+  "duration_ms": 292,
   "token_usage": {
-    "prompt_tokens": 2976,
-    "completion_tokens": 187,
-    "total_tokens": 3163
+    "prompt_tokens": null,
+    "completion_tokens": null,
+    "total_tokens": null
   },
   "messages": [
     {
@@ -30,8 +30,8 @@
     },
     {
       "role": "assistant",
-      "content": "{\"action\":\"tool_call\",\"arguments\":{\"max_depth\":4,\"max_files\":200,\"path\":\".\"},\"tool_name\":\"list_files\"}",
-      "name": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
+      "content": "{\"action\":\"tool_call\",\"tool_name\":\"list_files\",\"arguments\":{\"path\":\".\",\"max_depth\":4,\"max_files\":200}}",
+      "name": "agent-audit-scripted-v0",
       "tool_call_id": "tool_call_0001",
       "metadata": {}
     },
@@ -46,8 +46,8 @@
     },
     {
       "role": "assistant",
-      "content": "{\"action\":\"tool_call\",\"arguments\":{\"path\":\"src/mathlib.py\"},\"tool_name\":\"read_file\"}",
-      "name": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
+      "content": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/mathlib.py\"}}",
+      "name": "agent-audit-scripted-v0",
       "tool_call_id": "tool_call_0002",
       "metadata": {}
     },
@@ -62,8 +62,8 @@
     },
     {
       "role": "assistant",
-      "content": "{\"action\":\"tool_call\",\"arguments\":{\"content\":\"def normalize_ratio(numerator: int | float, denominator: int | float) -> float:\\n    \\\"\\\"\\\"Return numerator divided by denominator as a normalized ratio.\\\"\\\"\\\"\\n    if denominator == 0:\\n        raise ValueError(\\\"Denominator cannot be zero.\\\")\\n    return numerator / denominator\",\"path\":\"src/mathlib.py\"},\"tool_name\":\"write_file\"}",
-      "name": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
+      "content": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/mathlib.py\",\"content\":\"def normalize_ratio(numerator: int | float, denominator: int | float) -> float:\\n    \\\"\\\"\\\"Return numerator divided by denominator as a normalized ratio.\\\"\\\"\\\"\\n    if denominator == 0:\\n        raise ValueError(\\\"Denominator cannot be zero.\\\")\\n    return numerator / denominator\"}}",
+      "name": "agent-audit-scripted-v0",
       "tool_call_id": "tool_call_0003",
       "metadata": {}
     },
@@ -78,8 +78,8 @@
     },
     {
       "role": "assistant",
-      "content": "{\"action\":\"tool_call\",\"arguments\":{\"command\":\"uv run pytest tests/test_public.py\"},\"tool_name\":\"run_tests\"}",
-      "name": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
+      "content": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run pytest tests/test_public.py\"}}",
+      "name": "agent-audit-scripted-v0",
       "tool_call_id": "tool_call_0004",
       "metadata": {}
     },
@@ -95,71 +95,71 @@
     {
       "role": "assistant",
       "content": "{\"action\":\"final_answer\",\"text\":\"done\"}",
-      "name": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
+      "name": "agent-audit-scripted-v0",
       "tool_call_id": null,
       "metadata": {}
     }
   ],
   "model_responses": [
     {
-      "model_id": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
-      "output_text": "{\"action\":\"tool_call\",\"arguments\":{\"max_depth\":4,\"max_files\":200,\"path\":\".\"},\"tool_name\":\"list_files\"}",
+      "model_id": "agent-audit-scripted-v0",
+      "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"list_files\",\"arguments\":{\"path\":\".\",\"max_depth\":4,\"max_files\":200}}",
       "finish_reason": "stop_criteria_met",
-      "latency_ms": 11152,
-      "prompt_tokens": 395,
-      "completion_tokens": 33,
-      "total_tokens": 428,
+      "latency_ms": 0,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
       "error_class": null,
       "error_message": null,
-      "raw_response_ref": "provider_response/not_persisted"
+      "raw_response_ref": "fake_model/raw_response.json"
     },
     {
-      "model_id": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
-      "output_text": "{\"action\":\"tool_call\",\"arguments\":{\"path\":\"src/mathlib.py\"},\"tool_name\":\"read_file\"}",
+      "model_id": "agent-audit-scripted-v0",
+      "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/mathlib.py\"}}",
       "finish_reason": "stop_criteria_met",
-      "latency_ms": 848,
-      "prompt_tokens": 482,
-      "completion_tokens": 24,
-      "total_tokens": 506,
+      "latency_ms": 0,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
       "error_class": null,
       "error_message": null,
-      "raw_response_ref": "provider_response/not_persisted"
+      "raw_response_ref": "fake_model/raw_response.json"
     },
     {
-      "model_id": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
-      "output_text": "{\"action\":\"tool_call\",\"arguments\":{\"content\":\"def normalize_ratio(numerator: int | float, denominator: int | float) -> float:\\n    \\\"\\\"\\\"Return numerator divided by denominator as a normalized ratio.\\\"\\\"\\\"\\n    if denominator == 0:\\n        raise ValueError(\\\"Denominator cannot be zero.\\\")\\n    return numerator / denominator\",\"path\":\"src/mathlib.py\"},\"tool_name\":\"write_file\"}",
+      "model_id": "agent-audit-scripted-v0",
+      "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/mathlib.py\",\"content\":\"def normalize_ratio(numerator: int | float, denominator: int | float) -> float:\\n    \\\"\\\"\\\"Return numerator divided by denominator as a normalized ratio.\\\"\\\"\\\"\\n    if denominator == 0:\\n        raise ValueError(\\\"Denominator cannot be zero.\\\")\\n    return numerator / denominator\"}}",
       "finish_reason": "stop_criteria_met",
-      "latency_ms": 2654,
-      "prompt_tokens": 596,
-      "completion_tokens": 90,
-      "total_tokens": 686,
+      "latency_ms": 0,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
       "error_class": null,
       "error_message": null,
-      "raw_response_ref": "provider_response/not_persisted"
+      "raw_response_ref": "fake_model/raw_response.json"
     },
     {
-      "model_id": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
-      "output_text": "{\"action\":\"tool_call\",\"arguments\":{\"command\":\"uv run pytest tests/test_public.py\"},\"tool_name\":\"run_tests\"}",
+      "model_id": "agent-audit-scripted-v0",
+      "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run pytest tests/test_public.py\"}}",
       "finish_reason": "stop_criteria_met",
-      "latency_ms": 930,
-      "prompt_tokens": 722,
-      "completion_tokens": 27,
-      "total_tokens": 749,
+      "latency_ms": 0,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
       "error_class": null,
       "error_message": null,
-      "raw_response_ref": "provider_response/not_persisted"
+      "raw_response_ref": "fake_model/raw_response.json"
     },
     {
-      "model_id": "hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M",
+      "model_id": "agent-audit-scripted-v0",
       "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}",
       "finish_reason": "stop_criteria_met",
-      "latency_ms": 531,
-      "prompt_tokens": 781,
-      "completion_tokens": 13,
-      "total_tokens": 794,
+      "latency_ms": 0,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
       "error_class": null,
       "error_message": null,
-      "raw_response_ref": "provider_response/not_persisted"
+      "raw_response_ref": "fake_model/raw_response.json"
     }
   ],
   "tool_results": [
@@ -219,10 +219,10 @@
       "output": {
         "passed": true
       },
-      "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /tmp/agentenv-agent_task_run_c5b95440dd0542d8bb7ffb98c0c75e73-edi0jtrr/agent_interaction_workspace/workspace\nconfigfile: pyproject.toml\ncollected 1 item\n\ntests/test_public.py .                                                   [100%]\n\n============================== 1 passed in 0.01s ===============================\n",
-      "stderr": "warning: `VIRTUAL_ENV=/home/kshitij/agentenv-posttraining-lab/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead\nUsing CPython 3.11.14\nCreating virtual environment at: .venv\nInstalled 5 packages in 16ms\n",
+      "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /tmp/agentenv-agent_task_run_5b2cbb97aa3640fbbd32ea4749402ef5-jy8kz4jr/agent_interaction_workspace/workspace\nconfigfile: pyproject.toml\ncollected 1 item\n\ntests/test_public.py .                                                   [100%]\n\n============================== 1 passed in 0.00s ===============================\n",
+      "stderr": "warning: `VIRTUAL_ENV=/home/kshitij/agentenv-posttraining-lab/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead\nUsing CPython 3.11.14\nCreating virtual environment at: .venv\nInstalled 5 packages in 10ms\n",
       "exit_code": 0,
-      "duration_ms": 394,
+      "duration_ms": 289,
       "error_class": null,
       "error_message": null
     }
