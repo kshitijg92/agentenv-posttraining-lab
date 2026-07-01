@@ -7,6 +7,7 @@ import yaml
 
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.tasks.schema import TaskManifest, TaskPackManifest, TaskSplitsLock
+from agentenv.tasks.splits import validate_split_membership
 
 
 class TaskPackValidationResult:
@@ -122,7 +123,7 @@ def validate_task_pack(task_pack_path: Path) -> TaskPackValidationResult:
         _validate_hidden_tests_not_public_duplicates(manifest, manifest_path)
         manifests[manifest.id] = manifest
 
-    _validate_split_membership(manifests, splits_lock)
+    validate_split_membership(manifests, splits_lock)
 
     return TaskPackValidationResult(
         task_pack_id=pack_manifest.id,
@@ -268,51 +269,6 @@ def _validate_hidden_tests_not_public_duplicates(
                     f"Hidden validator {hidden_file} duplicates public test "
                     f"{public_file}"
                 )
-
-
-def _validate_split_membership(
-    manifests: dict[str, TaskManifest],
-    splits_lock: TaskSplitsLock,
-) -> None:
-    split_memberships = {
-        "practice": splits_lock.practice,
-        "dev": splits_lock.dev,
-        "heldout_private": splits_lock.heldout_private,
-        "public_calibration": splits_lock.public_calibration,
-    }
-
-    seen: dict[str, str] = {}
-    for split, task_ids in split_memberships.items():
-        for task_id in task_ids:
-            if task_id in seen:
-                raise ValueError(
-                    f"Task {task_id!r} appears in both {seen[task_id]!r} and {split!r}"
-                )
-            seen[task_id] = split
-
-    discovered_ids = set(manifests)
-    locked_ids = set(seen)
-    missing_from_lock = discovered_ids - locked_ids
-    if missing_from_lock:
-        raise ValueError(
-            "Task manifests missing from splits.lock.json: "
-            + ", ".join(sorted(missing_from_lock))
-        )
-
-    missing_from_pack = locked_ids - discovered_ids
-    if missing_from_pack:
-        raise ValueError(
-            "splits.lock.json references missing task ids: "
-            + ", ".join(sorted(missing_from_pack))
-        )
-
-    for task_id, manifest in manifests.items():
-        locked_split = seen[task_id]
-        if manifest.split != locked_split:
-            raise ValueError(
-                f"Task {task_id} manifest split {manifest.split!r} does not "
-                f"match splits.lock.json split {locked_split!r}"
-            )
 
 
 def _iter_files(root: Path) -> list[Path]:

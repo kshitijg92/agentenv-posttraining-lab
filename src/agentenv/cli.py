@@ -36,6 +36,7 @@ from agentenv.tasks.validate import (
     validate_task_manifest_paths,
     validate_task_pack,
 )
+from agentenv.tasks.splits import check_splits_lock
 
 
 app = typer.Typer(no_args_is_help=True)
@@ -72,6 +73,21 @@ def validate_task(path: Path) -> None:
     manifest = load_task_manifest(path)
     validate_task_manifest_paths(manifest, path)
     console.print(f"[green]valid[/green] {manifest.id}")
+
+
+@tasks_app.command("check-splits")
+def check_task_splits(
+    splits_lock: Path = typer.Argument(..., help="Path to splits.lock.json."),
+) -> None:
+    result = check_splits_lock(splits_lock)
+    counts = " ".join(
+        f"{split}={count}"
+        for split, count in result.split_counts.items()
+    )
+    console.print(
+        f"[green]valid[/green] {result.task_pack_id} "
+        f"tasks={result.task_count} {counts}"
+    )
 
 
 @attempt_app.command("run")

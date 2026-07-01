@@ -36,6 +36,28 @@ Single task:
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
 ```
 
+## Check Task Splits
+
+Verify that `splits.lock.json` matches the task manifests:
+
+```bash
+uv run agentenv tasks check-splits data/task_packs/repo_patch_python_v0/splits.lock.json
+```
+
+Expected current output:
+
+```text
+valid repo_patch_python_v0 tasks=4 practice=1 dev=3 heldout_private=0 public_calibration=0
+```
+
+This checks that:
+
+- every task manifest is assigned in `splits.lock.json`;
+- no task appears in more than one split;
+- task manifest `split` fields match the split lock;
+- the split lock does not reference missing task IDs;
+- task IDs are unique across discovered task manifests.
+
 ## Run One Patch Attempt
 
 Oracle control:
