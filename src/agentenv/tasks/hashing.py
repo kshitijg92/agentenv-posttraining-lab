@@ -185,13 +185,14 @@ def _build_task_hash_record(
 def _selected_eval_task_hash_record(
     task_manifest_path: Path,
     required_task_files: list[str],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     task_record = _build_task_hash_record(task_manifest_path, required_task_files)
     return {
         "task_id": task_record["task_id"],
         "split": task_record["split"],
         "task_record_hash": task_record["task_record_hash"],
         "task_yaml_hash": task_record["task_yaml_hash"],
+        "required_task_files": task_record["required_task_files"],
         "required_task_files_hash": task_record["required_task_files_hash"],
         "full_task_dir_hash": task_record["full_task_dir_hash"],
     }

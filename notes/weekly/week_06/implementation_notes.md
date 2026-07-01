@@ -148,7 +148,10 @@ or continue with repeated-control flake detection.
 - Added `eval_task_hashes_v0` with:
   - `task_pack_id`;
   - `selected_task_hash_set`;
-  - one selected task record per configured eval task.
+  - one selected task record per configured eval task;
+  - both `required_task_files` and `required_task_files_hash` in each selected
+    task record, matching the task-pack hash report shape for required inputs;
+  - `full_task_dir_hash` for the broader task-local drift signal.
 - Kept eval hashes selected-task scoped. Eval manifests do not include
   task-pack-level hashes, because adding an unused task should not invalidate an
   eval over an unchanged selected task set.
@@ -176,6 +179,13 @@ The smoke eval manifest contained:
 {
   "schema_version": "eval_task_hashes_v0",
   "selected_task_hash_set": "xxh64:5516e0988567c439",
+  "selected_tasks": [
+    {
+      "full_task_dir_hash": "xxh64:1a569dd4b44a8af5",
+      "required_task_files_hash": "xxh64:70419960e3a22949",
+      "task_id": "toy_python_fix_001"
+    }
+  ],
   "task_pack_id": "repo_patch_python_v0"
 }
 ```

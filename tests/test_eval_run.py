@@ -386,8 +386,16 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert task_hashes["task_pack_id"] == "repo_patch_python_v0"
     assert task_hashes["selected_task_hash_set"].startswith("xxh64:")
     assert len(task_hashes["selected_tasks"]) == 1
-    assert task_hashes["selected_tasks"][0]["task_id"] == "toy_python_fix_001"
-    assert task_hashes["selected_tasks"][0]["task_record_hash"].startswith("xxh64:")
+    selected_task_hash = task_hashes["selected_tasks"][0]
+    assert selected_task_hash["task_id"] == "toy_python_fix_001"
+    assert selected_task_hash["task_record_hash"].startswith("xxh64:")
+    assert selected_task_hash["required_task_files_hash"].startswith("xxh64:")
+    assert selected_task_hash["full_task_dir_hash"].startswith("xxh64:")
+    assert {record["path"] for record in selected_task_hash["required_task_files"]} >= {
+        "task.yaml",
+        "seed_workspace",
+        "hidden_tests",
+    }
     assert run_manifest["policy"] == "oracle"
     assert run_manifest["policy_type"] == "scorer_control_patch"
     assert run_manifest["policy_family"] == "control"
@@ -528,7 +536,15 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     assert task_hashes["task_pack_id"] == "repo_patch_python_v0"
     assert task_hashes["selected_task_hash_set"].startswith("xxh64:")
     assert len(task_hashes["selected_tasks"]) == 1
-    assert task_hashes["selected_tasks"][0]["task_id"] == "toy_python_fix_001"
+    selected_task_hash = task_hashes["selected_tasks"][0]
+    assert selected_task_hash["task_id"] == "toy_python_fix_001"
+    assert selected_task_hash["required_task_files_hash"].startswith("xxh64:")
+    assert selected_task_hash["full_task_dir_hash"].startswith("xxh64:")
+    assert {record["path"] for record in selected_task_hash["required_task_files"]} >= {
+        "task.yaml",
+        "seed_workspace",
+        "hidden_tests",
+    }
     assert matrix_manifest["task_count"] == 1
     assert matrix_manifest["policy_count"] == 3
     assert matrix_manifest["attempt_count"] == 3

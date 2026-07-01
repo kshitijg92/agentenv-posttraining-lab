@@ -122,6 +122,20 @@ def test_eval_task_hash_set_ignores_unused_task(tmp_path: Path) -> None:
     assert before["selected_tasks"] == after["selected_tasks"]
 
 
+def test_eval_task_hashes_include_required_task_file_records() -> None:
+    task_hashes = build_eval_task_hashes(TASK_PACK, ["toy_python_fix_001"])
+
+    selected_task = task_hashes["selected_tasks"][0]
+    assert selected_task["task_id"] == "toy_python_fix_001"
+    assert selected_task["required_task_files_hash"].startswith("xxh64:")
+    assert selected_task["full_task_dir_hash"].startswith("xxh64:")
+    assert {record["path"] for record in selected_task["required_task_files"]} >= {
+        "task.yaml",
+        "seed_workspace",
+        "hidden_tests",
+    }
+
+
 def test_eval_task_hash_set_changes_when_selected_task_changes(tmp_path: Path) -> None:
     task_pack = _copy_task_pack(tmp_path)
     before = build_eval_task_hashes(task_pack, ["toy_python_fix_001"])

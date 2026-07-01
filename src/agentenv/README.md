@@ -167,7 +167,9 @@ experiments/runs/dev_baseline/replays/
 
 Eval manifests include a `task_hashes` block with the selected task hash set
 and one hash record per task selected by the eval config. This block is scoped
-to evaluated tasks only; it does not include a task-pack-level hash.
+to evaluated tasks only; it does not include a task-pack-level hash. Each
+selected task record includes both `required_task_files` and
+`required_task_files_hash`, plus `full_task_dir_hash`.
 
 ## Replay An Artifact Directory
 
