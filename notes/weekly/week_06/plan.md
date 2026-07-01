@@ -121,6 +121,31 @@ DeepSeek pass rate on three dev tasks is not a broad model-quality result.
 It is only a local integration and diagnostic baseline.
 ```
 
+Checkpoint decision after probe:
+
+```text
+DeepSeek R1 Distill Qwen is not supported yet under the current strict JSON
+action protocol.
+```
+
+Reason:
+
+- the local Ollama endpoint and model are reachable;
+- the model can emit a valid tool call on the first turn;
+- after a tool result, the model emits reasoning/prose artifacts before the next
+  JSON action;
+- `/no_think`, OpenAI-compatible `think: false`, and native Ollama
+  `think: false` did not disable the reasoning channel for this model;
+- weakening the parser or global prompt would change the harness contract.
+
+Decision:
+
+```text
+Do not add DeepSeek-specific protocol repair in Week 6.
+Move on to the eval-quality gate and revisit thinking-model adapters later as a
+deliberate model-interface/protocol design task.
+```
+
 ## Week 6 Gate Work
 
 After DeepSeek is closed or explicitly blocked, implement the manual's Week 6
