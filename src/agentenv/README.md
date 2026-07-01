@@ -58,6 +58,26 @@ This checks that:
 - the split lock does not reference missing task IDs;
 - task IDs are unique across discovered task manifests.
 
+## Hash A Task Pack
+
+Write a task-pack hash report:
+
+```bash
+uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 \
+  --out experiments/reports/repo_patch_python_v0_task_hashes.json
+```
+
+The report includes:
+
+- pack-level hashes for `manifest.yaml` and `splits.lock.json`;
+- one record per task;
+- exact hashes for `task.yaml` and every `required_task_files` entry from the
+  pack manifest;
+- directory hashes for entries such as `seed_workspace` and `hidden_tests`;
+- normalized text hashes for task instructions and visible tests;
+- `extra_task_files`, which flags task-local files outside the declared
+  required-file contract.
+
 ## Run One Patch Attempt
 
 Oracle control:

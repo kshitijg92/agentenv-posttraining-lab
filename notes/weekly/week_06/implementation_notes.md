@@ -63,3 +63,77 @@ task/split boundary before running repeated controls or trajectory exports.
 ### Next Small Step
 
 Add task hashing for instructions, visible tests, and task assets.
+
+## 2026-06-30 Hashing Checkpoint
+
+### Shipped
+
+- Added task-pack hashing through:
+  - `src/agentenv/tasks/hashing.py`
+  - `agentenv tasks hash <task-pack> --out <report.json>`
+- Added per-task hash records so eval subsets can later reference task identity
+  at task granularity.
+- Added pack-level hashes for:
+  - `manifest.yaml`;
+  - `splits.lock.json`;
+  - aggregate `pack_record_hash`.
+- Added per-task hashes for:
+  - `task.yaml`;
+  - normalized instruction text;
+  - normalized visible tests;
+  - each `required_task_files` entry from the pack manifest;
+  - full task directory contents;
+  - aggregate `task_record_hash`.
+- Added `extra_task_files` to flag task-local files outside the declared
+  required-file contract.
+- Excluded volatile cache/build directories such as `__pycache__`,
+  `.pytest_cache`, `.ruff_cache`, `.venv`, `build`, and `dist`.
+
+### Ran
+
+```bash
+uv run pytest tests/test_task_hashing.py
+uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 \
+  --out experiments/reports/repo_patch_python_v0_task_hashes.json
+uv run pytest tests/test_task_hashing.py tests/test_task_splits.py tests/test_task_manifest.py
+uv run ruff check .
+uv run pyright
+git diff --check
+uv run pytest -n auto
+```
+
+### Result
+
+```text
+hashed repo_patch_python_v0 tasks=4 pack_record_hash=xxh64:fb449de6b09683dc
+wrote experiments/reports/repo_patch_python_v0_task_hashes.json
+```
+
+Focused tests:
+
+```text
+tests/test_task_hashing.py -> 6 passed
+tests/test_task_hashing.py tests/test_task_splits.py tests/test_task_manifest.py -> 22 passed
+uv run pytest -n auto -> 355 passed
+```
+
+Static checks:
+
+```text
+uv run ruff check . -> passed
+uv run pyright -> 0 errors
+git diff --check -> passed
+```
+
+### Decision
+
+Use exact byte hashes for task assets and directory contents. Use normalized
+text hashes only for instruction text and visible tests.
+
+Keep generated hash reports outside the task pack. The task pack remains the
+source artifact; hash reports are derived evidence under `experiments/reports/`.
+
+### Next Small Step
+
+Run full checks, then decide whether to wire task hashes into eval manifests now
+or continue with repeated-control flake detection.

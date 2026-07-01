@@ -36,6 +36,7 @@ from agentenv.tasks.validate import (
     validate_task_manifest_paths,
     validate_task_pack,
 )
+from agentenv.tasks.hashing import write_task_hash_report
 from agentenv.tasks.splits import check_splits_lock
 
 
@@ -88,6 +89,20 @@ def check_task_splits(
         f"[green]valid[/green] {result.task_pack_id} "
         f"tasks={result.task_count} {counts}"
     )
+
+
+@tasks_app.command("hash")
+def hash_task_pack(
+    task_pack: Path = typer.Argument(..., help="Path to task pack directory."),
+    out: Path = typer.Option(..., "--out", help="Path for hash report JSON."),
+) -> None:
+    report = write_task_hash_report(task_pack, out)
+    console.print(
+        f"[green]hashed[/green] {report.payload['task_pack_id']} "
+        f"tasks={report.payload['task_count']} "
+        f"pack_record_hash={report.pack_record_hash}"
+    )
+    console.print(f"wrote {out}")
 
 
 @attempt_app.command("run")
