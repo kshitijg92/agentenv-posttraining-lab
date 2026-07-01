@@ -64,7 +64,7 @@ Write a task-pack hash report:
 
 ```bash
 uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 \
-  --out experiments/reports/repo_patch_python_v0_task_hashes.json
+  --out experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
 ```
 
 The report includes:
@@ -164,6 +164,10 @@ experiments/runs/dev_baseline/eval_matrix_manifest.json
 experiments/runs/dev_baseline/policies/
 experiments/runs/dev_baseline/replays/
 ```
+
+Eval manifests include a `task_hashes` block with the selected task hash set
+and one hash record per task selected by the eval config. This block is scoped
+to evaluated tasks only; it does not include a task-pack-level hash.
 
 ## Replay An Artifact Directory
 

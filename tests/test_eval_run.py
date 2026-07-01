@@ -381,6 +381,13 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert eval_run.attempts[0].scorer.status == "PASS"
     assert run_manifest["artifact_version"] == "eval_run_v0"
     assert run_manifest["config_name"] == "scorer_control_policies"
+    task_hashes = run_manifest["task_hashes"]
+    assert task_hashes["schema_version"] == "eval_task_hashes_v0"
+    assert task_hashes["task_pack_id"] == "repo_patch_python_v0"
+    assert task_hashes["selected_task_hash_set"].startswith("xxh64:")
+    assert len(task_hashes["selected_tasks"]) == 1
+    assert task_hashes["selected_tasks"][0]["task_id"] == "toy_python_fix_001"
+    assert task_hashes["selected_tasks"][0]["task_record_hash"].startswith("xxh64:")
     assert run_manifest["policy"] == "oracle"
     assert run_manifest["policy_type"] == "scorer_control_patch"
     assert run_manifest["policy_family"] == "control"
@@ -516,6 +523,12 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     ]
     assert matrix_manifest["artifact_version"] == "eval_matrix_v0"
     assert matrix_manifest["config_name"] == "scorer_control_policies"
+    task_hashes = matrix_manifest["task_hashes"]
+    assert task_hashes["schema_version"] == "eval_task_hashes_v0"
+    assert task_hashes["task_pack_id"] == "repo_patch_python_v0"
+    assert task_hashes["selected_task_hash_set"].startswith("xxh64:")
+    assert len(task_hashes["selected_tasks"]) == 1
+    assert task_hashes["selected_tasks"][0]["task_id"] == "toy_python_fix_001"
     assert matrix_manifest["task_count"] == 1
     assert matrix_manifest["policy_count"] == 3
     assert matrix_manifest["attempt_count"] == 3

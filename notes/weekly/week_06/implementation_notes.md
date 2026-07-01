@@ -94,7 +94,7 @@ Add task hashing for instructions, visible tests, and task assets.
 ```bash
 uv run pytest tests/test_task_hashing.py
 uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 \
-  --out experiments/reports/repo_patch_python_v0_task_hashes.json
+  --out experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
 uv run pytest tests/test_task_hashing.py tests/test_task_splits.py tests/test_task_manifest.py
 uv run ruff check .
 uv run pyright
@@ -106,7 +106,7 @@ uv run pytest -n auto
 
 ```text
 hashed repo_patch_python_v0 tasks=4 pack_record_hash=xxh64:fb449de6b09683dc
-wrote experiments/reports/repo_patch_python_v0_task_hashes.json
+wrote experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
 ```
 
 Focused tests:
@@ -137,3 +137,72 @@ source artifact; hash reports are derived evidence under `experiments/reports/`.
 
 Run full checks, then decide whether to wire task hashes into eval manifests now
 or continue with repeated-control flake detection.
+
+## 2026-06-30 Eval Manifest Task Hashes
+
+### Shipped
+
+- Added inline selected-task hashes to eval manifests:
+  - `run_manifest.json` for single-policy evals;
+  - `eval_matrix_manifest.json` for all-policy eval matrices.
+- Added `eval_task_hashes_v0` with:
+  - `task_pack_id`;
+  - `selected_task_hash_set`;
+  - one selected task record per configured eval task.
+- Kept eval hashes selected-task scoped. Eval manifests do not include
+  task-pack-level hashes, because adding an unused task should not invalidate an
+  eval over an unchanged selected task set.
+
+### Ran
+
+```bash
+uv run pytest tests/test_task_hashing.py tests/test_eval_run.py
+uv run ruff check .
+uv run pyright
+git diff --check
+uv run pytest -n auto
+uv run agentenv eval \
+  --config configs/eval/scorer_control_policies.yaml \
+  --policy oracle \
+  --out experiments/runs/task_hash_manifest_smoke \
+  --overwrite
+```
+
+### Result
+
+The smoke eval manifest contained:
+
+```json
+{
+  "schema_version": "eval_task_hashes_v0",
+  "selected_task_hash_set": "xxh64:5516e0988567c439",
+  "task_pack_id": "repo_patch_python_v0"
+}
+```
+
+Focused tests:
+
+```text
+tests/test_task_hashing.py tests/test_eval_run.py -> 26 passed
+uv run pytest -n auto -> 357 passed
+```
+
+Static checks:
+
+```text
+uv run ruff check . -> passed
+uv run pyright -> 0 errors
+git diff --check -> passed
+```
+
+### Decision
+
+Eval comparability is keyed by `selected_task_hash_set`, not by task-pack hash.
+
+The standalone task-pack hash report can still include pack-level context, but
+eval manifests should only inline the hashes of tasks actually selected by the
+eval config.
+
+### Next Small Step
+
+Move to repeated-control flake detection.

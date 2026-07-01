@@ -16,6 +16,7 @@ from agentenv.tasks.validate import (
 
 
 HASH_SCHEMA_VERSION = "task_hash_report_v0"
+EVAL_TASK_HASH_SCHEMA_VERSION = "eval_task_hashes_v0"
 
 _NOISY_NAMES = {
     ".git",
@@ -114,6 +115,41 @@ def write_task_hash_report(task_pack_path: Path, out_path: Path) -> TaskHashRepo
     return report
 
 
+def build_eval_task_hashes(
+    task_pack_path: Path,
+    selected_task_ids: list[str],
+) -> dict[str, Any]:
+    task_pack_path = task_pack_path.resolve()
+    if not task_pack_path.is_dir():
+        raise ValueError(f"Expected task pack directory: {task_pack_path}")
+
+    pack_manifest_path = task_pack_path / "manifest.yaml"
+    pack_manifest = load_task_pack_manifest(pack_manifest_path)
+    tasks_dir = _resolve_pack_path(task_pack_path, pack_manifest.tasks_dir)
+    selected_records = [
+        _selected_eval_task_hash_record(
+            _find_task_manifest_path(tasks_dir, task_id),
+            pack_manifest.required_task_files,
+        )
+        for task_id in selected_task_ids
+    ]
+    selected_hash_set = _hash_json(
+        [
+            {
+                "task_id": record["task_id"],
+                "task_record_hash": record["task_record_hash"],
+            }
+            for record in selected_records
+        ]
+    )
+    return {
+        "schema_version": EVAL_TASK_HASH_SCHEMA_VERSION,
+        "task_pack_id": pack_manifest.id,
+        "selected_task_hash_set": selected_hash_set,
+        "selected_tasks": selected_records,
+    }
+
+
 def _build_task_hash_record(
     task_manifest_path: Path,
     required_task_files: list[str],
@@ -144,6 +180,29 @@ def _build_task_hash_record(
         "required_task_files": required_records,
         "task_record_hash": task_record_hash,
     }
+
+
+def _selected_eval_task_hash_record(
+    task_manifest_path: Path,
+    required_task_files: list[str],
+) -> dict[str, str]:
+    task_record = _build_task_hash_record(task_manifest_path, required_task_files)
+    return {
+        "task_id": task_record["task_id"],
+        "split": task_record["split"],
+        "task_record_hash": task_record["task_record_hash"],
+        "task_yaml_hash": task_record["task_yaml_hash"],
+        "required_task_files_hash": task_record["required_task_files_hash"],
+        "full_task_dir_hash": task_record["full_task_dir_hash"],
+    }
+
+
+def _find_task_manifest_path(tasks_dir: Path, task_id: str) -> Path:
+    for task_manifest_path in sorted(tasks_dir.glob("*/task.yaml")):
+        manifest = load_task_manifest(task_manifest_path)
+        if manifest.id == task_id:
+            return task_manifest_path
+    raise ValueError(f"Task id {task_id!r} not found in task pack {tasks_dir.parent}")
 
 
 def _hash_required_task_path(task_dir: Path, raw_path: str) -> dict[str, str]:

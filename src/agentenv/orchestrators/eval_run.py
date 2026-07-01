@@ -16,6 +16,7 @@ from agentenv.evals.resolve import (
     agent_control_script_path,
     ResolvedEvalTask,
     resolve_config_file_ref,
+    resolve_task_pack_path,
     resolve_eval_tasks,
     scorer_control_patch_path,
     select_policy,
@@ -33,6 +34,7 @@ from agentenv.orchestrators.agent_task_run import (
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.replay.runner import ReplayRun, run_replay
+from agentenv.tasks.hashing import build_eval_task_hashes
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
@@ -80,6 +82,7 @@ class EvalRun:
     config: EvalConfig
     config_path: Path
     config_hash: str
+    task_hashes: dict[str, object]
     policy: str
     out_dir: Path
     created_at: str
@@ -92,6 +95,7 @@ class EvalMatrixRun:
     config: EvalConfig
     config_path: Path
     config_hash: str
+    task_hashes: dict[str, object]
     out_dir: Path
     created_at: str
     policy_runs: list[EvalRun]
@@ -118,6 +122,8 @@ def run_eval_config(
     validate_eval_config_paths(config, config_path)
     selected_policy = select_policy(config, policy)
     config_hash = _hash_file(config_path)
+    task_pack_path = resolve_task_pack_path(config, config_path)
+    task_hashes = build_eval_task_hashes(task_pack_path, config.tasks)
     eval_run_id = f"eval_{uuid4().hex}"
     created_at = _utc_now()
 
@@ -313,6 +319,7 @@ def run_eval_config(
         config=config,
         config_path=config_path,
         config_hash=config_hash,
+        task_hashes=task_hashes,
         policy=policy,
         out_dir=out_dir,
         created_at=created_at,
@@ -343,6 +350,8 @@ def run_eval_config_all_policies(
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     config_hash = _hash_file(config_path)
+    task_pack_path = resolve_task_pack_path(config, config_path)
+    task_hashes = build_eval_task_hashes(task_pack_path, config.tasks)
     eval_matrix_id = f"eval_matrix_{uuid4().hex}"
     created_at = _utc_now()
 
@@ -360,6 +369,7 @@ def run_eval_config_all_policies(
         config=config,
         config_path=config_path,
         config_hash=config_hash,
+        task_hashes=task_hashes,
         out_dir=out_dir,
         created_at=created_at,
         policy_runs=policy_runs,
@@ -439,6 +449,7 @@ def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
         "config_name": eval_run.config.name,
         "task_pack": eval_run.config.task_pack,
         "split": eval_run.config.split,
+        "task_hashes": eval_run.task_hashes,
         "policy": eval_run.policy,
         **_policy_metadata(eval_run.config, eval_run.policy),
         "attempt_count": len(eval_run.attempts),
@@ -471,6 +482,7 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
         "config_name": eval_matrix.config.name,
         "task_pack": eval_matrix.config.task_pack,
         "split": eval_matrix.config.split,
+        "task_hashes": eval_matrix.task_hashes,
         "tasks": eval_matrix.config.tasks,
         "task_count": len(eval_matrix.config.tasks),
         "policy_count": len(eval_matrix.policy_runs),

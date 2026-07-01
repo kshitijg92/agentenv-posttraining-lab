@@ -6,7 +6,7 @@ from typing import Any
 from typer.testing import CliRunner
 
 from agentenv.cli import app
-from agentenv.tasks.hashing import build_task_hash_report
+from agentenv.tasks.hashing import build_eval_task_hashes, build_task_hash_report
 
 
 TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
@@ -101,6 +101,36 @@ def test_noisy_cache_files_do_not_change_task_hash(tmp_path: Path) -> None:
     assert _task_record(before, "toy_python_fix_001")["task_record_hash"] == (
         _task_record(after, "toy_python_fix_001")["task_record_hash"]
     )
+
+
+def test_eval_task_hash_set_ignores_unused_task(tmp_path: Path) -> None:
+    task_pack = _copy_task_pack(tmp_path)
+    before = build_eval_task_hashes(task_pack, ["toy_python_fix_001"])
+
+    unused_task = task_pack / "tasks/unused_toy_copy"
+    shutil.copytree(task_pack / "tasks/toy_python_fix", unused_task)
+    manifest_path = unused_task / "task.yaml"
+    manifest_path.write_text(
+        manifest_path.read_text().replace(
+            "id: toy_python_fix_001",
+            "id: unused_toy_copy",
+        )
+    )
+    after = build_eval_task_hashes(task_pack, ["toy_python_fix_001"])
+
+    assert before["selected_task_hash_set"] == after["selected_task_hash_set"]
+    assert before["selected_tasks"] == after["selected_tasks"]
+
+
+def test_eval_task_hash_set_changes_when_selected_task_changes(tmp_path: Path) -> None:
+    task_pack = _copy_task_pack(tmp_path)
+    before = build_eval_task_hashes(task_pack, ["toy_python_fix_001"])
+
+    task_card = task_pack / "tasks/toy_python_fix/task_card.md"
+    task_card.write_text(task_card.read_text() + "\nSelected task changed.\n")
+    after = build_eval_task_hashes(task_pack, ["toy_python_fix_001"])
+
+    assert before["selected_task_hash_set"] != after["selected_task_hash_set"]
 
 
 def test_task_hash_cli_writes_report(tmp_path: Path) -> None:
