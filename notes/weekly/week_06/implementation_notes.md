@@ -268,6 +268,9 @@ provenance matched or drifted.
   overall, scorer, and agent stability counts. It points to
   `control_run_manifest.json` for per-file hashes and drift details instead of
   dumping those details into the human report.
+- Refactored control report rendering into `src/agentenv/controls/reporting.py`.
+  `controls_run.py` remains responsible for orchestration and artifact writes;
+  the controls reporting module owns Markdown presentation and table formatting.
 - `overall_match` now requires both:
   - every control record matches the expected semantic outcome;
   - `flake_detection.status` is `stable`.
