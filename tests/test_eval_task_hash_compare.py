@@ -6,6 +6,7 @@ import pytest
 from agentenv.evals.task_hash_compare import (
     compare_eval_task_hashes,
     load_eval_task_hash_source,
+    render_eval_task_hash_comparison_summary,
 )
 
 
@@ -38,6 +39,11 @@ def test_compare_eval_task_hashes_matches_run_and_matrix_manifests(
     assert comparison.removed_task_ids == ()
     assert comparison.changed_tasks == ()
     assert comparison.to_dict()["status"] == "matched"
+    assert render_eval_task_hash_comparison_summary(comparison) == [
+        "task input provenance matched",
+        "reference=eval_run_v0 task_pack=repo_patch_python_v0 selected_tasks=1",
+        "candidate=eval_matrix_v0 task_pack=repo_patch_python_v0 selected_tasks=1",
+    ]
 
 
 def test_compare_eval_task_hashes_detects_selected_task_drift(
@@ -115,6 +121,24 @@ def test_compare_eval_task_hashes_detects_selected_task_drift(
         ("seed_workspace", "removed"),
         ("hidden_tests", "added"),
         ("task.yaml", "changed"),
+    ]
+    assert render_eval_task_hash_comparison_summary(comparison) == [
+        "task input provenance drifted",
+        "reference=eval_run_v0 task_pack=repo_patch_python_v0 selected_tasks=2",
+        "candidate=eval_matrix_v0 task_pack=repo_patch_python_v0 selected_tasks=2",
+        (
+            "drift task_pack_id_match=true "
+            "selected_task_hash_set_match=false "
+            "added_tasks=1 removed_tasks=1 changed_tasks=1"
+        ),
+        "added_task_ids=task_c",
+        "removed_task_ids=task_b",
+        (
+            "changed_task=task_a "
+            "fields=task_record_hash,task_yaml_hash,"
+            "required_task_files_hash,full_task_dir_hash "
+            "required_file_drifts=3"
+        ),
     ]
 
 

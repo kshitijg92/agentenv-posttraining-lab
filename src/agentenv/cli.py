@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import typer
@@ -6,6 +7,10 @@ from rich.console import Console
 from agentenv.agents.audit import run_agent_task_audit
 from agentenv.artifacts import ArtifactDirectoryError
 from agentenv.controls.controls_run import run_controls
+from agentenv.evals.task_hash_compare import (
+    compare_eval_task_hashes,
+    render_eval_task_hash_comparison_summary,
+)
 from agentenv.local_model_setup.ollama import (
     DEFAULT_MODEL_ID,
     DEFAULT_OPENAI_BASE_URL,
@@ -21,8 +26,8 @@ from agentenv.local_model_setup.ollama import (
     setup_ollama_model,
 )
 from agentenv.orchestrators.eval_run import (
-    EvalMatrixRun,
-    EvalRun,
+    count_eval_matrix_layers,
+    count_eval_run_layers,
     run_eval_config,
     run_eval_config_all_policies,
 )
@@ -45,6 +50,7 @@ tasks_app = typer.Typer(no_args_is_help=True)
 attempt_app = typer.Typer(no_args_is_help=True)
 agents_app = typer.Typer(no_args_is_help=True)
 controls_app = typer.Typer(no_args_is_help=True)
+eval_app = typer.Typer(no_args_is_help=False)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 local_model_app = typer.Typer(no_args_is_help=True)
@@ -53,6 +59,7 @@ app.add_typer(tasks_app, name="tasks")
 app.add_typer(attempt_app, name="attempt")
 app.add_typer(agents_app, name="agents")
 app.add_typer(controls_app, name="controls")
+app.add_typer(eval_app, name="eval")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
 app.add_typer(local_model_app, name="local-model")
@@ -375,9 +382,10 @@ def print_ollama_serve_command() -> None:
     console.print(" ".join(serve_command()))
 
 
-@app.command("eval")
+@eval_app.callback(invoke_without_command=True)
 def run_eval(
-    config: Path = typer.Option(..., "--config", help="Path to eval config YAML."),
+    ctx: typer.Context,
+    config: Path | None = typer.Option(None, "--config", help="Path to eval config YAML."),
     policy: str | None = typer.Option(
         None,
         "--policy",
@@ -388,7 +396,7 @@ def run_eval(
         "--all-policies",
         help="Run every policy defined by the config.",
     ),
-    out: Path = typer.Option(..., "--out", help="Directory for eval artifacts."),
+    out: Path | None = typer.Option(None, "--out", help="Directory for eval artifacts."),
     report_out: Path | None = typer.Option(
         None,
         "--report-out",
@@ -400,6 +408,13 @@ def run_eval(
         help="Delete and recreate a non-empty --out directory before running.",
     ),
 ) -> None:
+    if ctx.invoked_subcommand is not None:
+        return
+    if config is None:
+        raise typer.BadParameter("Provide --config", param_hint="--config")
+    if out is None:
+        raise typer.BadParameter("Provide --out", param_hint="--out")
+
     if all_policies:
         if policy is not None:
             raise typer.BadParameter("--all-policies cannot be combined with --policy")
@@ -411,7 +426,7 @@ def run_eval(
             )
         except ArtifactDirectoryError as exc:
             raise typer.BadParameter(str(exc), param_hint="--out") from exc
-        layer_counts = _format_layer_counts(_matrix_layer_counts(eval_matrix))
+        layer_counts = _format_layer_counts(count_eval_matrix_layers(eval_matrix))
         console.print(
             f"[green]eval complete[/green] {eval_matrix.config.name} "
             f"policies={len(eval_matrix.policy_runs)} "
@@ -419,10 +434,13 @@ def run_eval(
             f"replays={len(eval_matrix.replay_runs)} "
             f"{layer_counts}"
         )
-        console.print(f"wrote {eval_matrix.out_dir / 'eval_matrix_manifest.json'}")
+        console.print(
+            f"wrote {eval_matrix.out_dir / 'eval_matrix_manifest.json'}",
+            soft_wrap=True,
+        )
         if report_out is not None:
             report_path = write_markdown_report(eval_matrix.out_dir, report_out)
-            console.print(f"wrote {report_path}")
+            console.print(f"wrote {report_path}", soft_wrap=True)
         return
 
     if policy is None:
@@ -432,16 +450,52 @@ def run_eval(
         eval_run = run_eval_config(config, policy, out, overwrite=overwrite)
     except ArtifactDirectoryError as exc:
         raise typer.BadParameter(str(exc), param_hint="--out") from exc
-    layer_counts = _format_layer_counts(_layer_counts(eval_run))
+    layer_counts = _format_layer_counts(count_eval_run_layers(eval_run))
     console.print(
         f"[green]eval complete[/green] {eval_run.config.name} "
         f"policy={eval_run.policy} attempts={len(eval_run.attempts)} "
         f"{layer_counts}"
     )
-    console.print(f"wrote {eval_run.out_dir / 'run_manifest.json'}")
+    console.print(f"wrote {eval_run.out_dir / 'run_manifest.json'}", soft_wrap=True)
     if report_out is not None:
         report_path = write_markdown_report(eval_run.out_dir, report_out)
-        console.print(f"wrote {report_path}")
+        console.print(f"wrote {report_path}", soft_wrap=True)
+
+
+@eval_app.command("compare-task-hashes")
+def compare_task_hashes(
+    reference: Path = typer.Option(
+        ...,
+        "--reference",
+        help="Reference eval artifact directory or manifest JSON.",
+    ),
+    candidate: Path = typer.Option(
+        ...,
+        "--candidate",
+        help="Candidate eval artifact directory or manifest JSON.",
+    ),
+    out: Path | None = typer.Option(
+        None,
+        "--out",
+        help="Optional JSON path for the full comparison result.",
+    ),
+) -> None:
+    try:
+        comparison = compare_eval_task_hashes(reference, candidate)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    summary_lines = render_eval_task_hash_comparison_summary(comparison)
+    style = "green" if comparison.status == "matched" else "red"
+    console.print(f"[{style}]{summary_lines[0]}[/{style}]")
+    for line in summary_lines[1:]:
+        console.print(line)
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(comparison.to_dict(), indent=2, sort_keys=True) + "\n")
+        console.print(f"wrote {out}", soft_wrap=True)
+    if comparison.status != "matched":
+        raise typer.Exit(1)
 
 
 @app.command("replay")
@@ -476,67 +530,6 @@ def report_run(
 ) -> None:
     report_path = write_markdown_report(artifact_dir, out)
     console.print(f"[green]wrote[/green] {report_path}")
-
-
-def _layer_counts(eval_run: EvalRun) -> dict[str, dict[str, int]]:
-    counts: dict[str, dict[str, int]] = {}
-    for attempt in eval_run.attempts:
-        if attempt.scorer is not None:
-            _increment_layer_count(counts, "scorer_status", attempt.scorer.status)
-            _increment_layer_count(
-                counts,
-                "scorer_public_status",
-                attempt.scorer.public_status,
-            )
-            _increment_layer_count(
-                counts,
-                "scorer_hidden_status",
-                attempt.scorer.hidden_status,
-            )
-        if attempt.agent is not None:
-            _increment_layer_count(counts, "agent_status", attempt.agent.status)
-            if attempt.agent.prompt_loop_status is not None:
-                _increment_layer_count(
-                    counts,
-                    "prompt_loop_status",
-                    attempt.agent.prompt_loop_status,
-                )
-            if attempt.agent.scorer_attempt is not None:
-                _increment_layer_count(
-                    counts,
-                    "agent_scorer_status",
-                    attempt.agent.scorer_attempt.status,
-                )
-                _increment_layer_count(
-                    counts,
-                    "agent_scorer_public_status",
-                    attempt.agent.scorer_attempt.public_status,
-                )
-                _increment_layer_count(
-                    counts,
-                    "agent_scorer_hidden_status",
-                    attempt.agent.scorer_attempt.hidden_status,
-                )
-    return counts
-
-
-def _matrix_layer_counts(eval_matrix: EvalMatrixRun) -> dict[str, dict[str, int]]:
-    counts: dict[str, dict[str, int]] = {}
-    for eval_run in eval_matrix.policy_runs:
-        for layer_name, status_counts in _layer_counts(eval_run).items():
-            layer_count = counts.setdefault(layer_name, {})
-            for status, count in status_counts.items():
-                layer_count[status] = layer_count.get(status, 0) + count
-    return counts
-
-
-def _increment_layer_count(
-    counts: dict[str, dict[str, int]],
-    layer_name: str,
-    status: str,
-) -> None:
-    layer_count = counts.setdefault(layer_name, {})
-    layer_count[status] = layer_count.get(status, 0) + 1
 
 
 def _format_layer_counts(layer_counts: dict[str, dict[str, int]]) -> str:

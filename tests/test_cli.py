@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -107,3 +108,126 @@ def test_eval_cli_writes_optional_eval_matrix_report(tmp_path: Path) -> None:
     assert (out_dir / "eval_matrix_manifest.json").is_file()
     assert report_path.is_file()
     assert "# Eval Matrix Report" in report_path.read_text()
+
+
+def test_eval_compare_task_hashes_cli_matches_and_writes_json(
+    tmp_path: Path,
+) -> None:
+    reference = tmp_path / "reference"
+    candidate = tmp_path / "candidate"
+    comparison_out = tmp_path / "reports/hash_comparison.json"
+    _write_eval_hash_manifest(
+        reference / "run_manifest.json",
+        artifact_version="eval_run_v0",
+        selected_task_hash_set="xxh64:same-set",
+        task_record_hash="xxh64:same-task",
+    )
+    _write_eval_hash_manifest(
+        candidate / "eval_matrix_manifest.json",
+        artifact_version="eval_matrix_v0",
+        selected_task_hash_set="xxh64:same-set",
+        task_record_hash="xxh64:same-task",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "eval",
+            "compare-task-hashes",
+            "--reference",
+            str(reference),
+            "--candidate",
+            str(candidate),
+            "--out",
+            str(comparison_out),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "task input provenance matched" in result.output
+    assert "reference=eval_run_v0" in result.output
+    assert "candidate=eval_matrix_v0" in result.output
+    assert comparison_out.is_file()
+    comparison = json.loads(comparison_out.read_text())
+    assert comparison["status"] == "matched"
+    assert comparison["reference"]["artifact_version"] == "eval_run_v0"
+    assert comparison["candidate"]["artifact_version"] == "eval_matrix_v0"
+
+
+def test_eval_compare_task_hashes_cli_exits_nonzero_on_drift(
+    tmp_path: Path,
+) -> None:
+    reference = tmp_path / "reference"
+    candidate = tmp_path / "candidate"
+    _write_eval_hash_manifest(
+        reference / "run_manifest.json",
+        artifact_version="eval_run_v0",
+        selected_task_hash_set="xxh64:reference-set",
+        task_record_hash="xxh64:reference-task",
+    )
+    _write_eval_hash_manifest(
+        candidate / "run_manifest.json",
+        artifact_version="eval_run_v0",
+        selected_task_hash_set="xxh64:candidate-set",
+        task_record_hash="xxh64:candidate-task",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "eval",
+            "compare-task-hashes",
+            "--reference",
+            str(reference),
+            "--candidate",
+            str(candidate),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "task input provenance drifted" in result.output
+    assert "selected_task_hash_set_match=false" in result.output
+    assert "changed_tasks=1" in result.output
+    assert "changed_task=toy_python_fix_001" in result.output
+
+
+def _write_eval_hash_manifest(
+    path: Path,
+    *,
+    artifact_version: str,
+    selected_task_hash_set: str,
+    task_record_hash: str,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "artifact_version": artifact_version,
+                "task_hashes": {
+                    "schema_version": "eval_task_hashes_v0",
+                    "task_pack_id": "repo_patch_python_v0",
+                    "selected_task_hash_set": selected_task_hash_set,
+                    "selected_tasks": [
+                        {
+                            "task_id": "toy_python_fix_001",
+                            "split": "practice",
+                            "task_record_hash": task_record_hash,
+                            "task_yaml_hash": "xxh64:task-yaml",
+                            "required_task_files_hash": "xxh64:required-files",
+                            "full_task_dir_hash": "xxh64:full-task-dir",
+                            "required_task_files": [
+                                {
+                                    "path": "task.yaml",
+                                    "kind": "file",
+                                    "hash": "xxh64:task-yaml",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )

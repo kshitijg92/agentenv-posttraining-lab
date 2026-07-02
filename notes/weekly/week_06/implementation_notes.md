@@ -234,6 +234,12 @@ Move to repeated-control flake detection.
   - selected tasks whose hashes changed;
   - required-task-file drift details when the manifest includes
     `required_task_files`.
+- Exposed the helper through `agentenv eval compare-task-hashes`.
+- The CLI prints a compact terminal summary and can optionally write the full
+  structured comparison JSON with `--out`.
+- Kept CLI code thin by moving comparison summary rendering into the helper
+  module and using eval-orchestrator layer-count helpers for eval CLI status
+  output.
 
 ### Design
 

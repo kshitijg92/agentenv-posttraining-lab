@@ -171,6 +171,23 @@ to evaluated tasks only; it does not include a task-pack-level hash. Each
 selected task record includes both `required_task_files` and
 `required_task_files_hash`, plus `full_task_dir_hash`.
 
+Compare selected-task hashes across eval artifacts:
+
+```bash
+uv run agentenv eval compare-task-hashes \
+  --reference experiments/runs/task_hash_provenance_smoke \
+  --candidate experiments/runs/task_hash_provenance_smoke
+
+uv run agentenv eval compare-task-hashes \
+  --reference experiments/runs/task_hash_provenance_smoke \
+  --candidate experiments/runs/task_hash_provenance_smoke \
+  --out experiments/reports/hash_comparisons/task_hash_provenance_smoke.json
+```
+
+The command accepts either `eval_run_v0` or `eval_matrix_v0` artifact
+directories, or direct manifest JSON paths. It exits `0` when task input
+provenance matches and non-zero when drift is detected.
+
 ## Replay An Artifact Directory
 
 Replay a scorer eval run:

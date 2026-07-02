@@ -192,6 +192,49 @@ def compare_eval_task_hash_sources(
     )
 
 
+def render_eval_task_hash_comparison_summary(
+    comparison: EvalTaskHashComparison,
+) -> list[str]:
+    lines = [
+        f"task input provenance {comparison.status}",
+        (
+            "reference="
+            f"{comparison.reference.artifact_version} "
+            f"task_pack={comparison.reference.task_pack_id} "
+            f"selected_tasks={len(comparison.reference.selected_tasks)}"
+        ),
+        (
+            "candidate="
+            f"{comparison.candidate.artifact_version} "
+            f"task_pack={comparison.candidate.task_pack_id} "
+            f"selected_tasks={len(comparison.candidate.selected_tasks)}"
+        ),
+    ]
+    if comparison.status == "matched":
+        return lines
+
+    lines.append(
+        "drift "
+        f"task_pack_id_match={str(comparison.task_pack_id_match).lower()} "
+        "selected_task_hash_set_match="
+        f"{str(comparison.selected_task_hash_set_match).lower()} "
+        f"added_tasks={len(comparison.added_task_ids)} "
+        f"removed_tasks={len(comparison.removed_task_ids)} "
+        f"changed_tasks={len(comparison.changed_tasks)}"
+    )
+    if comparison.added_task_ids:
+        lines.append("added_task_ids=" + ",".join(comparison.added_task_ids))
+    if comparison.removed_task_ids:
+        lines.append("removed_task_ids=" + ",".join(comparison.removed_task_ids))
+    lines.extend(
+        f"changed_task={changed_task.task_id} "
+        f"fields={','.join(changed_task.changed_fields)} "
+        f"required_file_drifts={len(changed_task.required_task_file_drifts)}"
+        for changed_task in comparison.changed_tasks
+    )
+    return lines
+
+
 def load_eval_task_hash_source(path: Path) -> EvalTaskHashSource:
     manifest_path = _resolve_eval_manifest_path(path)
     manifest = _load_json_object(manifest_path)

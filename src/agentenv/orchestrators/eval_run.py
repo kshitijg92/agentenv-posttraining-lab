@@ -310,7 +310,7 @@ def run_eval_config(
             "eval_task_finished",
             output_payload={
                 "attempt_count": len(task_attempt_records),
-                "layer_counts": _layer_counts(task_attempt_records),
+                "layer_counts": count_eval_attempt_layers(task_attempt_records),
             },
         )
 
@@ -331,7 +331,7 @@ def run_eval_config(
         "eval_finished",
         output_payload={
             "attempt_count": len(eval_run.attempts),
-            "layer_counts": _layer_counts(eval_run.attempts),
+            "layer_counts": count_eval_run_layers(eval_run),
         },
         payload_refs={"run_manifest": "run_manifest.json"},
     )
@@ -453,7 +453,7 @@ def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
         "policy": eval_run.policy,
         **_policy_metadata(eval_run.config, eval_run.policy),
         "attempt_count": len(eval_run.attempts),
-        "layer_counts": _layer_counts(eval_run.attempts),
+        "layer_counts": count_eval_run_layers(eval_run),
         "artifacts": {
             "trace": "trace.jsonl",
             "attempts": "attempts",
@@ -487,7 +487,7 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
         "task_count": len(eval_matrix.config.tasks),
         "policy_count": len(eval_matrix.policy_runs),
         "attempt_count": sum(policy_attempt_counts.values()),
-        "layer_counts": _matrix_layer_counts(eval_matrix.policy_runs),
+        "layer_counts": count_eval_matrix_layers(eval_matrix),
         "artifacts": artifacts,
         "policy_runs": [
             {
@@ -503,7 +503,7 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
                     )
                 ),
                 "attempt_count": len(policy_run.attempts),
-                "layer_counts": _layer_counts(policy_run.attempts),
+                "layer_counts": count_eval_run_layers(policy_run),
             }
             for policy_run in eval_matrix.policy_runs
         ],
@@ -811,7 +811,7 @@ def _child_artifact_version(attempt_dir: Path) -> str:
     return artifact_version
 
 
-def _layer_counts(
+def count_eval_attempt_layers(
     attempts: list[EvalAttemptRecord],
 ) -> dict[str, dict[str, int]]:
     layer_counts: dict[str, dict[str, int]] = {}
@@ -863,10 +863,16 @@ def _layer_counts(
     return layer_counts
 
 
-def _matrix_layer_counts(policy_runs: list[EvalRun]) -> dict[str, dict[str, int]]:
+def count_eval_run_layers(eval_run: EvalRun) -> dict[str, dict[str, int]]:
+    return count_eval_attempt_layers(eval_run.attempts)
+
+
+def count_eval_matrix_layers(
+    eval_matrix: EvalMatrixRun,
+) -> dict[str, dict[str, int]]:
     matrix_counts: dict[str, dict[str, int]] = {}
-    for policy_run in policy_runs:
-        for layer_name, status_counts in _layer_counts(policy_run.attempts).items():
+    for policy_run in eval_matrix.policy_runs:
+        for layer_name, status_counts in count_eval_run_layers(policy_run).items():
             for status, count in status_counts.items():
                 matrix_counts.setdefault(layer_name, {})[status] = (
                     matrix_counts.setdefault(layer_name, {}).get(status, 0) + count
