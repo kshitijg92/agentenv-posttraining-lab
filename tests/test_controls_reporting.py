@@ -1,0 +1,111 @@
+from pathlib import Path
+
+from agentenv.controls.controls_run import ControlRecord, ControlRun
+from agentenv.controls.reporting import render_control_report
+
+
+def test_render_control_report_from_control_run_dataclasses(tmp_path: Path) -> None:
+    out_dir = tmp_path / "controls"
+    control_run = ControlRun(
+        control_run_id="controls_test",
+        task_pack_path=Path("/repo/task_pack"),
+        out_dir=out_dir,
+        repeats=2,
+        created_at="2026-07-01T00:00:00Z",
+        records=[
+            ControlRecord(
+                task_id="task_a",
+                control_layer="scorer",
+                control_name="oracle",
+                repeat_index=0,
+                artifact_dir=out_dir / "scorer_control_patches/task_a__oracle__repeat_001",
+                expected={
+                    "attempt_status": "PASS",
+                    "public_status": "PASS",
+                    "hidden_status": "PASS",
+                },
+                actual={
+                    "attempt_status": "PASS",
+                    "public_status": "PASS",
+                    "hidden_status": "PASS",
+                    "error_class": None,
+                    "final_diff_hash": "xxh64:abc",
+                },
+                match=True,
+            ),
+            ControlRecord(
+                task_id="task_a",
+                control_layer="agent",
+                control_name="malformed",
+                repeat_index=0,
+                artifact_dir=out_dir
+                / "agent_control_scripts/task_a__malformed__repeat_001",
+                expected={
+                    "prompt_loop_status": "invalid_model_output",
+                },
+                actual={
+                    "agent_run_status": "agent_loop_failed",
+                    "prompt_loop_status": "invalid_model_output",
+                    "tool_results": [],
+                    "attempt_status": None,
+                    "public_status": None,
+                    "hidden_status": None,
+                    "error_class": "MalformedModelOutput",
+                },
+                match=True,
+            ),
+        ],
+        flake_detection={
+            "schema_version": "control_flake_detection_v0",
+            "status": "drifted",
+            "repeats": 2,
+            "groups_checked": 2,
+            "drifted_groups": 1,
+            "groups": {
+                "scorer": [
+                    {
+                        "task_id": "task_a",
+                        "control_name": "oracle",
+                        "status": "drifted",
+                    }
+                ],
+                "agent": [
+                    {
+                        "task_id": "task_a",
+                        "control_name": "malformed",
+                        "status": "stable",
+                    }
+                ],
+            },
+        },
+    )
+
+    report = render_control_report(control_run)
+
+    assert report.startswith("# Control Calibration\n")
+    assert "- Control run ID: controls_test" in report
+    assert "- Overall: FAIL" in report
+    assert report.index("## Flake Detection") < report.index(
+        "## Scorer Control Overview"
+    )
+    assert "| overall | drifted | 2 | 1 |" in report
+    assert "| scorer | drifted | 1 | 1 |" in report
+    assert "| agent | stable | 1 | 0 |" in report
+    assert (
+        "Per-file normalized hashes and drift details are in "
+        "`control_run_manifest.json`."
+    ) in report
+    assert "| all controls | 1 | 1 | 1/1 | 0 | " in report
+    assert "| oracle | 1 | 1 | 1/1 | 0 | " in report
+    assert "| malformed | 1 | 1 | 1/1 | 0 | " in report
+    assert "| task_a | oracle | 1 | 1/1 | PASS | PASS | PASS |" in report
+    assert "| task_a | malformed | 1 | 1/1 | invalid_model_output |  |" in report
+    assert (
+        "| task_a | oracle | 1 | PASS | PASS | PASS | PASS | PASS | PASS |  | "
+        "xxh64:abc | PASS | scorer_control_patches/task_a__oracle__repeat_001 |"
+    ) in report
+    assert (
+        "| task_a | malformed | 1 | invalid_model_output | agent_loop_failed | "
+        "invalid_model_output |  | [] |  |  |  | MalformedModelOutput | PASS | "
+        "agent_control_scripts/task_a__malformed__repeat_001 |"
+    ) in report

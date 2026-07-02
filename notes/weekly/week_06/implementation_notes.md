@@ -271,6 +271,9 @@ provenance matched or drifted.
 - Refactored control report rendering into `src/agentenv/controls/reporting.py`.
   `controls_run.py` remains responsible for orchestration and artifact writes;
   the controls reporting module owns Markdown presentation and table formatting.
+- Added a fast focused report-rendering test that constructs real `ControlRun`
+  and `ControlRecord` dataclasses directly, so report layout changes do not
+  depend only on the slower end-to-end control run test.
 - `overall_match` now requires both:
   - every control record matches the expected semantic outcome;
   - `flake_detection.status` is `stable`.
