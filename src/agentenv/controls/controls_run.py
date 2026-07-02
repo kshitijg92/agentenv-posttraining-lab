@@ -2,8 +2,11 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 from typing import Any, Literal
 from uuid import uuid4
+
+import xxhash
 
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
@@ -24,9 +27,33 @@ from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_p
 
 
 CONTROL_RUN_ARTIFACT_VERSION = "control_run_v0"
+FLAKE_DETECTION_SCHEMA_VERSION = "control_flake_detection_v0"
+SCORER_ARTIFACT_NORMALIZATION_VERSION = "scorer_artifact_normalization_v0"
 ControlLayer = Literal["scorer", "agent"]
+FlakeDetectionStatus = Literal["stable", "drifted"]
 MatchStatus = Literal["PASS", "FAIL"]
 JsonObject = dict[str, Any]
+
+
+_VOLATILE_JSON_KEYS = {
+    "attempt_id",
+    "control_run_id",
+    "created_at",
+    "duration_ms",
+    "ended_at",
+    "run_id",
+    "started_at",
+    "stderr_bytes",
+    "stdout_bytes",
+    "timestamp_utc",
+}
+
+_TEMP_WORKSPACE_RE = re.compile(r"/tmp/agentenv-[^/\s:\"']+/workspace")
+_TEMP_RUN_RE = re.compile(r"/tmp/agentenv-[^/\s:\"']+")
+_PYTEST_TMP_RE = re.compile(r"/tmp/pytest-of-[^/\s:\"']+/pytest-\d+")
+_PYTEST_TMP_SEGMENT_RE = re.compile(r"(?:(?<=/)|(?<=\.\.\.))pytest-\d+(?=/)")
+_SECONDS_DURATION_RE = re.compile(r"\bin \d+(?:\.\d+)?s\b")
+_MILLISECONDS_DURATION_RE = re.compile(r"\bin \d+ms\b")
 
 
 @dataclass(frozen=True)
@@ -64,10 +91,14 @@ class ControlRun:
     repeats: int
     created_at: str
     records: list[ControlRecord]
+    flake_detection: JsonObject | None = None
 
     @property
     def overall_match(self) -> bool:
-        return all(record.match for record in self.records)
+        return all(record.match for record in self.records) and (
+            self.flake_detection is None
+            or self.flake_detection.get("status") == "stable"
+        )
 
 
 def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
@@ -83,19 +114,14 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
     agent_control_dir.mkdir(parents=True, exist_ok=True)
 
     tasks = _discover_control_tasks(task_pack_path)
-    control_run = ControlRun(
-        control_run_id=f"controls_{uuid4().hex}",
-        task_pack_path=task_pack_path,
-        out_dir=out_dir,
-        repeats=repeats,
-        created_at=_utc_now(),
-        records=[],
-    )
+    control_run_id = f"controls_{uuid4().hex}"
+    created_at = _utc_now()
+    records: list[ControlRecord] = []
 
     for task in tasks:
         for control, submission_path in _scorer_control_paths(task):
             for repeat_index in range(repeats):
-                control_run.records.append(
+                records.append(
                     _run_scorer_control(
                         task=task,
                         control=control,
@@ -108,7 +134,7 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
         for control_name, control_path in _agent_control_script_paths(task):
             control_case = load_agent_control_script_case(control_path)
             for repeat_index in range(repeats):
-                control_run.records.append(
+                records.append(
                     _run_agent_control(
                         task=task,
                         control_name=control_name,
@@ -117,6 +143,21 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
                         out_dir=agent_control_dir,
                     )
                 )
+
+    flake_detection = _build_flake_detection(
+        task_pack_path=task_pack_path,
+        repeats=repeats,
+        records=records,
+    )
+    control_run = ControlRun(
+        control_run_id=control_run_id,
+        task_pack_path=task_pack_path,
+        out_dir=out_dir,
+        repeats=repeats,
+        created_at=created_at,
+        records=records,
+        flake_detection=flake_detection,
+    )
 
     _write_jsonl(control_run)
     _write_manifest(control_run)
@@ -392,6 +433,7 @@ def _control_run_manifest(control_run: ControlRun) -> dict[str, object]:
         "repeats": control_run.repeats,
         "record_count": len(control_run.records),
         "overall_match": control_run.overall_match,
+        "flake_detection": control_run.flake_detection,
         "artifacts": {
             "agent_control_scripts": "agent_control_scripts",
             "scorer_control_patches": "scorer_control_patches",
@@ -419,6 +461,210 @@ def _record_json(
         "actual": record.actual,
         "match": record.match,
     }
+
+
+def _build_flake_detection(
+    *,
+    task_pack_path: Path,
+    repeats: int,
+    records: list[ControlRecord],
+) -> JsonObject:
+    scorer_records = [
+        record
+        for record in records
+        if record.control_layer == "scorer"
+    ]
+    groups = [
+        _scorer_flake_detection_group(
+            task_pack_path,
+            _record_group(scorer_records, task_id, control_name),
+        )
+        for task_id, control_name in _summary_keys(scorer_records)
+    ]
+    drifted_groups = sum(group["status"] == "drifted" for group in groups)
+    status: FlakeDetectionStatus = "drifted" if drifted_groups else "stable"
+    return {
+        "schema_version": FLAKE_DETECTION_SCHEMA_VERSION,
+        "status": status,
+        "repeats": repeats,
+        "groups_checked": len(groups),
+        "drifted_groups": drifted_groups,
+        "groups": groups,
+    }
+
+
+def _scorer_flake_detection_group(
+    task_pack_path: Path,
+    records: list[ControlRecord],
+) -> JsonObject:
+    if not records:
+        raise ValueError("Expected at least one scorer control record")
+
+    sorted_records = sorted(records, key=lambda record: record.repeat_index)
+    reference = sorted_records[0]
+    if reference.repeat_index != 0:
+        raise ValueError(
+            f"Expected repeat_index 0 reference for {reference.task_id} "
+            f"{reference.control_name}"
+        )
+
+    repo_root = _find_repo_root(task_pack_path)
+    reference_hashes = _normalized_scorer_artifact_hashes(
+        reference.artifact_dir,
+        repo_root,
+    )
+    drifted_repeats: list[int] = []
+    individual_drift_details: dict[str, object] = {}
+    for record in sorted_records[1:]:
+        actual_hashes = _normalized_scorer_artifact_hashes(
+            record.artifact_dir,
+            repo_root,
+        )
+        file_drifts = _normalized_file_drifts(reference_hashes, actual_hashes)
+        if file_drifts:
+            drifted_repeats.append(record.repeat_index)
+            individual_drift_details[str(record.repeat_index)] = {
+                "files": file_drifts,
+            }
+
+    status: FlakeDetectionStatus = (
+        "drifted" if drifted_repeats else "stable"
+    )
+    return {
+        "control_layer": "scorer",
+        "task_id": reference.task_id,
+        "control_name": reference.control_name,
+        "status": status,
+        "reference_repeat_index": reference.repeat_index,
+        "drifted_repeats": drifted_repeats,
+        "items_compared": {
+            "normalization": SCORER_ARTIFACT_NORMALIZATION_VERSION,
+            "files": [
+                {
+                    "path": path,
+                    "normalized_hash": hash_value,
+                }
+                for path, hash_value in sorted(reference_hashes.items())
+            ],
+        },
+        "individual_drift_details": individual_drift_details,
+    }
+
+
+def _normalized_scorer_artifact_hashes(
+    artifact_dir: Path,
+    repo_root: Path | None,
+) -> dict[str, str]:
+    return {
+        file_path.relative_to(artifact_dir).as_posix(): _hash_normalized_artifact_file(
+            file_path,
+            repo_root,
+        )
+        for file_path in sorted(artifact_dir.rglob("*"))
+        if file_path.is_file()
+    }
+
+
+def _normalized_file_drifts(
+    reference_hashes: dict[str, str],
+    actual_hashes: dict[str, str],
+) -> list[JsonObject]:
+    drifts: list[JsonObject] = []
+    for path in sorted(set(reference_hashes) - set(actual_hashes)):
+        drifts.append(
+            {
+                "path": path,
+                "status": "removed",
+                "reference_hash": reference_hashes[path],
+                "actual_hash": None,
+            }
+        )
+    for path in sorted(set(actual_hashes) - set(reference_hashes)):
+        drifts.append(
+            {
+                "path": path,
+                "status": "added",
+                "reference_hash": None,
+                "actual_hash": actual_hashes[path],
+            }
+        )
+    for path in sorted(set(reference_hashes) & set(actual_hashes)):
+        if reference_hashes[path] != actual_hashes[path]:
+            drifts.append(
+                {
+                    "path": path,
+                    "status": "changed",
+                    "reference_hash": reference_hashes[path],
+                    "actual_hash": actual_hashes[path],
+                }
+            )
+    return drifts
+
+
+def _hash_normalized_artifact_file(path: Path, repo_root: Path | None) -> str:
+    if path.suffix == ".json":
+        normalized = _normalize_json_value(json.loads(path.read_text()), repo_root)
+        return _hash_json(normalized)
+    if path.suffix == ".jsonl":
+        normalized_lines = [
+            json.dumps(
+                _normalize_json_value(json.loads(line), repo_root),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            for line in path.read_text().splitlines()
+            if line.strip()
+        ]
+        return _hash_bytes(("\n".join(normalized_lines) + "\n").encode())
+    return _hash_bytes(_normalize_text(path.read_text(), repo_root).encode())
+
+
+def _normalize_json_value(value: Any, repo_root: Path | None) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _normalize_json_value(raw_value, repo_root)
+            for key, raw_value in sorted(value.items())
+            if key not in _VOLATILE_JSON_KEYS
+        }
+    if isinstance(value, list):
+        return [_normalize_json_value(item, repo_root) for item in value]
+    if isinstance(value, str):
+        return _normalize_text(value, repo_root)
+    return value
+
+
+def _normalize_text(text: str, repo_root: Path | None) -> str:
+    normalized = text.replace("\r\n", "\n")
+    if repo_root is not None:
+        normalized = normalized.replace(str(repo_root), "<REPO>")
+    normalized = _TEMP_WORKSPACE_RE.sub("<WORKSPACE>", normalized)
+    normalized = _TEMP_RUN_RE.sub("<TMP_RUN>", normalized)
+    normalized = _PYTEST_TMP_RE.sub("<PYTEST_TMP>", normalized)
+    normalized = _PYTEST_TMP_SEGMENT_RE.sub("pytest-<N>", normalized)
+    normalized = _SECONDS_DURATION_RE.sub("in <DURATION>", normalized)
+    normalized = _MILLISECONDS_DURATION_RE.sub("in <DURATION>", normalized)
+    return normalized
+
+
+def _hash_json(value: object) -> str:
+    return _hash_bytes(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    )
+
+
+def _hash_bytes(payload: bytes) -> str:
+    return f"xxh64:{xxhash.xxh64(payload).hexdigest()}"
+
+
+def _find_repo_root(path: Path) -> Path | None:
+    resolved = path.resolve()
+    candidates = [resolved, *resolved.parents]
+    for candidate in candidates:
+        if (candidate / "pyproject.toml").is_file() and (
+            candidate / "src/agentenv"
+        ).is_dir():
+            return candidate
+    return None
 
 
 def _records_for_layer(

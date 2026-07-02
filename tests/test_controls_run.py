@@ -1,6 +1,8 @@
+from dataclasses import replace
 import json
 from pathlib import Path
 
+from agentenv.controls import controls_run as controls_run_module
 from agentenv.controls.controls_run import expected_control_outcome, run_controls
 
 
@@ -134,6 +136,50 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert manifest["record_count"] == expected_record_count
     assert len(manifest["records"]) == expected_record_count
     assert manifest["overall_match"] is True
+    flake_detection = manifest["flake_detection"]
+    assert flake_detection["schema_version"] == "control_flake_detection_v0"
+    assert flake_detection["status"] == "stable"
+    assert flake_detection["repeats"] == 2
+    assert flake_detection["groups_checked"] == len(TASK_IDS) * len(CONTROL_NAMES)
+    assert flake_detection["drifted_groups"] == 0
+    scorer_flake_groups = flake_detection["groups"]
+    assert {
+        (group["control_layer"], group["task_id"], group["control_name"])
+        for group in scorer_flake_groups
+    } == {
+        ("scorer", task_id, control_name)
+        for task_id in TASK_IDS
+        for control_name in CONTROL_NAMES
+    }
+    toy_oracle_flake_group = next(
+        group
+        for group in scorer_flake_groups
+        if group["task_id"] == "toy_python_fix_001"
+        and group["control_name"] == "oracle"
+    )
+    assert toy_oracle_flake_group["status"] == "stable"
+    assert toy_oracle_flake_group["reference_repeat_index"] == 0
+    assert toy_oracle_flake_group["drifted_repeats"] == []
+    assert toy_oracle_flake_group["individual_drift_details"] == {}
+    assert toy_oracle_flake_group["items_compared"]["normalization"] == (
+        "scorer_artifact_normalization_v0"
+    )
+    assert {
+        file_record["path"]
+        for file_record in toy_oracle_flake_group["items_compared"]["files"]
+    } == {
+        "attempt.json",
+        "error.txt",
+        "final.diff",
+        "run_manifest.json",
+        "stderr.txt",
+        "stdout.txt",
+        "trace.jsonl",
+    }
+    assert all(
+        file_record["normalized_hash"].startswith("xxh64:")
+        for file_record in toy_oracle_flake_group["items_compared"]["files"]
+    )
     assert manifest["artifacts"] == {
         "agent_control_scripts": "agent_control_scripts",
         "report": "control_report.md",
@@ -198,3 +244,42 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
             assert not (artifact_dir / "work").exists()
             assert not (artifact_dir / "agent_interaction_workspace").exists()
             assert not (artifact_dir / "scoring_workspace").exists()
+
+    drifted_stdout = (
+        out_dir
+        / "scorer_control_patches"
+        / "toy_python_fix_001__oracle__repeat_002"
+        / "stdout.txt"
+    )
+    drifted_stdout.write_text(drifted_stdout.read_text() + "\nDRIFT\n")
+    drifted_flake_detection = controls_run_module._build_flake_detection(
+        task_pack_path=control_run.task_pack_path,
+        repeats=control_run.repeats,
+        records=control_run.records,
+    )
+    assert drifted_flake_detection["status"] == "drifted"
+    assert drifted_flake_detection["drifted_groups"] == 1
+    drifted_group = next(
+        group
+        for group in drifted_flake_detection["groups"]
+        if group["task_id"] == "toy_python_fix_001"
+        and group["control_name"] == "oracle"
+    )
+    assert drifted_group["status"] == "drifted"
+    assert drifted_group["drifted_repeats"] == [1]
+    file_drifts = drifted_group["individual_drift_details"]["1"]["files"]
+    assert len(file_drifts) == 1
+    file_drift = file_drifts[0]
+    assert file_drift["path"] == "stdout.txt"
+    assert file_drift["status"] == "changed"
+    assert file_drift["reference_hash"] == next(
+        file_record["normalized_hash"]
+        for file_record in drifted_group["items_compared"]["files"]
+        if file_record["path"] == "stdout.txt"
+    )
+    assert file_drift["actual_hash"].startswith("xxh64:")
+    assert file_drift["actual_hash"] != file_drift["reference_hash"]
+    assert (
+        replace(control_run, flake_detection=drifted_flake_detection).overall_match
+        is False
+    )

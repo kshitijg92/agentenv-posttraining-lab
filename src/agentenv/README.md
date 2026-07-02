@@ -289,6 +289,10 @@ experiments/runs/control_calibration/control_results.jsonl
 experiments/runs/control_calibration/control_run_manifest.json
 ```
 
+`control_run_manifest.json` includes `flake_detection` for scorer-control
+repeat artifact drift. `overall_match` is true only when expected control
+outcomes match and checked repeat artifacts are stable.
+
 ## Run Docker Smoke
 
 ```bash

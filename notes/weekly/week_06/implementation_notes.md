@@ -246,3 +246,44 @@ Move to repeated-control flake detection.
 Reports should eventually summarize the helper's status, not dump raw hashes.
 Raw hashes stay in JSON manifests; Markdown can later say whether task input
 provenance matched or drifted.
+
+## 2026-07-01 Control Flake Detection Manifest
+
+### Shipped
+
+- Added manifest-only `flake_detection` to `control_run_manifest.json`.
+- This checkpoint covers scorer controls only; the schema uses
+  `control_layer` per group so agent controls can be added later without a new
+  top-level shape.
+- Each scorer `(task_id, control_name)` repeat group compares repeat 1..N
+  against repeat 0.
+- The manifest stores per-file normalized hashes in `items_compared` and stores
+  per-repeat drift details only for repeats that drifted.
+- `overall_match` now requires both:
+  - every control record matches the expected semantic outcome;
+  - `flake_detection.status` is `stable`.
+
+### Normalization
+
+Scorer artifact normalization includes all files in the scorer artifact
+directory:
+
+- `attempt.json`;
+- `run_manifest.json`;
+- `final.diff`;
+- `stdout.txt`;
+- `stderr.txt`;
+- `error.txt`;
+- `trace.jsonl`.
+
+The normalizer removes or rewrites volatile evidence:
+
+- run IDs and attempt IDs;
+- timestamps;
+- durations and stdout/stderr byte counts;
+- repo root paths;
+- generated agentenv temp workspace paths;
+- pytest temp paths, including pytest's ellipsized path rendering.
+
+The intent is to detect deterministic artifact drift without failing because of
+expected run-local identifiers, paths, or timing.
