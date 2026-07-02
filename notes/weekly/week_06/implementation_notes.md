@@ -274,6 +274,11 @@ provenance matched or drifted.
 - Added a fast focused report-rendering test that constructs real `ControlRun`
   and `ControlRecord` dataclasses directly, so report layout changes do not
   depend only on the slower end-to-end control run test.
+- Added `docs/eval_quality_gate.md` as a human checklist for trusting
+  `repo_patch_python_v0` eval results. The v0 gate includes task validation,
+  split locking, selected-task hashes, hidden-validator boundaries, scorer and
+  agent controls, repeat stability, control replayability, report separation,
+  and construct-validity limitations.
 - `overall_match` now requires both:
   - every control record matches the expected semantic outcome;
   - `flake_detection.status` is `stable`.
@@ -303,3 +308,41 @@ The normalizer removes or rewrites volatile evidence:
 
 The intent is to detect deterministic artifact drift without failing because of
 expected run-local identifiers, paths, or timing.
+
+## 2026-07-01 Eval Quality Gate Report
+
+### Shipped
+
+- Added `docs/construct_validity_v0.md`.
+- Added `docs/eval_quality_gate.md`.
+- Added schedule-neutral eval config
+  `configs/eval/eval_quality_gate_repo_patch_python_v0.yaml`.
+- Generated `experiments/reports/week06_eval_quality.md` as the learning-week
+  evidence summary.
+
+### Ran
+
+```bash
+uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
+uv run agentenv tasks check-splits data/task_packs/repo_patch_python_v0/splits.lock.json
+uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 --out experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
+uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/eval_quality_controls_repo_patch_python_v0
+uv run agentenv eval --config configs/eval/eval_quality_gate_repo_patch_python_v0.yaml --all-policies --out experiments/runs/eval_quality_gate_repo_patch_python_v0 --report-out experiments/reports/eval_matrices/eval_quality_gate_repo_patch_python_v0.md --overwrite
+```
+
+### Result
+
+```text
+eval-quality gate: PASS
+task-pack validation: valid repo_patch_python_v0 tasks=4
+split-lock validation: practice=1 dev=3 heldout_private=0 public_calibration=0
+task hash pack_record_hash: xxh64:fb449de6b09683dc
+repeat controls: 72 records, 24 groups checked, 0 drifted groups
+dev eval-quality matrix: 18 attempts, 6 replay runs, replay match rate 18/18
+```
+
+### Decision
+
+Keep code/config names schedule-neutral. The repo artifact is
+`eval_quality_gate_repo_patch_python_v0`; the weekly report is allowed to use
+`week06` because it is a learning-note/report artifact.
