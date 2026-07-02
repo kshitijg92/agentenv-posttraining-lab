@@ -216,3 +216,27 @@ eval config.
 ### Next Small Step
 
 Move to repeated-control flake detection.
+
+## 2026-07-01 Eval Task Hash Comparison Helper
+
+### Shipped
+
+- Added an eval-layer helper that accepts either an artifact directory or a
+  manifest JSON file.
+- The loader distinguishes `eval_run_v0` (`run_manifest.json`) from
+  `eval_matrix_v0` (`eval_matrix_manifest.json`) at the boundary.
+- The comparison logic operates on the common `task_hashes` payload and returns
+  semantic drift data:
+  - overall `matched` or `drifted` status;
+  - task-pack-id match;
+  - selected-task-hash-set match;
+  - selected task IDs added or removed;
+  - selected tasks whose hashes changed;
+  - required-task-file drift details when the manifest includes
+    `required_task_files`.
+
+### Design
+
+Reports should eventually summarize the helper's status, not dump raw hashes.
+Raw hashes stay in JSON manifests; Markdown can later say whether task input
+provenance matched or drifted.
