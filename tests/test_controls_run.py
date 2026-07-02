@@ -43,6 +43,32 @@ def test_expected_control_outcome_is_inferred_from_control_name() -> None:
     ) == ("HIDDEN_TEST_FAIL", "PASS", "FAIL")
 
 
+def test_flake_detection_normalizes_ellipsized_pytest_tmp_paths() -> None:
+    reference = (
+        "CompletedProcess(args=['...pytest-1022/test_a0/input.jsonl'], "
+        "returncode=0)"
+    )
+    actual = (
+        "CompletedProcess(args=['...pytest-1024/test_a0/input.jsonl'], "
+        "returncode=0)"
+    )
+    assert controls_run_module._normalize_text(reference, None) == (
+        controls_run_module._normalize_text(actual, None)
+    )
+
+    reference_without_first_char = (
+        "CompletedProcess(args=['...ytest-1022/test_a0/input.jsonl'], "
+        "returncode=0)"
+    )
+    actual_without_first_char = (
+        "CompletedProcess(args=['...ytest-1024/test_a0/input.jsonl'], "
+        "returncode=0)"
+    )
+    assert controls_run_module._normalize_text(reference_without_first_char, None) == (
+        controls_run_module._normalize_text(actual_without_first_char, None)
+    )
+
+
 def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -257,6 +283,10 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
 
     report = (out_dir / "control_report.md").read_text()
     assert "# Control Calibration" in report
+    assert report.index("## Summary") < report.index("## Flake Detection")
+    assert report.index("## Flake Detection") < report.index(
+        "## Scorer Control Overview"
+    )
     assert report.index("## Scorer Control Overview") < report.index(
         "## Agent Control Overview"
     )
@@ -269,6 +299,17 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert (
         "| control | tasks | records | matches | failures | status |" in report
     )
+    assert "| scope | stability | groups checked | drifted groups |" in report
+    assert (
+        f"| overall | stable | {len(TASK_IDS) * (len(CONTROL_NAMES) + len(AGENT_CONTROL_NAMES))} "
+        "| 0 |"
+    ) in report
+    assert f"| scorer | stable | {len(TASK_IDS) * len(CONTROL_NAMES)} | 0 |" in report
+    assert f"| agent | stable | {len(TASK_IDS) * len(AGENT_CONTROL_NAMES)} | 0 |" in report
+    assert (
+        "Per-file normalized hashes and drift details are in "
+        "`control_run_manifest.json`."
+    ) in report
     assert "| all controls | 4 | 24 | 24/24 | 0 | " in report
     assert "| malformed | 4 | 8 | 8/8 | 0 | " in report
     assert "| oracle | 4 | 8 | 8/8 | 0 | " in report

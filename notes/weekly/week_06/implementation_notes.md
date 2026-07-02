@@ -264,6 +264,10 @@ provenance matched or drifted.
   repeats add, remove, or change files relative to repeat 0, that is drift.
 - The manifest stores per-file normalized hashes in `items_compared` and stores
   per-repeat drift details only for repeats that drifted.
+- `control_report.md` includes a compact `Flake Detection` section with
+  overall, scorer, and agent stability counts. It points to
+  `control_run_manifest.json` for per-file hashes and drift details instead of
+  dumping those details into the human report.
 - `overall_match` now requires both:
   - every control record matches the expected semantic outcome;
   - `flake_detection.status` is `stable`.
@@ -288,7 +292,8 @@ The normalizer removes or rewrites volatile evidence:
 - durations, model latency, and stdout/stderr byte counts;
 - repo root paths;
 - generated agentenv temp workspace paths;
-- pytest temp paths, including pytest's ellipsized path rendering.
+- pytest temp paths, including pytest's ellipsized `...pytest-N` and
+  `...ytest-N` path rendering.
 
 The intent is to detect deterministic artifact drift without failing because of
 expected run-local identifiers, paths, or timing.

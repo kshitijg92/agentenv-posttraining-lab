@@ -54,6 +54,7 @@ _TEMP_WORKSPACE_RE = re.compile(r"/tmp/agentenv-[^/\s:\"']+/workspace")
 _TEMP_RUN_RE = re.compile(r"/tmp/agentenv-[^/\s:\"']+")
 _PYTEST_TMP_RE = re.compile(r"/tmp/pytest-of-[^/\s:\"']+/pytest-\d+")
 _PYTEST_TMP_SEGMENT_RE = re.compile(r"(?:(?<=/)|(?<=\.\.\.))pytest-\d+(?=/)")
+_PYTEST_TMP_ELLIPSIZED_SEGMENT_RE = re.compile(r"(?<=\.\.\.)ytest-\d+(?=/)")
 _SECONDS_DURATION_RE = re.compile(r"\bin \d+(?:\.\d+)?s\b")
 _MILLISECONDS_DURATION_RE = re.compile(r"\bin \d+ms\b")
 
@@ -375,9 +376,17 @@ def _write_markdown(control_run: ControlRun) -> Path:
         f"- Records: {len(control_run.records)}",
         f"- Overall: {_match_display(control_run.overall_match)}",
         "",
-        "## Scorer Control Overview",
+        "## Flake Detection",
         "",
     ]
+    lines.extend(_flake_detection_table(control_run.flake_detection))
+    lines.extend(
+        [
+            "",
+            "## Scorer Control Overview",
+            "",
+        ]
+    )
     lines.extend(_overview_table(scorer_records))
     lines.extend(
         [
@@ -684,6 +693,7 @@ def _normalize_text(text: str, repo_root: Path | None) -> str:
     normalized = _TEMP_RUN_RE.sub("<TMP_RUN>", normalized)
     normalized = _PYTEST_TMP_RE.sub("<PYTEST_TMP>", normalized)
     normalized = _PYTEST_TMP_SEGMENT_RE.sub("pytest-<N>", normalized)
+    normalized = _PYTEST_TMP_ELLIPSIZED_SEGMENT_RE.sub("pytest-<N>", normalized)
     normalized = _SECONDS_DURATION_RE.sub("in <DURATION>", normalized)
     normalized = _MILLISECONDS_DURATION_RE.sub("in <DURATION>", normalized)
     return normalized
@@ -719,6 +729,72 @@ def _records_for_layer(
         for record in control_run.records
         if record.control_layer == control_layer
     ]
+
+
+def _flake_detection_table(flake_detection: JsonObject | None) -> list[str]:
+    if flake_detection is None:
+        return ["No flake detection recorded."]
+
+    rows = [
+        "| scope | stability | groups checked | drifted groups |",
+        "| --- | --- | ---: | ---: |",
+    ]
+    rows.append(
+        _flake_detection_row(
+            "overall",
+            flake_detection["status"],
+            flake_detection["groups_checked"],
+            flake_detection["drifted_groups"],
+        )
+    )
+    for layer in ("scorer", "agent"):
+        status, groups_checked, drifted_groups = _flake_detection_layer_counts(
+            flake_detection,
+            layer,
+        )
+        rows.append(
+            _flake_detection_row(
+                layer,
+                status,
+                groups_checked,
+                drifted_groups,
+            )
+        )
+    rows.extend(
+        [
+            "",
+            (
+                "Per-file normalized hashes and drift details are in "
+                "`control_run_manifest.json`."
+            ),
+        ]
+    )
+    return rows
+
+
+def _flake_detection_layer_counts(
+    flake_detection: JsonObject,
+    layer: ControlLayer,
+) -> tuple[FlakeDetectionStatus, int, int]:
+    layer_groups = flake_detection["groups"][layer]
+    drifted_groups = sum(
+        group["status"] == "drifted"
+        for group in layer_groups
+    )
+    status: FlakeDetectionStatus = "drifted" if drifted_groups else "stable"
+    return status, len(layer_groups), drifted_groups
+
+
+def _flake_detection_row(
+    scope: str,
+    status: object,
+    groups_checked: object,
+    drifted_groups: object,
+) -> str:
+    return (
+        f"| {scope} | {_display(status)} | {_display(groups_checked)} "
+        f"| {_display(drifted_groups)} |"
+    )
 
 
 def _overview_table(records: list[ControlRecord]) -> list[str]:
