@@ -279,6 +279,9 @@ provenance matched or drifted.
   split locking, selected-task hashes, hidden-validator boundaries, scorer and
   agent controls, repeat stability, control replayability, report separation,
   and construct-validity limitations.
+- Added task-pack validation for unique `leakage_canary` values, so leakage
+  checks remain task-specific and cannot be made ambiguous by duplicated canary
+  strings.
 - `overall_match` now requires both:
   - every control record matches the expected semantic outcome;
   - `flake_detection.status` is `stable`.
@@ -319,6 +322,9 @@ expected run-local identifiers, paths, or timing.
   `configs/eval/eval_quality_gate_repo_patch_python_v0.yaml`.
 - Generated `experiments/reports/week06_eval_quality.md` as the learning-week
   evidence summary.
+- Identified weakest-task evidence before future task authoring:
+  `toy_python_fix_001` is practice-only, and `repair_jsonl_deduper` is the
+  narrowest current dev task by construct breadth.
 
 ### Ran
 

@@ -89,6 +89,22 @@ def test_task_pack_validation_rejects_split_mismatch(tmp_path: Path) -> None:
         validate_task_pack(task_pack)
 
 
+def test_task_pack_validation_rejects_duplicate_leakage_canary(
+    tmp_path: Path,
+) -> None:
+    task_pack = _copy_task_pack(tmp_path)
+    manifest_path = task_pack / "tasks/repair_jsonl_deduper/task.yaml"
+    manifest_path.write_text(
+        manifest_path.read_text().replace(
+            "CANARY_REPAIR_JSONL_DEDUPER_PRIVATE",
+            "CANARY_TOY_PY_FIX_001_PRIVATE",
+        )
+    )
+
+    with pytest.raises(ValueError, match="Duplicate leakage_canary"):
+        validate_task_pack(task_pack)
+
+
 def test_task_pack_validation_rejects_hidden_public_duplicate(
     tmp_path: Path,
 ) -> None:

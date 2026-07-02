@@ -183,6 +183,20 @@ Mitigations:
 - human reports summarize flake status;
 - JSON manifests store per-file drift evidence.
 
+## Current Weakest Task
+
+`toy_python_fix_001` is intentionally practice-only and should not be used for
+dev-split capability claims.
+
+Among the current dev tasks, `repair_jsonl_deduper` is the narrowest task. It is
+mostly a single-function data-transformation repair, with less interface,
+configuration, or process behavior than `repair_config_precedence` and
+`preserve_cli_error_codes`.
+
+It remains useful as a focused repair task, but future task authoring should
+prefer adding construct variation over adding more single-function JSON/text
+helpers.
+
 ## Required Evidence Before Trusting Results
 
 Before using results from this task pack as eval evidence, check:

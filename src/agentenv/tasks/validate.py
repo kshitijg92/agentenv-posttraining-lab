@@ -109,10 +109,18 @@ def validate_task_pack(task_pack_path: Path) -> TaskPackValidationResult:
         raise ValueError(f"No task manifests found under {tasks_dir}")
 
     manifests: dict[str, TaskManifest] = {}
+    leakage_canaries: dict[str, str] = {}
     for manifest_path in task_manifest_paths:
         manifest = load_task_manifest(manifest_path)
         if manifest.id in manifests:
             raise ValueError(f"Duplicate task id in task pack: {manifest.id}")
+        if manifest.leakage_canary in leakage_canaries:
+            other_task_id = leakage_canaries[manifest.leakage_canary]
+            raise ValueError(
+                f"Duplicate leakage_canary {manifest.leakage_canary!r} in "
+                f"tasks {other_task_id!r} and {manifest.id!r}"
+            )
+        leakage_canaries[manifest.leakage_canary] = manifest.id
         validate_task_manifest_paths(manifest, manifest_path)
         _validate_task_required_files(
             manifest_path.parent,

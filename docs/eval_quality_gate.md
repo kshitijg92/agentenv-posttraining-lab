@@ -39,12 +39,14 @@ small localized Python repair under a strict JSON-action tool interface
 - [ ] `agentenv tasks validate <task-pack>` passes.
 - [ ] Every task manifest loads under the current schema.
 - [ ] Every required task file exists.
+- [ ] Every task leakage canary is unique within the task pack.
 - [ ] Hidden validator paths stay inside task-local hidden validator locations.
 - [ ] Agent-visible workspaces do not include hidden validators or hidden assets.
 
 Block the eval if:
 
 - a task manifest is invalid;
+- two tasks share the same leakage canary;
 - hidden validators are missing;
 - hidden validator paths escape expected task boundaries;
 - hidden files are visible to the agent.
@@ -220,6 +222,7 @@ uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
 uv run agentenv tasks check-splits data/task_packs/repo_patch_python_v0/splits.lock.json
 uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 --out experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/eval_quality_controls_repo_patch_python_v0
+uv run agentenv eval --config configs/eval/eval_quality_gate_repo_patch_python_v0.yaml --all-policies --out experiments/runs/eval_quality_gate_repo_patch_python_v0 --report-out experiments/reports/eval_matrices/eval_quality_gate_repo_patch_python_v0.md --overwrite
 ```
 
 Replay command shape depends on the source artifact being replayed:

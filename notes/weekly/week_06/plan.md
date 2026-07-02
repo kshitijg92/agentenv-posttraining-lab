@@ -151,20 +151,40 @@ deliberate model-interface/protocol design task.
 After DeepSeek is closed or explicitly blocked, implement the manual's Week 6
 eval-quality gate.
 
-Required artifacts from the manual:
+Required artifact concepts from the manual:
+
+```text
+task split enforcement
+task input hashing
+repeat-control flake detection
+eval-quality gate config
+eval-quality gate documentation
+construct-validity documentation
+weekly eval-quality report
+```
+
+Implemented artifact mapping:
 
 ```text
 src/agentenv/tasks/splits.py
 src/agentenv/tasks/hashing.py
-src/agentenv/graders/flakes.py
-configs/eval/week06_eval_quality.yaml
+src/agentenv/controls/controls_run.py
+src/agentenv/controls/reporting.py
+configs/eval/eval_quality_gate_repo_patch_python_v0.yaml
 docs/eval_quality_gate.md
 docs/construct_validity_v0.md
 experiments/reports/week06_eval_quality.md
 ```
 
-Use current architecture names where appropriate. If an existing module already
-covers the concept, prefer a clean extension over duplicate compatibility code.
+Notes:
+
+- The flake detector lives with control-run execution/reporting instead of a
+  separate `graders/flakes.py` module, because it compares complete repeated
+  control artifacts, including scorer and agent groups.
+- The eval config and run paths are schedule-neutral because repo code and
+  config should not know about the learning-week calendar.
+- The weekly report keeps `week06` in the filename because it is a learning
+  artifact, not a reusable repo contract.
 
 ## Required Checks
 
@@ -190,20 +210,21 @@ hash with xxhash64
 
 ## Planned Commands
 
-Manual Week 6 command shape:
+The manual listed placeholder command names with `week06_*` paths. Use the
+schedule-neutral command shape below for the current repo:
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
 uv run agentenv tasks check-splits data/task_packs/repo_patch_python_v0/splits.lock.json
-uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 --out experiments/reports/week06_task_hashes.json
-uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/week06_controls
-uv run agentenv graders flake-check experiments/runs/week06_controls --out experiments/reports/week06_flakes.md
-uv run agentenv eval --config configs/eval/week06_eval_quality.yaml --policy public-tests-only --out experiments/runs/week06_public_only
-uv run agentenv report compare experiments/runs/week06_controls experiments/runs/week06_public_only --out experiments/reports/week06_eval_quality.md
+uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 --out experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
+uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/eval_quality_controls_repo_patch_python_v0
+uv run agentenv eval --config configs/eval/eval_quality_gate_repo_patch_python_v0.yaml --all-policies --out experiments/runs/eval_quality_gate_repo_patch_python_v0 --report-out experiments/reports/eval_matrices/eval_quality_gate_repo_patch_python_v0.md --overwrite
 ```
 
-Adjust command names only if the existing CLI already uses a clearer current
-name. Record any rename in implementation notes.
+The control run now writes flake detection into `control_run_manifest.json` and
+summarizes it in `control_report.md`; there is no separate flake-check command.
+The eval report plus `experiments/reports/week06_eval_quality.md` provide the
+human-facing gate summary.
 
 ## Construct Validity Notes
 
