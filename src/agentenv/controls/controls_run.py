@@ -29,6 +29,7 @@ from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_p
 CONTROL_RUN_ARTIFACT_VERSION = "control_run_v0"
 FLAKE_DETECTION_SCHEMA_VERSION = "control_flake_detection_v0"
 SCORER_ARTIFACT_NORMALIZATION_VERSION = "scorer_artifact_normalization_v0"
+AGENT_ARTIFACT_NORMALIZATION_VERSION = "agent_artifact_normalization_v0"
 ControlLayer = Literal["scorer", "agent"]
 FlakeDetectionStatus = Literal["stable", "drifted"]
 MatchStatus = Literal["PASS", "FAIL"]
@@ -41,6 +42,7 @@ _VOLATILE_JSON_KEYS = {
     "created_at",
     "duration_ms",
     "ended_at",
+    "latency_ms",
     "run_id",
     "started_at",
     "stderr_bytes",
@@ -474,22 +476,40 @@ def _build_flake_detection(
         for record in records
         if record.control_layer == "scorer"
     ]
-    groups = [
+    agent_records = [
+        record
+        for record in records
+        if record.control_layer == "agent"
+    ]
+    scorer_groups = [
         _scorer_flake_detection_group(
             task_pack_path,
             _record_group(scorer_records, task_id, control_name),
         )
         for task_id, control_name in _summary_keys(scorer_records)
     ]
-    drifted_groups = sum(group["status"] == "drifted" for group in groups)
+    agent_groups = [
+        _agent_flake_detection_group(
+            task_pack_path,
+            _record_group(agent_records, task_id, control_name),
+        )
+        for task_id, control_name in _summary_keys(agent_records)
+    ]
+    drifted_groups = sum(
+        group["status"] == "drifted"
+        for group in [*scorer_groups, *agent_groups]
+    )
     status: FlakeDetectionStatus = "drifted" if drifted_groups else "stable"
     return {
         "schema_version": FLAKE_DETECTION_SCHEMA_VERSION,
         "status": status,
         "repeats": repeats,
-        "groups_checked": len(groups),
+        "groups_checked": len(scorer_groups) + len(agent_groups),
         "drifted_groups": drifted_groups,
-        "groups": groups,
+        "groups": {
+            "scorer": scorer_groups,
+            "agent": agent_groups,
+        },
     }
 
 
@@ -497,8 +517,32 @@ def _scorer_flake_detection_group(
     task_pack_path: Path,
     records: list[ControlRecord],
 ) -> JsonObject:
+    return _control_artifact_flake_detection_group(
+        task_pack_path,
+        records,
+        normalization_version=SCORER_ARTIFACT_NORMALIZATION_VERSION,
+    )
+
+
+def _agent_flake_detection_group(
+    task_pack_path: Path,
+    records: list[ControlRecord],
+) -> JsonObject:
+    return _control_artifact_flake_detection_group(
+        task_pack_path,
+        records,
+        normalization_version=AGENT_ARTIFACT_NORMALIZATION_VERSION,
+    )
+
+
+def _control_artifact_flake_detection_group(
+    task_pack_path: Path,
+    records: list[ControlRecord],
+    *,
+    normalization_version: str,
+) -> JsonObject:
     if not records:
-        raise ValueError("Expected at least one scorer control record")
+        raise ValueError("Expected at least one control record")
 
     sorted_records = sorted(records, key=lambda record: record.repeat_index)
     reference = sorted_records[0]
@@ -509,14 +553,14 @@ def _scorer_flake_detection_group(
         )
 
     repo_root = _find_repo_root(task_pack_path)
-    reference_hashes = _normalized_scorer_artifact_hashes(
+    reference_hashes = _normalized_artifact_hashes(
         reference.artifact_dir,
         repo_root,
     )
     drifted_repeats: list[int] = []
     individual_drift_details: dict[str, object] = {}
     for record in sorted_records[1:]:
-        actual_hashes = _normalized_scorer_artifact_hashes(
+        actual_hashes = _normalized_artifact_hashes(
             record.artifact_dir,
             repo_root,
         )
@@ -531,14 +575,13 @@ def _scorer_flake_detection_group(
         "drifted" if drifted_repeats else "stable"
     )
     return {
-        "control_layer": "scorer",
         "task_id": reference.task_id,
         "control_name": reference.control_name,
         "status": status,
         "reference_repeat_index": reference.repeat_index,
         "drifted_repeats": drifted_repeats,
         "items_compared": {
-            "normalization": SCORER_ARTIFACT_NORMALIZATION_VERSION,
+            "normalization": normalization_version,
             "files": [
                 {
                     "path": path,
@@ -551,7 +594,7 @@ def _scorer_flake_detection_group(
     }
 
 
-def _normalized_scorer_artifact_hashes(
+def _normalized_artifact_hashes(
     artifact_dir: Path,
     repo_root: Path | None,
 ) -> dict[str, str]:

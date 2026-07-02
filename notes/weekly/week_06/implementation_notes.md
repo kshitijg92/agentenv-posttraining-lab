@@ -252,11 +252,16 @@ provenance matched or drifted.
 ### Shipped
 
 - Added manifest-only `flake_detection` to `control_run_manifest.json`.
-- This checkpoint covers scorer controls only; the schema uses
-  `control_layer` per group so agent controls can be added later without a new
-  top-level shape.
+- Added repeat artifact stability groups under `groups.scorer` and
+  `groups.agent`.
 - Each scorer `(task_id, control_name)` repeat group compares repeat 1..N
   against repeat 0.
+- Each agent `(task_id, control_name)` repeat group compares repeat 1..N
+  against repeat 0.
+- Agent artifact comparison is dynamic based on the repeat-0 artifact surface:
+  prompt-loop-only controls compare agent-level artifacts only; controls that
+  reach scoring also compare nested `attempt/*` scorer artifacts. If later
+  repeats add, remove, or change files relative to repeat 0, that is drift.
 - The manifest stores per-file normalized hashes in `items_compared` and stores
   per-repeat drift details only for repeats that drifted.
 - `overall_match` now requires both:
@@ -280,7 +285,7 @@ The normalizer removes or rewrites volatile evidence:
 
 - run IDs and attempt IDs;
 - timestamps;
-- durations and stdout/stderr byte counts;
+- durations, model latency, and stdout/stderr byte counts;
 - repo root paths;
 - generated agentenv temp workspace paths;
 - pytest temp paths, including pytest's ellipsized path rendering.

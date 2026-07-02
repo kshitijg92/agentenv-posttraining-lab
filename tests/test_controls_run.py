@@ -140,16 +140,29 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert flake_detection["schema_version"] == "control_flake_detection_v0"
     assert flake_detection["status"] == "stable"
     assert flake_detection["repeats"] == 2
-    assert flake_detection["groups_checked"] == len(TASK_IDS) * len(CONTROL_NAMES)
+    assert flake_detection["groups_checked"] == (
+        len(TASK_IDS) * len(CONTROL_NAMES)
+        + len(TASK_IDS) * len(AGENT_CONTROL_NAMES)
+    )
     assert flake_detection["drifted_groups"] == 0
-    scorer_flake_groups = flake_detection["groups"]
+    assert set(flake_detection["groups"]) == {"scorer", "agent"}
+    scorer_flake_groups = flake_detection["groups"]["scorer"]
+    agent_flake_groups = flake_detection["groups"]["agent"]
     assert {
-        (group["control_layer"], group["task_id"], group["control_name"])
+        (group["task_id"], group["control_name"])
         for group in scorer_flake_groups
     } == {
-        ("scorer", task_id, control_name)
+        (task_id, control_name)
         for task_id in TASK_IDS
         for control_name in CONTROL_NAMES
+    }
+    assert {
+        (group["task_id"], group["control_name"])
+        for group in agent_flake_groups
+    } == {
+        (task_id, control_name)
+        for task_id in TASK_IDS
+        for control_name in AGENT_CONTROL_NAMES
     }
     toy_oracle_flake_group = next(
         group
@@ -179,6 +192,61 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert all(
         file_record["normalized_hash"].startswith("xxh64:")
         for file_record in toy_oracle_flake_group["items_compared"]["files"]
+    )
+    toy_malformed_agent_flake_group = next(
+        group
+        for group in agent_flake_groups
+        if group["task_id"] == "toy_python_fix_001"
+        and group["control_name"] == "malformed"
+    )
+    assert toy_malformed_agent_flake_group["status"] == "stable"
+    assert toy_malformed_agent_flake_group["reference_repeat_index"] == 0
+    assert toy_malformed_agent_flake_group["drifted_repeats"] == []
+    assert toy_malformed_agent_flake_group["individual_drift_details"] == {}
+    assert toy_malformed_agent_flake_group["items_compared"]["normalization"] == (
+        "agent_artifact_normalization_v0"
+    )
+    assert {
+        file_record["path"]
+        for file_record in toy_malformed_agent_flake_group["items_compared"]["files"]
+    } == {
+        "agent_control_script.json",
+        "agent_task_run.json",
+        "agent_task_view.json",
+        "decoding_config.json",
+        "error.txt",
+        "prompt_loop_result.json",
+        "run_manifest.json",
+    }
+    toy_happy_agent_flake_group = next(
+        group
+        for group in agent_flake_groups
+        if group["task_id"] == "toy_python_fix_001"
+        and group["control_name"] == "happy"
+    )
+    assert {
+        file_record["path"]
+        for file_record in toy_happy_agent_flake_group["items_compared"]["files"]
+    } == {
+        "agent_control_script.json",
+        "agent_task_run.json",
+        "agent_task_view.json",
+        "attempt/attempt.json",
+        "attempt/error.txt",
+        "attempt/final.diff",
+        "attempt/run_manifest.json",
+        "attempt/stderr.txt",
+        "attempt/stdout.txt",
+        "attempt/trace.jsonl",
+        "candidate.patch",
+        "decoding_config.json",
+        "error.txt",
+        "prompt_loop_result.json",
+        "run_manifest.json",
+    }
+    assert all(
+        file_record["normalized_hash"].startswith("xxh64:")
+        for file_record in toy_happy_agent_flake_group["items_compared"]["files"]
     )
     assert manifest["artifacts"] == {
         "agent_control_scripts": "agent_control_scripts",
@@ -245,6 +313,41 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
             assert not (artifact_dir / "agent_interaction_workspace").exists()
             assert not (artifact_dir / "scoring_workspace").exists()
 
+    drifted_agent_error = (
+        out_dir
+        / "agent_control_scripts"
+        / "toy_python_fix_001__malformed__repeat_002"
+        / "error.txt"
+    )
+    original_agent_error = drifted_agent_error.read_text()
+    drifted_agent_error.write_text(original_agent_error + "\nDRIFT\n")
+    agent_drifted_flake_detection = controls_run_module._build_flake_detection(
+        task_pack_path=control_run.task_pack_path,
+        repeats=control_run.repeats,
+        records=control_run.records,
+    )
+    assert agent_drifted_flake_detection["status"] == "drifted"
+    assert agent_drifted_flake_detection["drifted_groups"] == 1
+    agent_drifted_group = next(
+        group
+        for group in agent_drifted_flake_detection["groups"]["agent"]
+        if group["task_id"] == "toy_python_fix_001"
+        and group["control_name"] == "malformed"
+    )
+    assert agent_drifted_group["status"] == "drifted"
+    assert agent_drifted_group["drifted_repeats"] == [1]
+    agent_file_drifts = agent_drifted_group["individual_drift_details"]["1"]["files"]
+    assert len(agent_file_drifts) == 1
+    agent_file_drift = agent_file_drifts[0]
+    assert agent_file_drift["path"] == "error.txt"
+    assert agent_file_drift["status"] == "changed"
+    assert agent_file_drift["actual_hash"].startswith("xxh64:")
+    assert (
+        replace(control_run, flake_detection=agent_drifted_flake_detection).overall_match
+        is False
+    )
+    drifted_agent_error.write_text(original_agent_error)
+
     drifted_stdout = (
         out_dir
         / "scorer_control_patches"
@@ -261,7 +364,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert drifted_flake_detection["drifted_groups"] == 1
     drifted_group = next(
         group
-        for group in drifted_flake_detection["groups"]
+        for group in drifted_flake_detection["groups"]["scorer"]
         if group["task_id"] == "toy_python_fix_001"
         and group["control_name"] == "oracle"
     )
