@@ -77,7 +77,7 @@ Preserve measurement boundaries:
 - exported trajectories must not redefine task success;
 - hidden validators must remain private;
 - split and task-hash provenance must travel with exported records;
-- environment failures must not become positive training examples;
+- orchestration failures must not become positive training examples;
 - reward components must be inspectable separately from any aggregate reward;
 - heldout-private and public-calibration records must never become
   training-eligible.
@@ -160,7 +160,7 @@ Done when:
 
 - hidden success and public-test success are separate;
 - format/tool failures are separate from task failure;
-- environment failure is explicit;
+- orchestration failure is explicit;
 - reward-hack flags can be represented;
 - reward version, config hash, code hash, and scorer version are recorded.
 
@@ -191,7 +191,7 @@ Done when:
 - exported JSONL validates;
 - every record links back to source artifacts;
 - split rules are enforced in code;
-- environment failures are marked non-training-eligible;
+- orchestration failures are marked non-training-eligible;
 - heldout-private and public-calibration examples cannot be exported as
   training-eligible.
 
