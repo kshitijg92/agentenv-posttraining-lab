@@ -7,7 +7,7 @@ from agentenv.agents.schema import AgentTaskView, PromptLoopResult, TokenUsage
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig, Message, ModelResponse
 from agentenv.orchestrators.agent_task_run import (
-    AGENT_RUN_ORCHESTRATOR_VERSION,
+    AGENT_TASK_RUN_ORCHESTRATOR_VERSION,
     AgentTaskRun,
     AgentTaskRunErrorDetails,
     AgentTaskRunResult,
@@ -127,7 +127,7 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
         tmp_path / "out",
     )
 
-    assert artifact_paths.run_manifest_json == tmp_path / "out/run_manifest.json"
+    assert artifact_paths.manifest_json == tmp_path / "out/manifest.json"
     assert artifact_paths.agent_task_run_json == tmp_path / "out/agent_task_run.json"
     assert artifact_paths.decoding_config_json is None
     assert artifact_paths.agent_control_script_json is None
@@ -150,7 +150,7 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
         tmp_path / "out/attempt/final.diff"
     )
 
-    run_manifest = json.loads(artifact_paths.run_manifest_json.read_text())
+    run_manifest = json.loads(artifact_paths.manifest_json.read_text())
     agent_task_result = json.loads(artifact_paths.agent_task_run_json.read_text())
     agent_task_view = json.loads(artifact_paths.agent_task_view_json.read_text())
     prompt_loop_result = json.loads(
@@ -158,11 +158,20 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
     )
     attempt_result = json.loads(artifact_paths.attempt_artifacts.attempt_json.read_text())
 
-    assert run_manifest["artifact_version"] == "agent_task_run_artifacts_v0"
+    assert run_manifest["artifact_type"] == "agent_attempt"
+    assert run_manifest["artifact_schema_version"] == "agent_attempt_artifact_v0"
+    assert (
+        run_manifest["orchestrator_version"]
+        == AGENT_TASK_RUN_ORCHESTRATOR_VERSION
+    )
     assert run_manifest["status"] == "scored"
     assert run_manifest["prompt_loop_status"] == "completed"
     assert run_manifest["attempt_status"] == "PASS"
     assert run_manifest["artifacts"]["attempt"] == "attempt/"
+    assert (
+        agent_task_result["orchestrator_version"]
+        == AGENT_TASK_RUN_ORCHESTRATOR_VERSION
+    )
     assert agent_task_result["attempt_result"]["status"] == "PASS"
     assert agent_task_result["attempt_result"]["public_status"] == "PASS"
     assert agent_task_result["attempt_result"]["hidden_status"] == "PASS"
@@ -217,7 +226,7 @@ def test_run_agent_task_attempt_does_not_score_failed_prompt_loop(
         tmp_path / "out",
     )
 
-    run_manifest = json.loads(artifact_paths.run_manifest_json.read_text())
+    run_manifest = json.loads(artifact_paths.manifest_json.read_text())
     agent_task_result = json.loads(artifact_paths.agent_task_run_json.read_text())
     assert artifact_paths.prompt_loop_result_json is not None
     prompt_loop_result = json.loads(
@@ -255,7 +264,7 @@ def test_write_agent_task_run_artifacts_redacts_secret_canary(
             started_at="2026-06-19T00:00:00Z",
             ended_at="2026-06-19T00:00:01Z",
             duration_ms=1,
-            orchestrator_version=AGENT_RUN_ORCHESTRATOR_VERSION,
+            orchestrator_version=AGENT_TASK_RUN_ORCHESTRATOR_VERSION,
         ),
         agent_task_view=AgentTaskView(
             task_id="task_001",
@@ -320,7 +329,7 @@ def test_write_agent_task_run_artifacts_redacts_secret_canary(
     written_text = "\n".join(
         path.read_text()
         for path in [
-            artifact_paths.run_manifest_json,
+            artifact_paths.manifest_json,
             artifact_paths.agent_task_run_json,
             artifact_paths.agent_task_view_json,
             artifact_paths.prompt_loop_result_json,
@@ -380,7 +389,7 @@ def test_run_and_persist_agent_task_attempt_keeps_scratch_out_of_artifacts(
         agent_control_script=agent_control_script,
     )
 
-    run_manifest = json.loads((out_dir / "run_manifest.json").read_text())
+    run_manifest = json.loads((out_dir / "manifest.json").read_text())
     assert agent_task_run.result.prompt_loop_status == "completed"
     assert (out_dir / "agent_task_run.json").is_file()
     assert (out_dir / "decoding_config.json").is_file()

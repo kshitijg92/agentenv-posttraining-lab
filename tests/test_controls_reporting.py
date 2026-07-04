@@ -93,7 +93,7 @@ def test_render_control_report_from_control_run_dataclasses(tmp_path: Path) -> N
     assert "| agent | stable | 1 | 0 |" in report
     assert (
         "Per-file normalized hashes and drift details are in "
-        "`control_run_manifest.json`."
+        "`manifest.json`."
     ) in report
     assert "| all controls | 1 | 1 | 1/1 | 0 | " in report
     assert "| oracle | 1 | 1 | 1/1 | 0 | " in report

@@ -5,6 +5,7 @@ import pytest
 
 import agentenv.orchestrators.attempt as attempt_module
 from agentenv.orchestrators.attempt import (
+    SCORER_ATTEMPT_ORCHESTRATOR_VERSION,
     AttemptCommand,
     AttemptErrorDetails,
     AttemptResult,
@@ -34,10 +35,10 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
     )
 
     artifact_paths = write_attempt_artifacts(attempt_run, tmp_path / "out")
-    run_manifest_data = json.loads(artifact_paths.run_manifest_json.read_text())
+    run_manifest_data = json.loads(artifact_paths.manifest_json.read_text())
     attempt_data = json.loads(artifact_paths.attempt_json.read_text())
 
-    assert artifact_paths.run_manifest_json == tmp_path / "out/run_manifest.json"
+    assert artifact_paths.manifest_json == tmp_path / "out/manifest.json"
     assert artifact_paths.attempt_json == tmp_path / "out/attempt.json"
     assert artifact_paths.stdout_txt == tmp_path / "out/stdout.txt"
     assert artifact_paths.stderr_txt == tmp_path / "out/stderr.txt"
@@ -49,7 +50,16 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
     assert attempt_data["status"] == "PASS"
     assert attempt_data["public_status"] == "PASS"
     assert attempt_data["hidden_status"] == "PASS"
-    assert run_manifest_data["artifact_version"] == "run_artifacts_v0"
+    assert attempt_data["orchestrator_version"] == SCORER_ATTEMPT_ORCHESTRATOR_VERSION
+    assert run_manifest_data["artifact_type"] == "scorer_attempt"
+    assert (
+        run_manifest_data["artifact_schema_version"]
+        == "scorer_attempt_artifact_v0"
+    )
+    assert (
+        run_manifest_data["orchestrator_version"]
+        == SCORER_ATTEMPT_ORCHESTRATOR_VERSION
+    )
     assert run_manifest_data["run_id"] == attempt_data["run_id"]
     assert run_manifest_data["attempt_id"] == attempt_data["attempt_id"]
     assert run_manifest_data["status"] == attempt_data["status"]
@@ -150,7 +160,7 @@ def test_write_attempt_artifacts_redacts_secret_canary(
             ended_at="2026-06-19T00:00:01Z",
             duration_ms=1,
             final_diff_hash=None,
-            orchestrator_version="attempt_v0",
+            orchestrator_version=SCORER_ATTEMPT_ORCHESTRATOR_VERSION,
         ),
         commands=[
             AttemptCommand(
@@ -176,7 +186,7 @@ def test_write_attempt_artifacts_redacts_secret_canary(
     written_text = "\n".join(
         path.read_text()
         for path in [
-            artifact_paths.run_manifest_json,
+            artifact_paths.manifest_json,
             artifact_paths.attempt_json,
             artifact_paths.stdout_txt,
             artifact_paths.stderr_txt,
@@ -203,6 +213,6 @@ def test_run_and_persist_patch_attempt_to_dir(tmp_path: Path) -> None:
 
     assert attempt_run.result.status == "PASS"
     assert attempt_data["status"] == "PASS"
-    assert (tmp_path / "out/run_manifest.json").is_file()
+    assert (tmp_path / "out/manifest.json").is_file()
     assert (tmp_path / "out/trace.jsonl").is_file()
     assert (tmp_path / "out/final.diff").is_file()

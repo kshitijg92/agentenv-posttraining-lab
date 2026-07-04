@@ -9,13 +9,15 @@ from agentenv.orchestrators.attempt import AttemptStatus, CheckStatus
 from agentenv.tasks.schema import TaskSplit
 
 
-TrajectorySchemaVersion = Literal["trajectory_record_v0"]
+TrajectoryRecordSchemaVersion = Literal["trajectory_record_v0"]
 RewardComponentsVersion = Literal["reward_components_v0"]
 GradeState = Literal["scored_pass", "scored_fail", "cannot_grade"]
 ReviewStatus = Literal["not_reviewed", "reviewed"]
 ReviewDecision = Literal["accepted", "rejected", "needs_followup"]
 
-TRAJECTORY_SCHEMA_VERSION: TrajectorySchemaVersion = "trajectory_record_v0"
+TRAJECTORY_RECORD_SCHEMA_VERSION: TrajectoryRecordSchemaVersion = (
+    "trajectory_record_v0"
+)
 REWARD_COMPONENTS_VERSION: RewardComponentsVersion = "reward_components_v0"
 
 
@@ -98,8 +100,8 @@ class TrajectoryArtifacts(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     eval_run_path: str = Field(min_length=1)
-    eval_matrix_json: ArtifactRef | None = None
-    run_manifest_json: ArtifactRef
+    eval_suite_json: ArtifactRef | None = None
+    manifest_json: ArtifactRef
     agent_task_run_json: ArtifactRef | None = None
     prompt_loop_result_json: ArtifactRef | None = None
     candidate_patch: ArtifactRef | None = None
@@ -182,7 +184,7 @@ class TrajectoryReview(BaseModel):
 class TrajectoryRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: TrajectorySchemaVersion = TRAJECTORY_SCHEMA_VERSION
+    schema_version: TrajectoryRecordSchemaVersion = TRAJECTORY_RECORD_SCHEMA_VERSION
     identity: TrajectoryIdentity
     source_provenance: SourceProvenance
     policy: TrajectoryPolicy

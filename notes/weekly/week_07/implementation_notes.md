@@ -116,7 +116,7 @@ Examples:
 
 ```text
 eval_config_path
-run_manifest_path
+manifest_path
 task_manifest_path
 splits_lock_path
 trace_jsonl
@@ -246,8 +246,8 @@ task_success = true | false
 
 ```text
 eval_run_path
-eval_matrix_path
-run_manifest_json
+eval_suite_json
+manifest_json
 agent_task_run_json
 prompt_loop_result_json
 candidate_patch
@@ -408,10 +408,10 @@ data/task_packs/repo_patch_python_v0/manifest.yaml
 ```
 
 The patch-attempt artifact also records an `orchestrator_version`, currently
-`attempt_v0`, but that is an artifact/runtime version, not the semantic scoring
-contract. The trajectory source provenance section records `scoring_contract`,
-while the reward section records only reward-component versioning and
-reward-signal hashes.
+`scorer_attempt_orchestrator_v0`, but that is producer/procedure provenance,
+not the semantic scoring contract. The trajectory source provenance section
+records `scoring_contract`, while the reward section records only
+reward-component versioning and reward-signal hashes.
 
 Third correction: `scoring_contract` does not belong in `reward_components`.
 
@@ -490,5 +490,5 @@ eval run artifacts -> TrajectoryRecord sections
 ```
 
 Do not implement export yet until the mapping identifies which fields can be read
-directly from `run_manifest.json`, attempt records, agent task artifacts, task
+directly from `manifest.json`, attempt records, agent task artifacts, task
 hash reports, and split lock evidence.

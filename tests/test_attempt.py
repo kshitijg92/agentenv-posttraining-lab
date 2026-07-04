@@ -4,7 +4,11 @@ from subprocess import TimeoutExpired
 import pytest
 
 import agentenv.orchestrators.attempt as attempt_module
-from agentenv.orchestrators.attempt import AttemptResult, run_patch_attempt
+from agentenv.orchestrators.attempt import (
+    SCORER_ATTEMPT_ORCHESTRATOR_VERSION,
+    AttemptResult,
+    run_patch_attempt,
+)
 from agentenv.runners.command_runner import CommandResult
 
 
@@ -28,7 +32,7 @@ def test_attempt_result_schema() -> None:
         ended_at="2026-06-19T00:00:01Z",
         duration_ms=1000,
         final_diff_hash="abc123",
-        orchestrator_version="attempt_v0",
+        orchestrator_version=SCORER_ATTEMPT_ORCHESTRATOR_VERSION,
     )
 
     assert result.status == "PASS"
@@ -61,6 +65,7 @@ def test_run_patch_attempt_distinguishes_controls(
 
     assert result.task_id == "toy_python_fix_001"
     assert result.task_manifest_path.endswith("toy_python_fix/task.yaml")
+    assert result.orchestrator_version == SCORER_ATTEMPT_ORCHESTRATOR_VERSION
     assert result.status == expected_status
     assert result.public_status == expected_public
     assert result.hidden_status == expected_hidden

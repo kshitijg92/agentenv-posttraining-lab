@@ -156,8 +156,11 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
                 "error_class": "InvalidToolInput",
             }
 
-    manifest = json.loads((out_dir / "control_run_manifest.json").read_text())
-    assert manifest["artifact_version"] == "control_run_v0"
+    manifest = json.loads((out_dir / "manifest.json").read_text())
+    assert manifest["artifact_type"] == "control_calibration"
+    assert (
+        manifest["artifact_schema_version"] == "control_calibration_artifact_v0"
+    )
     assert manifest["repeats"] == 2
     assert manifest["record_count"] == expected_record_count
     assert len(manifest["records"]) == expected_record_count
@@ -210,7 +213,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         "attempt.json",
         "error.txt",
         "final.diff",
-        "run_manifest.json",
+        "manifest.json",
         "stderr.txt",
         "stdout.txt",
         "trace.jsonl",
@@ -242,7 +245,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         "decoding_config.json",
         "error.txt",
         "prompt_loop_result.json",
-        "run_manifest.json",
+        "manifest.json",
     }
     toy_happy_agent_flake_group = next(
         group
@@ -260,7 +263,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         "attempt/attempt.json",
         "attempt/error.txt",
         "attempt/final.diff",
-        "attempt/run_manifest.json",
+        "attempt/manifest.json",
         "attempt/stderr.txt",
         "attempt/stdout.txt",
         "attempt/trace.jsonl",
@@ -268,7 +271,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         "decoding_config.json",
         "error.txt",
         "prompt_loop_result.json",
-        "run_manifest.json",
+        "manifest.json",
     }
     assert all(
         file_record["normalized_hash"].startswith("xxh64:")
@@ -308,7 +311,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert f"| agent | stable | {len(TASK_IDS) * len(AGENT_CONTROL_NAMES)} | 0 |" in report
     assert (
         "Per-file normalized hashes and drift details are in "
-        "`control_run_manifest.json`."
+        "`manifest.json`."
     ) in report
     assert "| all controls | 4 | 24 | 24/24 | 0 | " in report
     assert "| malformed | 4 | 8 | 8/8 | 0 | " in report

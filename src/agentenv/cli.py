@@ -5,7 +5,7 @@ import typer
 from rich.console import Console
 
 from agentenv.agents.audit import run_agent_task_audit
-from agentenv.artifacts import ArtifactDirectoryError
+from agentenv.artifacts import MANIFEST_FILENAME, ArtifactDirectoryError
 from agentenv.controls.controls_run import run_controls
 from agentenv.evals.task_hash_compare import (
     compare_eval_task_hashes,
@@ -435,7 +435,7 @@ def run_eval(
             f"{layer_counts}"
         )
         console.print(
-            f"wrote {eval_matrix.out_dir / 'eval_matrix_manifest.json'}",
+            f"wrote {eval_matrix.out_dir / MANIFEST_FILENAME}",
             soft_wrap=True,
         )
         if report_out is not None:
@@ -456,7 +456,7 @@ def run_eval(
         f"policy={eval_run.policy} attempts={len(eval_run.attempts)} "
         f"{layer_counts}"
     )
-    console.print(f"wrote {eval_run.out_dir / 'run_manifest.json'}", soft_wrap=True)
+    console.print(f"wrote {eval_run.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
     if report_out is not None:
         report_path = write_markdown_report(eval_run.out_dir, report_out)
         console.print(f"wrote {report_path}", soft_wrap=True)

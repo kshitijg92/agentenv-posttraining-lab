@@ -108,7 +108,7 @@ eval_attempt_finished
 eval_task_finished
 eval_finished
 replay_started
-source_run_manifest_loaded
+source_manifest_loaded
 source_attempt_loaded
 fresh_attempt_started
 fresh_attempt_finished
@@ -176,13 +176,15 @@ Replay event provenance supports:
 }
 ```
 
-`replay_id` is required for replay events. Source-manifest and attempt-specific
-replay events require the source eval, task, and attempt ids needed to audit the
-event.
+`replay_id` is required for replay events. `source_manifest_loaded` records
+either `source_eval_run_id` for eval-run sources or `source_artifact_id` for
+direct agent-attempt sources. Attempt-specific replay events additionally record
+the task and source attempt ids needed to audit the event.
 
 ```json
 {
-  "replay_id": "replay_..."
+  "replay_id": "replay_...",
+  "source_artifact_id": "agent_attempt_..."
 }
 ```
 

@@ -139,7 +139,7 @@ Block the eval if:
 ### 7. Controls Are Repeat-Stable
 
 - [ ] Controls are run with repeated attempts.
-- [ ] `control_run_manifest.json` includes `flake_detection`.
+- [ ] `manifest.json` includes `flake_detection`.
 - [ ] Overall flake status is `stable`.
 - [ ] Scorer artifact stability is `stable`.
 - [ ] Agent artifact stability is `stable`.
@@ -222,7 +222,7 @@ uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
 uv run agentenv tasks check-splits data/task_packs/repo_patch_python_v0/splits.lock.json
 uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 --out experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
 uv run agentenv controls run --task-pack data/task_packs/repo_patch_python_v0 --repeats 3 --out experiments/runs/eval_quality_controls_repo_patch_python_v0
-uv run agentenv eval --config configs/eval/eval_quality_gate_repo_patch_python_v0.yaml --all-policies --out experiments/runs/eval_quality_gate_repo_patch_python_v0 --report-out experiments/reports/eval_matrices/eval_quality_gate_repo_patch_python_v0.md --overwrite
+uv run agentenv eval --config configs/eval/eval_quality_gate_repo_patch_python_v0.yaml --all-policies --out experiments/runs/eval_quality_gate_repo_patch_python_v0 --report-out experiments/reports/eval_suites/eval_quality_gate_repo_patch_python_v0.md --overwrite
 ```
 
 Replay command shape depends on the source artifact being replayed:

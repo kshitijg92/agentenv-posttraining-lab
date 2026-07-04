@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import xxhash
 
+from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     ExpectedAgentControlResult,
@@ -27,8 +28,8 @@ from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_paths
 
 
-CONTROL_RUN_ARTIFACT_VERSION = "control_run_v0"
-FLAKE_DETECTION_SCHEMA_VERSION = "control_flake_detection_v0"
+CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION = "control_calibration_artifact_v0"
+CONTROL_FLAKE_DETECTION_SCHEMA_VERSION = "control_flake_detection_v0"
 SCORER_ARTIFACT_NORMALIZATION_VERSION = "scorer_artifact_normalization_v0"
 AGENT_ARTIFACT_NORMALIZATION_VERSION = "agent_artifact_normalization_v0"
 ControlLayer = Literal["scorer", "agent"]
@@ -354,7 +355,7 @@ def _write_jsonl(control_run: ControlRun) -> Path:
 
 
 def _write_manifest(control_run: ControlRun) -> Path:
-    path = control_run.out_dir / "control_run_manifest.json"
+    path = control_run.out_dir / MANIFEST_FILENAME
     path.write_text(
         json.dumps(_control_run_manifest(control_run), indent=2, sort_keys=True) + "\n"
     )
@@ -369,7 +370,8 @@ def _write_markdown(control_run: ControlRun) -> Path:
 
 def _control_run_manifest(control_run: ControlRun) -> dict[str, object]:
     return {
-        "artifact_version": CONTROL_RUN_ARTIFACT_VERSION,
+        "artifact_type": ArtifactType.CONTROL_CALIBRATION,
+        "artifact_schema_version": CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION,
         "control_run_id": control_run.control_run_id,
         "created_at": control_run.created_at,
         "task_pack_path": str(control_run.task_pack_path),
@@ -442,7 +444,7 @@ def _build_flake_detection(
     )
     status: FlakeDetectionStatus = "drifted" if drifted_groups else "stable"
     return {
-        "schema_version": FLAKE_DETECTION_SCHEMA_VERSION,
+        "schema_version": CONTROL_FLAKE_DETECTION_SCHEMA_VERSION,
         "status": status,
         "repeats": repeats,
         "groups_checked": len(scorer_groups) + len(agent_groups),

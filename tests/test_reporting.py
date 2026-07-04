@@ -66,8 +66,8 @@ def test_write_eval_markdown_report(tmp_path: Path) -> None:
     assert "| scorer_public_status | PASS | 1 |" in report
     assert "| scorer_hidden_status | PASS | 1 |" in report
     assert (
-        "| toy_python_fix_001 | 0 | run_artifacts_v0 | PASS | PASS | PASS |  |  | "
-        " |  |  |  | xxh64:e3fc746d6fe0786c | "
+        "| toy_python_fix_001 | 0 | scorer_attempt | scorer_attempt_artifact_v0 | "
+        "PASS | PASS | PASS |  |  |  |  |  |  | xxh64:e3fc746d6fe0786c | "
         "attempts/toy_python_fix_001__attempt_001 |"
     ) in report
 
@@ -86,8 +86,9 @@ def test_write_agent_eval_markdown_report(tmp_path: Path) -> None:
     assert "- Control layer: agent" in report
     assert "| agent_scorer_status | PASS | 1 |" in report
     assert (
-        "| toy_python_fix_001 | 0 | agent_task_run_artifacts_v0 |  |  |  | scored | "
-        "completed | PASS | PASS | PASS |  | xxh64:e3fc746d6fe0786c | "
+        "| toy_python_fix_001 | 0 | agent_attempt | agent_attempt_artifact_v0 | "
+        " |  |  | scored | completed | PASS | PASS | PASS |  | "
+        "xxh64:e3fc746d6fe0786c | "
         "attempts/toy_python_fix_001__attempt_001 |"
     ) in report
 
@@ -97,10 +98,11 @@ def test_write_agent_model_eval_report_includes_model_and_decoding_config(
 ) -> None:
     artifact_dir = tmp_path / "agent_model_eval"
     artifact_dir.mkdir()
-    (artifact_dir / "run_manifest.json").write_text(
+    (artifact_dir / "manifest.json").write_text(
         json.dumps(
             {
-                "artifact_version": "eval_run_v0",
+                "artifact_type": "eval_run",
+                "artifact_schema_version": "eval_run_artifact_v0",
                 "artifacts": {"attempts": "attempts", "trace": "trace.jsonl"},
                 "attempt_count": 0,
                 "attempts": [],
@@ -151,10 +153,29 @@ def test_write_agent_eval_malformed_markdown_report(tmp_path: Path) -> None:
     assert "- Policy: agent-malformed" in report
     assert "| agent_status | agent_loop_failed | 1 |" in report
     assert (
-        "| toy_python_fix_001 | 0 | agent_task_run_artifacts_v0 |  |  |  | "
-        "agent_loop_failed | invalid_model_output |  |  |  | MalformedModelOutput | "
-        " | attempts/toy_python_fix_001__attempt_001 |"
+        "| toy_python_fix_001 | 0 | agent_attempt | agent_attempt_artifact_v0 | "
+        " |  |  | agent_loop_failed | invalid_model_output |  |  |  | "
+        "MalformedModelOutput |  | attempts/toy_python_fix_001__attempt_001 |"
     ) in report
+
+
+def test_eval_report_rejects_bad_attempt_schema(tmp_path: Path) -> None:
+    run_eval_config(CONTROL_EVAL_CONFIG, "oracle", tmp_path / "eval_run")
+    manifest_path = tmp_path / "eval_run/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["attempts"][0][
+        "artifact_schema_version"
+    ] = "scorer_attempt_artifact_v999"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+    with pytest.raises(
+        ValueError,
+        match="Unsupported eval report attempt artifact_schema_version",
+    ):
+        write_markdown_report(
+            tmp_path / "eval_run",
+            tmp_path / "reports/bad_eval_attempt.md",
+        )
 
 
 def test_write_replay_markdown_report(tmp_path: Path) -> None:
@@ -196,7 +217,8 @@ def test_write_agent_replay_markdown_report(tmp_path: Path) -> None:
 
     assert report_path == tmp_path / "reports/agent_replay.md"
     assert "# Replay Report" in report
-    assert "- Source artifact version: agent_task_run_artifacts_v0" in report
+    assert "- Source artifact type: agent_attempt" in report
+    assert "- Source artifact schema version: agent_attempt_artifact_v0" in report
     assert (
         "| toy_python_fix_001 | agent_task_run | match | 15/15 (100%) | "
         "6/6 (100%) | . | agent_task_run |"
@@ -216,7 +238,7 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     report = report_path.read_text()
 
     assert report_path == tmp_path / "reports/eval_matrix.md"
-    assert "# Eval Matrix Report" in report
+    assert "# Eval Suite Report" in report
     assert "## Control Calibration" in report
     assert "### Scorer Control Summary" in report
     assert "### Agent Control Summary" in report
@@ -242,12 +264,12 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "- Oracle pass rate: 1/1 (100%)" in report
     assert "- Known-bad final PASS rate: 0/2 (0%)" in report
     assert "- Known-bad public-pass/hidden-fail rate: 2/2 (100%)" in report
-    assert "No agent control policies in this eval matrix." in report
-    assert "No agent budget metadata in this eval matrix." in report
-    assert "No agent model policies in this eval matrix." in report
-    assert "No agent model debug signals in this eval matrix." in report
-    assert "No agent model policy attempts in this eval matrix." in report
-    assert "No agent aggregate rates for this eval matrix." in report
+    assert "No agent control policies in this eval suite." in report
+    assert "No agent budget metadata in this eval suite." in report
+    assert "No agent model policies in this eval suite." in report
+    assert "No agent model debug signals in this eval suite." in report
+    assert "No agent model policy attempts in this eval suite." in report
+    assert "No agent aggregate rates for this eval suite." in report
     assert "### Replay Checks" in report
     assert (
         "| oracle | PASS | 1/1 (100%) | 0 | "
@@ -276,9 +298,53 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
         "0/1 (0%) | 1 | 0 | 0 |"
     ) in report
     assert (
-        "| toy_python_fix_001 | bad-public-only | run_artifacts_v0 | "
-        "HIDDEN_TEST_FAIL | PASS | FAIL |"
+        "| toy_python_fix_001 | bad-public-only | scorer_attempt | "
+        "scorer_attempt_artifact_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |"
     ) in report
+
+
+def test_eval_matrix_report_rejects_bad_nested_policy_manifest(
+    tmp_path: Path,
+) -> None:
+    run_eval_config_all_policies(
+        CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+    )
+    nested_manifest_path = tmp_path / "eval_matrix/policies/oracle/manifest.json"
+    nested_manifest = json.loads(nested_manifest_path.read_text())
+    nested_manifest["artifact_type"] = "replay_run"
+    nested_manifest["artifact_schema_version"] = "replay_run_artifact_v0"
+    nested_manifest_path.write_text(json.dumps(nested_manifest, indent=2) + "\n")
+
+    with pytest.raises(ValueError, match="Unsupported artifact_type"):
+        write_markdown_report(
+            tmp_path / "eval_matrix",
+            tmp_path / "reports/bad_nested_policy.md",
+        )
+
+
+def test_eval_matrix_report_rejects_bad_nested_attempt_schema(
+    tmp_path: Path,
+) -> None:
+    run_eval_config_all_policies(
+        CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+    )
+    nested_manifest_path = tmp_path / "eval_matrix/policies/oracle/manifest.json"
+    nested_manifest = json.loads(nested_manifest_path.read_text())
+    nested_manifest["attempts"][0][
+        "artifact_schema_version"
+    ] = "scorer_attempt_artifact_v999"
+    nested_manifest_path.write_text(json.dumps(nested_manifest, indent=2) + "\n")
+
+    with pytest.raises(
+        ValueError,
+        match="Unsupported eval report attempt artifact_schema_version",
+    ):
+        write_markdown_report(
+            tmp_path / "eval_matrix",
+            tmp_path / "reports/bad_nested_attempt.md",
+        )
 
 
 def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
@@ -306,8 +372,8 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "### Agent Model Budget Summary" in report
     assert "### Scorer Control Expectations" in report
     assert "### Agent Control Expectations" in report
-    assert "No scorer control policies in this eval matrix." in report
-    assert "No scorer aggregate rates for this eval matrix." in report
+    assert "No scorer control policies in this eval suite." in report
+    assert "No scorer aggregate rates for this eval suite." in report
     assert "- Agent control expectation pass rate: 3/3 (100%)" in report
     assert (
         "| agent-happy | happy | 1 | 1/1 (100%) | 1/1 (100%) | 0 | "
@@ -341,12 +407,14 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
         '<span style="color: green">ON_TRACK</span> |'
     ) in report
     assert (
-        "| toy_python_fix_001 | agent-happy | agent_task_run_artifacts_v0 | "
-        " |  |  | scored | completed | PASS | PASS | PASS |"
+        "| toy_python_fix_001 | agent-happy | agent_attempt | "
+        "agent_attempt_artifact_v0 |  |  |  | scored | completed | PASS | PASS | "
+        "PASS |"
     ) in report
     assert (
-        "| toy_python_fix_001 | agent-malformed | agent_task_run_artifacts_v0 | "
-        " |  |  | agent_loop_failed | invalid_model_output |  |  |  | "
+        "| toy_python_fix_001 | agent-malformed | agent_attempt | "
+        "agent_attempt_artifact_v0 |  |  |  | agent_loop_failed | "
+        "invalid_model_output |  |  |  | "
         "MalformedModelOutput |"
     ) in report
 

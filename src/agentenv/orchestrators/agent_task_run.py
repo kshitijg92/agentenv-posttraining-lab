@@ -12,7 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agentenv.agents.loop import run_prompt_loop
 from agentenv.agents.schema import AgentTaskView, PromptLoopResult, PromptLoopStatus
-from agentenv.artifacts import prepare_artifact_output_dir
+from agentenv.artifacts import (
+    MANIFEST_FILENAME,
+    ArtifactType,
+    prepare_artifact_output_dir,
+)
 from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.models.client import ModelClient
 from agentenv.models.config_schema import ModelConfig
@@ -30,7 +34,8 @@ from agentenv.security.secrets import redact_jsonable, redact_secrets
 from agentenv.tasks.validate import load_task_manifest
 
 
-AGENT_RUN_ORCHESTRATOR_VERSION = "agent_task_run_v0"
+AGENT_TASK_RUN_ORCHESTRATOR_VERSION = "agent_task_run_orchestrator_v0"
+AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION = "agent_attempt_artifact_v0"
 
 AgentTaskRunStatus = Literal["scored", "agent_loop_failed", "orchestrator_error"]
 
@@ -73,7 +78,7 @@ class AgentTaskRun:
 
 @dataclass(frozen=True)
 class AgentTaskRunArtifactPaths:
-    run_manifest_json: Path
+    manifest_json: Path
     agent_task_run_json: Path
     decoding_config_json: Path | None
     model_config_json: Path | None
@@ -254,7 +259,7 @@ def write_agent_task_run_artifacts(
     decoding_config_provenance: dict[str, Any] | None = None,
 ) -> AgentTaskRunArtifactPaths:
     out_dir = prepare_artifact_output_dir(out_dir)
-    run_manifest_path = out_dir / "run_manifest.json"
+    manifest_path = out_dir / MANIFEST_FILENAME
     agent_task_run_path = out_dir / "agent_task_run.json"
     decoding_config_path = (
         out_dir / "decoding_config.json" if decoding_config is not None else None
@@ -324,8 +329,8 @@ def write_agent_task_run_artifacts(
         if agent_task_run.attempt_run is not None and attempt_dir is not None
         else None
     )
-    run_manifest_path.write_text(
-        _run_manifest_json(
+    manifest_path.write_text(
+        _manifest_json(
             agent_task_run,
             include_decoding_config=decoding_config is not None,
             include_model_config=model_config_provenance is not None,
@@ -334,7 +339,7 @@ def write_agent_task_run_artifacts(
     )
 
     return AgentTaskRunArtifactPaths(
-        run_manifest_json=run_manifest_path,
+        manifest_json=manifest_path,
         agent_task_run_json=agent_task_run_path,
         decoding_config_json=decoding_config_path,
         model_config_json=model_config_path,
@@ -433,7 +438,7 @@ def _result(
         started_at=started_at,
         ended_at=_utc_now(),
         duration_ms=int((perf_counter() - started_timer) * 1000),
-        orchestrator_version=AGENT_RUN_ORCHESTRATOR_VERSION,
+        orchestrator_version=AGENT_TASK_RUN_ORCHESTRATOR_VERSION,
     )
 
 
@@ -458,7 +463,7 @@ def _error_text(agent_task_run: AgentTaskRun) -> str:
     )
 
 
-def _run_manifest_json(
+def _manifest_json(
     agent_task_run: AgentTaskRun,
     *,
     include_decoding_config: bool,
@@ -485,7 +490,8 @@ def _run_manifest_json(
         artifacts["attempt"] = "attempt/"
 
     manifest = AgentTaskRunManifest(
-        artifact_version="agent_task_run_artifacts_v0",
+        artifact_type=ArtifactType.AGENT_ATTEMPT,
+        artifact_schema_version=AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
         orchestrator_version=agent_task_run.result.orchestrator_version,
         run_id=agent_task_run.result.run_id,
         task_id=agent_task_run.result.task_id,
@@ -501,7 +507,8 @@ def _run_manifest_json(
 class AgentTaskRunManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    artifact_version: str = Field(min_length=1)
+    artifact_type: str = Field(min_length=1)
+    artifact_schema_version: str = Field(min_length=1)
     orchestrator_version: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)

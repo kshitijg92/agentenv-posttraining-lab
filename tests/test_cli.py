@@ -27,9 +27,9 @@ def test_eval_cli_writes_optional_eval_report(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "wrote" in result.output
-    assert "run_manifest.json" in result.output
+    assert "manifest.json" in result.output
     assert "eval_report.md" in result.output
-    assert (out_dir / "run_manifest.json").is_file()
+    assert (out_dir / "manifest.json").is_file()
     assert report_path.is_file()
     assert "# Eval Report" in report_path.read_text()
 
@@ -80,7 +80,7 @@ def test_eval_cli_overwrite_clears_non_empty_out(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert not stale_file.exists()
-    assert (out_dir / "run_manifest.json").is_file()
+    assert (out_dir / "manifest.json").is_file()
 
 
 def test_eval_cli_writes_optional_eval_matrix_report(tmp_path: Path) -> None:
@@ -103,11 +103,11 @@ def test_eval_cli_writes_optional_eval_matrix_report(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "wrote" in result.output
-    assert "eval_matrix_manifest.json" in result.output
+    assert "manifest.json" in result.output
     assert "eval_matrix.md" in result.output
-    assert (out_dir / "eval_matrix_manifest.json").is_file()
+    assert (out_dir / "manifest.json").is_file()
     assert report_path.is_file()
-    assert "# Eval Matrix Report" in report_path.read_text()
+    assert "# Eval Suite Report" in report_path.read_text()
 
 
 def test_eval_compare_task_hashes_cli_matches_and_writes_json(
@@ -117,14 +117,16 @@ def test_eval_compare_task_hashes_cli_matches_and_writes_json(
     candidate = tmp_path / "candidate"
     comparison_out = tmp_path / "reports/hash_comparison.json"
     _write_eval_hash_manifest(
-        reference / "run_manifest.json",
-        artifact_version="eval_run_v0",
+        reference / "manifest.json",
+        artifact_type="eval_run",
+        artifact_schema_version="eval_run_artifact_v0",
         selected_task_hash_set="xxh64:same-set",
         task_record_hash="xxh64:same-task",
     )
     _write_eval_hash_manifest(
-        candidate / "eval_matrix_manifest.json",
-        artifact_version="eval_matrix_v0",
+        candidate / "manifest.json",
+        artifact_type="eval_suite",
+        artifact_schema_version="eval_suite_artifact_v0",
         selected_task_hash_set="xxh64:same-set",
         task_record_hash="xxh64:same-task",
     )
@@ -145,13 +147,21 @@ def test_eval_compare_task_hashes_cli_matches_and_writes_json(
 
     assert result.exit_code == 0, result.output
     assert "task input provenance matched" in result.output
-    assert "reference=eval_run_v0" in result.output
-    assert "candidate=eval_matrix_v0" in result.output
+    assert "reference=eval_run/eval_run_artifact_v0" in result.output
+    assert "candidate=eval_suite/eval_suite_artifact_v0" in result.output
     assert comparison_out.is_file()
     comparison = json.loads(comparison_out.read_text())
     assert comparison["status"] == "matched"
-    assert comparison["reference"]["artifact_version"] == "eval_run_v0"
-    assert comparison["candidate"]["artifact_version"] == "eval_matrix_v0"
+    assert comparison["reference"]["artifact_type"] == "eval_run"
+    assert (
+        comparison["reference"]["artifact_schema_version"]
+        == "eval_run_artifact_v0"
+    )
+    assert comparison["candidate"]["artifact_type"] == "eval_suite"
+    assert (
+        comparison["candidate"]["artifact_schema_version"]
+        == "eval_suite_artifact_v0"
+    )
 
 
 def test_eval_compare_task_hashes_cli_exits_nonzero_on_drift(
@@ -160,14 +170,16 @@ def test_eval_compare_task_hashes_cli_exits_nonzero_on_drift(
     reference = tmp_path / "reference"
     candidate = tmp_path / "candidate"
     _write_eval_hash_manifest(
-        reference / "run_manifest.json",
-        artifact_version="eval_run_v0",
+        reference / "manifest.json",
+        artifact_type="eval_run",
+        artifact_schema_version="eval_run_artifact_v0",
         selected_task_hash_set="xxh64:reference-set",
         task_record_hash="xxh64:reference-task",
     )
     _write_eval_hash_manifest(
-        candidate / "run_manifest.json",
-        artifact_version="eval_run_v0",
+        candidate / "manifest.json",
+        artifact_type="eval_run",
+        artifact_schema_version="eval_run_artifact_v0",
         selected_task_hash_set="xxh64:candidate-set",
         task_record_hash="xxh64:candidate-task",
     )
@@ -194,7 +206,8 @@ def test_eval_compare_task_hashes_cli_exits_nonzero_on_drift(
 def _write_eval_hash_manifest(
     path: Path,
     *,
-    artifact_version: str,
+    artifact_type: str,
+    artifact_schema_version: str,
     selected_task_hash_set: str,
     task_record_hash: str,
 ) -> None:
@@ -202,7 +215,8 @@ def _write_eval_hash_manifest(
     path.write_text(
         json.dumps(
             {
-                "artifact_version": artifact_version,
+                "artifact_type": artifact_type,
+                "artifact_schema_version": artifact_schema_version,
                 "task_hashes": {
                     "schema_version": "eval_task_hashes_v0",
                     "task_pack_id": "repo_patch_python_v0",

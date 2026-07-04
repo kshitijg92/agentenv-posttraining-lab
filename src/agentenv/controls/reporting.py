@@ -178,7 +178,7 @@ def _flake_detection_table(flake_detection: JsonObject | None) -> list[str]:
             "",
             (
                 "Per-file normalized hashes and drift details are in "
-                "`control_run_manifest.json`."
+                "`manifest.json`."
             ),
         ]
     )

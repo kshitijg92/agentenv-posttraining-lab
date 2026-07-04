@@ -16,14 +16,16 @@ def test_compare_eval_task_hashes_matches_run_and_matrix_manifests(
     run_dir = tmp_path / "run"
     matrix_dir = tmp_path / "matrix"
     _write_manifest(
-        run_dir / "run_manifest.json",
-        artifact_version="eval_run_v0",
+        run_dir / "manifest.json",
+        artifact_type="eval_run",
+        artifact_schema_version="eval_run_artifact_v0",
         selected_task_hash_set="xxh64:same-set",
         selected_tasks=[_selected_task("task_a")],
     )
     _write_manifest(
-        matrix_dir / "eval_matrix_manifest.json",
-        artifact_version="eval_matrix_v0",
+        matrix_dir / "manifest.json",
+        artifact_type="eval_suite",
+        artifact_schema_version="eval_suite_artifact_v0",
         selected_task_hash_set="xxh64:same-set",
         selected_tasks=[_selected_task("task_a")],
     )
@@ -31,8 +33,10 @@ def test_compare_eval_task_hashes_matches_run_and_matrix_manifests(
     comparison = compare_eval_task_hashes(run_dir, matrix_dir)
 
     assert comparison.status == "matched"
-    assert comparison.reference.artifact_version == "eval_run_v0"
-    assert comparison.candidate.artifact_version == "eval_matrix_v0"
+    assert comparison.reference.artifact_type == "eval_run"
+    assert comparison.reference.artifact_schema_version == "eval_run_artifact_v0"
+    assert comparison.candidate.artifact_type == "eval_suite"
+    assert comparison.candidate.artifact_schema_version == "eval_suite_artifact_v0"
     assert comparison.task_pack_id_match is True
     assert comparison.selected_task_hash_set_match is True
     assert comparison.added_task_ids == ()
@@ -41,8 +45,14 @@ def test_compare_eval_task_hashes_matches_run_and_matrix_manifests(
     assert comparison.to_dict()["status"] == "matched"
     assert render_eval_task_hash_comparison_summary(comparison) == [
         "task input provenance matched",
-        "reference=eval_run_v0 task_pack=repo_patch_python_v0 selected_tasks=1",
-        "candidate=eval_matrix_v0 task_pack=repo_patch_python_v0 selected_tasks=1",
+        (
+            "reference=eval_run/eval_run_artifact_v0 "
+            "task_pack=repo_patch_python_v0 selected_tasks=1"
+        ),
+        (
+            "candidate=eval_suite/eval_suite_artifact_v0 "
+            "task_pack=repo_patch_python_v0 selected_tasks=1"
+        ),
     ]
 
 
@@ -52,8 +62,9 @@ def test_compare_eval_task_hashes_detects_selected_task_drift(
     reference_dir = tmp_path / "reference"
     candidate_dir = tmp_path / "candidate"
     _write_manifest(
-        reference_dir / "run_manifest.json",
-        artifact_version="eval_run_v0",
+        reference_dir / "manifest.json",
+        artifact_type="eval_run",
+        artifact_schema_version="eval_run_artifact_v0",
         selected_task_hash_set="xxh64:reference-set",
         selected_tasks=[
             _selected_task(
@@ -75,8 +86,9 @@ def test_compare_eval_task_hashes_detects_selected_task_drift(
         ],
     )
     _write_manifest(
-        candidate_dir / "eval_matrix_manifest.json",
-        artifact_version="eval_matrix_v0",
+        candidate_dir / "manifest.json",
+        artifact_type="eval_suite",
+        artifact_schema_version="eval_suite_artifact_v0",
         selected_task_hash_set="xxh64:candidate-set",
         selected_tasks=[
             _selected_task(
@@ -124,8 +136,14 @@ def test_compare_eval_task_hashes_detects_selected_task_drift(
     ]
     assert render_eval_task_hash_comparison_summary(comparison) == [
         "task input provenance drifted",
-        "reference=eval_run_v0 task_pack=repo_patch_python_v0 selected_tasks=2",
-        "candidate=eval_matrix_v0 task_pack=repo_patch_python_v0 selected_tasks=2",
+        (
+            "reference=eval_run/eval_run_artifact_v0 "
+            "task_pack=repo_patch_python_v0 selected_tasks=2"
+        ),
+        (
+            "candidate=eval_suite/eval_suite_artifact_v0 "
+            "task_pack=repo_patch_python_v0 selected_tasks=2"
+        ),
         (
             "drift task_pack_id_match=true "
             "selected_task_hash_set_match=false "
@@ -145,10 +163,11 @@ def test_compare_eval_task_hashes_detects_selected_task_drift(
 def test_load_eval_task_hash_source_accepts_manifest_file_path(
     tmp_path: Path,
 ) -> None:
-    manifest_path = tmp_path / "run_manifest.json"
+    manifest_path = tmp_path / "manifest.json"
     _write_manifest(
         manifest_path,
-        artifact_version="eval_run_v0",
+        artifact_type="eval_run",
+        artifact_schema_version="eval_run_artifact_v0",
         selected_task_hash_set="xxh64:selected-set",
         selected_tasks=[_selected_task("task_a")],
     )
@@ -163,19 +182,59 @@ def test_load_eval_task_hash_source_accepts_manifest_file_path(
 def test_load_eval_task_hash_source_rejects_unsupported_manifest(
     tmp_path: Path,
 ) -> None:
-    manifest_path = tmp_path / "run_manifest.json"
+    manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(
-        json.dumps({"artifact_version": "attempt_run_v0"}) + "\n"
+        json.dumps(
+            {
+                "artifact_type": "scorer_attempt",
+                "artifact_schema_version": "scorer_attempt_artifact_v0",
+            }
+        )
+        + "\n"
     )
 
-    with pytest.raises(ValueError, match="Expected eval_run_v0 or eval_matrix_v0"):
+    with pytest.raises(ValueError, match="Expected eval_run or eval_suite"):
         load_eval_task_hash_source(manifest_path)
+
+
+@pytest.mark.parametrize(
+    ("artifact_type", "artifact_schema_version", "expected_message"),
+    [
+        (
+            "eval_run",
+            "eval_run_artifact_v999",
+            "Unsupported eval_run artifact_schema_version",
+        ),
+        (
+            "eval_suite",
+            "eval_suite_artifact_v999",
+            "Unsupported eval_suite artifact_schema_version",
+        ),
+    ],
+)
+def test_load_eval_task_hash_source_rejects_bad_artifact_schema_version(
+    tmp_path: Path,
+    artifact_type: str,
+    artifact_schema_version: str,
+    expected_message: str,
+) -> None:
+    _write_manifest(
+        tmp_path / "manifest.json",
+        artifact_type=artifact_type,
+        artifact_schema_version=artifact_schema_version,
+        selected_task_hash_set="xxh64:selected-set",
+        selected_tasks=[_selected_task("task_a")],
+    )
+
+    with pytest.raises(ValueError, match=expected_message):
+        load_eval_task_hash_source(tmp_path)
 
 
 def _write_manifest(
     path: Path,
     *,
-    artifact_version: str,
+    artifact_type: str,
+    artifact_schema_version: str,
     selected_task_hash_set: str,
     selected_tasks: list[dict[str, object]],
 ) -> None:
@@ -183,7 +242,8 @@ def _write_manifest(
     path.write_text(
         json.dumps(
             {
-                "artifact_version": artifact_version,
+                "artifact_type": artifact_type,
+                "artifact_schema_version": artifact_schema_version,
                 "task_hashes": {
                     "schema_version": "eval_task_hashes_v0",
                     "task_pack_id": "repo_patch_python_v0",

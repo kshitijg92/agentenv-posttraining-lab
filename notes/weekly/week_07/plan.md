@@ -47,7 +47,7 @@ Current eval-quality gate artifacts:
 ```text
 configs/eval/eval_quality_gate_repo_patch_python_v0.yaml
 experiments/runs/eval_quality_gate_repo_patch_python_v0
-experiments/reports/eval_matrices/eval_quality_gate_repo_patch_python_v0.md
+experiments/reports/eval_suites/eval_quality_gate_repo_patch_python_v0.md
 experiments/runs/eval_quality_controls_repo_patch_python_v0
 experiments/runs/eval_quality_controls_repo_patch_python_v0/control_report.md
 experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
@@ -234,7 +234,7 @@ uv run agentenv eval \
   --config configs/eval/eval_quality_gate_repo_patch_python_v0.yaml \
   --all-policies \
   --out experiments/runs/eval_quality_gate_repo_patch_python_v0 \
-  --report-out experiments/reports/eval_matrices/eval_quality_gate_repo_patch_python_v0.md \
+  --report-out experiments/reports/eval_suites/eval_quality_gate_repo_patch_python_v0.md \
   --overwrite
 ```
 

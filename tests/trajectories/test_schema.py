@@ -57,8 +57,8 @@ def _base_record_payload() -> dict[str, Any]:
         },
         "artifacts": {
             "eval_run_path": "experiments/runs/eval_quality_gate_repo_patch_python_v0",
-            "eval_matrix_json": _artifact("eval_matrix.json"),
-            "run_manifest_json": _artifact("run_manifest.json"),
+            "eval_suite_json": _artifact("eval_suite.json"),
+            "manifest_json": _artifact("manifest.json"),
             "agent_task_run_json": _artifact("agent_task_run.json"),
             "prompt_loop_result_json": _artifact("prompt_loop_result.json"),
             "candidate_patch": _artifact("candidate.patch"),

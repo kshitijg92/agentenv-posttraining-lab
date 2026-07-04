@@ -13,7 +13,7 @@ each task has:
 - private hidden validators,
 - oracle and known-bad controls,
 - replayable attempt artifacts,
-- a consolidated eval matrix report.
+- a consolidated eval suite report.
 
 ## Current Task Family
 
@@ -98,7 +98,7 @@ The oracle shows the task is solvable under the scoring contract. The known-bad
 controls show that public checks are not being mistaken for the score and that
 hidden validators catch the intended shortcut.
 
-The dev-baseline matrix report currently shows all control expectations on
+The dev-baseline eval suite report currently shows all control expectations on
 track:
 
 ```text
@@ -147,7 +147,8 @@ The suite is intentionally narrow:
 
 The current report still has instrumentation gaps:
 
-- hidden-validator file hashes are not captured in `eval_matrix_v0`,
+- hidden-validator file hashes are not captured in
+  `eval_suite` / `eval_suite_artifact_v0`,
 - task exclusions are not structured data,
 - replay is defined for control-patch policies, not future model-agent policies.
 

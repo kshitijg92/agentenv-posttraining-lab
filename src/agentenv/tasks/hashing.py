@@ -15,8 +15,8 @@ from agentenv.tasks.validate import (
 )
 
 
-HASH_SCHEMA_VERSION = "task_hash_report_v0"
-EVAL_TASK_HASH_SCHEMA_VERSION = "eval_task_hashes_v0"
+TASK_HASH_REPORT_SCHEMA_VERSION = "task_hash_report_v0"
+EVAL_TASK_HASHES_SCHEMA_VERSION = "eval_task_hashes_v0"
 
 _NOISY_NAMES = {
     ".git",
@@ -73,7 +73,7 @@ def build_task_hash_report(task_pack_path: Path) -> TaskHashReport:
         raise ValueError(f"No task manifests found under {tasks_dir}")
 
     pack_record_input = {
-        "schema_version": HASH_SCHEMA_VERSION,
+        "schema_version": TASK_HASH_REPORT_SCHEMA_VERSION,
         "task_pack_id": pack_manifest.id,
         "manifest_yaml_hash": _hash_file(pack_manifest_path),
         "splits_lock_hash": _hash_file(splits_lock_path),
@@ -89,7 +89,7 @@ def build_task_hash_report(task_pack_path: Path) -> TaskHashReport:
 
     return TaskHashReport(
         payload={
-            "schema_version": HASH_SCHEMA_VERSION,
+            "schema_version": TASK_HASH_REPORT_SCHEMA_VERSION,
             "generated_at_utc": _utc_now_iso(),
             "git_sha_or_unknown": _git_sha_or_unknown(task_pack_path),
             "task_pack_id": pack_manifest.id,
@@ -143,7 +143,7 @@ def build_eval_task_hashes(
         ]
     )
     return {
-        "schema_version": EVAL_TASK_HASH_SCHEMA_VERSION,
+        "schema_version": EVAL_TASK_HASHES_SCHEMA_VERSION,
         "task_pack_id": pack_manifest.id,
         "selected_task_hash_set": selected_hash_set,
         "selected_tasks": selected_records,

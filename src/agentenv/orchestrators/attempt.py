@@ -19,7 +19,7 @@ from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
 
-ORCHESTRATOR_VERSION = "attempt_v0"
+SCORER_ATTEMPT_ORCHESTRATOR_VERSION = "scorer_attempt_orchestrator_v0"
 
 AttemptStatus = Literal[
     "PASS",
@@ -297,7 +297,7 @@ def _finish_attempt(
         ended_at=ended_at,
         duration_ms=duration_ms,
         final_diff_hash=final_diff_hash,
-        orchestrator_version=ORCHESTRATOR_VERSION,
+        orchestrator_version=SCORER_ATTEMPT_ORCHESTRATOR_VERSION,
     )
     return AttemptRun(
         result=result,

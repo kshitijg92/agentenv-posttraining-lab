@@ -3,20 +3,44 @@ from collections.abc import Iterable
 from pathlib import Path
 from statistics import median
 
+from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType
+from agentenv.orchestrators.agent_task_run import AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION
+from agentenv.orchestrators.eval_run import (
+    EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
+    EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
+)
+from agentenv.orchestrators.attempt_io import SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
+from agentenv.replay.runner import REPLAY_RUN_ARTIFACT_SCHEMA_VERSION
+
 
 def write_markdown_report(artifact_dir: Path, out_path: Path) -> Path:
     artifact_dir = artifact_dir.resolve()
     manifest = _load_artifact_manifest(artifact_dir)
-    artifact_version = manifest.get("artifact_version")
+    artifact_type = manifest.get("artifact_type")
 
-    if artifact_version == "eval_run_v0":
+    if artifact_type == ArtifactType.EVAL_RUN.value:
+        _require_artifact_schema_version(
+            manifest,
+            artifact_dir,
+            EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
+        )
         markdown = render_eval_report(artifact_dir, manifest)
-    elif artifact_version == "eval_matrix_v0":
+    elif artifact_type == ArtifactType.EVAL_SUITE.value:
+        _require_artifact_schema_version(
+            manifest,
+            artifact_dir,
+            EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
+        )
         markdown = render_eval_matrix_report(artifact_dir, manifest)
-    elif artifact_version == "replay_v0":
+    elif artifact_type == ArtifactType.REPLAY_RUN.value:
+        _require_artifact_schema_version(
+            manifest,
+            artifact_dir,
+            REPLAY_RUN_ARTIFACT_SCHEMA_VERSION,
+        )
         markdown = render_replay_report(artifact_dir, manifest)
     else:
-        raise ValueError(f"Unsupported artifact_version: {artifact_version!r}")
+        raise ValueError(f"Unsupported artifact_type: {artifact_type!r}")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(markdown)
@@ -33,7 +57,7 @@ def render_eval_report(
         "## Run Details",
         "",
         f"- Artifact directory: {_relative_or_absolute(artifact_dir)}",
-        "- Eval manifest: run_manifest.json",
+        f"- Eval manifest: {MANIFEST_FILENAME}",
         f"- Eval run id: {_display(manifest.get('eval_run_id'))}",
         f"- Config name: {_display(manifest.get('config_name'))}",
         f"- Config path: {_path_display(manifest.get('config_path'))}",
@@ -74,15 +98,16 @@ def render_eval_report(
             "## Attempts",
             "",
             (
-                "| task_id | attempt_index | artifact_version | scorer_status | "
-                "scorer_public_status | scorer_hidden_status | agent_status | "
-                "prompt_loop_status | agent_scorer_status | "
-                "agent_scorer_public_status | agent_scorer_hidden_status | "
-                "error_class | final_diff_hash | artifact_dir |"
+                "| task_id | attempt_index | artifact_type | "
+                "artifact_schema_version | scorer_status | scorer_public_status | "
+                "scorer_hidden_status | agent_status | prompt_loop_status | "
+                "agent_scorer_status | agent_scorer_public_status | "
+                "agent_scorer_hidden_status | error_class | final_diff_hash | "
+                "artifact_dir |"
             ),
             (
                 "| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- "
-                "| --- | --- | --- |"
+                "| --- | --- | --- | --- |"
             ),
         ]
     )
@@ -92,7 +117,9 @@ def render_eval_report(
         for raw_attempt in attempts:
             if not isinstance(raw_attempt, dict):
                 continue
-            lines.append(_attempt_row(artifact_dir, raw_attempt))
+            attempt_record = dict(raw_attempt)
+            _require_supported_attempt_artifact_identity(attempt_record)
+            lines.append(_attempt_row(artifact_dir, attempt_record))
 
     return "\n".join(lines) + "\n"
 
@@ -124,13 +151,13 @@ def render_eval_matrix_report(
     replay_match_rate = _matrix_replay_match_rate(manifest)
 
     lines = [
-        "# Eval Matrix Report",
+        "# Eval Suite Report",
         "",
         "## Run Details",
         "",
         f"- Artifact directory: {_relative_or_absolute(artifact_dir)}",
-        "- Eval matrix manifest: eval_matrix_manifest.json",
-        f"- Eval matrix id: {_display(manifest.get('eval_matrix_id'))}",
+        f"- Eval suite manifest: {MANIFEST_FILENAME}",
+        f"- Eval suite id: {_display(manifest.get('eval_suite_id'))}",
         f"- Config name: {_display(manifest.get('config_name'))}",
         f"- Config path: {_path_display(manifest.get('config_path'))}",
         f"- Config hash: {_display(manifest.get('config_hash'))}",
@@ -140,7 +167,7 @@ def render_eval_matrix_report(
         f"- Policy count: {_display(manifest.get('policy_count'))}",
         f"- Attempt count: {_display(manifest.get('attempt_count'))}",
         (
-            "- Hidden-validator version/hash: not captured in eval_matrix_v0; "
+            "- Hidden-validator version/hash: not captured in eval suite artifacts; "
             f"current substitute is config hash {_display(manifest.get('config_hash'))}"
         ),
         f"- Replay policy count: {_display(manifest.get('replay_policy_count'))}",
@@ -228,7 +255,7 @@ def render_eval_matrix_report(
         _matrix_attempt_table(
             artifact_dir,
             control_policy_runs,
-            empty_message="No control policy attempts in this eval matrix.",
+            empty_message="No control policy attempts in this eval suite.",
         )
     )
     lines.extend(
@@ -241,7 +268,7 @@ def render_eval_matrix_report(
                 if replay_match_rate is not None
                 else "- Replay match rate: not run"
             ),
-            "- Task exclusions: none recorded in eval_matrix_v0",
+            "- Task exclusions: none recorded in eval suite artifacts",
             "",
         ]
     )
@@ -283,7 +310,7 @@ def render_eval_matrix_report(
         _matrix_attempt_table(
             artifact_dir,
             agent_model_policy_runs,
-            empty_message="No agent model policy attempts in this eval matrix.",
+            empty_message="No agent model policy attempts in this eval suite.",
         )
     )
 
@@ -331,11 +358,15 @@ def render_replay_report(
         "## Replay Details",
         "",
         f"- Artifact directory: {_relative_or_absolute(artifact_dir)}",
-        "- Replay manifest: replay_manifest.json",
+        f"- Replay manifest: {MANIFEST_FILENAME}",
         f"- Replay id: {_display(manifest.get('replay_id'))}",
         f"- Source run directory: {_path_display(manifest.get('source_run_dir'))}",
         f"- Source eval run id: {_display(manifest.get('source_eval_run_id'))}",
-        f"- Source artifact version: {_display(manifest.get('source_artifact_version'))}",
+        f"- Source artifact type: {_display(manifest.get('source_artifact_type'))}",
+        (
+            "- Source artifact schema version: "
+            f"{_display(manifest.get('source_artifact_schema_version'))}"
+        ),
         "",
         "## Replay Result",
         "",
@@ -368,7 +399,8 @@ def _attempt_row(artifact_dir: Path, attempt_record: dict[str, object]) -> str:
     return (
         f"| {_display(attempt_record.get('task_id'))} "
         f"| {_display(attempt_record.get('attempt_index'))} "
-        f"| {_display(attempt_record.get('artifact_version'))} "
+        f"| {_display(attempt_record.get('artifact_type'))} "
+        f"| {_display(attempt_record.get('artifact_schema_version'))} "
         f"| {_display(_field(scorer, 'status'))} "
         f"| {_display(_field(scorer, 'public_status'))} "
         f"| {_display(_field(scorer, 'hidden_status'))} "
@@ -389,16 +421,22 @@ def _load_matrix_policy_runs(
 ) -> list[tuple[str, str, dict[str, object]]]:
     raw_policy_runs = manifest.get("policy_runs")
     if not isinstance(raw_policy_runs, list):
-        raise ValueError("Expected eval matrix policy_runs list")
+        raise ValueError("Expected eval suite policy_runs list")
 
     policy_runs: list[tuple[str, str, dict[str, object]]] = []
     for raw_policy_run in raw_policy_runs:
         if not isinstance(raw_policy_run, dict):
-            raise ValueError("Expected eval matrix policy_runs entries to be objects")
+            raise ValueError("Expected eval suite policy_runs entries to be objects")
         policy = _required_str(raw_policy_run, "policy")
         run_artifact_dir = _required_str(raw_policy_run, "artifact_dir")
-        run_manifest_ref = _required_str(raw_policy_run, "run_manifest")
+        run_manifest_ref = _required_str(raw_policy_run, "manifest")
         run_manifest = _load_json_object(artifact_dir / run_manifest_ref)
+        _require_artifact_identity(
+            run_manifest,
+            artifact_dir / run_manifest_ref,
+            ArtifactType.EVAL_RUN.value,
+            EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
+        )
         policy_runs.append((policy, run_artifact_dir, run_manifest))
     return policy_runs
 
@@ -611,7 +649,7 @@ def _policy_runs_for_policy_type(
 
 def _scorer_policy_summary_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No scorer control policies in this eval matrix."]
+        return ["No scorer control policies in this eval suite."]
 
     return [
         (
@@ -644,7 +682,7 @@ def _scorer_policy_summary_row(summary: dict[str, object]) -> str:
 
 def _agent_policy_summary_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No agent control policies in this eval matrix."]
+        return ["No agent control policies in this eval suite."]
 
     return [
         (
@@ -683,7 +721,7 @@ def _agent_policy_summary_row(summary: dict[str, object]) -> str:
 
 def _agent_model_outcome_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No agent model policies in this eval matrix."]
+        return ["No agent model policies in this eval suite."]
 
     return [
         (
@@ -719,7 +757,7 @@ def _agent_model_outcome_row(summary: dict[str, object]) -> str:
 
 def _agent_model_debug_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No agent model debug signals in this eval matrix."]
+        return ["No agent model debug signals in this eval suite."]
 
     return [
         (
@@ -750,7 +788,7 @@ def _agent_model_debug_row(summary: dict[str, object]) -> str:
 
 def _agent_model_budget_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No agent budget metadata in this eval matrix."]
+        return ["No agent budget metadata in this eval suite."]
 
     return [
         (
@@ -787,7 +825,7 @@ def _agent_model_budget_row(summary: dict[str, object]) -> str:
 
 def _scorer_expectation_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No scorer control policies in this eval matrix."]
+        return ["No scorer control policies in this eval suite."]
 
     return [
         (
@@ -853,7 +891,7 @@ def _scorer_control_expectation(control_name: str) -> dict[str, str] | None:
 
 def _agent_expectation_table(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No agent control policies in this eval matrix."]
+        return ["No agent control policies in this eval suite."]
 
     return [
         (
@@ -990,7 +1028,7 @@ def _required_expected_status(
 
 def _scorer_aggregate_rate_lines(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No scorer aggregate rates for this eval matrix."]
+        return ["No scorer aggregate rates for this eval suite."]
 
     return [
         f"- Oracle pass rate: {_rate_display(_oracle_pass_rate(summaries))}",
@@ -1009,7 +1047,7 @@ def _scorer_aggregate_rate_lines(summaries: list[dict[str, object]]) -> list[str
 
 def _agent_aggregate_rate_lines(summaries: list[dict[str, object]]) -> list[str]:
     if not summaries:
-        return ["No agent aggregate rates for this eval matrix."]
+        return ["No agent aggregate rates for this eval suite."]
 
     return [
         (
@@ -1022,7 +1060,7 @@ def _agent_aggregate_rate_lines(summaries: list[dict[str, object]]) -> list[str]
 def _matrix_replay_rows(manifest: dict[str, object]) -> list[str]:
     replay_runs = _matrix_replay_runs(manifest)
     if not replay_runs:
-        return ["Replay was not run for this eval matrix."]
+        return ["Replay was not run for this eval suite."]
 
     rows = [
         "| policy | status | match_rate | error_count | replay_result |",
@@ -1061,11 +1099,11 @@ def _matrix_replay_runs(manifest: dict[str, object]) -> list[dict[str, object]]:
     if raw_replay_runs is None:
         return []
     if not isinstance(raw_replay_runs, list):
-        raise ValueError("Expected eval matrix replay_runs list")
+        raise ValueError("Expected eval suite replay_runs list")
     replay_runs: list[dict[str, object]] = []
     for raw_replay_run in raw_replay_runs:
         if not isinstance(raw_replay_run, dict):
-            raise ValueError("Expected eval matrix replay_runs entries to be objects")
+            raise ValueError("Expected eval suite replay_runs entries to be objects")
         replay_runs.append(raw_replay_run)
     return replay_runs
 
@@ -1231,7 +1269,8 @@ def _matrix_attempt_rows(
         (
             f"| {_display(attempt.get('task_id'))} "
             f"| {policy} "
-            f"| {_display(attempt.get('artifact_version'))} "
+            f"| {_display(attempt.get('artifact_type'))} "
+            f"| {_display(attempt.get('artifact_schema_version'))} "
             f"| {_display(_scorer_field(attempt, 'status'))} "
             f"| {_display(_scorer_field(attempt, 'public_status'))} "
             f"| {_display(_scorer_field(attempt, 'hidden_status'))} "
@@ -1265,16 +1304,16 @@ def _matrix_attempt_table(
 
     rows = [
         (
-            "| task_id | policy | artifact_version | scorer_status | "
-            "scorer_public_status | scorer_hidden_status | agent_status | "
-            "prompt_loop_status | agent_scorer_status | "
+            "| task_id | policy | artifact_type | artifact_schema_version | "
+            "scorer_status | scorer_public_status | scorer_hidden_status | "
+            "agent_status | prompt_loop_status | agent_scorer_status | "
             "agent_scorer_public_status | agent_scorer_hidden_status | "
-            "error_class | duration_ms | candidate_patch_bytes | final_diff_hash | "
-            "artifact_dir |"
+            "error_class | duration_ms | candidate_patch_bytes | "
+            "final_diff_hash | artifact_dir |"
         ),
         (
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
-            "| --- | ---: | ---: | --- | --- |"
+            "| --- | --- | ---: | ---: | --- | --- |"
         ),
     ]
     for policy, run_artifact_dir, run_manifest in policy_runs:
@@ -1303,7 +1342,8 @@ def _matrix_attempts_with_artifacts(
         attempt_record["artifact_dir"] = str(
             (run_dir / attempt_artifact_ref).relative_to(artifact_dir)
         )
-        if attempt_record.get("artifact_version") == "agent_task_run_artifacts_v0":
+        _require_supported_attempt_artifact_identity(attempt_record)
+        if attempt_record.get("artifact_type") == ArtifactType.AGENT_ATTEMPT.value:
             attempt_record["agent_artifact"] = _agent_artifact_summary(
                 run_dir / attempt_artifact_ref
             )
@@ -1460,19 +1500,70 @@ def _load_jsonl_objects(path: Path) -> list[dict[str, object]]:
 
 
 def _load_artifact_manifest(artifact_dir: Path) -> dict[str, object]:
-    eval_matrix_manifest = artifact_dir / "eval_matrix_manifest.json"
-    if eval_matrix_manifest.is_file():
-        return _load_json_object(eval_matrix_manifest)
-
-    eval_manifest = artifact_dir / "run_manifest.json"
-    if eval_manifest.is_file():
-        return _load_json_object(eval_manifest)
-
-    replay_manifest = artifact_dir / "replay_manifest.json"
-    if replay_manifest.is_file():
-        return _load_json_object(replay_manifest)
+    manifest = artifact_dir / MANIFEST_FILENAME
+    if manifest.is_file():
+        return _load_json_object(manifest)
 
     raise ValueError(f"No supported artifact manifest found in {artifact_dir}")
+
+
+def _require_artifact_schema_version(
+    manifest: dict[str, object],
+    artifact_dir: Path,
+    expected: str,
+) -> None:
+    artifact_schema_version = manifest.get("artifact_schema_version")
+    if artifact_schema_version != expected:
+        raise ValueError(
+            "Unsupported artifact_schema_version "
+            f"{artifact_schema_version!r} at {artifact_dir / MANIFEST_FILENAME}; "
+            f"expected {expected!r}"
+        )
+
+
+def _require_artifact_identity(
+    manifest: dict[str, object],
+    manifest_path: Path,
+    expected_artifact_type: str,
+    expected_artifact_schema_version: str,
+) -> None:
+    artifact_type = manifest.get("artifact_type")
+    if artifact_type != expected_artifact_type:
+        raise ValueError(
+            f"Unsupported artifact_type {artifact_type!r} at {manifest_path}; "
+            f"expected {expected_artifact_type!r}"
+        )
+    artifact_schema_version = manifest.get("artifact_schema_version")
+    if artifact_schema_version != expected_artifact_schema_version:
+        raise ValueError(
+            "Unsupported artifact_schema_version "
+            f"{artifact_schema_version!r} at {manifest_path}; "
+            f"expected {expected_artifact_schema_version!r}"
+        )
+
+
+def _require_supported_attempt_artifact_identity(
+    attempt_record: dict[str, object],
+) -> None:
+    artifact_type = attempt_record.get("artifact_type")
+    artifact_schema_version = attempt_record.get("artifact_schema_version")
+    expected_schema_versions = {
+        ArtifactType.SCORER_ATTEMPT.value: SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
+        ArtifactType.AGENT_ATTEMPT.value: AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
+    }
+    if not isinstance(artifact_type, str) or artifact_type not in expected_schema_versions:
+        raise ValueError(
+            "Eval report attempt artifact_type must be one of "
+            f"{ArtifactType.SCORER_ATTEMPT.value!r}, "
+            f"{ArtifactType.AGENT_ATTEMPT.value!r}; got {artifact_type!r}"
+        )
+    expected_schema_version = expected_schema_versions[artifact_type]
+    if artifact_schema_version != expected_schema_version:
+        raise ValueError(
+            "Unsupported eval report attempt artifact_schema_version "
+            f"{artifact_schema_version!r} for artifact_type {artifact_type!r}; "
+            f"expected {expected_schema_version!r}"
+        )
 
 
 def _required_str(data: dict[str, object], key: str) -> str:

@@ -6,22 +6,28 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from agentenv.artifacts import prepare_artifact_output_dir
+from agentenv.artifacts import (
+    MANIFEST_FILENAME,
+    ArtifactType,
+    prepare_artifact_output_dir,
+)
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import (
+    AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
     AgentTaskRunResult,
     run_and_persist_agent_task_attempt_to_dir,
 )
 from agentenv.orchestrators.attempt import AttemptResult
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
+from agentenv.orchestrators.attempt_io import SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
+from agentenv.orchestrators.eval_run import EVAL_RUN_ARTIFACT_SCHEMA_VERSION
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
-REPLAY_ARTIFACT_VERSION = "replay_v0"
-SOURCE_EVAL_ARTIFACT_VERSION = "eval_run_v0"
-SOURCE_AGENT_TASK_ARTIFACT_VERSION = "agent_task_run_artifacts_v0"
+REPLAY_RUN_ARTIFACT_SCHEMA_VERSION = "replay_run_artifact_v0"
+REPLAY_RESULT_SCHEMA_VERSION = "replay_result_v0"
 AGENT_CONTROL_SCRIPT_ARTIFACT = "agent_control_script.json"
 DECODING_CONFIG_ARTIFACT = "decoding_config.json"
 
@@ -44,7 +50,7 @@ COMPARED_FIELDS: tuple[ComparedField, ...] = (
 )
 
 SCORER_ATTEMPT_ARTIFACTS = (
-    "run_manifest.json",
+    MANIFEST_FILENAME,
     "attempt.json",
     "stdout.txt",
     "stderr.txt",
@@ -53,7 +59,7 @@ SCORER_ATTEMPT_ARTIFACTS = (
     "final.diff",
 )
 AGENT_BASE_ARTIFACTS = (
-    "run_manifest.json",
+    MANIFEST_FILENAME,
     "agent_task_run.json",
     "error.txt",
     "agent_task_view.json",
@@ -124,14 +130,14 @@ def run_replay(
     )
 
     try:
-        source_manifest_path = source_run_dir / "run_manifest.json"
+        source_manifest_path = source_run_dir / MANIFEST_FILENAME
         source_manifest = _load_json_object(source_manifest_path)
         _require_supported_source_manifest(source_manifest, source_manifest_path)
         base_provenance = _source_manifest_provenance(replay_id, source_manifest)
         _append_trace(
             trace_events,
             base_provenance,
-            "source_run_manifest_loaded",
+            "source_manifest_loaded",
             input_payload={
                 "source_manifest_path": str(source_manifest_path),
             },
@@ -184,8 +190,8 @@ def _replay_source_artifact(
     source_manifest: dict[str, object],
     trace_events: list[dict[str, object]],
 ) -> list[ReplayComparison]:
-    artifact_version = source_manifest.get("artifact_version")
-    if artifact_version == SOURCE_EVAL_ARTIFACT_VERSION:
+    artifact_type = source_manifest.get("artifact_type")
+    if artifact_type == ArtifactType.EVAL_RUN.value:
         return _replay_eval_run_attempts(
             base_provenance,
             source_run_dir,
@@ -193,7 +199,7 @@ def _replay_source_artifact(
             source_manifest,
             trace_events,
         )
-    if artifact_version == SOURCE_AGENT_TASK_ARTIFACT_VERSION:
+    if artifact_type == ArtifactType.AGENT_ATTEMPT.value:
         return [
             _replay_agent_task_run_artifact(
                 base_provenance,
@@ -203,7 +209,7 @@ def _replay_source_artifact(
                 trace_events,
             )
         ]
-    raise ValueError(f"Unsupported replay source artifact_version: {artifact_version!r}")
+    raise ValueError(f"Unsupported replay source artifact_type: {artifact_type!r}")
 
 
 def _replay_eval_run_attempts(
@@ -243,10 +249,25 @@ def _replay_one_eval_attempt_artifact(
     trace_events: list[dict[str, object]],
 ) -> ReplayComparison:
     artifact_dir = _required_str(source_attempt_record, "artifact_dir")
+    parent_artifact_type = _validated_attempt_source_artifact_type(
+        source_attempt_record,
+        source_run_dir / MANIFEST_FILENAME,
+    )
     source_artifact_dir = source_run_dir / artifact_dir
-    source_artifact_manifest = _load_json_object(source_artifact_dir / "run_manifest.json")
-    artifact_version = source_artifact_manifest.get("artifact_version")
-    if artifact_version == SOURCE_AGENT_TASK_ARTIFACT_VERSION:
+    source_artifact_manifest = _load_json_object(
+        source_artifact_dir / MANIFEST_FILENAME
+    )
+    artifact_type = _validated_attempt_source_artifact_type(
+        source_artifact_manifest,
+        source_artifact_dir / MANIFEST_FILENAME,
+    )
+    if artifact_type != parent_artifact_type:
+        raise ValueError(
+            "Eval run child artifact_type mismatch between parent attempt record "
+            f"{parent_artifact_type!r} and child manifest {artifact_type!r} "
+            f"for {artifact_dir}"
+        )
+    if artifact_type == ArtifactType.AGENT_ATTEMPT.value:
         return _replay_agent_task_run_artifact(
             base_provenance,
             source_artifact_dir,
@@ -262,6 +283,33 @@ def _replay_one_eval_attempt_artifact(
         source_attempt_record,
         trace_events,
     )
+
+
+def _validated_attempt_source_artifact_type(
+    source_manifest: dict[str, object],
+    source_manifest_path: Path,
+) -> str:
+    artifact_type = source_manifest.get("artifact_type")
+    artifact_schema_version = source_manifest.get("artifact_schema_version")
+    expected_schema_versions = {
+        ArtifactType.SCORER_ATTEMPT.value: SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
+        ArtifactType.AGENT_ATTEMPT.value: AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
+    }
+    if not isinstance(artifact_type, str) or artifact_type not in expected_schema_versions:
+        raise ValueError(
+            "Eval run child artifact_type must be one of "
+            f"{ArtifactType.SCORER_ATTEMPT.value!r}, "
+            f"{ArtifactType.AGENT_ATTEMPT.value!r}; got {artifact_type!r} "
+            f"at {source_manifest_path}"
+        )
+    expected_schema_version = expected_schema_versions[artifact_type]
+    if artifact_schema_version != expected_schema_version:
+        raise ValueError(
+            "Unsupported eval run child artifact_schema_version "
+            f"{artifact_schema_version!r} for artifact_type {artifact_type!r}; "
+            f"expected {expected_schema_version!r} at {source_manifest_path}"
+        )
+    return artifact_type
 
 
 def _replay_one_scorer_attempt(
@@ -396,7 +444,10 @@ def _replay_agent_task_run_artifact(
         "source_attempt_loaded",
         input_payload={
             "source_artifact_dir": str(source_run_dir),
-            "source_artifact_version": source_manifest.get("artifact_version"),
+            "source_artifact_type": source_manifest.get("artifact_type"),
+            "source_artifact_schema_version": source_manifest.get(
+                "artifact_schema_version"
+            ),
         },
         output_payload={
             "source_status": source_agent_result.status,
@@ -515,7 +566,7 @@ def _write_replay_artifacts(
         },
     )
 
-    (replay_run.out_dir / "replay_manifest.json").write_text(
+    (replay_run.out_dir / MANIFEST_FILENAME).write_text(
         json.dumps(
             _replay_manifest(replay_run, created_at, source_manifest),
             indent=2,
@@ -560,21 +611,25 @@ def _replay_manifest(
         "replay_results": "replay_results.jsonl",
         "trace": "trace.jsonl",
     }
-    source_artifact_version = source_manifest.get("artifact_version")
+    source_artifact_type = source_manifest.get("artifact_type")
     comparison_types = {
         comparison.comparison_type for comparison in replay_run.comparisons
     }
-    if source_artifact_version == SOURCE_EVAL_ARTIFACT_VERSION:
+    if source_artifact_type == ArtifactType.EVAL_RUN.value:
         artifacts["attempts"] = "attempts"
     elif "agent_task_run" in comparison_types:
         artifacts["agent_task_run"] = "agent_task_run"
     return {
-        "artifact_version": REPLAY_ARTIFACT_VERSION,
+        "artifact_type": ArtifactType.REPLAY_RUN,
+        "artifact_schema_version": REPLAY_RUN_ARTIFACT_SCHEMA_VERSION,
         "replay_id": replay_run.replay_id,
         "created_at": created_at,
         "source_run_dir": str(replay_run.source_run_dir),
         "source_eval_run_id": source_manifest.get("eval_run_id"),
-        "source_artifact_version": source_manifest.get("artifact_version"),
+        "source_artifact_type": source_manifest.get("artifact_type"),
+        "source_artifact_schema_version": source_manifest.get(
+            "artifact_schema_version"
+        ),
         "artifacts": artifacts,
     }
 
@@ -585,7 +640,7 @@ def _replay_result(replay_run: ReplayRun) -> dict[str, object]:
     )
     attempt_count = len(replay_run.comparisons)
     return {
-        "artifact_version": REPLAY_ARTIFACT_VERSION,
+        "schema_version": REPLAY_RESULT_SCHEMA_VERSION,
         "replay_id": replay_run.replay_id,
         "status": replay_run.status,
         "attempt_count": attempt_count,
@@ -830,16 +885,25 @@ def _require_supported_source_manifest(
     source_manifest: dict[str, object],
     source_manifest_path: Path,
 ) -> None:
-    artifact_version = source_manifest.get("artifact_version")
-    if artifact_version not in {
-        SOURCE_EVAL_ARTIFACT_VERSION,
-        SOURCE_AGENT_TASK_ARTIFACT_VERSION,
-    }:
+    artifact_type = source_manifest.get("artifact_type")
+    artifact_schema_version = source_manifest.get("artifact_schema_version")
+    expected_schema_versions = {
+        ArtifactType.EVAL_RUN.value: EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
+        ArtifactType.AGENT_ATTEMPT.value: AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
+    }
+    if not isinstance(artifact_type, str) or artifact_type not in expected_schema_versions:
         raise ValueError(
-            "Replay input must be one of "
-            f"{SOURCE_EVAL_ARTIFACT_VERSION!r}, "
-            f"{SOURCE_AGENT_TASK_ARTIFACT_VERSION!r}; got {artifact_version!r} "
+            "Replay input artifact_type must be one of "
+            f"{ArtifactType.EVAL_RUN.value!r}, "
+            f"{ArtifactType.AGENT_ATTEMPT.value!r}; got {artifact_type!r} "
             f"at {source_manifest_path}"
+        )
+    expected_schema_version = expected_schema_versions[artifact_type]
+    if artifact_schema_version != expected_schema_version:
+        raise ValueError(
+            "Unsupported replay source artifact_schema_version "
+            f"{artifact_schema_version!r} for artifact_type {artifact_type!r}; "
+            f"expected {expected_schema_version!r} at {source_manifest_path}"
         )
 
 

@@ -1,5 +1,18 @@
 import shutil
+from enum import StrEnum
 from pathlib import Path
+
+
+MANIFEST_FILENAME = "manifest.json"
+
+
+class ArtifactType(StrEnum):
+    SCORER_ATTEMPT = "scorer_attempt"
+    AGENT_ATTEMPT = "agent_attempt"
+    EVAL_RUN = "eval_run"
+    EVAL_SUITE = "eval_suite"
+    CONTROL_CALIBRATION = "control_calibration"
+    REPLAY_RUN = "replay_run"
 
 
 class ArtifactDirectoryError(ValueError):

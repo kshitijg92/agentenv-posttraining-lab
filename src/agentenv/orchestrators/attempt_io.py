@@ -4,18 +4,23 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from agentenv.artifacts import prepare_artifact_output_dir
+from agentenv.artifacts import (
+    MANIFEST_FILENAME,
+    ArtifactType,
+    prepare_artifact_output_dir,
+)
 from agentenv.orchestrators.attempt import AttemptResult, AttemptRun
 from agentenv.security.secrets import redact_jsonable, redact_secrets
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
 TraceEvent = dict[str, object]
+SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION = "scorer_attempt_artifact_v0"
 
 
 @dataclass(frozen=True)
 class AttemptArtifactPaths:
-    run_manifest_json: Path
+    manifest_json: Path
     attempt_json: Path
     stdout_txt: Path
     stderr_txt: Path
@@ -35,7 +40,7 @@ def write_attempt_artifacts(
     attempt_run: AttemptRun, out_dir: Path
 ) -> AttemptArtifactPaths:
     out_dir = prepare_artifact_output_dir(out_dir)
-    run_manifest_path = out_dir / "run_manifest.json"
+    manifest_path = out_dir / MANIFEST_FILENAME
     attempt_path = write_attempt_result(attempt_run.result, out_dir)
     stdout_path = out_dir / "stdout.txt"
     stderr_path = out_dir / "stderr.txt"
@@ -56,7 +61,7 @@ def write_attempt_artifacts(
     error_path.write_text(redact_secrets(_error_text(attempt_run)))
     trace_path.write_text(_trace_jsonl(attempt_run))
     final_diff_path.write_text(attempt_run.final_diff)
-    run_manifest_path.write_text(
+    manifest_path.write_text(
         json.dumps(
             redact_jsonable(_run_manifest(attempt_run)),
             indent=2,
@@ -66,7 +71,7 @@ def write_attempt_artifacts(
     )
 
     return AttemptArtifactPaths(
-        run_manifest_json=run_manifest_path,
+        manifest_json=manifest_path,
         attempt_json=attempt_path,
         stdout_txt=stdout_path,
         stderr_txt=stderr_path,
@@ -205,7 +210,8 @@ def _attempt_provenance(result: AttemptResult) -> dict[str, object]:
 
 def _run_manifest(attempt_run: AttemptRun) -> dict[str, object]:
     return {
-        "artifact_version": "run_artifacts_v0",
+        "artifact_type": ArtifactType.SCORER_ATTEMPT,
+        "artifact_schema_version": SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
         "orchestrator_version": attempt_run.result.orchestrator_version,
         "run_id": attempt_run.result.run_id,
         "attempt_id": attempt_run.result.attempt_id,

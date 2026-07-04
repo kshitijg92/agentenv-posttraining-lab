@@ -2,11 +2,12 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import xxhash
 
-from agentenv.artifacts import prepare_artifact_output_dir
+from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType, prepare_artifact_output_dir
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     load_agent_control_script_case,
@@ -33,13 +34,16 @@ from agentenv.orchestrators.agent_task_run import (
 )
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
-from agentenv.replay.runner import ReplayRun, run_replay
 from agentenv.tasks.hashing import build_eval_task_hashes
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
-EVAL_RUN_ARTIFACT_VERSION = "eval_run_v0"
-EVAL_MATRIX_ARTIFACT_VERSION = "eval_matrix_v0"
+if TYPE_CHECKING:
+    from agentenv.replay.runner import ReplayRun
+
+
+EVAL_RUN_ARTIFACT_SCHEMA_VERSION = "eval_run_artifact_v0"
+EVAL_SUITE_ARTIFACT_SCHEMA_VERSION = "eval_suite_artifact_v0"
 TraceEvent = dict[str, object]
 
 
@@ -71,9 +75,16 @@ class EvalAttemptRecord:
     task_id: str
     attempt_index: int
     attempt_dir: Path
-    artifact_version: str
+    artifact_type: str
+    artifact_schema_version: str
     scorer: ScorerAttemptSummary | None
     agent: AgentAttemptSummary | None
+
+
+@dataclass(frozen=True)
+class ArtifactIdentity:
+    artifact_type: str
+    artifact_schema_version: str
 
 
 @dataclass(frozen=True)
@@ -91,7 +102,7 @@ class EvalRun:
 
 @dataclass(frozen=True)
 class EvalMatrixRun:
-    eval_matrix_id: str
+    eval_suite_id: str
     config: EvalConfig
     config_path: Path
     config_hash: str
@@ -107,7 +118,7 @@ class EvalMatrixReplayRecord:
     policy: str
     replay_index: int
     replay_dir: Path
-    replay_run: ReplayRun
+    replay_run: "ReplayRun"
 
 
 def run_eval_config(
@@ -297,7 +308,8 @@ def run_eval_config(
                 ),
                 "eval_attempt_finished",
                 output_payload={
-                    "artifact_version": attempt_record.artifact_version,
+                    "artifact_type": attempt_record.artifact_type,
+                    "artifact_schema_version": attempt_record.artifact_schema_version,
                     "scorer": _scorer_summary_json(attempt_record.scorer),
                     "agent": _agent_summary_json(attempt_record.agent),
                 },
@@ -333,7 +345,7 @@ def run_eval_config(
             "attempt_count": len(eval_run.attempts),
             "layer_counts": count_eval_run_layers(eval_run),
         },
-        payload_refs={"run_manifest": "run_manifest.json"},
+        payload_refs={"manifest": MANIFEST_FILENAME},
     )
     _write_eval_trace(eval_run, trace_events)
     _write_eval_run_manifest(eval_run)
@@ -352,7 +364,7 @@ def run_eval_config_all_policies(
     config_hash = _hash_file(config_path)
     task_pack_path = resolve_task_pack_path(config, config_path)
     task_hashes = build_eval_task_hashes(task_pack_path, config.tasks)
-    eval_matrix_id = f"eval_matrix_{uuid4().hex}"
+    eval_suite_id = f"eval_suite_{uuid4().hex}"
     created_at = _utc_now()
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
@@ -365,7 +377,7 @@ def run_eval_config_all_policies(
     ]
     replay_runs = _replay_configured_policy_runs(config, policy_runs, out_dir)
     eval_matrix = EvalMatrixRun(
-        eval_matrix_id=eval_matrix_id,
+        eval_suite_id=eval_suite_id,
         config=config,
         config_path=config_path,
         config_hash=config_hash,
@@ -384,6 +396,8 @@ def _replay_configured_policy_runs(
     policy_runs: list[EvalRun],
     out_dir: Path,
 ) -> list[EvalMatrixReplayRecord]:
+    from agentenv.replay.runner import run_replay
+
     replays_dir = out_dir / "replays"
     replay_records: list[EvalMatrixReplayRecord] = []
     for policy_run in policy_runs:
@@ -414,7 +428,7 @@ def _write_eval_trace(eval_run: EvalRun, trace_events: list[TraceEvent]) -> Path
 
 
 def _write_eval_run_manifest(eval_run: EvalRun) -> Path:
-    manifest_path = eval_run.out_dir / "run_manifest.json"
+    manifest_path = eval_run.out_dir / MANIFEST_FILENAME
     manifest_path.write_text(
         json.dumps(
             _eval_run_manifest(eval_run),
@@ -427,7 +441,7 @@ def _write_eval_run_manifest(eval_run: EvalRun) -> Path:
 
 
 def _write_eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> Path:
-    manifest_path = eval_matrix.out_dir / "eval_matrix_manifest.json"
+    manifest_path = eval_matrix.out_dir / MANIFEST_FILENAME
     manifest_path.write_text(
         json.dumps(
             _eval_matrix_manifest(eval_matrix),
@@ -441,7 +455,8 @@ def _write_eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> Path:
 
 def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
     return {
-        "artifact_version": EVAL_RUN_ARTIFACT_VERSION,
+        "artifact_type": ArtifactType.EVAL_RUN,
+        "artifact_schema_version": EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
         "eval_run_id": eval_run.eval_run_id,
         "created_at": eval_run.created_at,
         "config_path": str(eval_run.config_path),
@@ -474,8 +489,9 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
         artifacts["replays"] = "replays"
 
     return {
-        "artifact_version": EVAL_MATRIX_ARTIFACT_VERSION,
-        "eval_matrix_id": eval_matrix.eval_matrix_id,
+        "artifact_type": ArtifactType.EVAL_SUITE,
+        "artifact_schema_version": EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
+        "eval_suite_id": eval_matrix.eval_suite_id,
         "created_at": eval_matrix.created_at,
         "config_path": str(eval_matrix.config_path),
         "config_hash": eval_matrix.config_hash,
@@ -497,8 +513,8 @@ def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
                 "artifact_dir": str(
                     policy_run.out_dir.relative_to(eval_matrix.out_dir)
                 ),
-                "run_manifest": str(
-                    (policy_run.out_dir / "run_manifest.json").relative_to(
+                "manifest": str(
+                    (policy_run.out_dir / MANIFEST_FILENAME).relative_to(
                         eval_matrix.out_dir
                     )
                 ),
@@ -532,8 +548,8 @@ def _eval_matrix_replay_record(
         "replay_index": replay_record.replay_index,
         "status": replay_record.replay_run.status,
         "artifact_dir": str(replay_record.replay_dir.relative_to(eval_matrix.out_dir)),
-        "replay_manifest": str(
-            (replay_record.replay_dir / "replay_manifest.json").relative_to(
+        "manifest": str(
+            (replay_record.replay_dir / MANIFEST_FILENAME).relative_to(
                 eval_matrix.out_dir
             )
         ),
@@ -577,11 +593,13 @@ def _run_scorer_eval_attempt(
         submission_path,
         attempt_dir,
     )
+    artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
         task_id=task.task_id,
         attempt_index=attempt_index,
         attempt_dir=attempt_dir,
-        artifact_version=_child_artifact_version(attempt_dir),
+        artifact_type=artifact_identity.artifact_type,
+        artifact_schema_version=artifact_identity.artifact_schema_version,
         scorer=_scorer_summary(attempt_run.result),
         agent=None,
     )
@@ -606,11 +624,13 @@ def _run_agent_control_eval_attempt(
         attempt_dir,
         agent_control_script=control_case,
     )
+    artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
         task_id=task.task_id,
         attempt_index=attempt_index,
         attempt_dir=attempt_dir,
-        artifact_version=_child_artifact_version(attempt_dir),
+        artifact_type=artifact_identity.artifact_type,
+        artifact_schema_version=artifact_identity.artifact_schema_version,
         scorer=None,
         agent=_agent_summary(agent_task_run.result),
     )
@@ -643,11 +663,13 @@ def _run_agent_model_eval_attempt(
             decoding_config_hash=_hash_file(decoding_config_path),
         ),
     )
+    artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
         task_id=task.task_id,
         attempt_index=attempt_index,
         attempt_dir=attempt_dir,
-        artifact_version=_child_artifact_version(attempt_dir),
+        artifact_type=artifact_identity.artifact_type,
+        artifact_schema_version=artifact_identity.artifact_schema_version,
         scorer=None,
         agent=_agent_summary(agent_task_run.result),
     )
@@ -721,7 +743,8 @@ def _eval_attempt_record(
         "task_id": attempt.task_id,
         "attempt_index": attempt.attempt_index,
         "artifact_dir": str(attempt.attempt_dir.relative_to(eval_run.out_dir)),
-        "artifact_version": attempt.artifact_version,
+        "artifact_type": attempt.artifact_type,
+        "artifact_schema_version": attempt.artifact_schema_version,
         "scorer": _scorer_summary_json(attempt.scorer),
         "agent": _agent_summary_json(attempt.agent),
     }
@@ -801,14 +824,21 @@ def _required_agent(attempt: EvalAttemptRecord) -> AgentAttemptSummary:
     return attempt.agent
 
 
-def _child_artifact_version(attempt_dir: Path) -> str:
-    manifest = json.loads((attempt_dir / "run_manifest.json").read_text())
+def _child_artifact_identity(attempt_dir: Path) -> ArtifactIdentity:
+    manifest_path = attempt_dir / MANIFEST_FILENAME
+    manifest = json.loads(manifest_path.read_text())
     if not isinstance(manifest, dict):
-        raise ValueError(f"Expected run_manifest.json object at {attempt_dir}")
-    artifact_version = manifest.get("artifact_version")
-    if not isinstance(artifact_version, str):
-        raise ValueError(f"Missing artifact_version in {attempt_dir / 'run_manifest.json'}")
-    return artifact_version
+        raise ValueError(f"Expected {MANIFEST_FILENAME} object at {attempt_dir}")
+    artifact_type = manifest.get("artifact_type")
+    if not isinstance(artifact_type, str):
+        raise ValueError(f"Missing artifact_type in {manifest_path}")
+    artifact_schema_version = manifest.get("artifact_schema_version")
+    if not isinstance(artifact_schema_version, str):
+        raise ValueError(f"Missing artifact_schema_version in {manifest_path}")
+    return ArtifactIdentity(
+        artifact_type=artifact_type,
+        artifact_schema_version=artifact_schema_version,
+    )
 
 
 def count_eval_attempt_layers(

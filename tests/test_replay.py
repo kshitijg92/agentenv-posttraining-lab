@@ -25,7 +25,7 @@ SCORER_ATTEMPT_ARTIFACTS = {
     "attempt.json": True,
     "error.txt": True,
     "final.diff": True,
-    "run_manifest.json": True,
+    "manifest.json": True,
     "stderr.txt": True,
     "stdout.txt": True,
     "trace.jsonl": True,
@@ -58,6 +58,49 @@ def _write_agent_control_source_artifact(
     )
 
 
+def _write_eval_with_child_attempt_manifest(
+    tmp_path: Path,
+    *,
+    child_artifact_type: str,
+    child_artifact_schema_version: str,
+    parent_artifact_type: str = "scorer_attempt",
+    parent_artifact_schema_version: str = "scorer_attempt_artifact_v0",
+) -> Path:
+    source_eval_dir = tmp_path / "source_eval"
+    child_dir = source_eval_dir / "attempts/toy_python_fix_001__attempt_001"
+    child_dir.mkdir(parents=True, exist_ok=True)
+    (child_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_type": child_artifact_type,
+                "artifact_schema_version": child_artifact_schema_version,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    (source_eval_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_type": "eval_run",
+                "artifact_schema_version": "eval_run_artifact_v0",
+                "eval_run_id": "eval_child_validation_001",
+                "attempts": [
+                    {
+                        "task_id": "toy_python_fix_001",
+                        "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
+                        "artifact_type": parent_artifact_type,
+                        "artifact_schema_version": parent_artifact_schema_version,
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    return source_eval_dir
+
+
 def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
     source_run = run_eval_config(
         CONTROL_EVAL_CONFIG,
@@ -69,7 +112,7 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
 
     replay_result = json.loads((tmp_path / "replay_run/replay_result.json").read_text())
     replay_manifest = json.loads(
-        (tmp_path / "replay_run/replay_manifest.json").read_text()
+        (tmp_path / "replay_run/manifest.json").read_text()
     )
     replay_records = [
         json.loads(line)
@@ -79,10 +122,12 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
     ]
 
     assert replay_run.status == "PASS"
+    assert replay_result["schema_version"] == "replay_result_v0"
     assert replay_result["status"] == "PASS"
     assert replay_result["attempt_count"] == 1
     assert replay_result["matched_attempts"] == 1
-    assert replay_manifest["artifact_version"] == "replay_v0"
+    assert replay_manifest["artifact_type"] == "replay_run"
+    assert replay_manifest["artifact_schema_version"] == "replay_run_artifact_v0"
     assert replay_manifest["source_eval_run_id"] == source_run.eval_run_id
     assert replay_manifest["artifacts"]["attempts"] == "attempts"
     assert "agent_task_run" not in replay_manifest["artifacts"]
@@ -138,7 +183,7 @@ def test_run_replay_detects_durable_attempt_artifact_mismatch(
         "oracle",
         tmp_path / "source_run",
     )
-    source_manifest = json.loads((tmp_path / "source_run/run_manifest.json").read_text())
+    source_manifest = json.loads((tmp_path / "source_run/manifest.json").read_text())
     source_attempt_ref = source_manifest["attempts"][0]["artifact_dir"]
     source_stdout = tmp_path / "source_run" / source_attempt_ref / "stdout.txt"
     source_stdout.write_text(source_stdout.read_text() + "deterministic tamper\n")
@@ -191,6 +236,7 @@ def test_run_replay_normalizes_pytest_tmp_paths_for_dev_controls(
     ]
 
     assert replay_run.status == "PASS"
+    assert replay_result["schema_version"] == "replay_result_v0"
     assert replay_result["status"] == "PASS"
     assert replay_result["matched_attempts"] == 3
     assert all(record["artifact_matches"]["stdout.txt"] for record in replay_records)
@@ -221,8 +267,9 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
 
     replay_result = json.loads((tmp_path / "replay_run/replay_result.json").read_text())
     replay_manifest = json.loads(
-        (tmp_path / "replay_run/replay_manifest.json").read_text()
+        (tmp_path / "replay_run/manifest.json").read_text()
     )
+    source_manifest = json.loads((tmp_path / "source_agent/manifest.json").read_text())
     replay_records = [
         json.loads(line)
         for line in (tmp_path / "replay_run/replay_results.jsonl")
@@ -232,7 +279,11 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
 
     assert replay_run.status == "PASS"
     assert replay_result["status"] == "PASS"
-    assert replay_manifest["source_artifact_version"] == "agent_task_run_artifacts_v0"
+    assert replay_manifest["source_artifact_type"] == "agent_attempt"
+    assert (
+        replay_manifest["source_artifact_schema_version"]
+        == "agent_attempt_artifact_v0"
+    )
     assert replay_manifest["artifacts"]["agent_task_run"] == "agent_task_run"
     assert len(replay_records) == 1
     assert replay_records[0]["comparison_type"] == "agent_task_run"
@@ -250,10 +301,16 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
         "decoding_config.json",
         "error.txt",
         "prompt_loop_result.json",
-        "run_manifest.json",
+        "manifest.json",
     }.issubset(set(replay_records[0]["artifact_matches"]))
     assert (tmp_path / "replay_run/agent_task_run/agent_task_run.json").is_file()
     validate_trace_file(tmp_path / "replay_run/trace.jsonl")
+    trace_events = load_trace_events(tmp_path / "replay_run/trace.jsonl")
+    assert trace_events[1].event_type == "source_manifest_loaded"
+    second_provenance = trace_events[1].provenance_config
+    assert isinstance(second_provenance, ReplayTraceProvenance)
+    assert second_provenance.source_artifact_id == source_manifest["run_id"]
+    assert second_provenance.source_eval_run_id is None
 
 
 def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> None:
@@ -266,15 +323,18 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
         source_agent_attempt_dir,
     )
     source_eval_dir.mkdir(parents=True, exist_ok=True)
-    (source_eval_dir / "run_manifest.json").write_text(
+    (source_eval_dir / "manifest.json").write_text(
         json.dumps(
             {
-                "artifact_version": "eval_run_v0",
+                "artifact_type": "eval_run",
+                "artifact_schema_version": "eval_run_artifact_v0",
                 "eval_run_id": "eval_agent_001",
                 "attempts": [
                     {
                         "task_id": "toy_python_fix_001",
                         "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
+                        "artifact_type": "agent_attempt",
+                        "artifact_schema_version": "agent_attempt_artifact_v0",
                     }
                 ],
             },
@@ -286,7 +346,7 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
     replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
 
     replay_manifest = json.loads(
-        (tmp_path / "replay_run/replay_manifest.json").read_text()
+        (tmp_path / "replay_run/manifest.json").read_text()
     )
     replay_records = [
         json.loads(line)
@@ -312,6 +372,73 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
         / "replay_run/attempts/toy_python_fix_001__attempt_001/agent_task_run.json"
     ).is_file()
     validate_trace_file(tmp_path / "replay_run/trace.jsonl")
+
+
+def test_run_replay_rejects_eval_child_attempt_with_bad_schema(
+    tmp_path: Path,
+) -> None:
+    source_eval_dir = _write_eval_with_child_attempt_manifest(
+        tmp_path,
+        child_artifact_type="scorer_attempt",
+        child_artifact_schema_version="scorer_attempt_artifact_v999",
+    )
+
+    replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
+
+    assert replay_run.status == "REPLAY_ERROR"
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "Unsupported eval run child artifact_schema_version" in trace_text
+
+
+def test_run_replay_rejects_eval_child_attempt_with_unsupported_type(
+    tmp_path: Path,
+) -> None:
+    source_eval_dir = _write_eval_with_child_attempt_manifest(
+        tmp_path,
+        child_artifact_type="eval_suite",
+        child_artifact_schema_version="eval_suite_artifact_v0",
+    )
+
+    replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
+
+    assert replay_run.status == "REPLAY_ERROR"
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "Eval run child artifact_type must be one of" in trace_text
+
+
+def test_run_replay_rejects_eval_attempt_record_with_bad_schema(
+    tmp_path: Path,
+) -> None:
+    source_eval_dir = _write_eval_with_child_attempt_manifest(
+        tmp_path,
+        child_artifact_type="scorer_attempt",
+        child_artifact_schema_version="scorer_attempt_artifact_v0",
+        parent_artifact_schema_version="scorer_attempt_artifact_v999",
+    )
+
+    replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
+
+    assert replay_run.status == "REPLAY_ERROR"
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "Unsupported eval run child artifact_schema_version" in trace_text
+
+
+def test_run_replay_rejects_eval_attempt_record_child_manifest_mismatch(
+    tmp_path: Path,
+) -> None:
+    source_eval_dir = _write_eval_with_child_attempt_manifest(
+        tmp_path,
+        child_artifact_type="agent_attempt",
+        child_artifact_schema_version="agent_attempt_artifact_v0",
+        parent_artifact_type="scorer_attempt",
+        parent_artifact_schema_version="scorer_attempt_artifact_v0",
+    )
+
+    replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
+
+    assert replay_run.status == "REPLAY_ERROR"
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "Eval run child artifact_type mismatch" in trace_text
 
 
 def test_run_replay_detects_agent_trajectory_artifact_mismatch(

@@ -146,10 +146,10 @@ uv run agentenv eval \
   --config configs/eval/dev_baseline.yaml \
   --all-policies \
   --out experiments/runs/dev_baseline \
-  --report-out experiments/reports/eval_matrices/dev_baseline.md
+  --report-out experiments/reports/eval_suites/dev_baseline.md
 ```
 
-`--all-policies` writes an eval matrix. Replay is policy-owned through each
+`--all-policies` writes an eval suite. Replay is policy-owned through each
 policy's `replay.repeats`; for `dev_baseline`, scorer and agent control
 policies each request one replay run.
 
@@ -157,10 +157,10 @@ Eval artifact directories must be new or empty. To intentionally rerun into an
 existing directory, pass `--overwrite`; this deletes and recreates `--out`
 before the eval starts.
 
-Main eval matrix outputs:
+Main eval suite outputs:
 
 ```text
-experiments/runs/dev_baseline/eval_matrix_manifest.json
+experiments/runs/dev_baseline/manifest.json
 experiments/runs/dev_baseline/policies/
 experiments/runs/dev_baseline/replays/
 ```
@@ -184,9 +184,9 @@ uv run agentenv eval compare-task-hashes \
   --out experiments/reports/hash_comparisons/task_hash_provenance_smoke.json
 ```
 
-The command accepts either `eval_run_v0` or `eval_matrix_v0` artifact
-directories, or direct manifest JSON paths. It exits `0` when task input
-provenance matches and non-zero when drift is detected.
+The command accepts `eval_run` and `eval_suite` artifact directories, or direct
+manifest JSON paths. It exits `0` when task input provenance matches and
+non-zero when drift is detected.
 
 ## Replay An Artifact Directory
 
@@ -206,8 +206,8 @@ uv run agentenv replay \
   --out experiments/replays/dev_baseline_agent_happy
 ```
 
-Replay accepts source artifact directories such as `eval_run_v0` policy runs
-and direct `agent_task_run_artifacts_v0` agent task run artifacts.
+Replay accepts source artifact directories such as `eval_run` policy runs and
+direct `agent_attempt` artifacts.
 Replay artifact directories follow the same rule: use a new/empty `--out`, or
 pass `--overwrite` to recreate it.
 
@@ -224,12 +224,12 @@ uv run agentenv report \
   --out experiments/reports/evals/scorer_control_policies_oracle.md
 ```
 
-Eval matrix report:
+Eval suite report:
 
 ```bash
 uv run agentenv report \
   experiments/runs/dev_baseline \
-  --out experiments/reports/eval_matrices/dev_baseline.md
+  --out experiments/reports/eval_suites/dev_baseline.md
 ```
 
 Replay report:
@@ -286,10 +286,10 @@ Main outputs:
 ```text
 experiments/runs/control_calibration/control_report.md
 experiments/runs/control_calibration/control_results.jsonl
-experiments/runs/control_calibration/control_run_manifest.json
+experiments/runs/control_calibration/manifest.json
 ```
 
-`control_run_manifest.json` includes `flake_detection` for scorer-control
+`manifest.json` includes `flake_detection` for scorer-control
 repeat artifact drift. `overall_match` is true only when expected control
 outcomes match and checked repeat artifacts are stable.
 

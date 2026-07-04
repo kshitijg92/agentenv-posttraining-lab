@@ -19,7 +19,7 @@ EvalTraceEventType = Literal[
 ]
 ReplayTraceEventType = Literal[
     "replay_started",
-    "source_run_manifest_loaded",
+    "source_manifest_loaded",
     "source_attempt_loaded",
     "fresh_attempt_started",
     "fresh_attempt_finished",
@@ -49,7 +49,7 @@ EVAL_TRACE_EVENT_TYPES = frozenset(
 REPLAY_TRACE_EVENT_TYPES = frozenset(
     {
         "replay_started",
-        "source_run_manifest_loaded",
+        "source_manifest_loaded",
         "source_attempt_loaded",
         "fresh_attempt_started",
         "fresh_attempt_finished",
@@ -170,7 +170,7 @@ def _validate_replay_event_provenance(
     event_type: TraceEventType,
     provenance: ReplayTraceProvenance,
 ) -> None:
-    if event_type == "source_run_manifest_loaded":
+    if event_type == "source_manifest_loaded":
         _require_any_provenance_field(
             event_type,
             provenance,

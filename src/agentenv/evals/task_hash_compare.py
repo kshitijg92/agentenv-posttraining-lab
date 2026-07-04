@@ -3,10 +3,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from agentenv.tasks.hashing import EVAL_TASK_HASH_SCHEMA_VERSION
+from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType
+from agentenv.orchestrators.eval_run import (
+    EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
+    EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
+)
+from agentenv.tasks.hashing import EVAL_TASK_HASHES_SCHEMA_VERSION
 
 
-EvalHashArtifactVersion = Literal["eval_run_v0", "eval_matrix_v0"]
+EvalHashArtifactType = Literal["eval_run", "eval_suite"]
 TaskHashComparisonStatus = Literal["matched", "drifted"]
 RequiredTaskFileDriftStatus = Literal["added", "removed", "changed"]
 
@@ -55,7 +60,8 @@ class SelectedTaskHash:
 @dataclass(frozen=True)
 class EvalTaskHashSource:
     manifest_path: Path
-    artifact_version: EvalHashArtifactVersion
+    artifact_type: EvalHashArtifactType
+    artifact_schema_version: str
     task_pack_id: str
     selected_task_hash_set: str
     selected_tasks: tuple[SelectedTaskHash, ...]
@@ -66,7 +72,8 @@ class EvalTaskHashSource:
     def summary_dict(self) -> dict[str, object]:
         return {
             "manifest_path": str(self.manifest_path),
-            "artifact_version": self.artifact_version,
+            "artifact_type": self.artifact_type,
+            "artifact_schema_version": self.artifact_schema_version,
             "task_pack_id": self.task_pack_id,
             "selected_task_hash_set": self.selected_task_hash_set,
             "selected_task_count": len(self.selected_tasks),
@@ -199,13 +206,15 @@ def render_eval_task_hash_comparison_summary(
         f"task input provenance {comparison.status}",
         (
             "reference="
-            f"{comparison.reference.artifact_version} "
+            f"{comparison.reference.artifact_type}/"
+            f"{comparison.reference.artifact_schema_version} "
             f"task_pack={comparison.reference.task_pack_id} "
             f"selected_tasks={len(comparison.reference.selected_tasks)}"
         ),
         (
             "candidate="
-            f"{comparison.candidate.artifact_version} "
+            f"{comparison.candidate.artifact_type}/"
+            f"{comparison.candidate.artifact_schema_version} "
             f"task_pack={comparison.candidate.task_pack_id} "
             f"selected_tasks={len(comparison.candidate.selected_tasks)}"
         ),
@@ -238,17 +247,21 @@ def render_eval_task_hash_comparison_summary(
 def load_eval_task_hash_source(path: Path) -> EvalTaskHashSource:
     manifest_path = _resolve_eval_manifest_path(path)
     manifest = _load_json_object(manifest_path)
-    artifact_version = _artifact_version(manifest, manifest_path)
+    artifact_type, artifact_schema_version = _artifact_identity(
+        manifest,
+        manifest_path,
+    )
     task_hashes = _required_object(manifest, "task_hashes", manifest_path)
     schema_version = _required_str(task_hashes, "schema_version", manifest_path)
-    if schema_version != EVAL_TASK_HASH_SCHEMA_VERSION:
+    if schema_version != EVAL_TASK_HASHES_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported task_hashes schema_version {schema_version!r} "
             f"at {manifest_path}"
         )
     return EvalTaskHashSource(
         manifest_path=manifest_path,
-        artifact_version=artifact_version,
+        artifact_type=artifact_type,
+        artifact_schema_version=artifact_schema_version,
         task_pack_id=_required_str(task_hashes, "task_pack_id", manifest_path),
         selected_task_hash_set=_required_str(
             task_hashes,
@@ -341,31 +354,44 @@ def _resolve_eval_manifest_path(path: Path) -> Path:
     if not path.is_dir():
         raise ValueError(f"Expected eval artifact directory or manifest file: {path}")
 
-    matrix_manifest = path / "eval_matrix_manifest.json"
-    if matrix_manifest.is_file():
-        return matrix_manifest
+    manifest = path / MANIFEST_FILENAME
+    if manifest.is_file():
+        return manifest
 
-    run_manifest = path / "run_manifest.json"
-    if run_manifest.is_file():
-        return run_manifest
-
-    raise ValueError(
-        f"No eval_matrix_manifest.json or run_manifest.json found in {path}"
-    )
+    raise ValueError(f"No {MANIFEST_FILENAME} found in {path}")
 
 
-def _artifact_version(
+def _artifact_identity(
     manifest: dict[str, Any],
     manifest_path: Path,
-) -> EvalHashArtifactVersion:
-    artifact_version = _required_str(manifest, "artifact_version", manifest_path)
-    if artifact_version == "eval_run_v0":
-        return "eval_run_v0"
-    if artifact_version == "eval_matrix_v0":
-        return "eval_matrix_v0"
+) -> tuple[EvalHashArtifactType, str]:
+    artifact_type = _required_str(manifest, "artifact_type", manifest_path)
+    artifact_schema_version = _required_str(
+        manifest,
+        "artifact_schema_version",
+        manifest_path,
+    )
+    if artifact_type == ArtifactType.EVAL_RUN.value:
+        expected = EVAL_RUN_ARTIFACT_SCHEMA_VERSION
+        if artifact_schema_version != expected:
+            raise ValueError(
+                f"Unsupported eval_run artifact_schema_version "
+                f"{artifact_schema_version!r} at {manifest_path}; "
+                f"expected {expected!r}"
+            )
+        return "eval_run", artifact_schema_version
+    if artifact_type == ArtifactType.EVAL_SUITE.value:
+        expected = EVAL_SUITE_ARTIFACT_SCHEMA_VERSION
+        if artifact_schema_version != expected:
+            raise ValueError(
+                f"Unsupported eval_suite artifact_schema_version "
+                f"{artifact_schema_version!r} at {manifest_path}; "
+                f"expected {expected!r}"
+            )
+        return "eval_suite", artifact_schema_version
     raise ValueError(
-        f"Expected eval_run_v0 or eval_matrix_v0 artifact_version at "
-        f"{manifest_path}; got {artifact_version!r}"
+        f"Expected eval_run or eval_suite artifact_type at {manifest_path}; "
+        f"got {artifact_type!r}"
     )
 
 

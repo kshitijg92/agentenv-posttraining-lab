@@ -193,10 +193,11 @@ Important boundaries:
 
 ## Artifact Contract
 
-Agent task artifacts use `agent_task_run_artifacts_v0` and include:
+Agent task artifacts are root manifests with `artifact_type: agent_attempt` and
+`artifact_schema_version: agent_attempt_artifact_v0`. They include:
 
 ```text
-run_manifest.json
+manifest.json
 agent_task_run.json
 decoding_config.json
 model_config.json           # only for real agent_model policies
@@ -208,7 +209,7 @@ error.txt
 attempt/                    # only when nested scoring runs
 ```
 
-The matrix report reads model and budget metadata from these artifacts:
+The eval suite report reads model and budget metadata from these artifacts:
 
 - model ids from `prompt_loop_result.json`
 - token fields from `prompt_loop_result.json`
@@ -280,7 +281,7 @@ endpoint with Qwen:
 ```text
 config: configs/eval/agent_model_dev_ollama_qwen3_14b.yaml
 model: hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M
-report: experiments/reports/eval_matrices/agent_model_dev_ollama_qwen3_14b.md
+report: experiments/reports/eval_suites/agent_model_dev_ollama_qwen3_14b.md
 ```
 
 The run is useful as an integration baseline, not a model-quality claim. The

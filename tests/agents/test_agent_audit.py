@@ -764,7 +764,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
     assert markdown_path.is_file()
     for case_id in EXPECTED_COMPARISONS:
         artifact_dir = out_dir / f"agent_task_runs/{case_id}"
-        assert (artifact_dir / "run_manifest.json").is_file()
+        assert (artifact_dir / "manifest.json").is_file()
         assert (artifact_dir / "agent_task_run.json").is_file()
         assert (artifact_dir / "agent_task_view.json").is_file()
         assert (artifact_dir / "prompt_loop_result.json").is_file()
