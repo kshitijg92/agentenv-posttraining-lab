@@ -1,6 +1,8 @@
+from collections.abc import Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.config import JsonDict
 
 from agentenv.tools.schema import ToolName
 
@@ -9,6 +11,11 @@ TaskDomain = Literal["repo_patch_python"]
 TaskSplit = Literal["practice", "dev", "heldout_private", "public_calibration"]
 HiddenValidatorType = Literal["pytest"]
 NetworkMode = Literal["off"]
+AGENT_PRIVATE_FIELD_SCHEMA_EXTRA_KEY = "agent_private"
+
+
+def _agent_private_schema_extra() -> JsonDict:
+    return {AGENT_PRIVATE_FIELD_SCHEMA_EXTRA_KEY: True}
 
 
 class PublicCheck(BaseModel):
@@ -79,17 +86,38 @@ class TaskManifest(BaseModel):
 
     id: str = Field(min_length=1)
     domain: TaskDomain
-    split: TaskSplit
+    split: TaskSplit = Field(json_schema_extra=_agent_private_schema_extra())
     instruction: str = Field(min_length=1)
     seed_workspace: str = Field(min_length=1)
     allowed_tools: list[ToolName] = Field(min_length=1)
     public_checks: list[PublicCheck] = Field(min_length=1)
-    hidden_validators: list[HiddenValidator] = Field(min_length=1)
-    scoring: ScoringSpec
+    hidden_validators: list[HiddenValidator] = Field(
+        min_length=1,
+        json_schema_extra=_agent_private_schema_extra(),
+    )
+    scoring: ScoringSpec = Field(json_schema_extra=_agent_private_schema_extra())
     limits: LimitSpec
-    controls: ControlSpec
-    replay: ReplaySpec
-    leakage_canary: str = Field(min_length=1)
+    controls: ControlSpec = Field(json_schema_extra=_agent_private_schema_extra())
+    replay: ReplaySpec = Field(json_schema_extra=_agent_private_schema_extra())
+    leakage_canary: str = Field(
+        min_length=1,
+        json_schema_extra=_agent_private_schema_extra(),
+    )
+
+
+def agent_private_task_manifest_field_names() -> tuple[str, ...]:
+    return tuple(
+        field_name
+        for field_name, field in TaskManifest.model_fields.items()
+        if _is_agent_private_field(field.json_schema_extra)
+    )
+
+
+def _is_agent_private_field(json_schema_extra: object) -> bool:
+    return (
+        isinstance(json_schema_extra, Mapping)
+        and json_schema_extra.get(AGENT_PRIVATE_FIELD_SCHEMA_EXTRA_KEY) is True
+    )
 
 
 class BaselinePolicySpec(BaseModel):

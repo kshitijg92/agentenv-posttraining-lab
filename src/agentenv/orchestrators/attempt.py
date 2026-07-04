@@ -15,7 +15,10 @@ from agentenv.runners.diff_runner import hash_diff, render_directory_diff
 from agentenv.runners.patch_runner import apply_patch_file
 from agentenv.runners.public_check_runner import run_public_checks
 from agentenv.scorers.pytest_hidden import run_hidden_pytest_validators
-from agentenv.tasks.schema import TaskManifest
+from agentenv.security.leakage import (
+    contains_hidden_validator_asset_reference,
+    patch_modifies_public_tests,
+)
 from agentenv.tasks.validate import load_task_manifest
 
 
@@ -122,7 +125,7 @@ def run_patch_attempt(
         )
         submission_text = submission_path.read_text()
 
-        if _references_hidden_validator_assets(submission_text, manifest):
+        if contains_hidden_validator_asset_reference(submission_text, manifest):
             return _finish_attempt(
                 context=context,
                 commands=commands,
@@ -134,7 +137,7 @@ def run_patch_attempt(
                 final_diff_hash=final_diff_hash,
             )
 
-        if _modifies_public_tests(submission_text):
+        if patch_modifies_public_tests(submission_text):
             return _finish_attempt(
                 context=context,
                 commands=commands,
@@ -307,7 +310,9 @@ def _exception_details(exc: Exception) -> AttemptErrorDetails:
     return AttemptErrorDetails(
         error_class=type(exc).__name__,
         message=str(exc),
-        traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        traceback="".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__)
+        ),
     )
 
 
@@ -321,31 +326,6 @@ def _timeout_status(
     if phase == "hidden_score":
         return "PASS", "FAIL", "HiddenValidationTimeout"
     return "NOT_RUN", "NOT_RUN", "SetupTimeout"
-
-
-def _modifies_public_tests(diff: str) -> bool:
-    for line in diff.splitlines():
-        if not line.startswith(("--- ", "+++ ")):
-            continue
-        path = line[4:]
-        if path == "/dev/null":
-            continue
-        if path.startswith(("a/", "b/")):
-            path = path[2:]
-        if Path(path).parts[:1] == ("tests",):
-            return True
-    return False
-
-
-def _references_hidden_validator_assets(
-    submission_text: str,
-    manifest: TaskManifest,
-) -> bool:
-    hidden_markers = ["hidden_tests", manifest.leakage_canary]
-    hidden_markers.extend(
-        hidden_validator.path for hidden_validator in manifest.hidden_validators
-    )
-    return any(marker in submission_text for marker in hidden_markers if marker)
 
 
 def _utc_now() -> str:
