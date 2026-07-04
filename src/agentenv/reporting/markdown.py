@@ -98,7 +98,7 @@ def render_eval_report(
             "## Attempts",
             "",
             (
-                "| task_id | attempt_index | artifact_type | "
+                "| eval_attempt_id | task_id | attempt_index | artifact_type | "
                 "artifact_schema_version | scorer_status | scorer_public_status | "
                 "scorer_hidden_status | agent_status | prompt_loop_status | "
                 "agent_scorer_status | agent_scorer_public_status | "
@@ -106,7 +106,7 @@ def render_eval_report(
                 "artifact_dir |"
             ),
             (
-                "| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+                "| --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- "
                 "| --- | --- | --- | --- |"
             ),
         ]
@@ -359,7 +359,7 @@ def render_replay_report(
         "",
         f"- Artifact directory: {_relative_or_absolute(artifact_dir)}",
         f"- Replay manifest: {MANIFEST_FILENAME}",
-        f"- Replay id: {_display(manifest.get('replay_id'))}",
+        f"- Replay run id: {_display(manifest.get('replay_run_id'))}",
         f"- Source run directory: {_path_display(manifest.get('source_run_dir'))}",
         f"- Source eval run id: {_display(manifest.get('source_eval_run_id'))}",
         f"- Source artifact type: {_display(manifest.get('source_artifact_type'))}",
@@ -397,6 +397,7 @@ def _attempt_row(artifact_dir: Path, attempt_record: dict[str, object]) -> str:
     scorer = _optional_object(attempt_record.get("scorer"))
     agent = _optional_object(attempt_record.get("agent"))
     return (
+        f"| {_display(attempt_record.get('eval_attempt_id'))} "
         f"| {_display(attempt_record.get('task_id'))} "
         f"| {_display(attempt_record.get('attempt_index'))} "
         f"| {_display(attempt_record.get('artifact_type'))} "
@@ -1267,6 +1268,7 @@ def _matrix_attempt_rows(
 ) -> list[str]:
     return [
         (
+            f"| {_display(attempt.get('eval_attempt_id'))} "
             f"| {_display(attempt.get('task_id'))} "
             f"| {policy} "
             f"| {_display(attempt.get('artifact_type'))} "
@@ -1304,15 +1306,15 @@ def _matrix_attempt_table(
 
     rows = [
         (
-            "| task_id | policy | artifact_type | artifact_schema_version | "
-            "scorer_status | scorer_public_status | scorer_hidden_status | "
-            "agent_status | prompt_loop_status | agent_scorer_status | "
-            "agent_scorer_public_status | agent_scorer_hidden_status | "
-            "error_class | duration_ms | candidate_patch_bytes | "
-            "final_diff_hash | artifact_dir |"
+            "| eval_attempt_id | task_id | policy | artifact_type | "
+            "artifact_schema_version | scorer_status | scorer_public_status | "
+            "scorer_hidden_status | agent_status | prompt_loop_status | "
+            "agent_scorer_status | agent_scorer_public_status | "
+            "agent_scorer_hidden_status | error_class | duration_ms | "
+            "candidate_patch_bytes | final_diff_hash | artifact_dir |"
         ),
         (
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
             "| --- | --- | ---: | ---: | --- | --- |"
         ),
     ]

@@ -820,8 +820,8 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         ]
         assert record["overall_match"] is True
         assert record["task_manifest"] == TASK_MANIFEST
-        assert record["agent_run_id"] == (
-            results_by_case[case_id].agent_task_run.result.run_id
+        assert record["agent_attempt_id"] == (
+            results_by_case[case_id].agent_task_run.result.agent_attempt_id
         )
         for field, expected_value in EXPECTED_RECORD_FIELDS[case_id].items():
             assert record[field] == expected_value

@@ -6,8 +6,10 @@ import pytest
 from agentenv.artifacts import ArtifactDirectoryError
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.eval_run import (
+    EvalAttemptRecord,
     run_eval_config,
     run_eval_config_all_policies,
+    _validate_unique_eval_attempt_ids,
 )
 from agentenv.tracing.schema import EvalTraceProvenance
 from agentenv.tracing.validate import load_trace_events, validate_trace_file
@@ -195,6 +197,14 @@ def test_agent_model_eval_records_missing_model_env_failure(
         "prompt_loop_status": {"model_error": 2},
     }
     first_attempt = run_manifest["attempts"][0]
+    eval_attempt_ids = [
+        attempt["eval_attempt_id"] for attempt in run_manifest["attempts"]
+    ]
+    assert all(
+        eval_attempt_id.startswith("eval_attempt_")
+        for eval_attempt_id in eval_attempt_ids
+    )
+    assert len(set(eval_attempt_ids)) == 2
     assert first_attempt["artifact_type"] == "agent_attempt"
     assert first_attempt["artifact_schema_version"] == "agent_attempt_artifact_v0"
     assert first_attempt["scorer"] is None
@@ -255,6 +265,22 @@ def test_agent_model_eval_records_missing_model_env_failure(
     assert "secret-token" not in (attempt_dir / "model_config.json").read_text()
     validate_trace_file(tmp_path / "eval/trace.jsonl")
     trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
+    attempt_trace_events = [
+        event
+        for event in trace_events
+        if event.event_type
+        in {"eval_attempt_started", "eval_attempt_finished"}
+    ]
+    assert len(attempt_trace_events) == 4
+    for attempt_index, eval_attempt_id in enumerate(eval_attempt_ids):
+        started_provenance = attempt_trace_events[attempt_index * 2].provenance_config
+        finished_provenance = attempt_trace_events[attempt_index * 2 + 1].provenance_config
+        assert isinstance(started_provenance, EvalTraceProvenance)
+        assert isinstance(finished_provenance, EvalTraceProvenance)
+        assert started_provenance.attempt_index == attempt_index
+        assert started_provenance.eval_attempt_id == eval_attempt_id
+        assert finished_provenance.attempt_index == attempt_index
+        assert finished_provenance.eval_attempt_id == eval_attempt_id
     assert trace_events[3].payload_refs == {
         "agent_task_run": "attempts/toy_python_fix_001__attempt_001/agent_task_run.json",
         "decoding_config": "attempts/toy_python_fix_001__attempt_001/decoding_config.json",
@@ -279,11 +305,13 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
 
     assert eval_run.config.name == "agent_control_policies"
     assert eval_run.policy == "agent-happy"
+    assert eval_run.eval_run_id.startswith("eval_run_")
     assert len(eval_run.attempts) == 1
     assert eval_run.attempts[0].scorer is None
     assert eval_run.attempts[0].agent is not None
     assert eval_run.attempts[0].agent.status == "scored"
     assert run_manifest["policy_type"] == "agent_control_script"
+    assert run_manifest["eval_run_id"].startswith("eval_run_")
     assert run_manifest["policy_family"] == "control"
     assert run_manifest["control_layer"] == "agent"
     assert run_manifest["control_name"] == "happy"
@@ -298,9 +326,15 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
     }
     attempt_record = run_manifest["attempts"][0]
     assert attempt_record["task_id"] == "toy_python_fix_001"
+    assert attempt_record["eval_attempt_id"].startswith("eval_attempt_")
+    assert "attempt_id" not in attempt_record
     assert attempt_record["artifact_type"] == "agent_attempt"
     assert attempt_record["artifact_schema_version"] == "agent_attempt_artifact_v0"
     assert attempt_record["scorer"] is None
+    assert attempt_record["agent"]["agent_attempt_id"].startswith(
+        "agent_attempt_"
+    )
+    assert "run_id" not in attempt_record["agent"]
     assert attempt_record["agent"]["status"] == "scored"
     assert attempt_record["agent"]["prompt_loop_status"] == "completed"
     assert attempt_record["agent"]["error_class"] is None
@@ -322,8 +356,28 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
     assert decoding_config["config"]["timeout_seconds"] == 30
     validate_trace_file(tmp_path / "eval/trace.jsonl")
     trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
+    attempt_started_provenance = trace_events[2].provenance_config
+    assert isinstance(attempt_started_provenance, EvalTraceProvenance)
+    assert (
+        attempt_started_provenance.eval_attempt_id
+        == attempt_record["eval_attempt_id"]
+    )
     assert trace_events[3].output_payload is not None
     assert trace_events[3].output_payload["agent"]["status"] == "scored"
+    attempt_finished_provenance = trace_events[3].provenance_config
+    assert isinstance(attempt_finished_provenance, EvalTraceProvenance)
+    assert (
+        attempt_finished_provenance.eval_attempt_id
+        == attempt_record["eval_attempt_id"]
+    )
+    assert (
+        attempt_finished_provenance.agent_attempt_id
+        == attempt_record["agent"]["agent_attempt_id"]
+    )
+    assert (
+        attempt_finished_provenance.scorer_attempt_id
+        == attempt_record["agent"]["scorer_attempt"]["scorer_attempt_id"]
+    )
     assert trace_events[3].payload_refs == {
         "agent_control_script": (
             "attempts/toy_python_fix_001__attempt_001/agent_control_script.json"
@@ -354,9 +408,15 @@ def test_run_eval_config_records_agent_control_malformed_failure(
         "prompt_loop_status": {"invalid_model_output": 1},
     }
     attempt_record = run_manifest["attempts"][0]
+    assert attempt_record["eval_attempt_id"].startswith("eval_attempt_")
+    assert "attempt_id" not in attempt_record
     assert attempt_record["artifact_type"] == "agent_attempt"
     assert attempt_record["artifact_schema_version"] == "agent_attempt_artifact_v0"
     assert attempt_record["scorer"] is None
+    assert attempt_record["agent"]["agent_attempt_id"].startswith(
+        "agent_attempt_"
+    )
+    assert "run_id" not in attempt_record["agent"]
     assert attempt_record["agent"]["status"] == "agent_loop_failed"
     assert attempt_record["agent"]["prompt_loop_status"] == "invalid_model_output"
     assert attempt_record["agent"]["error_class"] == "MalformedModelOutput"
@@ -379,11 +439,13 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
 
     assert eval_run.config.name == "scorer_control_policies"
     assert eval_run.policy == "oracle"
+    assert eval_run.eval_run_id.startswith("eval_run_")
     assert len(eval_run.attempts) == 1
     assert eval_run.attempts[0].scorer is not None
     assert eval_run.attempts[0].scorer.status == "PASS"
     assert run_manifest["artifact_type"] == "eval_run"
     assert run_manifest["artifact_schema_version"] == "eval_run_artifact_v0"
+    assert run_manifest["eval_run_id"].startswith("eval_run_")
     assert run_manifest["config_name"] == "scorer_control_policies"
     task_hashes = run_manifest["task_hashes"]
     assert task_hashes["schema_version"] == "eval_task_hashes_v0"
@@ -420,6 +482,8 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     }
     attempt_record = run_manifest["attempts"][0]
     assert attempt_record["task_id"] == "toy_python_fix_001"
+    assert attempt_record["eval_attempt_id"].startswith("eval_attempt_")
+    assert "attempt_id" not in attempt_record
     assert attempt_record["attempt_index"] == 0
     assert attempt_record["artifact_dir"] == "attempts/toy_python_fix_001__attempt_001"
     assert attempt_record["artifact_type"] == "scorer_attempt"
@@ -453,8 +517,12 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert attempt_finished_provenance.task_index == 0
     assert attempt_finished_provenance.attempt_index == 0
     assert (
-        attempt_finished_provenance.attempt_id
-        == attempt_record["scorer"]["attempt_id"]
+        attempt_finished_provenance.eval_attempt_id
+        == attempt_record["eval_attempt_id"]
+    )
+    assert (
+        attempt_finished_provenance.scorer_attempt_id
+        == attempt_record["scorer"]["scorer_attempt_id"]
     )
     assert trace_events[3].output_payload is not None
     assert trace_events[3].output_payload["scorer"]["status"] == "PASS"
@@ -474,6 +542,34 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
         tmp_path / "eval/attempts/toy_python_fix_001__attempt_001/attempt.json"
     ).is_file()
     assert (tmp_path / "eval/trace.jsonl").is_file()
+
+
+def test_validate_unique_eval_attempt_ids_rejects_duplicates(tmp_path: Path) -> None:
+    attempts = [
+        EvalAttemptRecord(
+            eval_attempt_id="eval_attempt_duplicate",
+            task_id="task_001",
+            attempt_index=0,
+            attempt_dir=tmp_path / "attempt_1",
+            artifact_type="scorer_attempt",
+            artifact_schema_version="scorer_attempt_artifact_v0",
+            scorer=None,
+            agent=None,
+        ),
+        EvalAttemptRecord(
+            eval_attempt_id="eval_attempt_duplicate",
+            task_id="task_002",
+            attempt_index=0,
+            attempt_dir=tmp_path / "attempt_2",
+            artifact_type="scorer_attempt",
+            artifact_schema_version="scorer_attempt_artifact_v0",
+            scorer=None,
+            agent=None,
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="Duplicate eval_attempt_id"):
+        _validate_unique_eval_attempt_ids(attempts)
 
 
 def test_run_eval_config_distinguishes_bad_noop(tmp_path: Path) -> None:
@@ -659,6 +755,7 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
         {
             "policy": "oracle",
             "replay_index": 0,
+            "replay_run_id": eval_matrix.replay_runs[0].replay_run.replay_run_id,
             "status": "PASS",
             "artifact_dir": "replays/oracle__replay_001",
             "manifest": "replays/oracle__replay_001/manifest.json",
@@ -671,6 +768,7 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
         {
             "policy": "bad-noop",
             "replay_index": 0,
+            "replay_run_id": eval_matrix.replay_runs[1].replay_run.replay_run_id,
             "status": "PASS",
             "artifact_dir": "replays/bad-noop__replay_001",
             "manifest": "replays/bad-noop__replay_001/manifest.json",
@@ -683,6 +781,7 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
         {
             "policy": "bad-public-only",
             "replay_index": 0,
+            "replay_run_id": eval_matrix.replay_runs[2].replay_run.replay_run_id,
             "status": "PASS",
             "artifact_dir": "replays/bad-public-only__replay_001",
             "manifest": (

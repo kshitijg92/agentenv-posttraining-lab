@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
-from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,6 +17,7 @@ from agentenv.artifacts import (
     prepare_artifact_output_dir,
 )
 from agentenv.envs.local_repo_env import prepare_agent_workspace
+from agentenv.ids import new_agent_attempt_id
 from agentenv.models.client import ModelClient
 from agentenv.models.config_schema import ModelConfig
 from agentenv.models.schema import DecodingConfig
@@ -43,7 +43,7 @@ AgentTaskRunStatus = Literal["scored", "agent_loop_failed", "orchestrator_error"
 class AgentTaskRunResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    run_id: str = Field(min_length=1)
+    agent_attempt_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     task_manifest_path: str = Field(min_length=1)
     status: AgentTaskRunStatus
@@ -98,10 +98,10 @@ def run_agent_task_attempt(
     workspace_parent: Path | None = None,
 ) -> AgentTaskRun:
     task_manifest_path = task_manifest_path.resolve()
-    run_id = f"agent_task_run_{uuid4().hex}"
+    agent_attempt_id = new_agent_attempt_id()
     started_at = _utc_now()
     started_timer = perf_counter()
-    run_root = _run_root(workspace_parent, run_id)
+    run_root = _run_root(workspace_parent, agent_attempt_id)
 
     agent_task_view: AgentTaskView | None = None
     prompt_loop_result: PromptLoopResult | None = None
@@ -135,7 +135,7 @@ def run_agent_task_attempt(
         if prompt_loop_result.status != "completed":
             return AgentTaskRun(
                 result=_result(
-                    run_id=run_id,
+                    agent_attempt_id=agent_attempt_id,
                     task_id=manifest.id,
                     task_manifest_path=task_manifest_path,
                     status="agent_loop_failed",
@@ -168,7 +168,7 @@ def run_agent_task_attempt(
 
         return AgentTaskRun(
             result=_result(
-                run_id=run_id,
+                agent_attempt_id=agent_attempt_id,
                 task_id=manifest.id,
                 task_manifest_path=task_manifest_path,
                 status="scored",
@@ -194,7 +194,7 @@ def run_agent_task_attempt(
         )
         return AgentTaskRun(
             result=_result(
-                run_id=run_id,
+                agent_attempt_id=agent_attempt_id,
                 task_id=task_id,
                 task_manifest_path=task_manifest_path,
                 status="orchestrator_error",
@@ -399,9 +399,9 @@ def generated_decoding_config_provenance_artifact(
     }
 
 
-def _run_root(workspace_parent: Path | None, run_id: str) -> Path:
+def _run_root(workspace_parent: Path | None, agent_attempt_id: str) -> Path:
     if workspace_parent is None:
-        return Path(tempfile.mkdtemp(prefix=f"agentenv-{run_id}-")).resolve()
+        return Path(tempfile.mkdtemp(prefix=f"agentenv-{agent_attempt_id}-")).resolve()
 
     workspace_parent.mkdir(parents=True, exist_ok=True)
     return workspace_parent.resolve()
@@ -409,7 +409,7 @@ def _run_root(workspace_parent: Path | None, run_id: str) -> Path:
 
 def _result(
     *,
-    run_id: str,
+    agent_attempt_id: str,
     task_id: str,
     task_manifest_path: Path,
     status: AgentTaskRunStatus,
@@ -423,7 +423,7 @@ def _result(
     started_timer: float,
 ) -> AgentTaskRunResult:
     return AgentTaskRunResult(
-        run_id=run_id,
+        agent_attempt_id=agent_attempt_id,
         task_id=task_id,
         task_manifest_path=str(task_manifest_path),
         status=status,
@@ -493,7 +493,7 @@ def _manifest_json(
         artifact_type=ArtifactType.AGENT_ATTEMPT,
         artifact_schema_version=AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
         orchestrator_version=agent_task_run.result.orchestrator_version,
-        run_id=agent_task_run.result.run_id,
+        agent_attempt_id=agent_task_run.result.agent_attempt_id,
         task_id=agent_task_run.result.task_id,
         task_manifest_path=agent_task_run.result.task_manifest_path,
         status=agent_task_run.result.status,
@@ -510,7 +510,7 @@ class AgentTaskRunManifest(BaseModel):
     artifact_type: str = Field(min_length=1)
     artifact_schema_version: str = Field(min_length=1)
     orchestrator_version: str = Field(min_length=1)
-    run_id: str = Field(min_length=1)
+    agent_attempt_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     task_manifest_path: str = Field(min_length=1)
     status: AgentTaskRunStatus

@@ -1,5 +1,12 @@
 # Artifact Manifest Refactor Plan
 
+> Superseded note: this plan predates
+> [id_vocabulary_refactor_plan.md](id_vocabulary_refactor_plan.md). Its
+> historical examples may use older generic id names such as `run_id`,
+> `attempt_id`, and `replay_id`; the current artifact contract uses typed ids
+> such as `scorer_attempt_id`, `agent_attempt_id`, `eval_attempt_id`, and
+> `replay_run_id`.
+
 ## Why This Refactor Exists
 
 The current artifact layout mixes several different meanings into similar names:

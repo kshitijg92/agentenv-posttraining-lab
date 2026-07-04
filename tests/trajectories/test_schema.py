@@ -16,11 +16,15 @@ def _base_record_payload() -> dict[str, Any]:
         "schema_version": "trajectory_record_v0",
         "identity": {
             "trajectory_id": "traj_001",
-            "run_id": "eval_run_001",
+            "eval_suite_id": "eval_suite_001",
+            "eval_run_id": "eval_run_001",
+            "eval_attempt_id": "eval_attempt_001",
             "task_id": "repair_jsonl_deduper",
             "policy_id": "agent-happy",
             "attempt_index": 0,
-            "attempt_id": "attempt_001",
+            "agent_attempt_id": "agent_attempt_001",
+            "scorer_attempt_id": "scorer_attempt_001",
+            "replay_run_id": None,
         },
         "source_provenance": {
             "task_id": "repair_jsonl_deduper",
@@ -116,15 +120,67 @@ def test_trajectory_record_accepts_successful_agent_attempt() -> None:
     record = TrajectoryRecord.model_validate(_base_record_payload())
 
     assert record.identity.trajectory_id == "traj_001"
+    assert record.identity.eval_run_id == "eval_run_001"
+    assert record.identity.eval_attempt_id == "eval_attempt_001"
+    assert record.identity.agent_attempt_id == "agent_attempt_001"
+    assert record.identity.scorer_attempt_id == "scorer_attempt_001"
     assert record.source_provenance.scoring_contract == "scoring_contract_v0"
     assert record.statuses.task_success is True
     assert record.reward_components.reward_version == "reward_components_v0"
     assert record.training_eligibility.positive_sft_allowed is True
 
 
+def test_trajectory_record_accepts_missing_eval_suite_id() -> None:
+    payload = _record_payload(identity={"eval_suite_id": None})
+
+    record = TrajectoryRecord.model_validate(payload)
+
+    assert record.identity.eval_suite_id is None
+
+
+def test_trajectory_record_accepts_scorer_only_attempt() -> None:
+    payload = _record_payload(
+        identity={"agent_attempt_id": None},
+        statuses={
+            "agent_task_run_status": None,
+            "prompt_loop_status": None,
+        },
+        artifacts={
+            "agent_task_run_json": None,
+            "prompt_loop_result_json": None,
+            "candidate_patch": None,
+        },
+    )
+
+    record = TrajectoryRecord.model_validate(payload)
+
+    assert record.identity.agent_attempt_id is None
+    assert record.identity.scorer_attempt_id == "scorer_attempt_001"
+    assert record.statuses.task_success is True
+
+
+def test_trajectory_record_rejects_scorer_only_record_with_agent_artifacts() -> None:
+    payload = _record_payload(
+        identity={"agent_attempt_id": None},
+        statuses={
+            "agent_task_run_status": None,
+            "prompt_loop_status": None,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="agent artifact refs require identity.agent_attempt_id",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
 def test_trajectory_record_accepts_cannot_grade_record() -> None:
     payload = _record_payload(
-        identity={"attempt_id": None},
+        identity={
+            "scorer_attempt_id": None,
+            "replay_run_id": "replay_run_001",
+        },
         statuses={
             "agent_task_run_status": "agent_loop_failed",
             "prompt_loop_status": "max_turns_exceeded",
@@ -152,6 +208,8 @@ def test_trajectory_record_accepts_cannot_grade_record() -> None:
     assert record.statuses.grade_state == "cannot_grade"
     assert record.statuses.task_success is False
     assert record.statuses.attempt_status is None
+    assert record.identity.scorer_attempt_id is None
+    assert record.identity.replay_run_id == "replay_run_001"
 
 
 def test_task_success_requires_scored_pass_grade_state() -> None:
@@ -316,6 +374,78 @@ def test_identity_and_provenance_task_ids_must_match() -> None:
         match="identity.task_id must match source_provenance.task_id",
     ):
         TrajectoryRecord.model_validate(payload)
+
+
+@pytest.mark.parametrize("field", ["eval_run_id", "eval_attempt_id"])
+def test_identity_requires_eval_layer_ids(field: str) -> None:
+    payload = _base_record_payload()
+    del payload["identity"][field]
+
+    with pytest.raises(ValidationError, match="Field required"):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_identity_and_policy_ids_must_match() -> None:
+    payload = _record_payload(identity={"policy_id": "other-policy"})
+
+    with pytest.raises(
+        ValidationError,
+        match="identity.policy_id must match policy.policy_id",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_agent_status_requires_agent_attempt_id() -> None:
+    payload = _record_payload(identity={"agent_attempt_id": None})
+
+    with pytest.raises(
+        ValidationError,
+        match="agent_task_run_status requires identity.agent_attempt_id",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_attempt_status_requires_scorer_attempt_id() -> None:
+    payload = _record_payload(identity={"scorer_attempt_id": None})
+
+    with pytest.raises(
+        ValidationError,
+        match="attempt_status requires identity.scorer_attempt_id",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_scored_record_requires_scorer_attempt_id_even_without_status() -> None:
+    payload = _record_payload(
+        identity={"scorer_attempt_id": None},
+        statuses={
+            "attempt_status": None,
+            "public_status": None,
+            "hidden_status": None,
+            "grade_state": "scored_fail",
+            "task_success": False,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": True,
+            "preference_data_allowed": False,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="scored trajectory records require identity.scorer_attempt_id",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_identity_rejects_legacy_generic_ids() -> None:
+    identity = _base_record_payload()["identity"]
+    identity["run_id"] = "eval_run_001"
+    identity["attempt_id"] = "attempt_001"
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        TrajectoryRecord.model_validate(_record_payload(identity=identity))
 
 
 def test_helper_payloads_do_not_share_mutable_state() -> None:

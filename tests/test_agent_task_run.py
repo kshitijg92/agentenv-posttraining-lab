@@ -167,11 +167,17 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
     assert run_manifest["status"] == "scored"
     assert run_manifest["prompt_loop_status"] == "completed"
     assert run_manifest["attempt_status"] == "PASS"
+    assert run_manifest["agent_attempt_id"].startswith("agent_attempt_")
+    assert "run_id" not in run_manifest
     assert run_manifest["artifacts"]["attempt"] == "attempt/"
     assert (
         agent_task_result["orchestrator_version"]
         == AGENT_TASK_RUN_ORCHESTRATOR_VERSION
     )
+    assert (
+        agent_task_result["agent_attempt_id"] == run_manifest["agent_attempt_id"]
+    )
+    assert "run_id" not in agent_task_result
     assert agent_task_result["attempt_result"]["status"] == "PASS"
     assert agent_task_result["attempt_result"]["public_status"] == "PASS"
     assert agent_task_result["attempt_result"]["hidden_status"] == "PASS"
@@ -238,8 +244,14 @@ def test_run_agent_task_attempt_does_not_score_failed_prompt_loop(
     assert artifact_paths.attempt_artifacts is None
     assert run_manifest["status"] == "agent_loop_failed"
     assert run_manifest["prompt_loop_status"] == "invalid_model_output"
+    assert run_manifest["agent_attempt_id"].startswith("agent_attempt_")
+    assert "run_id" not in run_manifest
     assert "candidate_patch" not in run_manifest["artifacts"]
     assert "attempt" not in run_manifest["artifacts"]
+    assert (
+        agent_task_result["agent_attempt_id"] == run_manifest["agent_attempt_id"]
+    )
+    assert "run_id" not in agent_task_result
     assert agent_task_result["attempt_result"] is None
     assert prompt_loop_result["status"] == "invalid_model_output"
 
@@ -251,7 +263,7 @@ def test_write_agent_task_run_artifacts_redacts_secret_canary(
     monkeypatch.setenv("AGENTENV_MODEL_API_KEY", CANARY)
     agent_task_run = AgentTaskRun(
         result=AgentTaskRunResult(
-            run_id="agent_task_run_001",
+            agent_attempt_id="agent_attempt_001",
             task_id="task_001",
             task_manifest_path=f"tasks/{CANARY}/task.yaml",
             status="agent_loop_failed",

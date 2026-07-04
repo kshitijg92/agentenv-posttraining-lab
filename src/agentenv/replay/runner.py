@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from uuid import uuid4
 
 from agentenv.artifacts import (
     MANIFEST_FILENAME,
@@ -12,6 +11,7 @@ from agentenv.artifacts import (
     prepare_artifact_output_dir,
 )
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
+from agentenv.ids import new_replay_run_id
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_run import (
@@ -69,8 +69,8 @@ AGENT_BASE_ARTIFACTS = (
 )
 
 VOLATILE_JSON_KEYS = {
-    "run_id",
-    "attempt_id",
+    "agent_attempt_id",
+    "scorer_attempt_id",
     "started_at",
     "ended_at",
     "timestamp_utc",
@@ -85,12 +85,15 @@ VOLATILE_JSON_KEYS = {
 class ReplayComparison:
     comparison_type: ReplayComparisonType
     task_id: str
-    source_id: str
     source_artifact_dir: Path
-    replay_id: str
     replay_artifact_dir: Path
     field_matches: dict[str, bool]
     artifact_matches: dict[str, bool]
+    source_eval_attempt_id: str | None = None
+    source_scorer_attempt_id: str | None = None
+    replayed_scorer_attempt_id: str | None = None
+    source_agent_attempt_id: str | None = None
+    replayed_agent_attempt_id: str | None = None
 
     @property
     def matched(self) -> bool:
@@ -99,7 +102,7 @@ class ReplayComparison:
 
 @dataclass(frozen=True)
 class ReplayRun:
-    replay_id: str
+    replay_run_id: str
     status: ReplayStatus
     source_run_dir: Path
     out_dir: Path
@@ -113,12 +116,12 @@ def run_replay(
     overwrite: bool = False,
 ) -> ReplayRun:
     source_run_dir = source_run_dir.resolve()
-    replay_id = f"replay_{uuid4().hex}"
+    replay_run_id = new_replay_run_id()
     created_at = _utc_now()
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
 
     trace_events: list[dict[str, object]] = []
-    base_provenance: dict[str, object] = {"replay_id": replay_id}
+    base_provenance: dict[str, object] = {"replay_run_id": replay_run_id}
     _append_trace(
         trace_events,
         base_provenance,
@@ -133,7 +136,7 @@ def run_replay(
         source_manifest_path = source_run_dir / MANIFEST_FILENAME
         source_manifest = _load_json_object(source_manifest_path)
         _require_supported_source_manifest(source_manifest, source_manifest_path)
-        base_provenance = _source_manifest_provenance(replay_id, source_manifest)
+        base_provenance = _source_manifest_provenance(replay_run_id, source_manifest)
         _append_trace(
             trace_events,
             base_provenance,
@@ -168,7 +171,7 @@ def run_replay(
         source_manifest = {}
 
     replay_run = ReplayRun(
-        replay_id=replay_id,
+        replay_run_id=replay_run_id,
         status=status,
         source_run_dir=source_run_dir,
         out_dir=out_dir,
@@ -249,6 +252,10 @@ def _replay_one_eval_attempt_artifact(
     trace_events: list[dict[str, object]],
 ) -> ReplayComparison:
     artifact_dir = _required_str(source_attempt_record, "artifact_dir")
+    source_eval_attempt_id = _required_str(
+        source_attempt_record,
+        "eval_attempt_id",
+    )
     parent_artifact_type = _validated_attempt_source_artifact_type(
         source_attempt_record,
         source_run_dir / MANIFEST_FILENAME,
@@ -275,6 +282,7 @@ def _replay_one_eval_attempt_artifact(
             source_artifact_manifest,
             trace_events,
             replay_agent_dir=replay_attempts_dir / Path(artifact_dir).name,
+            source_eval_attempt_id=source_eval_attempt_id,
         )
     return _replay_one_scorer_attempt(
         base_provenance,
@@ -282,6 +290,7 @@ def _replay_one_eval_attempt_artifact(
         replay_attempts_dir,
         source_attempt_record,
         trace_events,
+        source_eval_attempt_id=source_eval_attempt_id,
     )
 
 
@@ -318,6 +327,8 @@ def _replay_one_scorer_attempt(
     replay_attempts_dir: Path,
     source_attempt_record: dict[str, object],
     trace_events: list[dict[str, object]],
+    *,
+    source_eval_attempt_id: str,
 ) -> ReplayComparison:
     artifact_dir = _required_str(source_attempt_record, "artifact_dir")
     task_id = _required_str(source_attempt_record, "task_id")
@@ -328,7 +339,8 @@ def _replay_one_scorer_attempt(
     source_attempt_provenance = _event_provenance(
         base_provenance,
         task_id=task_id,
-        source_attempt_id=source_attempt.attempt_id,
+        source_eval_attempt_id=source_eval_attempt_id,
+        source_scorer_attempt_id=source_attempt.scorer_attempt_id,
     )
     _append_trace(
         trace_events,
@@ -364,8 +376,9 @@ def _replay_one_scorer_attempt(
     replay_attempt_provenance = _event_provenance(
         base_provenance,
         task_id=task_id,
-        source_attempt_id=source_attempt.attempt_id,
-        replay_attempt_id=replay_attempt.attempt_id,
+        source_eval_attempt_id=source_eval_attempt_id,
+        source_scorer_attempt_id=source_attempt.scorer_attempt_id,
+        replayed_scorer_attempt_id=replay_attempt.scorer_attempt_id,
     )
     _append_trace(
         trace_events,
@@ -397,12 +410,13 @@ def _replay_one_scorer_attempt(
     comparison = ReplayComparison(
         comparison_type="scorer_attempt",
         task_id=task_id,
-        source_id=source_attempt.attempt_id,
         source_artifact_dir=source_attempt_dir,
-        replay_id=replay_attempt.attempt_id,
         replay_artifact_dir=replay_attempt_dir,
         field_matches=field_matches,
         artifact_matches=artifact_matches,
+        source_eval_attempt_id=source_eval_attempt_id,
+        source_scorer_attempt_id=source_attempt.scorer_attempt_id,
+        replayed_scorer_attempt_id=replay_attempt.scorer_attempt_id,
     )
     _append_trace(
         trace_events,
@@ -429,6 +443,7 @@ def _replay_agent_task_run_artifact(
     trace_events: list[dict[str, object]],
     *,
     replay_agent_dir: Path | None = None,
+    source_eval_attempt_id: str | None = None,
 ) -> ReplayComparison:
     source_agent_result = AgentTaskRunResult.model_validate(
         _load_json_object(source_run_dir / "agent_task_run.json")
@@ -436,7 +451,8 @@ def _replay_agent_task_run_artifact(
     source_provenance = _event_provenance(
         base_provenance,
         task_id=source_agent_result.task_id,
-        source_artifact_id=source_agent_result.run_id,
+        source_eval_attempt_id=source_eval_attempt_id,
+        source_agent_attempt_id=source_agent_result.agent_attempt_id,
     )
     _append_trace(
         trace_events,
@@ -492,8 +508,9 @@ def _replay_agent_task_run_artifact(
     replay_provenance = _event_provenance(
         base_provenance,
         task_id=source_agent_result.task_id,
-        source_artifact_id=source_agent_result.run_id,
-        replay_artifact_id=replay_agent_result.run_id,
+        source_eval_attempt_id=source_eval_attempt_id,
+        source_agent_attempt_id=source_agent_result.agent_attempt_id,
+        replayed_agent_attempt_id=replay_agent_result.agent_attempt_id,
     )
     _append_trace(
         trace_events,
@@ -523,12 +540,13 @@ def _replay_agent_task_run_artifact(
     comparison = ReplayComparison(
         comparison_type="agent_task_run",
         task_id=source_agent_result.task_id,
-        source_id=source_agent_result.run_id,
         source_artifact_dir=source_run_dir,
-        replay_id=replay_agent_result.run_id,
         replay_artifact_dir=replay_agent_dir,
         field_matches=field_matches,
         artifact_matches=artifact_matches,
+        source_eval_attempt_id=source_eval_attempt_id,
+        source_agent_attempt_id=source_agent_result.agent_attempt_id,
+        replayed_agent_attempt_id=replay_agent_result.agent_attempt_id,
     )
     _append_trace(
         trace_events,
@@ -555,7 +573,7 @@ def _write_replay_artifacts(
 ) -> None:
     _append_trace(
         trace_events,
-        _source_manifest_provenance(replay_run.replay_id, source_manifest),
+        _source_manifest_provenance(replay_run.replay_run_id, source_manifest),
         "replay_finished",
         output_payload={
             "status": replay_run.status,
@@ -622,7 +640,7 @@ def _replay_manifest(
     return {
         "artifact_type": ArtifactType.REPLAY_RUN,
         "artifact_schema_version": REPLAY_RUN_ARTIFACT_SCHEMA_VERSION,
-        "replay_id": replay_run.replay_id,
+        "replay_run_id": replay_run.replay_run_id,
         "created_at": created_at,
         "source_run_dir": str(replay_run.source_run_dir),
         "source_eval_run_id": source_manifest.get("eval_run_id"),
@@ -641,7 +659,7 @@ def _replay_result(replay_run: ReplayRun) -> dict[str, object]:
     attempt_count = len(replay_run.comparisons)
     return {
         "schema_version": REPLAY_RESULT_SCHEMA_VERSION,
-        "replay_id": replay_run.replay_id,
+        "replay_run_id": replay_run.replay_run_id,
         "status": replay_run.status,
         "attempt_count": attempt_count,
         "matched_attempts": matched_attempts,
@@ -660,16 +678,26 @@ def _comparison_record(
     return {
         "comparison_type": comparison.comparison_type,
         "task_id": comparison.task_id,
-        "source_id": comparison.source_id,
+        **_comparison_id_fields(comparison),
         "source_artifact_ref": source_artifact_ref,
         "source_artifact_path": str(comparison.source_artifact_dir),
-        "replay_id": comparison.replay_id,
         "replay_artifact_ref": replay_artifact_ref,
         "replay_artifact_path": str(comparison.replay_artifact_dir),
         "matched": comparison.matched,
         "field_matches": comparison.field_matches,
         "artifact_matches": comparison.artifact_matches,
     }
+
+
+def _comparison_id_fields(comparison: ReplayComparison) -> dict[str, str]:
+    fields = {
+        "source_eval_attempt_id": comparison.source_eval_attempt_id,
+        "source_scorer_attempt_id": comparison.source_scorer_attempt_id,
+        "replayed_scorer_attempt_id": comparison.replayed_scorer_attempt_id,
+        "source_agent_attempt_id": comparison.source_agent_attempt_id,
+        "replayed_agent_attempt_id": comparison.replayed_agent_attempt_id,
+    }
+    return {key: value for key, value in fields.items() if value is not None}
 
 
 def _compare_artifacts(
@@ -908,16 +936,16 @@ def _require_supported_source_manifest(
 
 
 def _source_manifest_provenance(
-    replay_id: str,
+    replay_run_id: str,
     source_manifest: dict[str, object],
 ) -> dict[str, object]:
-    provenance: dict[str, object] = {"replay_id": replay_id}
+    provenance: dict[str, object] = {"replay_run_id": replay_run_id}
     eval_run_id = source_manifest.get("eval_run_id")
     if isinstance(eval_run_id, str):
         provenance["source_eval_run_id"] = eval_run_id
-    source_artifact_id = source_manifest.get("run_id")
-    if isinstance(source_artifact_id, str):
-        provenance["source_artifact_id"] = source_artifact_id
+    source_agent_attempt_id = source_manifest.get("agent_attempt_id")
+    if isinstance(source_agent_attempt_id, str):
+        provenance["source_agent_attempt_id"] = source_agent_attempt_id
     return provenance
 
 
@@ -960,7 +988,10 @@ def _event_provenance(
     base_provenance: dict[str, object],
     **extra: object,
 ) -> dict[str, object]:
-    return {**base_provenance, **extra}
+    return {
+        **base_provenance,
+        **{key: value for key, value in extra.items() if value is not None},
+    }
 
 
 def _utc_now() -> str:

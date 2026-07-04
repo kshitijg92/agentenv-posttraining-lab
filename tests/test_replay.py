@@ -84,9 +84,10 @@ def _write_eval_with_child_attempt_manifest(
             {
                 "artifact_type": "eval_run",
                 "artifact_schema_version": "eval_run_artifact_v0",
-                "eval_run_id": "eval_child_validation_001",
+                "eval_run_id": "eval_run_child_validation_001",
                 "attempts": [
                     {
+                        "eval_attempt_id": "eval_attempt_child_validation_001",
                         "task_id": "toy_python_fix_001",
                         "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
                         "artifact_type": parent_artifact_type,
@@ -110,6 +111,8 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
 
     replay_run = run_replay(tmp_path / "source_run", tmp_path / "replay_run")
 
+    source_manifest = json.loads((tmp_path / "source_run/manifest.json").read_text())
+    source_attempt_record = source_manifest["attempts"][0]
     replay_result = json.loads((tmp_path / "replay_run/replay_result.json").read_text())
     replay_manifest = json.loads(
         (tmp_path / "replay_run/manifest.json").read_text()
@@ -122,18 +125,37 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
     ]
 
     assert replay_run.status == "PASS"
+    assert replay_run.replay_run_id.startswith("replay_run_")
     assert replay_result["schema_version"] == "replay_result_v0"
+    assert replay_result["replay_run_id"] == replay_run.replay_run_id
+    assert "replay_id" not in replay_result
     assert replay_result["status"] == "PASS"
     assert replay_result["attempt_count"] == 1
     assert replay_result["matched_attempts"] == 1
     assert replay_manifest["artifact_type"] == "replay_run"
     assert replay_manifest["artifact_schema_version"] == "replay_run_artifact_v0"
+    assert replay_manifest["replay_run_id"] == replay_run.replay_run_id
+    assert "replay_id" not in replay_manifest
     assert replay_manifest["source_eval_run_id"] == source_run.eval_run_id
     assert replay_manifest["artifacts"]["attempts"] == "attempts"
     assert "agent_task_run" not in replay_manifest["artifacts"]
     assert len(replay_records) == 1
     assert replay_records[0]["matched"] is True
     assert replay_records[0]["comparison_type"] == "scorer_attempt"
+    assert (
+        replay_records[0]["source_eval_attempt_id"]
+        == source_attempt_record["eval_attempt_id"]
+    )
+    assert replay_records[0]["source_scorer_attempt_id"].startswith(
+        "scorer_attempt_"
+    )
+    assert replay_records[0]["replayed_scorer_attempt_id"].startswith(
+        "scorer_attempt_"
+    )
+    assert "source_id" not in replay_records[0]
+    assert "replay_id" not in replay_records[0]
+    assert "source_attempt_id" not in replay_records[0]
+    assert "replay_attempt_id" not in replay_records[0]
     assert (
         replay_records[0]["source_artifact_ref"]
         == "attempts/toy_python_fix_001__attempt_001"
@@ -169,10 +191,16 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
     assert trace_events[0].event_type == "replay_started"
     first_provenance = trace_events[0].provenance_config
     assert isinstance(first_provenance, ReplayTraceProvenance)
-    assert first_provenance.replay_id == replay_run.replay_id
+    assert first_provenance.replay_run_id == replay_run.replay_run_id
     second_provenance = trace_events[1].provenance_config
     assert isinstance(second_provenance, ReplayTraceProvenance)
     assert second_provenance.source_eval_run_id == source_run.eval_run_id
+    source_attempt_provenance = trace_events[2].provenance_config
+    assert isinstance(source_attempt_provenance, ReplayTraceProvenance)
+    assert (
+        source_attempt_provenance.source_eval_attempt_id
+        == source_attempt_record["eval_attempt_id"]
+    )
 
 
 def test_run_replay_detects_durable_attempt_artifact_mismatch(
@@ -236,7 +264,10 @@ def test_run_replay_normalizes_pytest_tmp_paths_for_dev_controls(
     ]
 
     assert replay_run.status == "PASS"
+    assert replay_run.replay_run_id.startswith("replay_run_")
     assert replay_result["schema_version"] == "replay_result_v0"
+    assert replay_result["replay_run_id"] == replay_run.replay_run_id
+    assert "replay_id" not in replay_result
     assert replay_result["status"] == "PASS"
     assert replay_result["matched_attempts"] == 3
     assert all(record["artifact_matches"]["stdout.txt"] for record in replay_records)
@@ -278,7 +309,12 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
     ]
 
     assert replay_run.status == "PASS"
+    assert replay_run.replay_run_id.startswith("replay_run_")
     assert replay_result["status"] == "PASS"
+    assert replay_result["replay_run_id"] == replay_run.replay_run_id
+    assert "replay_id" not in replay_result
+    assert replay_manifest["replay_run_id"] == replay_run.replay_run_id
+    assert "replay_id" not in replay_manifest
     assert replay_manifest["source_artifact_type"] == "agent_attempt"
     assert (
         replay_manifest["source_artifact_schema_version"]
@@ -287,6 +323,15 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
     assert replay_manifest["artifacts"]["agent_task_run"] == "agent_task_run"
     assert len(replay_records) == 1
     assert replay_records[0]["comparison_type"] == "agent_task_run"
+    assert replay_records[0]["source_agent_attempt_id"].startswith(
+        "agent_attempt_"
+    )
+    assert replay_records[0]["replayed_agent_attempt_id"].startswith(
+        "agent_attempt_"
+    )
+    assert "source_eval_attempt_id" not in replay_records[0]
+    assert "source_id" not in replay_records[0]
+    assert "replay_id" not in replay_records[0]
     assert replay_records[0]["matched"] is True
     assert replay_records[0]["field_matches"] == AGENT_FIELD_MATCHES
     assert all(replay_records[0]["artifact_matches"].values())
@@ -309,8 +354,21 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
     assert trace_events[1].event_type == "source_manifest_loaded"
     second_provenance = trace_events[1].provenance_config
     assert isinstance(second_provenance, ReplayTraceProvenance)
-    assert second_provenance.source_artifact_id == source_manifest["run_id"]
+    assert (
+        second_provenance.source_agent_attempt_id
+        == source_manifest["agent_attempt_id"]
+    )
+    assert "source_artifact_id" not in second_provenance.model_dump()
     assert second_provenance.source_eval_run_id is None
+    assert second_provenance.source_eval_attempt_id is None
+    raw_trace_events = [
+        json.loads(line)
+        for line in (tmp_path / "replay_run/trace.jsonl").read_text().splitlines()
+    ]
+    assert (
+        "source_eval_attempt_id"
+        not in raw_trace_events[1]["provenance_config"]
+    )
 
 
 def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> None:
@@ -328,9 +386,10 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
             {
                 "artifact_type": "eval_run",
                 "artifact_schema_version": "eval_run_artifact_v0",
-                "eval_run_id": "eval_agent_001",
+                "eval_run_id": "eval_run_agent_001",
                 "attempts": [
                     {
+                        "eval_attempt_id": "eval_attempt_agent_001",
                         "task_id": "toy_python_fix_001",
                         "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
                         "artifact_type": "agent_attempt",
@@ -356,9 +415,24 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
     ]
 
     assert replay_run.status == "PASS"
+    assert replay_run.replay_run_id.startswith("replay_run_")
+    assert replay_manifest["replay_run_id"] == replay_run.replay_run_id
+    assert "replay_id" not in replay_manifest
     assert replay_manifest["artifacts"]["attempts"] == "attempts"
     assert "agent_task_run" not in replay_manifest["artifacts"]
     assert replay_records[0]["comparison_type"] == "agent_task_run"
+    assert (
+        replay_records[0]["source_eval_attempt_id"]
+        == "eval_attempt_agent_001"
+    )
+    assert replay_records[0]["source_agent_attempt_id"].startswith(
+        "agent_attempt_"
+    )
+    assert replay_records[0]["replayed_agent_attempt_id"].startswith(
+        "agent_attempt_"
+    )
+    assert "source_id" not in replay_records[0]
+    assert "replay_id" not in replay_records[0]
     assert (
         replay_records[0]["source_artifact_ref"]
         == "attempts/toy_python_fix_001__attempt_001"
@@ -372,6 +446,13 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
         / "replay_run/attempts/toy_python_fix_001__attempt_001/agent_task_run.json"
     ).is_file()
     validate_trace_file(tmp_path / "replay_run/trace.jsonl")
+    trace_events = load_trace_events(tmp_path / "replay_run/trace.jsonl")
+    source_attempt_provenance = trace_events[2].provenance_config
+    assert isinstance(source_attempt_provenance, ReplayTraceProvenance)
+    assert (
+        source_attempt_provenance.source_eval_attempt_id
+        == "eval_attempt_agent_001"
+    )
 
 
 def test_run_replay_rejects_eval_child_attempt_with_bad_schema(

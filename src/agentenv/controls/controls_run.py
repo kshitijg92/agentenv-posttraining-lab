@@ -38,13 +38,13 @@ JsonObject = dict[str, Any]
 
 
 _VOLATILE_JSON_KEYS = {
-    "attempt_id",
+    "agent_attempt_id",
     "control_run_id",
     "created_at",
     "duration_ms",
     "ended_at",
     "latency_ms",
-    "run_id",
+    "scorer_attempt_id",
     "started_at",
     "stderr_bytes",
     "stdout_bytes",
@@ -685,7 +685,7 @@ def _scorer_expected_json(expectation: ScorerControlExpectation) -> JsonObject:
 
 def _scorer_actual_json(result: AttemptResult) -> JsonObject:
     return {
-        "attempt_id": result.attempt_id,
+        "scorer_attempt_id": result.scorer_attempt_id,
         "attempt_status": result.status,
         "public_status": result.public_status,
         "hidden_status": result.hidden_status,
@@ -724,7 +724,7 @@ def _agent_expected_json(expected_result: ExpectedAgentControlResult) -> JsonObj
 def _agent_actual_json(agent_task_run: AgentTaskRun) -> JsonObject:
     attempt_result = agent_task_run.result.attempt_result
     return {
-        "agent_run_id": agent_task_run.result.run_id,
+        "agent_attempt_id": agent_task_run.result.agent_attempt_id,
         "agent_run_status": agent_task_run.result.status,
         "prompt_loop_status": agent_task_run.result.prompt_loop_status,
         "tool_results": _actual_tool_results(agent_task_run),

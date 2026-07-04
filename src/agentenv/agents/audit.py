@@ -360,7 +360,7 @@ def _json_record(
         "agent_task_artifact_dir": str(
             result.agent_task_artifact_dir.relative_to(out_dir)
         ),
-        "agent_run_id": run_result.run_id,
+        "agent_attempt_id": run_result.agent_attempt_id,
         "agent_run_status": run_result.status,
         "prompt_loop_status": run_result.prompt_loop_status,
         "error_class": run_result.error_class,

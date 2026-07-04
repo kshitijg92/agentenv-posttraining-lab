@@ -189,10 +189,15 @@ review
 
 ```text
 trajectory_id
-run_id
+eval_suite_id
+eval_run_id
+eval_attempt_id
 task_id
 policy_id
-attempt_id
+attempt_index
+agent_attempt_id
+scorer_attempt_id
+replay_run_id
 ```
 
 `source_provenance` should include denormalized safety-gate fields plus artifact

@@ -44,6 +44,8 @@ def _write_agent_control_source_artifact(out_dir: Path) -> None:
 
 def test_write_eval_markdown_report(tmp_path: Path) -> None:
     run_eval_config(CONTROL_EVAL_CONFIG, "oracle", tmp_path / "eval_run")
+    manifest = json.loads((tmp_path / "eval_run/manifest.json").read_text())
+    eval_attempt_id = manifest["attempts"][0]["eval_attempt_id"]
 
     report_path = write_markdown_report(
         tmp_path / "eval_run",
@@ -66,7 +68,8 @@ def test_write_eval_markdown_report(tmp_path: Path) -> None:
     assert "| scorer_public_status | PASS | 1 |" in report
     assert "| scorer_hidden_status | PASS | 1 |" in report
     assert (
-        "| toy_python_fix_001 | 0 | scorer_attempt | scorer_attempt_artifact_v0 | "
+        f"| {eval_attempt_id} | toy_python_fix_001 | 0 | scorer_attempt | "
+        "scorer_attempt_artifact_v0 | "
         "PASS | PASS | PASS |  |  |  |  |  |  | xxh64:e3fc746d6fe0786c | "
         "attempts/toy_python_fix_001__attempt_001 |"
     ) in report
@@ -74,6 +77,8 @@ def test_write_eval_markdown_report(tmp_path: Path) -> None:
 
 def test_write_agent_eval_markdown_report(tmp_path: Path) -> None:
     run_eval_config(AGENT_CONTROL_EVAL_CONFIG, "agent-happy", tmp_path / "eval_run")
+    manifest = json.loads((tmp_path / "eval_run/manifest.json").read_text())
+    eval_attempt_id = manifest["attempts"][0]["eval_attempt_id"]
 
     report_path = write_markdown_report(
         tmp_path / "eval_run",
@@ -86,7 +91,8 @@ def test_write_agent_eval_markdown_report(tmp_path: Path) -> None:
     assert "- Control layer: agent" in report
     assert "| agent_scorer_status | PASS | 1 |" in report
     assert (
-        "| toy_python_fix_001 | 0 | agent_attempt | agent_attempt_artifact_v0 | "
+        f"| {eval_attempt_id} | toy_python_fix_001 | 0 | agent_attempt | "
+        "agent_attempt_artifact_v0 | "
         " |  |  | scored | completed | PASS | PASS | PASS |  | "
         "xxh64:e3fc746d6fe0786c | "
         "attempts/toy_python_fix_001__attempt_001 |"
@@ -112,7 +118,7 @@ def test_write_agent_model_eval_report_includes_model_and_decoding_config(
                 "config_path": "configs/eval/agent_model_smoke.yaml",
                 "created_at": "2026-06-30T00:00:00Z",
                 "decoding_config": "configs/decoding/greedy_1024.yaml",
-                "eval_run_id": "eval_test",
+                "eval_run_id": "eval_run_test",
                 "layer_counts": {},
                 "model_config": "configs/models/openai_compatible_chat_placeholder.yaml",
                 "policy": "local-model-smoke",
@@ -143,6 +149,8 @@ def test_write_agent_eval_malformed_markdown_report(tmp_path: Path) -> None:
         "agent-malformed",
         tmp_path / "eval_run",
     )
+    manifest = json.loads((tmp_path / "eval_run/manifest.json").read_text())
+    eval_attempt_id = manifest["attempts"][0]["eval_attempt_id"]
 
     report_path = write_markdown_report(
         tmp_path / "eval_run",
@@ -153,7 +161,8 @@ def test_write_agent_eval_malformed_markdown_report(tmp_path: Path) -> None:
     assert "- Policy: agent-malformed" in report
     assert "| agent_status | agent_loop_failed | 1 |" in report
     assert (
-        "| toy_python_fix_001 | 0 | agent_attempt | agent_attempt_artifact_v0 | "
+        f"| {eval_attempt_id} | toy_python_fix_001 | 0 | agent_attempt | "
+        "agent_attempt_artifact_v0 | "
         " |  |  | agent_loop_failed | invalid_model_output |  |  |  | "
         "MalformedModelOutput |  | attempts/toy_python_fix_001__attempt_001 |"
     ) in report
@@ -230,6 +239,15 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
         CONTROL_EVAL_CONFIG,
         tmp_path / "eval_matrix",
     )
+    bad_public_only_manifest = json.loads(
+        (
+            tmp_path
+            / "eval_matrix/policies/bad-public-only/manifest.json"
+        ).read_text()
+    )
+    bad_public_only_eval_attempt_id = (
+        bad_public_only_manifest["attempts"][0]["eval_attempt_id"]
+    )
 
     report_path = write_markdown_report(
         tmp_path / "eval_matrix",
@@ -298,7 +316,8 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
         "0/1 (0%) | 1 | 0 | 0 |"
     ) in report
     assert (
-        "| toy_python_fix_001 | bad-public-only | scorer_attempt | "
+        f"| {bad_public_only_eval_attempt_id} | toy_python_fix_001 | "
+        "bad-public-only | scorer_attempt | "
         "scorer_attempt_artifact_v0 | HIDDEN_TEST_FAIL | PASS | FAIL |"
     ) in report
 
@@ -351,6 +370,19 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
     run_eval_config_all_policies(
         AGENT_CONTROL_EVAL_CONFIG,
         tmp_path / "eval_matrix",
+    )
+    happy_manifest = json.loads(
+        (tmp_path / "eval_matrix/policies/agent-happy/manifest.json").read_text()
+    )
+    malformed_manifest = json.loads(
+        (
+            tmp_path
+            / "eval_matrix/policies/agent-malformed/manifest.json"
+        ).read_text()
+    )
+    happy_eval_attempt_id = happy_manifest["attempts"][0]["eval_attempt_id"]
+    malformed_eval_attempt_id = (
+        malformed_manifest["attempts"][0]["eval_attempt_id"]
     )
 
     report_path = write_markdown_report(
@@ -407,12 +439,14 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
         '<span style="color: green">ON_TRACK</span> |'
     ) in report
     assert (
-        "| toy_python_fix_001 | agent-happy | agent_attempt | "
+        f"| {happy_eval_attempt_id} | toy_python_fix_001 | agent-happy | "
+        "agent_attempt | "
         "agent_attempt_artifact_v0 |  |  |  | scored | completed | PASS | PASS | "
         "PASS |"
     ) in report
     assert (
-        "| toy_python_fix_001 | agent-malformed | agent_attempt | "
+        f"| {malformed_eval_attempt_id} | toy_python_fix_001 | agent-malformed | "
+        "agent_attempt | "
         "agent_attempt_artifact_v0 |  |  |  | agent_loop_failed | "
         "invalid_model_output |  |  |  | "
         "MalformedModelOutput |"
@@ -458,6 +492,17 @@ def test_write_mixed_agent_control_and_model_eval_matrix_report(
         )
     )
     run_eval_config_all_policies(config_path, tmp_path / "eval_matrix")
+    happy_manifest = json.loads(
+        (tmp_path / "eval_matrix/policies/agent-happy/manifest.json").read_text()
+    )
+    model_manifest = json.loads(
+        (
+            tmp_path
+            / "eval_matrix/policies/real-agent-smoke/manifest.json"
+        ).read_text()
+    )
+    happy_eval_attempt_id = happy_manifest["attempts"][0]["eval_attempt_id"]
+    model_eval_attempt_id = model_manifest["attempts"][0]["eval_attempt_id"]
 
     report_path = write_markdown_report(
         tmp_path / "eval_matrix",
@@ -500,8 +545,14 @@ def test_write_mixed_agent_control_and_model_eval_matrix_report(
         "60 | 10 | not_recorded | not_recorded | not_recorded | not_recorded | "
         "0 | 0 |"
     ) in report
-    assert "| toy_python_fix_001 | agent-happy |" in control_per_task
+    assert (
+        f"| {happy_eval_attempt_id} | toy_python_fix_001 | agent-happy |"
+        in control_per_task
+    )
     assert "real-agent-smoke" not in control_per_task
-    assert "| toy_python_fix_001 | real-agent-smoke |" in agent_model_per_task
+    assert (
+        f"| {model_eval_attempt_id} | toy_python_fix_001 | real-agent-smoke |"
+        in agent_model_per_task
+    )
     assert "agent-happy" not in agent_model_per_task
     assert "- Agent control expectation pass rate: 1/1 (100%)" in report

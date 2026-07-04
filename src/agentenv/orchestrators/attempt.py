@@ -5,11 +5,11 @@ from pathlib import Path
 from subprocess import TimeoutExpired
 from time import perf_counter
 from typing import Literal
-from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from agentenv.envs.local_repo_env import prepare_agent_workspace
+from agentenv.ids import new_scorer_attempt_id
 from agentenv.runners.command_runner import CommandResult
 from agentenv.runners.diff_runner import hash_diff, render_directory_diff
 from agentenv.runners.patch_runner import apply_patch_file
@@ -40,10 +40,9 @@ AttemptExecutionPhase = Literal["setup"] | CommandPhase
 class AttemptResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    run_id: str = Field(min_length=1)
+    scorer_attempt_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     task_manifest_path: str = Field(min_length=1)
-    attempt_id: str = Field(min_length=1)
     submission_path: str = Field(min_length=1)
     status: AttemptStatus
     public_status: CheckStatus
@@ -84,10 +83,9 @@ class AttemptErrorDetails:
 
 @dataclass(frozen=True)
 class AttemptContext:
-    run_id: str
+    scorer_attempt_id: str
     task_id: str
     task_manifest_path: Path
-    attempt_id: str
     submission_path: Path
     started_at: str
     started_timer: float
@@ -104,10 +102,9 @@ def run_patch_attempt(
     started_timer = perf_counter()
     manifest = load_task_manifest(task_manifest_path)
     context = AttemptContext(
-        run_id=f"run_{uuid4().hex}",
+        scorer_attempt_id=new_scorer_attempt_id(),
         task_id=manifest.id,
         task_manifest_path=task_manifest_path,
-        attempt_id=f"attempt_{uuid4().hex}",
         submission_path=submission_path,
         started_at=started_at,
         started_timer=started_timer,
@@ -284,10 +281,9 @@ def _finish_attempt(
     ended_at = _utc_now()
     duration_ms = int((perf_counter() - context.started_timer) * 1000)
     result = AttemptResult(
-        run_id=context.run_id,
+        scorer_attempt_id=context.scorer_attempt_id,
         task_id=context.task_id,
         task_manifest_path=str(context.task_manifest_path),
-        attempt_id=context.attempt_id,
         submission_path=str(context.submission_path),
         status=status,
         public_status=public_status,

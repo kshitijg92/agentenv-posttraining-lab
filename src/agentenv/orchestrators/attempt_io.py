@@ -202,8 +202,7 @@ def _append_trace(
 
 def _attempt_provenance(result: AttemptResult) -> dict[str, object]:
     return {
-        "run_id": result.run_id,
-        "attempt_id": result.attempt_id,
+        "scorer_attempt_id": result.scorer_attempt_id,
         "task_id": result.task_id,
     }
 
@@ -213,8 +212,7 @@ def _run_manifest(attempt_run: AttemptRun) -> dict[str, object]:
         "artifact_type": ArtifactType.SCORER_ATTEMPT,
         "artifact_schema_version": SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
         "orchestrator_version": attempt_run.result.orchestrator_version,
-        "run_id": attempt_run.result.run_id,
-        "attempt_id": attempt_run.result.attempt_id,
+        "scorer_attempt_id": attempt_run.result.scorer_attempt_id,
         "task_id": attempt_run.result.task_id,
         "task_manifest_path": attempt_run.result.task_manifest_path,
         "submission_path": attempt_run.result.submission_path,

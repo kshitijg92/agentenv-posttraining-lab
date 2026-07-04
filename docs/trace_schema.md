@@ -47,7 +47,7 @@ Required fields:
   "timestamp_utc": "2026-06-20T00:00:00Z",
   "event_type": "replay_started",
   "provenance_config": {
-    "replay_id": "replay_..."
+    "replay_run_id": "replay_run_..."
   }
 }
 ```
@@ -133,67 +133,78 @@ Attempt event provenance supports:
 
 ```json
 {
-  "run_id": "run_...",
-  "attempt_id": "attempt_...",
+  "scorer_attempt_id": "scorer_attempt_...",
   "task_id": "toy_python_fix_001",
   "phase": "public_check",
   "name": "pytest_public"
 }
 ```
 
-`run_id`, `attempt_id`, and `task_id` are required for attempt events.
+`scorer_attempt_id` and `task_id` are required for attempt events.
 `command_finished` also requires `phase` and `name`.
 
 Eval event provenance supports:
 
 ```json
 {
-  "eval_run_id": "eval_...",
+  "eval_run_id": "eval_run_...",
   "config_hash": "xxh64:...",
   "config_name": "scorer_control_policies",
   "policy": "oracle",
   "task_id": "toy_python_fix_001",
   "task_index": 0,
   "attempt_index": 0,
-  "attempt_id": "attempt_..."
+  "eval_attempt_id": "eval_attempt_...",
+  "scorer_attempt_id": "scorer_attempt_..."
 }
 ```
 
 `eval_run_id`, `config_hash`, and `config_name` are required for eval events.
 Task lifecycle events also require `policy`, `task_id`, and `task_index`.
-`eval_attempt_started` requires `attempt_index`; `eval_attempt_finished` also
-requires the attempt runner's `attempt_id`.
+`eval_attempt_started` requires `attempt_index` and `eval_attempt_id`;
+`eval_attempt_finished` requires those same eval-slot fields plus child attempt
+identity. Scorer-only attempts include `scorer_attempt_id`; agent attempts
+include `agent_attempt_id`, and scored agent attempts also include the nested
+`scorer_attempt_id`.
 
 Replay event provenance supports:
 
 ```json
 {
-  "replay_id": "replay_...",
-  "source_eval_run_id": "eval_...",
+  "replay_run_id": "replay_run_...",
+  "source_eval_run_id": "eval_run_...",
+  "source_eval_attempt_id": "eval_attempt_...",
   "task_id": "toy_python_fix_001",
-  "source_attempt_id": "attempt_...",
-  "replay_attempt_id": "attempt_..."
+  "source_scorer_attempt_id": "scorer_attempt_...",
+  "replayed_scorer_attempt_id": "scorer_attempt_..."
 }
 ```
 
-`replay_id` is required for replay events. `source_manifest_loaded` records
-either `source_eval_run_id` for eval-run sources or `source_artifact_id` for
-direct agent-attempt sources. Attempt-specific replay events additionally record
-the task and source attempt ids needed to audit the event.
+`replay_run_id` is required for replay events. `source_manifest_loaded` records
+either `source_eval_run_id` for eval-run sources or `source_agent_attempt_id`
+for direct agent-attempt sources. Attempt-specific replay events additionally
+record the task and source attempt ids needed to audit the event. When the
+source is an eval run, attempt-specific replay events also include
+`source_eval_attempt_id`. Finished replay attempts and comparison records keep
+source and replayed attempt ids in the same family: scorer source attempts use
+`replayed_scorer_attempt_id`, and agent source attempts use
+`replayed_agent_attempt_id`. They include exactly one complete family pair, not
+both scorer and agent pairs on the same event.
 
 ```json
 {
-  "replay_id": "replay_...",
-  "source_artifact_id": "agent_attempt_..."
+  "replay_run_id": "replay_run_...",
+  "source_agent_attempt_id": "agent_attempt_..."
 }
 ```
 
 ```json
 {
-  "replay_id": "replay_...",
-  "source_eval_run_id": "eval_...",
+  "replay_run_id": "replay_run_...",
+  "source_eval_run_id": "eval_run_...",
+  "source_eval_attempt_id": "eval_attempt_...",
   "task_id": "toy_python_fix_001",
-  "source_attempt_id": "attempt_..."
+  "source_scorer_attempt_id": "scorer_attempt_..."
 }
 ```
 

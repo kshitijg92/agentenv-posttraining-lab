@@ -19,10 +19,9 @@ TOY_TASK_MANIFEST = Path(
 
 def test_attempt_result_schema() -> None:
     result = AttemptResult(
-        run_id="run_001",
+        scorer_attempt_id="scorer_attempt_001",
         task_id="toy_python_fix_001",
         task_manifest_path="data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml",
-        attempt_id="attempt_001",
         submission_path="controls/scorer_control_patches/oracle.patch",
         status="PASS",
         public_status="PASS",

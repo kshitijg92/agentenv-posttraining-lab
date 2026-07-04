@@ -140,6 +140,12 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
                 ]
                 == "completed"
             )
+            happy_actual = records_by_control[
+                ("agent", task_id, "happy", repeat_index)
+            ]["actual"]
+            assert happy_actual["agent_attempt_id"].startswith("agent_attempt_")
+            assert "run_id" not in happy_actual
+            assert "agent_run_id" not in happy_actual
             assert (
                 records_by_control[("agent", task_id, "malformed", repeat_index)][
                     "actual"

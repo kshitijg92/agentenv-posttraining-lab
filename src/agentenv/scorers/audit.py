@@ -286,7 +286,7 @@ def _json_record(result: ScorerAuditResult, out_dir: Path) -> dict[str, object]:
         "task_manifest": result.case.task_manifest,
         "submission": result.case.submission,
         "attempt_artifact_dir": str(result.attempt_artifact_dir.relative_to(out_dir)),
-        "attempt_id": result.attempt_result.attempt_id,
+        "scorer_attempt_id": result.attempt_result.scorer_attempt_id,
         "error_class": result.attempt_result.error_class,
         "overall_match": result.overall_match,
         "manifest_override": result.manifest_override_record,

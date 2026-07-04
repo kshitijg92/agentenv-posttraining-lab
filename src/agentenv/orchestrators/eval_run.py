@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 import xxhash
 
@@ -23,6 +22,11 @@ from agentenv.evals.resolve import (
     select_policy,
 )
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
+from agentenv.ids import (
+    new_eval_attempt_id,
+    new_eval_run_id,
+    new_eval_suite_id,
+)
 from agentenv.models.config import load_decoding_config, load_model_config
 from agentenv.models.factory import build_model_client
 from agentenv.models.fake import ScriptedFakeModelClient
@@ -49,8 +53,7 @@ TraceEvent = dict[str, object]
 
 @dataclass(frozen=True)
 class ScorerAttemptSummary:
-    run_id: str
-    attempt_id: str
+    scorer_attempt_id: str
     status: AttemptStatus
     public_status: CheckStatus
     hidden_status: CheckStatus
@@ -61,7 +64,7 @@ class ScorerAttemptSummary:
 
 @dataclass(frozen=True)
 class AgentAttemptSummary:
-    run_id: str
+    agent_attempt_id: str
     status: str
     prompt_loop_status: str | None
     error_class: str | None
@@ -72,6 +75,7 @@ class AgentAttemptSummary:
 
 @dataclass(frozen=True)
 class EvalAttemptRecord:
+    eval_attempt_id: str
     task_id: str
     attempt_index: int
     attempt_dir: Path
@@ -135,7 +139,7 @@ def run_eval_config(
     config_hash = _hash_file(config_path)
     task_pack_path = resolve_task_pack_path(config, config_path)
     task_hashes = build_eval_task_hashes(task_pack_path, config.tasks)
-    eval_run_id = f"eval_{uuid4().hex}"
+    eval_run_id = new_eval_run_id()
     created_at = _utc_now()
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
@@ -184,6 +188,7 @@ def run_eval_config(
         task_attempt_records: list[EvalAttemptRecord] = []
 
         for attempt_index in range(selected_policy.attempts):
+            eval_attempt_id = new_eval_attempt_id()
             attempt_dir = (
                 attempts_dir / f"{task.task_id}__attempt_{attempt_index + 1:03d}"
             )
@@ -195,8 +200,11 @@ def run_eval_config(
                 task_id=task.task_id,
                 task_index=task_index,
                 attempt_index=attempt_index,
+                eval_attempt_id=eval_attempt_id,
             )
             artifact_dir_ref = str(attempt_dir.relative_to(out_dir))
+            scorer_attempt_id: str | None = None
+            agent_attempt_id: str | None = None
             if selected_policy.type == "scorer_control_patch":
                 submission_path = scorer_control_patch_path(
                     task.manifest_path.parent,
@@ -216,10 +224,13 @@ def run_eval_config(
                 attempt_record = _run_scorer_eval_attempt(
                     task=task,
                     submission_path=submission_path,
+                    eval_attempt_id=eval_attempt_id,
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
                 )
-                attempt_id = _required_scorer(attempt_record).attempt_id
+                scorer_attempt_id = _required_scorer(
+                    attempt_record
+                ).scorer_attempt_id
                 payload_refs = {
                     "attempt": f"{artifact_dir_ref}/attempt.json",
                     "attempt_trace": f"{artifact_dir_ref}/trace.jsonl",
@@ -244,10 +255,14 @@ def run_eval_config(
                 attempt_record = _run_agent_control_eval_attempt(
                     task=task,
                     control_case=control_case,
+                    eval_attempt_id=eval_attempt_id,
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
                 )
-                attempt_id = _required_agent(attempt_record).run_id
+                agent_attempt = _required_agent(attempt_record)
+                agent_attempt_id = agent_attempt.agent_attempt_id
+                if agent_attempt.scorer_attempt is not None:
+                    scorer_attempt_id = agent_attempt.scorer_attempt.scorer_attempt_id
                 payload_refs = _agent_eval_attempt_payload_refs(
                     artifact_dir_ref,
                     attempt_dir,
@@ -280,10 +295,14 @@ def run_eval_config(
                     task=task,
                     model_config_path=model_config_path,
                     decoding_config_path=decoding_config_path,
+                    eval_attempt_id=eval_attempt_id,
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
                 )
-                attempt_id = _required_agent(attempt_record).run_id
+                agent_attempt = _required_agent(attempt_record)
+                agent_attempt_id = agent_attempt.agent_attempt_id
+                if agent_attempt.scorer_attempt is not None:
+                    scorer_attempt_id = agent_attempt.scorer_attempt.scorer_attempt_id
                 payload_refs = _agent_eval_attempt_payload_refs(
                     artifact_dir_ref,
                     attempt_dir,
@@ -304,7 +323,9 @@ def run_eval_config(
                     task_id=task.task_id,
                     task_index=task_index,
                     attempt_index=attempt_index,
-                    attempt_id=attempt_id,
+                    eval_attempt_id=eval_attempt_id,
+                    scorer_attempt_id=scorer_attempt_id,
+                    agent_attempt_id=agent_attempt_id,
                 ),
                 "eval_attempt_finished",
                 output_payload={
@@ -337,6 +358,7 @@ def run_eval_config(
         created_at=created_at,
         attempts=attempt_records,
     )
+    _validate_unique_eval_attempt_ids(eval_run.attempts)
     _append_trace(
         trace_events,
         base_provenance,
@@ -364,7 +386,7 @@ def run_eval_config_all_policies(
     config_hash = _hash_file(config_path)
     task_pack_path = resolve_task_pack_path(config, config_path)
     task_hashes = build_eval_task_hashes(task_pack_path, config.tasks)
-    eval_suite_id = f"eval_suite_{uuid4().hex}"
+    eval_suite_id = new_eval_suite_id()
     created_at = _utc_now()
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
@@ -546,6 +568,7 @@ def _eval_matrix_replay_record(
     return {
         "policy": replay_record.policy,
         "replay_index": replay_record.replay_index,
+        "replay_run_id": replay_record.replay_run.replay_run_id,
         "status": replay_record.replay_run.status,
         "artifact_dir": str(replay_record.replay_dir.relative_to(eval_matrix.out_dir)),
         "manifest": str(
@@ -585,6 +608,7 @@ def _run_scorer_eval_attempt(
     *,
     task: ResolvedEvalTask,
     submission_path: Path,
+    eval_attempt_id: str,
     attempt_index: int,
     attempt_dir: Path,
 ) -> EvalAttemptRecord:
@@ -595,6 +619,7 @@ def _run_scorer_eval_attempt(
     )
     artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
+        eval_attempt_id=eval_attempt_id,
         task_id=task.task_id,
         attempt_index=attempt_index,
         attempt_dir=attempt_dir,
@@ -609,6 +634,7 @@ def _run_agent_control_eval_attempt(
     *,
     task: ResolvedEvalTask,
     control_case: AgentControlScriptCase,
+    eval_attempt_id: str,
     attempt_index: int,
     attempt_dir: Path,
 ) -> EvalAttemptRecord:
@@ -626,6 +652,7 @@ def _run_agent_control_eval_attempt(
     )
     artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
+        eval_attempt_id=eval_attempt_id,
         task_id=task.task_id,
         attempt_index=attempt_index,
         attempt_dir=attempt_dir,
@@ -641,6 +668,7 @@ def _run_agent_model_eval_attempt(
     task: ResolvedEvalTask,
     model_config_path: Path,
     decoding_config_path: Path,
+    eval_attempt_id: str,
     attempt_index: int,
     attempt_dir: Path,
 ) -> EvalAttemptRecord:
@@ -665,6 +693,7 @@ def _run_agent_model_eval_attempt(
     )
     artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
+        eval_attempt_id=eval_attempt_id,
         task_id=task.task_id,
         attempt_index=attempt_index,
         attempt_dir=attempt_dir,
@@ -740,6 +769,7 @@ def _eval_attempt_record(
     attempt: EvalAttemptRecord,
 ) -> dict[str, object]:
     return {
+        "eval_attempt_id": attempt.eval_attempt_id,
         "task_id": attempt.task_id,
         "attempt_index": attempt.attempt_index,
         "artifact_dir": str(attempt.attempt_dir.relative_to(eval_run.out_dir)),
@@ -752,8 +782,7 @@ def _eval_attempt_record(
 
 def _scorer_summary(result: AttemptResult) -> ScorerAttemptSummary:
     return ScorerAttemptSummary(
-        run_id=result.run_id,
-        attempt_id=result.attempt_id,
+        scorer_attempt_id=result.scorer_attempt_id,
         status=result.status,
         public_status=result.public_status,
         hidden_status=result.hidden_status,
@@ -765,7 +794,7 @@ def _scorer_summary(result: AttemptResult) -> ScorerAttemptSummary:
 
 def _agent_summary(result: AgentTaskRunResult) -> AgentAttemptSummary:
     return AgentAttemptSummary(
-        run_id=result.run_id,
+        agent_attempt_id=result.agent_attempt_id,
         status=result.status,
         prompt_loop_status=result.prompt_loop_status,
         error_class=result.error_class,
@@ -785,8 +814,7 @@ def _scorer_summary_json(
     if scorer is None:
         return None
     return {
-        "run_id": scorer.run_id,
-        "attempt_id": scorer.attempt_id,
+        "scorer_attempt_id": scorer.scorer_attempt_id,
         "status": scorer.status,
         "public_status": scorer.public_status,
         "hidden_status": scorer.hidden_status,
@@ -802,7 +830,7 @@ def _agent_summary_json(
     if agent is None:
         return None
     return {
-        "run_id": agent.run_id,
+        "agent_attempt_id": agent.agent_attempt_id,
         "status": agent.status,
         "prompt_loop_status": agent.prompt_loop_status,
         "error_class": agent.error_class,
@@ -822,6 +850,18 @@ def _required_agent(attempt: EvalAttemptRecord) -> AgentAttemptSummary:
     if attempt.agent is None:
         raise ValueError("Expected agent eval attempt summary")
     return attempt.agent
+
+
+def _validate_unique_eval_attempt_ids(attempts: list[EvalAttemptRecord]) -> None:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for attempt in attempts:
+        if attempt.eval_attempt_id in seen:
+            duplicates.add(attempt.eval_attempt_id)
+        seen.add(attempt.eval_attempt_id)
+    if duplicates:
+        duplicate_list = ", ".join(sorted(duplicates))
+        raise ValueError(f"Duplicate eval_attempt_id value(s): {duplicate_list}")
 
 
 def _child_artifact_identity(attempt_dir: Path) -> ArtifactIdentity:
@@ -956,7 +996,9 @@ def _eval_provenance(
     task_id: str | None = None,
     task_index: int | None = None,
     attempt_index: int | None = None,
-    attempt_id: str | None = None,
+    eval_attempt_id: str | None = None,
+    scorer_attempt_id: str | None = None,
+    agent_attempt_id: str | None = None,
 ) -> dict[str, object]:
     provenance: dict[str, object] = {
         "eval_run_id": eval_run_id,
@@ -971,8 +1013,12 @@ def _eval_provenance(
         provenance["task_index"] = task_index
     if attempt_index is not None:
         provenance["attempt_index"] = attempt_index
-    if attempt_id is not None:
-        provenance["attempt_id"] = attempt_id
+    if eval_attempt_id is not None:
+        provenance["eval_attempt_id"] = eval_attempt_id
+    if scorer_attempt_id is not None:
+        provenance["scorer_attempt_id"] = scorer_attempt_id
+    if agent_attempt_id is not None:
+        provenance["agent_attempt_id"] = agent_attempt_id
     return provenance
 
 

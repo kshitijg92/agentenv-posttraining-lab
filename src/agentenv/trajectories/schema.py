@@ -25,11 +25,15 @@ class TrajectoryIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     trajectory_id: str = Field(min_length=1)
-    run_id: str = Field(min_length=1)
+    eval_suite_id: str | None = Field(default=None, min_length=1)
+    eval_run_id: str = Field(min_length=1)
+    eval_attempt_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     policy_id: str = Field(min_length=1)
     attempt_index: int = Field(ge=0)
-    attempt_id: str | None = Field(default=None, min_length=1)
+    agent_attempt_id: str | None = Field(default=None, min_length=1)
+    scorer_attempt_id: str | None = Field(default=None, min_length=1)
+    replay_run_id: str | None = Field(default=None, min_length=1)
 
 
 class SourceProvenance(BaseModel):
@@ -202,6 +206,46 @@ class TrajectoryRecord(BaseModel):
 
         if self.identity.policy_id != self.policy.policy_id:
             raise ValueError("identity.policy_id must match policy.policy_id")
+
+        if (
+            self.statuses.agent_task_run_status is not None
+            and self.identity.agent_attempt_id is None
+        ):
+            raise ValueError(
+                "agent_task_run_status requires identity.agent_attempt_id"
+            )
+
+        if self.identity.agent_attempt_id is None:
+            agent_artifact_fields = (
+                "agent_task_run_json",
+                "prompt_loop_result_json",
+                "candidate_patch",
+            )
+            present_agent_artifacts = [
+                field_name
+                for field_name in agent_artifact_fields
+                if getattr(self.artifacts, field_name) is not None
+            ]
+            if present_agent_artifacts:
+                joined_fields = ", ".join(present_agent_artifacts)
+                raise ValueError(
+                    "agent artifact refs require identity.agent_attempt_id: "
+                    f"{joined_fields}"
+                )
+
+        if (
+            self.statuses.attempt_status is not None
+            and self.identity.scorer_attempt_id is None
+        ):
+            raise ValueError("attempt_status requires identity.scorer_attempt_id")
+
+        if (
+            self.statuses.grade_state != "cannot_grade"
+            and self.identity.scorer_attempt_id is None
+        ):
+            raise ValueError(
+                "scored trajectory records require identity.scorer_attempt_id"
+            )
 
         if (
             self.training_eligibility.positive_sft_allowed

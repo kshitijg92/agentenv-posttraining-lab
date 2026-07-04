@@ -60,8 +60,10 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
         run_manifest_data["orchestrator_version"]
         == SCORER_ATTEMPT_ORCHESTRATOR_VERSION
     )
-    assert run_manifest_data["run_id"] == attempt_data["run_id"]
-    assert run_manifest_data["attempt_id"] == attempt_data["attempt_id"]
+    assert (
+        run_manifest_data["scorer_attempt_id"]
+        == attempt_data["scorer_attempt_id"]
+    )
     assert run_manifest_data["status"] == attempt_data["status"]
     assert run_manifest_data["artifacts"] == {
         "attempt": "attempt.json",
@@ -82,7 +84,7 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
     assert trace_events[0].event_type == "attempt_started"
     first_provenance = trace_events[0].provenance_config
     assert isinstance(first_provenance, AttemptTraceProvenance)
-    assert first_provenance.attempt_id == attempt_data["attempt_id"]
+    assert first_provenance.scorer_attempt_id == attempt_data["scorer_attempt_id"]
     assert trace_events[0].input_payload is not None
     assert (
         trace_events[0].input_payload["task_manifest_path"]
@@ -147,10 +149,9 @@ def test_write_attempt_artifacts_redacts_secret_canary(
     monkeypatch.setenv("AGENTENV_MODEL_API_KEY", CANARY)
     attempt_run = AttemptRun(
         result=AttemptResult(
-            run_id="run_001",
+            scorer_attempt_id="scorer_attempt_001",
             task_id="task_001",
             task_manifest_path="tasks/task.yaml",
-            attempt_id="attempt_001",
             submission_path="submissions/attempt.patch",
             status="ORCHESTRATOR_ERROR",
             public_status="NOT_RUN",
