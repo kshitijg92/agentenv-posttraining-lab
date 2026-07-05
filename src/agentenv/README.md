@@ -219,6 +219,29 @@ hash, trajectory record schema version, JSONL hash, and record count. This is a
 private eval artifact for analysis and later training-data conversion; it does
 not run replay, harness-audit, or training-eligibility gates.
 
+## Initialize A Trajectory Review Workspace
+
+Create pending review rows and a human-readable review queue from a trajectory
+export:
+
+```bash
+uv run agentenv trajectories review-init \
+  --source experiments/runs/dev_baseline_trajectory_export \
+  --out experiments/runs/dev_baseline_trajectory_review
+```
+
+Main outputs:
+
+```text
+experiments/runs/dev_baseline_trajectory_review/manifest.json
+experiments/runs/dev_baseline_trajectory_review/reviews.jsonl
+experiments/runs/dev_baseline_trajectory_review/review_queue.md
+```
+
+`review-init` creates one `not_reviewed` row per trajectory and does not make
+human decisions. Review rows are keyed by `trajectory_id`; the source
+trajectory export remains unchanged.
+
 ## Replay An Artifact Directory
 
 Replay a scorer eval run:

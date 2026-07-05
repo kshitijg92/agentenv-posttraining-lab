@@ -286,6 +286,67 @@ def test_trajectories_export_cli_writes_eval_suite_export(tmp_path: Path) -> Non
     assert (trajectory_out / "trajectories.jsonl").is_file()
 
 
+def test_trajectories_review_init_cli_writes_review_artifact(tmp_path: Path) -> None:
+    eval_out = tmp_path / "eval_run"
+    trajectory_out = tmp_path / "trajectory_export"
+    review_out = tmp_path / "trajectory_review"
+    runner = CliRunner()
+    eval_result = runner.invoke(
+        app,
+        [
+            "eval",
+            "--config",
+            "configs/eval/scorer_control_policies.yaml",
+            "--policy",
+            "oracle",
+            "--out",
+            str(eval_out),
+        ],
+    )
+    assert eval_result.exit_code == 0, eval_result.output
+
+    export_result = runner.invoke(
+        app,
+        [
+            "trajectories",
+            "export",
+            "--source",
+            str(eval_out),
+            "--out",
+            str(trajectory_out),
+        ],
+    )
+    assert export_result.exit_code == 0, export_result.output
+
+    result = runner.invoke(
+        app,
+        [
+            "trajectories",
+            "review-init",
+            "--source",
+            str(trajectory_out),
+            "--out",
+            str(review_out),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "trajectory review initialized" in result.output
+    assert "source=trajectory_export" in result.output
+    assert "records=1" in result.output
+    assert "manifest.json" in result.output
+    assert "reviews.jsonl" in result.output
+    assert "review_queue.md" in result.output
+    manifest = json.loads((review_out / "manifest.json").read_text())
+    assert manifest["artifact_type"] == "trajectory_review"
+    assert manifest["source_artifact_type"] == "trajectory_export"
+    assert manifest["source_eval_run_id"].startswith("eval_run_")
+    assert manifest["source_eval_suite_id"] is None
+    assert manifest["record_count"] == 1
+    assert (review_out / "reviews.jsonl").is_file()
+    assert (review_out / "review_queue.md").is_file()
+
+
 def _write_eval_hash_manifest(
     path: Path,
     *,

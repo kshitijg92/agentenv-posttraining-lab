@@ -44,6 +44,7 @@ from agentenv.tasks.validate import (
 from agentenv.tasks.hashing import write_task_hash_report
 from agentenv.tasks.splits import check_splits_lock
 from agentenv.trajectories.export import export_trajectory_records_from_eval_artifact
+from agentenv.trajectories.review import initialize_trajectory_review_artifact
 
 
 app = typer.Typer(no_args_is_help=True)
@@ -541,6 +542,55 @@ def export_trajectories(
     console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
     console.print(
         f"wrote {export.out_dir / manifest.artifacts['trajectories']}",
+        soft_wrap=True,
+    )
+
+
+@trajectories_app.command("review-init")
+def initialize_trajectory_review(
+    source: Path = typer.Option(
+        ...,
+        "--source",
+        help="Trajectory export artifact directory.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for trajectory review artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before initializing.",
+    ),
+) -> None:
+    try:
+        review_artifact = initialize_trajectory_review_artifact(
+            source,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--source") from exc
+
+    manifest = review_artifact.manifest
+    source_id = manifest.source_eval_run_id or manifest.source_eval_suite_id
+    console.print(
+        "[green]trajectory review initialized[/green] "
+        f"source={manifest.source_artifact_type} "
+        f"source_id={source_id} records={manifest.record_count}"
+    )
+    console.print(
+        f"wrote {review_artifact.out_dir / MANIFEST_FILENAME}", soft_wrap=True
+    )
+    console.print(
+        f"wrote {review_artifact.out_dir / manifest.artifacts['reviews']}",
+        soft_wrap=True,
+    )
+    console.print(
+        f"wrote {review_artifact.out_dir / manifest.artifacts['review_queue']}",
         soft_wrap=True,
     )
 
