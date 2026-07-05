@@ -34,6 +34,10 @@ from agentenv.orchestrators.attempt import AttemptStatus
 from agentenv.orchestrators.attempt import CheckStatus
 from agentenv.orchestrators.attempt import validate_attempt_status_fields
 from agentenv.tasks.schema import TaskSplit
+from agentenv.trajectories.schema import (
+    TRAJECTORY_RECORD_SCHEMA_VERSION,
+    TrajectoryRecordSchemaVersion,
+)
 
 NonNegativeInt = Annotated[int, Field(ge=0, strict=True)]
 PositiveInt = Annotated[int, Field(gt=0, strict=True)]
@@ -87,12 +91,16 @@ REPLAY_RUN_ARTIFACT_REFS = {
     "attempts": "attempts",
     "agent_task_run": "agent_task_run",
 }
+TRAJECTORY_EXPORT_ARTIFACT_REFS = {
+    "trajectories": "trajectories.jsonl",
+}
 EVAL_RUN_REQUIRED_ARTIFACTS = frozenset(EVAL_RUN_ARTIFACT_REFS)
 EVAL_SUITE_REQUIRED_ARTIFACTS = frozenset({"policies"})
 CONTROL_CALIBRATION_REQUIRED_ARTIFACTS = frozenset(CONTROL_CALIBRATION_ARTIFACT_REFS)
 REPLAY_RUN_BASE_REQUIRED_ARTIFACTS = frozenset(
     {"replay_result", "replay_results", "trace"}
 )
+TRAJECTORY_EXPORT_REQUIRED_ARTIFACTS = frozenset(TRAJECTORY_EXPORT_ARTIFACT_REFS)
 
 
 ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
@@ -101,6 +109,8 @@ EvalRunArtifactSchemaVersion = Literal["eval_run_artifact_v0"]
 EvalSuiteArtifactSchemaVersion = Literal["eval_suite_artifact_v0"]
 ControlCalibrationArtifactSchemaVersion = Literal["control_calibration_artifact_v0"]
 ReplayRunArtifactSchemaVersion = Literal["replay_run_artifact_v0"]
+TrajectoryExportArtifactSchemaVersion = Literal["trajectory_export_artifact_v0"]
+TrajectoryExportSourceArtifactType = Literal["eval_run", "eval_suite"]
 
 SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION: ScorerAttemptArtifactSchemaVersion = (
     "scorer_attempt_artifact_v0"
@@ -117,6 +127,9 @@ CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION: ControlCalibrationArtifactSchemaVer
 )
 REPLAY_RUN_ARTIFACT_SCHEMA_VERSION: ReplayRunArtifactSchemaVersion = (
     "replay_run_artifact_v0"
+)
+TRAJECTORY_EXPORT_ARTIFACT_SCHEMA_VERSION: TrajectoryExportArtifactSchemaVersion = (
+    "trajectory_export_artifact_v0"
 )
 
 
@@ -746,6 +759,73 @@ class ReplayRunManifest(ArtifactManifest):
         return self
 
 
+class TrajectoryExportManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.TRAJECTORY_EXPORT.value
+    expected_artifact_schema_version = TRAJECTORY_EXPORT_ARTIFACT_SCHEMA_VERSION
+
+    created_at: str = Field(min_length=1)
+    source_artifact_type: TrajectoryExportSourceArtifactType
+    source_artifact_schema_version: str = Field(min_length=1)
+    source_artifact_dir: str = Field(min_length=1)
+    source_manifest_path: str = Field(min_length=1)
+    source_manifest_hash: str = Field(min_length=1)
+    source_eval_run_id: str | None = Field(default=None, min_length=1)
+    source_eval_suite_id: str | None = Field(default=None, min_length=1)
+    trajectory_record_schema_version: TrajectoryRecordSchemaVersion
+    record_count: PositiveInt
+    trajectories_jsonl_hash: str = Field(min_length=1)
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_export_contract(self) -> "TrajectoryExportManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=TRAJECTORY_EXPORT_ARTIFACT_REFS,
+            owner="trajectory export manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=TRAJECTORY_EXPORT_REQUIRED_ARTIFACTS,
+            owner="trajectory export manifests",
+        )
+        if self.trajectory_record_schema_version != TRAJECTORY_RECORD_SCHEMA_VERSION:
+            raise ValueError(
+                "trajectory_record_schema_version must be "
+                f"{TRAJECTORY_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.source_artifact_type == ArtifactType.EVAL_RUN.value:
+            if self.source_artifact_schema_version != EVAL_RUN_ARTIFACT_SCHEMA_VERSION:
+                raise ValueError(
+                    "eval_run trajectory exports require matching "
+                    "source_artifact_schema_version"
+                )
+            if self.source_eval_run_id is None:
+                raise ValueError(
+                    "eval_run trajectory exports require source_eval_run_id"
+                )
+            if self.source_eval_suite_id is not None:
+                raise ValueError(
+                    "eval_run trajectory exports cannot include source_eval_suite_id"
+                )
+            return self
+
+        if self.source_artifact_schema_version != EVAL_SUITE_ARTIFACT_SCHEMA_VERSION:
+            raise ValueError(
+                "eval_suite trajectory exports require matching "
+                "source_artifact_schema_version"
+            )
+        if self.source_eval_suite_id is None:
+            raise ValueError(
+                "eval_suite trajectory exports require source_eval_suite_id"
+            )
+        if self.source_eval_run_id is not None:
+            raise ValueError(
+                "eval_suite trajectory exports cannot include source_eval_run_id"
+            )
+        return self
+
+
 def load_scorer_attempt_manifest(path: Path) -> ScorerAttemptManifest:
     return _validate_manifest(ScorerAttemptManifest, path)
 
@@ -768,6 +848,10 @@ def load_control_calibration_manifest(path: Path) -> ControlCalibrationManifest:
 
 def load_replay_run_manifest(path: Path) -> ReplayRunManifest:
     return _validate_manifest(ReplayRunManifest, path)
+
+
+def load_trajectory_export_manifest(path: Path) -> TrajectoryExportManifest:
+    return _validate_manifest(TrajectoryExportManifest, path)
 
 
 def load_attempt_manifest(path: Path) -> ScorerAttemptManifest | AgentTaskRunManifest:

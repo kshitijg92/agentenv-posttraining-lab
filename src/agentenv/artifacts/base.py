@@ -16,6 +16,7 @@ class ArtifactType(StrEnum):
     EVAL_SUITE = "eval_suite"
     CONTROL_CALIBRATION = "control_calibration"
     REPLAY_RUN = "replay_run"
+    TRAJECTORY_EXPORT = "trajectory_export"
 
 
 class ArtifactDirectoryError(ValueError):

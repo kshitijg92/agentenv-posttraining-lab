@@ -12,12 +12,14 @@ from agentenv.artifacts.manifests import (
     EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
     REPLAY_RUN_ARTIFACT_SCHEMA_VERSION,
     SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
+    TRAJECTORY_EXPORT_ARTIFACT_SCHEMA_VERSION,
     AgentTaskRunManifest,
     ControlCalibrationManifest,
     EvalRunManifest,
     EvalSuiteManifest,
     ReplayRunManifest,
     ScorerAttemptManifest,
+    TrajectoryExportManifest,
     load_agent_attempt_manifest,
     load_attempt_manifest,
     load_control_calibration_manifest,
@@ -27,6 +29,7 @@ from agentenv.artifacts.manifests import (
     load_replay_run_manifest,
     load_replay_source_manifest,
     load_scorer_attempt_manifest,
+    load_trajectory_export_manifest,
 )
 from agentenv.artifacts.payloads import CONTROL_FLAKE_DETECTION_SCHEMA_VERSION
 from agentenv.artifacts.payloads import EVAL_TASK_HASHES_SCHEMA_VERSION
@@ -39,6 +42,10 @@ def test_root_manifest_loaders_accept_current_shapes(tmp_path: Path) -> None:
     eval_suite_path = _write_json(tmp_path / "eval_suite.json", _eval_suite_manifest())
     control_path = _write_json(tmp_path / "control.json", _control_manifest())
     replay_path = _write_json(tmp_path / "replay.json", _replay_manifest())
+    trajectory_export_path = _write_json(
+        tmp_path / "trajectory_export.json",
+        _trajectory_export_manifest(),
+    )
 
     assert isinstance(load_scorer_attempt_manifest(scorer_path), ScorerAttemptManifest)
     assert isinstance(load_agent_attempt_manifest(agent_path), AgentTaskRunManifest)
@@ -49,6 +56,10 @@ def test_root_manifest_loaders_accept_current_shapes(tmp_path: Path) -> None:
         ControlCalibrationManifest,
     )
     assert isinstance(load_replay_run_manifest(replay_path), ReplayRunManifest)
+    assert isinstance(
+        load_trajectory_export_manifest(trajectory_export_path),
+        TrajectoryExportManifest,
+    )
 
     assert isinstance(load_attempt_manifest(scorer_path), ScorerAttemptManifest)
     assert isinstance(load_attempt_manifest(agent_path), AgentTaskRunManifest)
@@ -56,6 +67,31 @@ def test_root_manifest_loaders_accept_current_shapes(tmp_path: Path) -> None:
     assert isinstance(load_eval_artifact_manifest(eval_suite_path), EvalSuiteManifest)
     assert isinstance(load_replay_source_manifest(eval_run_path), EvalRunManifest)
     assert isinstance(load_replay_source_manifest(agent_path), AgentTaskRunManifest)
+
+
+def test_trajectory_export_manifest_rejects_missing_trajectories_ref(
+    tmp_path: Path,
+) -> None:
+    manifest = _trajectory_export_manifest()
+    manifest["artifacts"] = {}
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    with pytest.raises(ValidationError, match="trajectory export manifests require"):
+        load_trajectory_export_manifest(path)
+
+
+def test_trajectory_export_manifest_rejects_eval_run_with_suite_id(
+    tmp_path: Path,
+) -> None:
+    manifest = _trajectory_export_manifest()
+    manifest["source_eval_suite_id"] = "eval_suite_001"
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    with pytest.raises(
+        ValidationError,
+        match="eval_run trajectory exports cannot include source_eval_suite_id",
+    ):
+        load_trajectory_export_manifest(path)
 
 
 def test_root_loader_rejects_wrong_artifact_type(tmp_path: Path) -> None:
@@ -1360,5 +1396,26 @@ def _replay_manifest() -> dict[str, Any]:
             "replay_results": "replay_results.jsonl",
             "trace": "trace.jsonl",
             "attempts": "attempts",
+        },
+    }
+
+
+def _trajectory_export_manifest() -> dict[str, Any]:
+    return {
+        "artifact_type": "trajectory_export",
+        "artifact_schema_version": TRAJECTORY_EXPORT_ARTIFACT_SCHEMA_VERSION,
+        "created_at": "2026-01-01T00:00:00Z",
+        "source_artifact_type": "eval_run",
+        "source_artifact_schema_version": EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
+        "source_artifact_dir": "runs/eval",
+        "source_manifest_path": "runs/eval/manifest.json",
+        "source_manifest_hash": "xxh64:source",
+        "source_eval_run_id": "eval_run_001",
+        "source_eval_suite_id": None,
+        "trajectory_record_schema_version": "trajectory_record_v0",
+        "record_count": 1,
+        "trajectories_jsonl_hash": "xxh64:trajectories",
+        "artifacts": {
+            "trajectories": "trajectories.jsonl",
         },
     }

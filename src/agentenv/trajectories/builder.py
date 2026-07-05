@@ -108,6 +108,20 @@ def build_trajectory_records_from_eval_suite(
     return records
 
 
+def build_trajectory_records_from_eval_run(
+    eval_run_dir: Path,
+) -> list[TrajectoryRecord]:
+    eval_run_dir = eval_run_dir.resolve()
+    eval_run_manifest = load_eval_run_manifest(eval_run_dir / MANIFEST_FILENAME)
+    return [
+        build_trajectory_record_from_eval_attempt(
+            eval_run_dir,
+            eval_attempt_id=attempt_record.eval_attempt_id,
+        )
+        for attempt_record in eval_run_manifest.attempts
+    ]
+
+
 def build_trajectory_record_from_eval_attempt(
     eval_run_dir: Path,
     *,
