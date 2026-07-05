@@ -4,7 +4,10 @@ from agentenv.training.schema import (
     FinalTrainingEligibility,
     TrainingCandidateRecord,
 )
-from agentenv.trajectories.review import validate_trajectory_review_artifact
+from agentenv.trajectories.review import (
+    TrajectoryReviewValidation,
+    validate_trajectory_review_artifact,
+)
 from agentenv.trajectories.schema import TrajectoryRecord, TrajectoryReviewRecord
 
 
@@ -16,6 +19,12 @@ def build_training_candidate_records(
         trajectory_export_dir,
         review_dir,
     )
+    return build_training_candidate_records_from_review_validation(validation)
+
+
+def build_training_candidate_records_from_review_validation(
+    validation: TrajectoryReviewValidation,
+) -> tuple[TrainingCandidateRecord, ...]:
     review_by_trajectory_id = {
         review.trajectory_id: review for review in validation.review_artifact.reviews
     }

@@ -18,6 +18,7 @@ class ArtifactType(StrEnum):
     REPLAY_RUN = "replay_run"
     TRAJECTORY_EXPORT = "trajectory_export"
     TRAJECTORY_REVIEW = "trajectory_review"
+    TRAINING_CANDIDATE_EXPORT = "training_candidate_export"
 
 
 class ArtifactDirectoryError(ValueError):

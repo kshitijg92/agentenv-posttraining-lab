@@ -34,6 +34,10 @@ from agentenv.orchestrators.attempt import AttemptStatus
 from agentenv.orchestrators.attempt import CheckStatus
 from agentenv.orchestrators.attempt import validate_attempt_status_fields
 from agentenv.tasks.schema import TaskSplit
+from agentenv.training.schema import (
+    TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
+    TrainingCandidateRecordSchemaVersion,
+)
 from agentenv.trajectories.schema import (
     TRAJECTORY_RECORD_SCHEMA_VERSION,
     TRAJECTORY_REVIEW_SCHEMA_VERSION,
@@ -100,6 +104,9 @@ TRAJECTORY_REVIEW_ARTIFACT_REFS = {
     "reviews": "reviews.jsonl",
     "review_queue": "review_queue.md",
 }
+TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS = {
+    "training_candidates": "training_candidates.jsonl",
+}
 EVAL_RUN_REQUIRED_ARTIFACTS = frozenset(EVAL_RUN_ARTIFACT_REFS)
 EVAL_SUITE_REQUIRED_ARTIFACTS = frozenset({"policies"})
 CONTROL_CALIBRATION_REQUIRED_ARTIFACTS = frozenset(CONTROL_CALIBRATION_ARTIFACT_REFS)
@@ -108,6 +115,9 @@ REPLAY_RUN_BASE_REQUIRED_ARTIFACTS = frozenset(
 )
 TRAJECTORY_EXPORT_REQUIRED_ARTIFACTS = frozenset(TRAJECTORY_EXPORT_ARTIFACT_REFS)
 TRAJECTORY_REVIEW_REQUIRED_ARTIFACTS = frozenset(TRAJECTORY_REVIEW_ARTIFACT_REFS)
+TRAINING_CANDIDATE_EXPORT_REQUIRED_ARTIFACTS = frozenset(
+    TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS
+)
 
 
 ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
@@ -118,6 +128,9 @@ ControlCalibrationArtifactSchemaVersion = Literal["control_calibration_artifact_
 ReplayRunArtifactSchemaVersion = Literal["replay_run_artifact_v0"]
 TrajectoryExportArtifactSchemaVersion = Literal["trajectory_export_artifact_v0"]
 TrajectoryReviewArtifactSchemaVersion = Literal["trajectory_review_artifact_v0"]
+TrainingCandidateExportArtifactSchemaVersion = Literal[
+    "training_candidate_export_artifact_v0"
+]
 TrajectoryExportSourceArtifactType = Literal["eval_run", "eval_suite"]
 TrajectoryReviewSourceArtifactType = Literal["trajectory_export"]
 
@@ -143,6 +156,7 @@ TRAJECTORY_EXPORT_ARTIFACT_SCHEMA_VERSION: TrajectoryExportArtifactSchemaVersion
 TRAJECTORY_REVIEW_ARTIFACT_SCHEMA_VERSION: TrajectoryReviewArtifactSchemaVersion = (
     "trajectory_review_artifact_v0"
 )
+TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateExportArtifactSchemaVersion = "training_candidate_export_artifact_v0"
 
 
 class ArtifactManifest(BaseModel):
@@ -894,6 +908,87 @@ class TrajectoryReviewManifest(ArtifactManifest):
         return self
 
 
+class TrainingCandidateExportManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.TRAINING_CANDIDATE_EXPORT.value
+    expected_artifact_schema_version = TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION
+
+    created_at: str = Field(min_length=1)
+    source_trajectory_export_dir: str = Field(min_length=1)
+    source_trajectory_export_manifest_hash: str = Field(min_length=1)
+    source_trajectories_jsonl_hash: str = Field(min_length=1)
+    source_review_dir: str = Field(min_length=1)
+    source_review_manifest_hash: str = Field(min_length=1)
+    source_reviews_jsonl_hash: str = Field(min_length=1)
+    trajectory_record_schema_version: TrajectoryRecordSchemaVersion
+    trajectory_review_schema_version: TrajectoryReviewSchemaVersion
+    training_candidate_record_schema_version: TrainingCandidateRecordSchemaVersion
+    record_count: PositiveInt
+    training_candidates_jsonl_hash: str = Field(min_length=1)
+    analysis_allowed_count: NonNegativeInt
+    positive_sft_allowed_count: NonNegativeInt
+    negative_example_allowed_count: NonNegativeInt
+    preference_data_allowed_count: NonNegativeInt
+    trainable_count: NonNegativeInt
+    analysis_only_count: NonNegativeInt
+    not_trainable_count: NonNegativeInt
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_training_candidate_export_contract(
+        self,
+    ) -> "TrainingCandidateExportManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS,
+            owner="training candidate export manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=TRAINING_CANDIDATE_EXPORT_REQUIRED_ARTIFACTS,
+            owner="training candidate export manifests",
+        )
+        if self.trajectory_record_schema_version != TRAJECTORY_RECORD_SCHEMA_VERSION:
+            raise ValueError(
+                "trajectory_record_schema_version must be "
+                f"{TRAJECTORY_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.trajectory_review_schema_version != TRAJECTORY_REVIEW_SCHEMA_VERSION:
+            raise ValueError(
+                "trajectory_review_schema_version must be "
+                f"{TRAJECTORY_REVIEW_SCHEMA_VERSION!r}"
+            )
+        if (
+            self.training_candidate_record_schema_version
+            != TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "training_candidate_record_schema_version must be "
+                f"{TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION!r}"
+            )
+
+        bounded_counts = (
+            self.analysis_allowed_count,
+            self.positive_sft_allowed_count,
+            self.negative_example_allowed_count,
+            self.preference_data_allowed_count,
+            self.trainable_count,
+            self.analysis_only_count,
+            self.not_trainable_count,
+        )
+        if any(count > self.record_count for count in bounded_counts):
+            raise ValueError("training candidate summary counts cannot exceed records")
+        if (
+            self.trainable_count + self.analysis_only_count + self.not_trainable_count
+            != self.record_count
+        ):
+            raise ValueError(
+                "trainable, analysis_only, and not_trainable counts must sum to "
+                "record_count"
+            )
+        return self
+
+
 def load_scorer_attempt_manifest(path: Path) -> ScorerAttemptManifest:
     return _validate_manifest(ScorerAttemptManifest, path)
 
@@ -924,6 +1019,12 @@ def load_trajectory_export_manifest(path: Path) -> TrajectoryExportManifest:
 
 def load_trajectory_review_manifest(path: Path) -> TrajectoryReviewManifest:
     return _validate_manifest(TrajectoryReviewManifest, path)
+
+
+def load_training_candidate_export_manifest(
+    path: Path,
+) -> TrainingCandidateExportManifest:
+    return _validate_manifest(TrainingCandidateExportManifest, path)
 
 
 def load_attempt_manifest(path: Path) -> ScorerAttemptManifest | AgentTaskRunManifest:

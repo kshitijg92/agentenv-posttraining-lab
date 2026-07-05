@@ -619,3 +619,53 @@ candidate, but cannot make an otherwise ineligible trajectory trainable.
 
 This step deliberately does not write `manifest.json` or
 `training_candidates.jsonl`; that artifact boundary comes next.
+
+## Training Candidate Export Artifact
+
+The training-candidate export persists the in-memory candidate join:
+
+```text
+TrainingCandidateExport
+  manifest.json
+  training_candidates.jsonl
+```
+
+The manifest pins both upstream artifacts, not only the review artifact:
+
+```text
+source_trajectory_export_dir
+source_trajectory_export_manifest_hash
+source_trajectories_jsonl_hash
+
+source_review_dir
+source_review_manifest_hash
+source_reviews_jsonl_hash
+```
+
+It also records all three row schema versions at the join boundary:
+
+```text
+trajectory_record_schema_version
+trajectory_review_schema_version
+training_candidate_record_schema_version
+```
+
+Summary counts are stored in the manifest:
+
+```text
+analysis_allowed_count
+positive_sft_allowed_count
+negative_example_allowed_count
+preference_data_allowed_count
+trainable_count
+analysis_only_count
+not_trainable_count
+```
+
+The loader verifies the candidate JSONL hash, record count, and summary counts.
+This makes the export auditable without rereading the upstream trajectory and
+review artifacts for every summary check, while still preserving provenance back
+to those source artifacts.
+
+The export remains a candidate/index layer. It is not an SFT dataset or a
+preference dataset.
