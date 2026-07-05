@@ -73,8 +73,7 @@ def validate_task(path: Path) -> None:
     if path.is_dir():
         result = validate_task_pack(path)
         console.print(
-            f"[green]valid[/green] {result.task_pack_id} "
-            f"tasks={result.task_count}"
+            f"[green]valid[/green] {result.task_pack_id} tasks={result.task_count}"
         )
         return
 
@@ -89,12 +88,10 @@ def check_task_splits(
 ) -> None:
     result = check_splits_lock(splits_lock)
     counts = " ".join(
-        f"{split}={count}"
-        for split, count in result.split_counts.items()
+        f"{split}={count}" for split, count in result.split_counts.items()
     )
     console.print(
-        f"[green]valid[/green] {result.task_pack_id} "
-        f"tasks={result.task_count} {counts}"
+        f"[green]valid[/green] {result.task_pack_id} tasks={result.task_count} {counts}"
     )
 
 
@@ -105,8 +102,8 @@ def hash_task_pack(
 ) -> None:
     report = write_task_hash_report(task_pack, out)
     console.print(
-        f"[green]hashed[/green] {report.payload['task_pack_id']} "
-        f"tasks={report.payload['task_count']} "
+        f"[green]hashed[/green] {report.payload.task_pack_id} "
+        f"tasks={report.payload.task_count} "
         f"pack_record_hash={report.pack_record_hash}"
     )
     console.print(f"wrote {out}")
@@ -126,8 +123,7 @@ def run_attempt(
     attempt_run = run_and_persist_patch_attempt_to_dir(task_manifest, submission, out)
     style = "green" if attempt_run.result.status == "PASS" else "red"
     console.print(
-        f"[{style}]{attempt_run.result.status}[/{style}] "
-        f"{attempt_run.result.task_id}"
+        f"[{style}]{attempt_run.result.status}[/{style}] {attempt_run.result.task_id}"
     )
     console.print(f"wrote {out / 'attempt.json'}")
 
@@ -141,8 +137,7 @@ def audit_scorers(
     failed = sum(not result.overall_match for result in results)
     style = "green" if failed == 0 else "red"
     console.print(
-        f"[{style}]scorer audit complete[/{style}] "
-        f"cases={len(results)} failed={failed}"
+        f"[{style}]scorer audit complete[/{style}] cases={len(results)} failed={failed}"
     )
     console.print(f"wrote {out / 'scorer_audit.md'}")
 
@@ -385,7 +380,9 @@ def print_ollama_serve_command() -> None:
 @eval_app.callback(invoke_without_command=True)
 def run_eval(
     ctx: typer.Context,
-    config: Path | None = typer.Option(None, "--config", help="Path to eval config YAML."),
+    config: Path | None = typer.Option(
+        None, "--config", help="Path to eval config YAML."
+    ),
     policy: str | None = typer.Option(
         None,
         "--policy",
@@ -396,7 +393,9 @@ def run_eval(
         "--all-policies",
         help="Run every policy defined by the config.",
     ),
-    out: Path | None = typer.Option(None, "--out", help="Directory for eval artifacts."),
+    out: Path | None = typer.Option(
+        None, "--out", help="Directory for eval artifacts."
+    ),
     report_out: Path | None = typer.Option(
         None,
         "--report-out",
@@ -492,7 +491,9 @@ def compare_task_hashes(
         console.print(line)
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(comparison.to_dict(), indent=2, sort_keys=True) + "\n")
+        out.write_text(
+            json.dumps(comparison.to_dict(), indent=2, sort_keys=True) + "\n"
+        )
         console.print(f"wrote {out}", soft_wrap=True)
     if comparison.status != "matched":
         raise typer.Exit(1)
@@ -517,8 +518,7 @@ def replay_run(
         raise typer.BadParameter(str(exc), param_hint="--out") from exc
     style = "green" if replay.status == "PASS" else "red"
     console.print(
-        f"[{style}]{replay.status}[/{style}] "
-        f"comparisons={len(replay.comparisons)}"
+        f"[{style}]{replay.status}[/{style}] comparisons={len(replay.comparisons)}"
     )
     console.print(f"wrote {replay.out_dir / 'replay_result.json'}")
 

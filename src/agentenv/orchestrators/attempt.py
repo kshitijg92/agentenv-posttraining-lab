@@ -6,7 +6,7 @@ from subprocess import TimeoutExpired
 from time import perf_counter
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.ids import new_scorer_attempt_id
@@ -53,9 +53,77 @@ class AttemptResult(BaseModel):
     error_class: str | None
     started_at: str = Field(min_length=1)
     ended_at: str = Field(min_length=1)
-    duration_ms: int = Field(ge=0)
+    duration_ms: int = Field(ge=0, strict=True)
     final_diff_hash: str | None
     orchestrator_version: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_terminal_state(self) -> "AttemptResult":
+        validate_attempt_status_fields(
+            self.status,
+            public_status=self.public_status,
+            hidden_status=self.hidden_status,
+            error_class=self.error_class,
+        )
+        if self.status == "PASS" and self.final_diff_hash is None:
+            raise ValueError("PASS attempts require final_diff_hash")
+        return self
+
+
+def validate_attempt_status_fields(
+    status: AttemptStatus,
+    *,
+    public_status: CheckStatus,
+    hidden_status: CheckStatus,
+    error_class: str | None,
+) -> None:
+    validate_attempt_check_statuses(
+        status,
+        public_status=public_status,
+        hidden_status=hidden_status,
+    )
+    if status == "PASS":
+        if error_class is not None:
+            raise ValueError("PASS attempts cannot include error_class")
+        return
+
+    if error_class is None:
+        raise ValueError(f"{status} attempts require error_class")
+    return
+
+
+def validate_attempt_check_statuses(
+    status: AttemptStatus,
+    *,
+    public_status: CheckStatus,
+    hidden_status: CheckStatus,
+) -> None:
+    if status == "PASS":
+        if public_status != "PASS" or hidden_status != "PASS":
+            raise ValueError("PASS attempts require public and hidden PASS")
+        return
+
+    expected_statuses = {
+        "PATCH_APPLY_ERROR": ("NOT_RUN", "NOT_RUN"),
+        "PUBLIC_TEST_FAIL": ("FAIL", "NOT_RUN"),
+        "HIDDEN_TEST_FAIL": ("PASS", "FAIL"),
+        "INVALID_SHORTCUT": ("NOT_RUN", "NOT_RUN"),
+        "HIDDEN_VALIDATOR_ACCESS_ATTEMPT": ("NOT_RUN", "NOT_RUN"),
+        "ORCHESTRATOR_ERROR": ("NOT_RUN", "NOT_RUN"),
+    }
+    expected = expected_statuses.get(status)
+    if expected is not None:
+        if (public_status, hidden_status) != expected:
+            raise ValueError(f"{status} attempts have inconsistent check statuses")
+        return
+
+    valid_timeout_statuses = {
+        ("NOT_RUN", "NOT_RUN"),
+        ("FAIL", "NOT_RUN"),
+        ("PASS", "FAIL"),
+    }
+    if (public_status, hidden_status) not in valid_timeout_statuses:
+        raise ValueError("TIMEOUT attempts have inconsistent check statuses")
 
 
 @dataclass(frozen=True)

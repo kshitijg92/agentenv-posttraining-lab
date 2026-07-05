@@ -4,7 +4,11 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from agentenv.trajectories.schema import LeakageEvidence, TrajectoryRecord
+from agentenv.trajectories.schema import (
+    LeakageEvidence,
+    TrajectoryRecord,
+    list_reward_component_signal_field_names,
+)
 
 
 def _artifact(path: str) -> dict[str, str]:
@@ -64,7 +68,11 @@ def _base_record_payload() -> dict[str, Any]:
             "eval_suite_json": _artifact("eval_suite.json"),
             "manifest_json": _artifact("manifest.json"),
             "agent_task_run_json": _artifact("agent_task_run.json"),
+            "agent_task_view_json": _artifact("agent_task_view.json"),
             "prompt_loop_result_json": _artifact("prompt_loop_result.json"),
+            "decoding_config_json": _artifact("decoding_config.json"),
+            "model_config_json": None,
+            "agent_control_script_json": _artifact("agent_control_script.json"),
             "candidate_patch": _artifact("candidate.patch"),
             "attempt_json": _artifact("attempt/attempt.json"),
             "trace_jsonl": _artifact("attempt/trace.jsonl"),
@@ -130,6 +138,17 @@ def test_trajectory_record_accepts_successful_agent_attempt() -> None:
     assert record.training_eligibility.positive_sft_allowed is True
 
 
+def test_reward_component_signal_field_names_are_derived_from_schema() -> None:
+    assert list_reward_component_signal_field_names() == (
+        "public_validator_success",
+        "hidden_validator_success",
+        "model_output_format_valid",
+        "model_tool_usage_valid",
+        "orchestration_failure",
+        "reward_hack_flag",
+    )
+
+
 def test_trajectory_record_accepts_missing_eval_suite_id() -> None:
     payload = _record_payload(identity={"eval_suite_id": None})
 
@@ -147,8 +166,22 @@ def test_trajectory_record_accepts_scorer_only_attempt() -> None:
         },
         artifacts={
             "agent_task_run_json": None,
+            "agent_task_view_json": None,
             "prompt_loop_result_json": None,
+            "decoding_config_json": None,
+            "model_config_json": None,
+            "agent_control_script_json": None,
             "candidate_patch": None,
+        },
+        reward_components={
+            "model_output_format_valid": None,
+            "model_tool_usage_valid": None,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": False,
+            "preference_data_allowed": False,
+            "eligibility_reason": "analysis-only scorer attempt",
         },
     )
 
@@ -157,6 +190,60 @@ def test_trajectory_record_accepts_scorer_only_attempt() -> None:
     assert record.identity.agent_attempt_id is None
     assert record.identity.scorer_attempt_id == "scorer_attempt_001"
     assert record.statuses.task_success is True
+
+
+def test_positive_sft_requires_actual_agent_trajectory() -> None:
+    payload = _record_payload(
+        identity={"agent_attempt_id": None},
+        statuses={
+            "agent_task_run_status": None,
+            "prompt_loop_status": None,
+        },
+        artifacts={
+            "agent_task_run_json": None,
+            "agent_task_view_json": None,
+            "prompt_loop_result_json": None,
+            "decoding_config_json": None,
+            "model_config_json": None,
+            "agent_control_script_json": None,
+            "candidate_patch": None,
+        },
+        reward_components={
+            "model_output_format_valid": None,
+            "model_tool_usage_valid": None,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="positive_sft_allowed=true requires a scored agent trajectory|"
+        "training-eligible records require agent_attempt_id",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_training_eligibility_requires_agent_run_artifacts() -> None:
+    payload = _record_payload(
+        artifacts={"agent_task_run_json": None},
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="training-eligible records require agent_task_run_json",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_scored_agent_trajectory_requires_candidate_patch_ref() -> None:
+    payload = _record_payload(
+        artifacts={"candidate_patch": None},
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="scored agent trajectories require candidate_patch",
+    ):
+        TrajectoryRecord.model_validate(payload)
 
 
 def test_trajectory_record_rejects_scorer_only_record_with_agent_artifacts() -> None:
@@ -194,6 +281,7 @@ def test_trajectory_record_accepts_cannot_grade_record() -> None:
             "public_validator_success": None,
             "hidden_validator_success": None,
             "orchestration_failure": False,
+            "reward_hack_flag": None,
         },
         training_eligibility={
             "positive_sft_allowed": False,
@@ -227,6 +315,70 @@ def test_task_success_requires_scored_pass_grade_state() -> None:
     with pytest.raises(
         ValidationError,
         match="task_success=true requires grade_state=scored_pass",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_statuses_reject_scored_agent_with_non_completed_prompt_loop() -> None:
+    payload = _record_payload(
+        statuses={
+            "prompt_loop_status": "model_error",
+            "grade_state": "scored_pass",
+            "task_success": True,
+        }
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="scored agent trajectories require completed prompt loop",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_statuses_reject_agent_loop_failed_with_completed_prompt_loop() -> None:
+    payload = _record_payload(
+        statuses={
+            "agent_task_run_status": "agent_loop_failed",
+            "prompt_loop_status": "completed",
+            "attempt_status": None,
+            "public_status": None,
+            "hidden_status": None,
+            "grade_state": "cannot_grade",
+            "task_success": False,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": True,
+            "preference_data_allowed": False,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="agent loop failures cannot have completed prompt loop",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_statuses_reject_inconsistent_attempt_checks() -> None:
+    payload = _record_payload(
+        statuses={
+            "attempt_status": "PUBLIC_TEST_FAIL",
+            "public_status": "PASS",
+            "hidden_status": "NOT_RUN",
+            "grade_state": "scored_fail",
+            "task_success": False,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": True,
+            "preference_data_allowed": True,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="PUBLIC_TEST_FAIL attempts have inconsistent check statuses",
     ):
         TrajectoryRecord.model_validate(payload)
 
@@ -286,6 +438,59 @@ def test_positive_sft_forbidden_for_non_trainable_splits(split: str) -> None:
         TrajectoryRecord.model_validate(payload)
 
 
+@pytest.mark.parametrize("split", ["heldout_private", "public_calibration"])
+def test_negative_examples_forbidden_for_non_trainable_splits(split: str) -> None:
+    payload = _record_payload(
+        source_provenance={"split": split},
+        statuses={
+            "attempt_status": "HIDDEN_TEST_FAIL",
+            "public_status": "PASS",
+            "hidden_status": "FAIL",
+            "grade_state": "scored_fail",
+            "task_success": False,
+        },
+        reward_components={
+            "public_validator_success": True,
+            "hidden_validator_success": False,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": True,
+            "preference_data_allowed": False,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match=(
+            "negative_example_allowed=true is forbidden for heldout_private "
+            "and public_calibration splits"
+        ),
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+@pytest.mark.parametrize("split", ["heldout_private", "public_calibration"])
+def test_preference_data_forbidden_for_non_trainable_splits(split: str) -> None:
+    payload = _record_payload(
+        source_provenance={"split": split},
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": False,
+            "preference_data_allowed": True,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match=(
+            "preference_data_allowed=true is forbidden for heldout_private "
+            "and public_calibration splits"
+        ),
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
 def test_leakage_evidence_rejects_raw_canary_text() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         LeakageEvidence.model_validate(
@@ -305,6 +510,310 @@ def test_positive_sft_forbids_leakage() -> None:
     with pytest.raises(
         ValidationError,
         match="positive_sft_allowed=true forbids canary leakage",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_artifact_refs_reject_parent_traversal() -> None:
+    payload = _record_payload(
+        artifacts={
+            "manifest_json": _artifact("../manifest.json"),
+        }
+    )
+
+    with pytest.raises(ValidationError, match="parent traversal"):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_positive_sft_forbids_orchestration_failure() -> None:
+    payload = _record_payload(
+        reward_components={"orchestration_failure": True},
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="orchestration_failure must reflect orchestrator terminal statuses",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_reward_orchestration_failure_must_reflect_terminal_status() -> None:
+    payload = _record_payload(
+        identity={"scorer_attempt_id": None},
+        statuses={
+            "agent_task_run_status": "orchestrator_error",
+            "prompt_loop_status": None,
+            "attempt_status": None,
+            "public_status": None,
+            "hidden_status": None,
+            "grade_state": "cannot_grade",
+            "task_success": False,
+        },
+        artifacts={
+            "candidate_patch": None,
+            "attempt_json": None,
+            "trace_jsonl": None,
+            "stdout": None,
+            "stderr": None,
+            "final_diff": None,
+        },
+        reward_components={
+            "public_validator_success": None,
+            "hidden_validator_success": None,
+            "model_output_format_valid": None,
+            "model_tool_usage_valid": None,
+            "orchestration_failure": False,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": False,
+            "preference_data_allowed": False,
+            "eligibility_reason": "analysis-only orchestrator failure",
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="orchestration_failure must reflect orchestrator terminal statuses",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_reward_validator_success_must_reflect_statuses() -> None:
+    payload = _record_payload(
+        statuses={
+            "attempt_status": "HIDDEN_TEST_FAIL",
+            "public_status": "PASS",
+            "hidden_status": "FAIL",
+            "grade_state": "scored_fail",
+            "task_success": False,
+        },
+        reward_components={
+            "public_validator_success": True,
+            "hidden_validator_success": True,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": False,
+            "preference_data_allowed": True,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="hidden_validator_success must reflect hidden_status",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_reward_model_output_format_must_reflect_prompt_loop_status() -> None:
+    payload = _record_payload(
+        identity={"scorer_attempt_id": None},
+        statuses={
+            "agent_task_run_status": "agent_loop_failed",
+            "prompt_loop_status": "invalid_model_output",
+            "attempt_status": None,
+            "public_status": None,
+            "hidden_status": None,
+            "grade_state": "cannot_grade",
+            "task_success": False,
+        },
+        artifacts={
+            "candidate_patch": None,
+            "attempt_json": None,
+            "trace_jsonl": None,
+            "stdout": None,
+            "stderr": None,
+            "final_diff": None,
+        },
+        reward_components={
+            "public_validator_success": None,
+            "hidden_validator_success": None,
+            "model_output_format_valid": True,
+            "model_tool_usage_valid": None,
+            "reward_hack_flag": None,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": False,
+            "preference_data_allowed": False,
+            "eligibility_reason": "analysis-only invalid output",
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="model_output_format_valid must reflect prompt_loop_status",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_reward_tool_usage_must_reflect_prompt_loop_status() -> None:
+    payload = _record_payload(
+        identity={"scorer_attempt_id": None},
+        statuses={
+            "agent_task_run_status": "agent_loop_failed",
+            "prompt_loop_status": "terminal_tool_error",
+            "attempt_status": None,
+            "public_status": None,
+            "hidden_status": None,
+            "grade_state": "cannot_grade",
+            "task_success": False,
+        },
+        artifacts={
+            "candidate_patch": None,
+            "attempt_json": None,
+            "trace_jsonl": None,
+            "stdout": None,
+            "stderr": None,
+            "final_diff": None,
+        },
+        reward_components={
+            "public_validator_success": None,
+            "hidden_validator_success": None,
+            "model_output_format_valid": True,
+            "model_tool_usage_valid": True,
+            "reward_hack_flag": None,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": False,
+            "preference_data_allowed": False,
+            "eligibility_reason": "analysis-only tool error",
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="model_tool_usage_valid must reflect prompt_loop_status",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_reward_hack_flag_must_reflect_attempt_status() -> None:
+    payload = _record_payload(
+        reward_components={"reward_hack_flag": True},
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": False,
+            "preference_data_allowed": True,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="reward_hack_flag must reflect attempt_status",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_negative_examples_require_agent_policy() -> None:
+    payload = _record_payload(
+        identity={"agent_attempt_id": None},
+        policy={
+            "policy_spec": {
+                "type": "scorer_control_patch",
+                "control": "oracle",
+                "attempts": 1,
+                "replay": {"repeats": 0},
+            }
+        },
+        statuses={
+            "agent_task_run_status": None,
+            "prompt_loop_status": None,
+            "attempt_status": "HIDDEN_TEST_FAIL",
+            "public_status": "PASS",
+            "hidden_status": "FAIL",
+            "grade_state": "scored_fail",
+            "task_success": False,
+        },
+        artifacts={
+            "agent_task_run_json": None,
+            "agent_task_view_json": None,
+            "prompt_loop_result_json": None,
+            "decoding_config_json": None,
+            "model_config_json": None,
+            "agent_control_script_json": None,
+            "candidate_patch": None,
+        },
+        reward_components={
+            "public_validator_success": True,
+            "hidden_validator_success": False,
+            "model_output_format_valid": None,
+            "model_tool_usage_valid": None,
+            "reward_hack_flag": False,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": True,
+            "preference_data_allowed": False,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="negative_example_allowed=true requires an agent policy",
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_negative_examples_forbid_leakage() -> None:
+    payload = _record_payload(
+        statuses={
+            "attempt_status": "HIDDEN_TEST_FAIL",
+            "public_status": "PASS",
+            "hidden_status": "FAIL",
+            "grade_state": "scored_fail",
+            "task_success": False,
+        },
+        leakage={"hidden_validators_visible_to_model": True},
+        reward_components={
+            "public_validator_success": True,
+            "hidden_validator_success": False,
+            "reward_hack_flag": False,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": True,
+            "preference_data_allowed": False,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError, match="negative_example_allowed=true forbids leakage"
+    ):
+        TrajectoryRecord.model_validate(payload)
+
+
+def test_preference_data_requires_gradable_trajectory() -> None:
+    payload = _record_payload(
+        identity={"scorer_attempt_id": None},
+        statuses={
+            "agent_task_run_status": "agent_loop_failed",
+            "prompt_loop_status": "model_error",
+            "attempt_status": None,
+            "public_status": None,
+            "hidden_status": None,
+            "grade_state": "cannot_grade",
+            "task_success": False,
+        },
+        reward_components={
+            "public_validator_success": None,
+            "hidden_validator_success": None,
+            "model_output_format_valid": True,
+            "model_tool_usage_valid": None,
+            "reward_hack_flag": None,
+        },
+        training_eligibility={
+            "positive_sft_allowed": False,
+            "negative_example_allowed": True,
+            "preference_data_allowed": True,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="preference_data_allowed=true requires a gradable trajectory",
     ):
         TrajectoryRecord.model_validate(payload)
 
@@ -415,13 +924,13 @@ def test_attempt_status_requires_scorer_attempt_id() -> None:
         TrajectoryRecord.model_validate(payload)
 
 
-def test_scored_record_requires_scorer_attempt_id_even_without_status() -> None:
+def test_scored_record_attempt_status_requires_scorer_attempt_id() -> None:
     payload = _record_payload(
         identity={"scorer_attempt_id": None},
         statuses={
-            "attempt_status": None,
-            "public_status": None,
-            "hidden_status": None,
+            "attempt_status": "HIDDEN_TEST_FAIL",
+            "public_status": "PASS",
+            "hidden_status": "FAIL",
             "grade_state": "scored_fail",
             "task_success": False,
         },
@@ -434,7 +943,7 @@ def test_scored_record_requires_scorer_attempt_id_even_without_status() -> None:
 
     with pytest.raises(
         ValidationError,
-        match="scored trajectory records require identity.scorer_attempt_id",
+        match="attempt_status requires identity.scorer_attempt_id",
     ):
         TrajectoryRecord.model_validate(payload)
 

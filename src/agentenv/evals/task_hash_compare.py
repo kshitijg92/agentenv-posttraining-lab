@@ -1,14 +1,19 @@
-import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
-from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType
-from agentenv.orchestrators.eval_run import (
-    EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
-    EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
+from agentenv.artifacts import MANIFEST_FILENAME
+from agentenv.artifacts.manifests import (
+    EvalRunManifest,
+    EvalSuiteManifest,
+    load_eval_artifact_manifest,
 )
-from agentenv.tasks.hashing import EVAL_TASK_HASHES_SCHEMA_VERSION
+from agentenv.artifacts.payloads import (
+    RequiredTaskFileHash as ArtifactRequiredTaskFileHash,
+)
+from agentenv.artifacts.payloads import (
+    SelectedEvalTaskHash,
+)
 
 
 EvalHashArtifactType = Literal["eval_run", "eval_suite"]
@@ -246,29 +251,17 @@ def render_eval_task_hash_comparison_summary(
 
 def load_eval_task_hash_source(path: Path) -> EvalTaskHashSource:
     manifest_path = _resolve_eval_manifest_path(path)
-    manifest = _load_json_object(manifest_path)
-    artifact_type, artifact_schema_version = _artifact_identity(
-        manifest,
-        manifest_path,
-    )
-    task_hashes = _required_object(manifest, "task_hashes", manifest_path)
-    schema_version = _required_str(task_hashes, "schema_version", manifest_path)
-    if schema_version != EVAL_TASK_HASHES_SCHEMA_VERSION:
-        raise ValueError(
-            f"Unsupported task_hashes schema_version {schema_version!r} "
-            f"at {manifest_path}"
-        )
+    manifest = load_eval_artifact_manifest(manifest_path)
+    task_hashes = manifest.task_hashes
     return EvalTaskHashSource(
         manifest_path=manifest_path,
-        artifact_type=artifact_type,
-        artifact_schema_version=artifact_schema_version,
-        task_pack_id=_required_str(task_hashes, "task_pack_id", manifest_path),
-        selected_task_hash_set=_required_str(
-            task_hashes,
-            "selected_task_hash_set",
-            manifest_path,
+        artifact_type=_eval_hash_artifact_type(manifest),
+        artifact_schema_version=manifest.artifact_schema_version,
+        task_pack_id=task_hashes.task_pack_id,
+        selected_task_hash_set=task_hashes.selected_task_hash_set,
+        selected_tasks=tuple(
+            _selected_task_hash(record) for record in task_hashes.selected_tasks
         ),
-        selected_tasks=_selected_task_hashes(task_hashes, manifest_path),
     )
 
 
@@ -361,152 +354,34 @@ def _resolve_eval_manifest_path(path: Path) -> Path:
     raise ValueError(f"No {MANIFEST_FILENAME} found in {path}")
 
 
-def _artifact_identity(
-    manifest: dict[str, Any],
-    manifest_path: Path,
-) -> tuple[EvalHashArtifactType, str]:
-    artifact_type = _required_str(manifest, "artifact_type", manifest_path)
-    artifact_schema_version = _required_str(
-        manifest,
-        "artifact_schema_version",
-        manifest_path,
-    )
-    if artifact_type == ArtifactType.EVAL_RUN.value:
-        expected = EVAL_RUN_ARTIFACT_SCHEMA_VERSION
-        if artifact_schema_version != expected:
-            raise ValueError(
-                f"Unsupported eval_run artifact_schema_version "
-                f"{artifact_schema_version!r} at {manifest_path}; "
-                f"expected {expected!r}"
-            )
-        return "eval_run", artifact_schema_version
-    if artifact_type == ArtifactType.EVAL_SUITE.value:
-        expected = EVAL_SUITE_ARTIFACT_SCHEMA_VERSION
-        if artifact_schema_version != expected:
-            raise ValueError(
-                f"Unsupported eval_suite artifact_schema_version "
-                f"{artifact_schema_version!r} at {manifest_path}; "
-                f"expected {expected!r}"
-            )
-        return "eval_suite", artifact_schema_version
-    raise ValueError(
-        f"Expected eval_run or eval_suite artifact_type at {manifest_path}; "
-        f"got {artifact_type!r}"
-    )
+def _eval_hash_artifact_type(
+    manifest: EvalRunManifest | EvalSuiteManifest,
+) -> EvalHashArtifactType:
+    if isinstance(manifest, EvalRunManifest):
+        return "eval_run"
+    return "eval_suite"
 
 
-def _selected_task_hashes(
-    task_hashes: dict[str, Any],
-    manifest_path: Path,
-) -> tuple[SelectedTaskHash, ...]:
-    raw_selected_tasks = _required_list(task_hashes, "selected_tasks", manifest_path)
-    selected_tasks = [
-        _selected_task_hash(raw_task, manifest_path)
-        for raw_task in raw_selected_tasks
-    ]
-    seen_task_ids = set[str]()
-    for task in selected_tasks:
-        if task.task_id in seen_task_ids:
-            raise ValueError(
-                f"Duplicate selected task id {task.task_id!r} at {manifest_path}"
-            )
-        seen_task_ids.add(task.task_id)
-    return tuple(selected_tasks)
-
-
-def _selected_task_hash(
-    raw_task: Any,
-    manifest_path: Path,
-) -> SelectedTaskHash:
-    if not isinstance(raw_task, dict):
-        raise ValueError(f"Expected selected task object at {manifest_path}")
+def _selected_task_hash(record: SelectedEvalTaskHash) -> SelectedTaskHash:
     return SelectedTaskHash(
-        task_id=_required_str(raw_task, "task_id", manifest_path),
-        split=_required_str(raw_task, "split", manifest_path),
-        task_record_hash=_required_str(raw_task, "task_record_hash", manifest_path),
-        task_yaml_hash=_required_str(raw_task, "task_yaml_hash", manifest_path),
-        required_task_files_hash=_required_str(
-            raw_task,
-            "required_task_files_hash",
-            manifest_path,
-        ),
-        full_task_dir_hash=_required_str(raw_task, "full_task_dir_hash", manifest_path),
-        required_task_files=_required_task_file_hashes(
-            raw_task.get("required_task_files", []),
-            manifest_path,
+        task_id=record.task_id,
+        split=record.split,
+        task_record_hash=record.task_record_hash,
+        task_yaml_hash=record.task_yaml_hash,
+        required_task_files_hash=record.required_task_files_hash,
+        full_task_dir_hash=record.full_task_dir_hash,
+        required_task_files=tuple(
+            _required_task_file_hash(task_file)
+            for task_file in record.required_task_files
         ),
     )
-
-
-def _required_task_file_hashes(
-    raw_records: Any,
-    manifest_path: Path,
-) -> tuple[RequiredTaskFileHash, ...]:
-    if not isinstance(raw_records, list):
-        raise ValueError(f"Expected required_task_files list at {manifest_path}")
-    records = [
-        _required_task_file_hash(raw_record, manifest_path)
-        for raw_record in raw_records
-    ]
-    seen_paths = set[str]()
-    for record in records:
-        if record.path in seen_paths:
-            raise ValueError(
-                f"Duplicate required task file path {record.path!r} at "
-                f"{manifest_path}"
-            )
-        seen_paths.add(record.path)
-    return tuple(records)
 
 
 def _required_task_file_hash(
-    raw_record: Any,
-    manifest_path: Path,
+    record: ArtifactRequiredTaskFileHash,
 ) -> RequiredTaskFileHash:
-    if not isinstance(raw_record, dict):
-        raise ValueError(f"Expected required task file hash object at {manifest_path}")
     return RequiredTaskFileHash(
-        path=_required_str(raw_record, "path", manifest_path),
-        kind=_required_str(raw_record, "kind", manifest_path),
-        hash=_required_str(raw_record, "hash", manifest_path),
+        path=record.path,
+        kind=record.kind,
+        hash=record.hash,
     )
-
-
-def _load_json_object(path: Path) -> dict[str, Any]:
-    raw = json.loads(path.read_text())
-    if not isinstance(raw, dict):
-        raise ValueError(f"Expected JSON object at {path}")
-    return raw
-
-
-def _required_object(
-    value: dict[str, Any],
-    key: str,
-    path: Path,
-) -> dict[str, Any]:
-    raw_value = value.get(key)
-    if not isinstance(raw_value, dict):
-        raise ValueError(f"Expected object field {key!r} at {path}")
-    return raw_value
-
-
-def _required_list(
-    value: dict[str, Any],
-    key: str,
-    path: Path,
-) -> list[Any]:
-    raw_value = value.get(key)
-    if not isinstance(raw_value, list):
-        raise ValueError(f"Expected list field {key!r} at {path}")
-    return raw_value
-
-
-def _required_str(
-    value: dict[str, Any],
-    key: str,
-    path: Path,
-) -> str:
-    raw_value = value.get(key)
-    if not isinstance(raw_value, str) or not raw_value:
-        raise ValueError(f"Expected non-empty string field {key!r} at {path}")
-    return raw_value

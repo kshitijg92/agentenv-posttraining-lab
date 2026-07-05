@@ -8,15 +8,16 @@ from typing import Any, Literal
 
 import xxhash
 
+from agentenv.artifacts.payloads import EvalTaskHashes
+from agentenv.artifacts.payloads import EVAL_TASK_HASHES_SCHEMA_VERSION
+from agentenv.artifacts.payloads import TASK_HASH_REPORT_SCHEMA_VERSION
+from agentenv.artifacts.payloads import TaskHashReport as TaskHashReportPayload
 from agentenv.tasks.validate import (
     load_splits_lock,
     load_task_manifest,
     load_task_pack_manifest,
 )
 
-
-TASK_HASH_REPORT_SCHEMA_VERSION = "task_hash_report_v0"
-EVAL_TASK_HASHES_SCHEMA_VERSION = "eval_task_hashes_v0"
 
 _NOISY_NAMES = {
     ".git",
@@ -36,19 +37,17 @@ HashableKind = Literal["file", "directory"]
 
 @dataclass(frozen=True)
 class TaskHashReport:
-    payload: dict[str, Any]
+    payload: TaskHashReportPayload
 
     @property
     def pack_record_hash(self) -> str:
-        value = self.payload.get("pack_record_hash")
-        if not isinstance(value, str):
-            raise ValueError("task hash report is missing pack_record_hash")
-        return value
+        return self.payload.pack_record_hash
 
     def write_json(self, out_path: Path) -> None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(
-            json.dumps(self.payload, indent=2, sort_keys=True) + "\n",
+            json.dumps(self.payload.model_dump(mode="json"), indent=2, sort_keys=True)
+            + "\n",
         )
 
 
@@ -88,24 +87,26 @@ def build_task_hash_report(task_pack_path: Path) -> TaskHashReport:
     pack_record_hash = _hash_json(pack_record_input)
 
     return TaskHashReport(
-        payload={
-            "schema_version": TASK_HASH_REPORT_SCHEMA_VERSION,
-            "generated_at_utc": _utc_now_iso(),
-            "git_sha_or_unknown": _git_sha_or_unknown(task_pack_path),
-            "task_pack_id": pack_manifest.id,
-            "task_pack_path": _display_path(task_pack_path),
-            "task_count": len(task_records),
-            "manifest_yaml_hash": _hash_file(pack_manifest_path),
-            "splits_lock_hash": _hash_file(splits_lock_path),
-            "split_counts": {
-                "practice": len(splits_lock.practice),
-                "dev": len(splits_lock.dev),
-                "heldout_private": len(splits_lock.heldout_private),
-                "public_calibration": len(splits_lock.public_calibration),
-            },
-            "tasks": task_records,
-            "pack_record_hash": pack_record_hash,
-        }
+        payload=TaskHashReportPayload.model_validate(
+            {
+                "schema_version": TASK_HASH_REPORT_SCHEMA_VERSION,
+                "generated_at_utc": _utc_now_iso(),
+                "git_sha_or_unknown": _git_sha_or_unknown(task_pack_path),
+                "task_pack_id": pack_manifest.id,
+                "task_pack_path": _display_path(task_pack_path),
+                "task_count": len(task_records),
+                "manifest_yaml_hash": _hash_file(pack_manifest_path),
+                "splits_lock_hash": _hash_file(splits_lock_path),
+                "split_counts": {
+                    "practice": len(splits_lock.practice),
+                    "dev": len(splits_lock.dev),
+                    "heldout_private": len(splits_lock.heldout_private),
+                    "public_calibration": len(splits_lock.public_calibration),
+                },
+                "tasks": task_records,
+                "pack_record_hash": pack_record_hash,
+            }
+        )
     )
 
 
@@ -118,7 +119,7 @@ def write_task_hash_report(task_pack_path: Path, out_path: Path) -> TaskHashRepo
 def build_eval_task_hashes(
     task_pack_path: Path,
     selected_task_ids: list[str],
-) -> dict[str, Any]:
+) -> EvalTaskHashes:
     task_pack_path = task_pack_path.resolve()
     if not task_pack_path.is_dir():
         raise ValueError(f"Expected task pack directory: {task_pack_path}")
@@ -142,12 +143,14 @@ def build_eval_task_hashes(
             for record in selected_records
         ]
     )
-    return {
-        "schema_version": EVAL_TASK_HASHES_SCHEMA_VERSION,
-        "task_pack_id": pack_manifest.id,
-        "selected_task_hash_set": selected_hash_set,
-        "selected_tasks": selected_records,
-    }
+    return EvalTaskHashes.model_validate(
+        {
+            "schema_version": EVAL_TASK_HASHES_SCHEMA_VERSION,
+            "task_pack_id": pack_manifest.id,
+            "selected_task_hash_set": selected_hash_set,
+            "selected_tasks": selected_records,
+        }
+    )
 
 
 def _build_task_hash_record(

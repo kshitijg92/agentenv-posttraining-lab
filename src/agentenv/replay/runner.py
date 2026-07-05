@@ -10,26 +10,36 @@ from agentenv.artifacts import (
     ArtifactType,
     prepare_artifact_output_dir,
 )
+from agentenv.artifacts.base import resolve_relative_artifact_ref
+from agentenv.artifacts.manifests import AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION
+from agentenv.artifacts.manifests import AGENT_ATTEMPT_ARTIFACT_REFS
+from agentenv.artifacts.manifests import REPLAY_RUN_ARTIFACT_SCHEMA_VERSION
+from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_REFS
+from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
+from agentenv.artifacts.manifests import AgentTaskRunManifest
+from agentenv.artifacts.manifests import REPLAY_RUN_ARTIFACT_REFS
+from agentenv.artifacts.manifests import ReplayRunManifest
+from agentenv.artifacts.manifests import ScorerAttemptManifest
+from agentenv.artifacts.manifests import load_attempt_manifest
+from agentenv.artifacts.manifests import load_replay_source_manifest
+from agentenv.artifacts.payloads import ReplayComparisonRecord
+from agentenv.artifacts.payloads import ReplayResult
+from agentenv.artifacts.payloads import REPLAY_RESULT_SCHEMA_VERSION
+from agentenv.artifacts.payloads import load_agent_task_run_result
+from agentenv.artifacts.payloads import load_decoding_config_provenance
+from agentenv.artifacts.payloads import load_attempt_result
+from agentenv.artifacts.payloads import load_prompt_loop_result
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.ids import new_replay_run_id
 from agentenv.models.fake import ScriptedFakeModelClient
-from agentenv.models.schema import DecodingConfig
+from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.agent_task_run import (
-    AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
-    AgentTaskRunResult,
     run_and_persist_agent_task_attempt_to_dir,
 )
 from agentenv.orchestrators.attempt import AttemptResult
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
-from agentenv.orchestrators.attempt_io import SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
-from agentenv.orchestrators.eval_run import EVAL_RUN_ARTIFACT_SCHEMA_VERSION
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
-
-REPLAY_RUN_ARTIFACT_SCHEMA_VERSION = "replay_run_artifact_v0"
-REPLAY_RESULT_SCHEMA_VERSION = "replay_result_v0"
-AGENT_CONTROL_SCRIPT_ARTIFACT = "agent_control_script.json"
-DECODING_CONFIG_ARTIFACT = "decoding_config.json"
 
 ReplayStatus = Literal["PASS", "MISMATCH", "REPLAY_ERROR"]
 ReplayComparisonType = Literal["scorer_attempt", "agent_task_run"]
@@ -51,23 +61,8 @@ COMPARED_FIELDS: tuple[ComparedField, ...] = (
 
 SCORER_ATTEMPT_ARTIFACTS = (
     MANIFEST_FILENAME,
-    "attempt.json",
-    "stdout.txt",
-    "stderr.txt",
-    "error.txt",
-    "trace.jsonl",
-    "final.diff",
+    *SCORER_ATTEMPT_ARTIFACT_REFS.values(),
 )
-AGENT_BASE_ARTIFACTS = (
-    MANIFEST_FILENAME,
-    "agent_task_run.json",
-    "error.txt",
-    "agent_task_view.json",
-    "prompt_loop_result.json",
-    DECODING_CONFIG_ARTIFACT,
-    AGENT_CONTROL_SCRIPT_ARTIFACT,
-)
-
 VOLATILE_JSON_KEYS = {
     "agent_attempt_id",
     "scorer_attempt_id",
@@ -131,11 +126,15 @@ def run_replay(
             "out_dir": str(out_dir),
         },
     )
+    source_manifest: dict[str, object] = {}
 
     try:
         source_manifest_path = source_run_dir / MANIFEST_FILENAME
-        source_manifest = _load_json_object(source_manifest_path)
-        _require_supported_source_manifest(source_manifest, source_manifest_path)
+        loaded_source_manifest = load_replay_source_manifest(source_manifest_path)
+        source_manifest = loaded_source_manifest.model_dump(
+            mode="json",
+            by_alias=True,
+        )
         base_provenance = _source_manifest_provenance(replay_run_id, source_manifest)
         _append_trace(
             trace_events,
@@ -156,8 +155,12 @@ def run_replay(
             source_manifest,
             trace_events,
         )
+        if not comparisons:
+            raise ValueError("Replay source produced no comparisons")
         status: ReplayStatus = (
-            "PASS" if all(comparison.matched for comparison in comparisons) else "MISMATCH"
+            "PASS"
+            if all(comparison.matched for comparison in comparisons)
+            else "MISMATCH"
         )
     except Exception as exc:
         comparisons = []
@@ -168,7 +171,6 @@ def run_replay(
             "replay_error",
             output_payload={"error_class": type(exc).__name__, "message": str(exc)},
         )
-        source_manifest = {}
 
     replay_run = ReplayRun(
         replay_run_id=replay_run_id,
@@ -227,7 +229,7 @@ def _replay_eval_run_attempts(
         raise ValueError("Source eval run manifest is missing attempts list")
 
     comparisons: list[ReplayComparison] = []
-    replay_attempts_dir = out_dir / "attempts"
+    replay_attempts_dir = out_dir / REPLAY_RUN_ARTIFACT_REFS["attempts"]
     replay_attempts_dir.mkdir(parents=True, exist_ok=True)
 
     for raw_attempt in attempts:
@@ -260,21 +262,24 @@ def _replay_one_eval_attempt_artifact(
         source_attempt_record,
         source_run_dir / MANIFEST_FILENAME,
     )
-    source_artifact_dir = source_run_dir / artifact_dir
-    source_artifact_manifest = _load_json_object(
+    source_artifact_dir = resolve_relative_artifact_ref(source_run_dir, artifact_dir)
+    source_artifact_manifest_model = load_attempt_manifest(
         source_artifact_dir / MANIFEST_FILENAME
     )
-    artifact_type = _validated_attempt_source_artifact_type(
-        source_artifact_manifest,
-        source_artifact_dir / MANIFEST_FILENAME,
+    source_artifact_manifest = source_artifact_manifest_model.model_dump(
+        mode="json",
+        by_alias=True,
     )
-    if artifact_type != parent_artifact_type:
-        raise ValueError(
-            "Eval run child artifact_type mismatch between parent attempt record "
-            f"{parent_artifact_type!r} and child manifest {artifact_type!r} "
-            f"for {artifact_dir}"
-        )
+    artifact_type = source_artifact_manifest_model.artifact_type
+    _validate_eval_child_manifest_matches_parent(
+        source_attempt_record,
+        source_artifact_manifest_model,
+        artifact_dir=artifact_dir,
+        parent_artifact_type=parent_artifact_type,
+    )
     if artifact_type == ArtifactType.AGENT_ATTEMPT.value:
+        if not isinstance(source_artifact_manifest_model, AgentTaskRunManifest):
+            raise ValueError(f"Expected agent attempt manifest for {artifact_dir}")
         return _replay_agent_task_run_artifact(
             base_provenance,
             source_artifact_dir,
@@ -283,7 +288,10 @@ def _replay_one_eval_attempt_artifact(
             trace_events,
             replay_agent_dir=replay_attempts_dir / Path(artifact_dir).name,
             source_eval_attempt_id=source_eval_attempt_id,
+            parent_attempt_record=source_attempt_record,
         )
+    if not isinstance(source_artifact_manifest_model, ScorerAttemptManifest):
+        raise ValueError(f"Expected scorer attempt manifest for {artifact_dir}")
     return _replay_one_scorer_attempt(
         base_provenance,
         source_run_dir,
@@ -291,6 +299,7 @@ def _replay_one_eval_attempt_artifact(
         source_attempt_record,
         trace_events,
         source_eval_attempt_id=source_eval_attempt_id,
+        source_manifest=source_artifact_manifest_model,
     )
 
 
@@ -304,7 +313,10 @@ def _validated_attempt_source_artifact_type(
         ArtifactType.SCORER_ATTEMPT.value: SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
         ArtifactType.AGENT_ATTEMPT.value: AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
     }
-    if not isinstance(artifact_type, str) or artifact_type not in expected_schema_versions:
+    if (
+        not isinstance(artifact_type, str)
+        or artifact_type not in expected_schema_versions
+    ):
         raise ValueError(
             "Eval run child artifact_type must be one of "
             f"{ArtifactType.SCORER_ATTEMPT.value!r}, "
@@ -321,6 +333,99 @@ def _validated_attempt_source_artifact_type(
     return artifact_type
 
 
+def _validate_eval_child_manifest_matches_parent(
+    parent_attempt_record: dict[str, object],
+    child_manifest: ScorerAttemptManifest | AgentTaskRunManifest,
+    *,
+    artifact_dir: str,
+    parent_artifact_type: str,
+) -> None:
+    if child_manifest.artifact_type != parent_artifact_type:
+        raise ValueError(
+            "Eval run child artifact_type mismatch between parent attempt record "
+            f"{parent_artifact_type!r} and child manifest {child_manifest.artifact_type!r} "
+            f"for {artifact_dir}"
+        )
+    parent_schema_version = _required_str(
+        parent_attempt_record,
+        "artifact_schema_version",
+    )
+    if child_manifest.artifact_schema_version != parent_schema_version:
+        raise ValueError(
+            "Eval run child artifact_schema_version mismatch between parent attempt "
+            f"record {parent_schema_version!r} and child manifest "
+            f"{child_manifest.artifact_schema_version!r} for {artifact_dir}"
+        )
+    parent_task_id = _required_str(parent_attempt_record, "task_id")
+    if child_manifest.task_id != parent_task_id:
+        raise ValueError(
+            "Eval run child task_id mismatch between parent attempt record "
+            f"{parent_task_id!r} and child manifest {child_manifest.task_id!r} "
+            f"for {artifact_dir}"
+        )
+    if isinstance(child_manifest, ScorerAttemptManifest):
+        _validate_scorer_manifest_matches_eval_parent(
+            child_manifest,
+            parent_attempt_record,
+            artifact_dir,
+        )
+        return
+    _validate_agent_manifest_matches_eval_parent(
+        child_manifest,
+        parent_attempt_record,
+        artifact_dir,
+    )
+
+
+def _validate_scorer_manifest_matches_eval_parent(
+    child_manifest: ScorerAttemptManifest,
+    parent_attempt_record: dict[str, object],
+    artifact_dir: str,
+) -> None:
+    scorer_summary = parent_attempt_record.get("scorer")
+    if not isinstance(scorer_summary, dict):
+        raise ValueError(
+            f"Scorer eval attempt record missing scorer summary: {artifact_dir}"
+        )
+    source_scorer_attempt_id = _required_str(scorer_summary, "scorer_attempt_id")
+    if child_manifest.scorer_attempt_id != source_scorer_attempt_id:
+        raise ValueError(
+            "Eval run child scorer_attempt_id mismatch between parent attempt "
+            f"record {source_scorer_attempt_id!r} and child manifest "
+            f"{child_manifest.scorer_attempt_id!r} for {artifact_dir}"
+        )
+    _require_null_or_missing(parent_attempt_record, "agent", artifact_dir)
+
+
+def _validate_agent_manifest_matches_eval_parent(
+    child_manifest: AgentTaskRunManifest,
+    parent_attempt_record: dict[str, object],
+    artifact_dir: str,
+) -> None:
+    agent_summary = parent_attempt_record.get("agent")
+    if not isinstance(agent_summary, dict):
+        raise ValueError(
+            f"Agent eval attempt record missing agent summary: {artifact_dir}"
+        )
+    source_agent_attempt_id = _required_str(agent_summary, "agent_attempt_id")
+    if child_manifest.agent_attempt_id != source_agent_attempt_id:
+        raise ValueError(
+            "Eval run child agent_attempt_id mismatch between parent attempt "
+            f"record {source_agent_attempt_id!r} and child manifest "
+            f"{child_manifest.agent_attempt_id!r} for {artifact_dir}"
+        )
+    _require_null_or_missing(parent_attempt_record, "scorer", artifact_dir)
+
+
+def _require_null_or_missing(
+    payload: dict[str, object],
+    field_name: str,
+    artifact_dir: str,
+) -> None:
+    if payload.get(field_name) is not None:
+        raise ValueError(f"{field_name} must be null for eval child {artifact_dir}")
+
+
 def _replay_one_scorer_attempt(
     base_provenance: dict[str, object],
     source_run_dir: Path,
@@ -329,12 +434,26 @@ def _replay_one_scorer_attempt(
     trace_events: list[dict[str, object]],
     *,
     source_eval_attempt_id: str,
+    source_manifest: ScorerAttemptManifest,
 ) -> ReplayComparison:
     artifact_dir = _required_str(source_attempt_record, "artifact_dir")
     task_id = _required_str(source_attempt_record, "task_id")
-    source_attempt_dir = source_run_dir / artifact_dir
-    source_attempt = AttemptResult.model_validate(
-        _load_json_object(source_attempt_dir / "attempt.json")
+    source_attempt_dir = resolve_relative_artifact_ref(source_run_dir, artifact_dir)
+    source_attempt_ref = source_manifest.artifacts["attempt"]
+    source_attempt_path = resolve_relative_artifact_ref(
+        source_attempt_dir,
+        source_attempt_ref,
+    )
+    source_attempt = load_attempt_result(source_attempt_path)
+    _validate_scorer_result_matches_manifest(
+        source_attempt,
+        source_manifest,
+        source_attempt_path,
+    )
+    _validate_scorer_result_matches_eval_parent(
+        source_attempt,
+        source_attempt_record,
+        source_attempt_path,
     )
     source_attempt_provenance = _event_provenance(
         base_provenance,
@@ -392,8 +511,12 @@ def _replay_one_scorer_attempt(
             "final_diff_hash": replay_attempt.final_diff_hash,
         },
         payload_refs={
-            "attempt": str(replay_attempt_dir / "attempt.json"),
-            "final_diff": str(replay_attempt_dir / "final.diff"),
+            "attempt": str(
+                replay_attempt_dir / SCORER_ATTEMPT_ARTIFACT_REFS["attempt"]
+            ),
+            "final_diff": str(
+                replay_attempt_dir / SCORER_ATTEMPT_ARTIFACT_REFS["final_diff"]
+            ),
         },
     )
 
@@ -404,7 +527,7 @@ def _replay_one_scorer_attempt(
     artifact_matches = _compare_artifacts(
         source_attempt_dir,
         replay_attempt_dir,
-        artifact_refs=SCORER_ATTEMPT_ARTIFACTS,
+        artifact_refs=_scorer_artifact_refs(source_manifest),
         repo_roots=_repo_roots(source_attempt, replay_attempt),
     )
     comparison = ReplayComparison(
@@ -435,6 +558,74 @@ def _replay_one_scorer_attempt(
     return comparison
 
 
+def _validate_scorer_result_matches_manifest(
+    result: AttemptResult,
+    manifest: ScorerAttemptManifest,
+    source_path: Path,
+) -> None:
+    if result.scorer_attempt_id != manifest.scorer_attempt_id:
+        raise ValueError(
+            f"scorer_attempt_id mismatch between result and manifest: {source_path}"
+        )
+    if result.task_id != manifest.task_id:
+        raise ValueError(
+            f"task_id mismatch between scorer result and manifest: {source_path}"
+        )
+    if result.task_manifest_path != manifest.task_manifest_path:
+        raise ValueError(
+            f"task_manifest_path mismatch between scorer result and manifest: {source_path}"
+        )
+    if result.submission_path != manifest.submission_path:
+        raise ValueError(
+            f"submission_path mismatch between scorer result and manifest: {source_path}"
+        )
+    if result.status != manifest.status:
+        raise ValueError(
+            f"status mismatch between scorer result and manifest: {source_path}"
+        )
+
+
+def _validate_scorer_result_matches_eval_parent(
+    result: AttemptResult,
+    parent_attempt_record: dict[str, object],
+    source_path: Path,
+) -> None:
+    scorer_summary = parent_attempt_record.get("scorer")
+    if not isinstance(scorer_summary, dict):
+        raise ValueError(
+            f"Scorer eval attempt record missing scorer summary: {source_path}"
+        )
+    _validate_scorer_result_matches_summary(
+        result,
+        scorer_summary,
+        source_path,
+        context="eval parent",
+    )
+
+
+def _validate_scorer_result_matches_summary(
+    result: AttemptResult,
+    scorer_summary: dict[str, object],
+    source_path: Path,
+    *,
+    context: str,
+) -> None:
+    compared_fields = {
+        "scorer_attempt_id": result.scorer_attempt_id,
+        "status": result.status,
+        "public_status": result.public_status,
+        "hidden_status": result.hidden_status,
+        "error_class": result.error_class,
+        "final_diff_hash": result.final_diff_hash,
+    }
+    for field_name, result_value in compared_fields.items():
+        if result_value != scorer_summary.get(field_name):
+            raise ValueError(
+                f"{field_name} mismatch between scorer result and {context}: "
+                f"{source_path}"
+            )
+
+
 def _replay_agent_task_run_artifact(
     base_provenance: dict[str, object],
     source_run_dir: Path,
@@ -444,10 +635,26 @@ def _replay_agent_task_run_artifact(
     *,
     replay_agent_dir: Path | None = None,
     source_eval_attempt_id: str | None = None,
+    parent_attempt_record: dict[str, object] | None = None,
 ) -> ReplayComparison:
-    source_agent_result = AgentTaskRunResult.model_validate(
-        _load_json_object(source_run_dir / "agent_task_run.json")
+    agent_task_run_ref = _required_manifest_artifact_ref(
+        source_manifest,
+        "agent_task_run",
     )
+    source_agent_result = load_agent_task_run_result(
+        resolve_relative_artifact_ref(source_run_dir, agent_task_run_ref)
+    )
+    _validate_agent_result_matches_manifest(
+        source_agent_result,
+        source_manifest,
+        source_run_dir / agent_task_run_ref,
+    )
+    if parent_attempt_record is not None:
+        _validate_agent_result_matches_eval_parent(
+            source_agent_result,
+            parent_attempt_record,
+            source_run_dir / agent_task_run_ref,
+        )
     source_provenance = _event_provenance(
         base_provenance,
         task_id=source_agent_result.task_id,
@@ -474,14 +681,22 @@ def _replay_agent_task_run_artifact(
         },
     )
 
+    agent_control_script_ref = _required_manifest_artifact_ref(
+        source_manifest,
+        "agent_control_script",
+    )
+    decoding_config_ref = _required_manifest_artifact_ref(
+        source_manifest,
+        "decoding_config",
+    )
     control_case = load_agent_control_script_case(
-        source_run_dir / AGENT_CONTROL_SCRIPT_ARTIFACT
+        resolve_relative_artifact_ref(source_run_dir, agent_control_script_ref)
     )
-    decoding_config = DecodingConfig.model_validate(
-        _config_payload(_load_json_object(source_run_dir / DECODING_CONFIG_ARTIFACT))
-    )
+    decoding_config = load_decoding_config_provenance(
+        resolve_relative_artifact_ref(source_run_dir, decoding_config_ref)
+    ).config
     model_client = ScriptedFakeModelClient(
-        model_id=_source_agent_model_id(source_run_dir),
+        model_id=_source_agent_model_id(source_run_dir, source_manifest),
         script=control_case.script.steps,
     )
     if replay_agent_dir is None:
@@ -493,8 +708,8 @@ def _replay_agent_task_run_artifact(
         input_payload={
             "replay_artifact_dir": str(replay_agent_dir),
             "task_manifest_path": source_agent_result.task_manifest_path,
-            "agent_control_script": AGENT_CONTROL_SCRIPT_ARTIFACT,
-            "decoding_config": DECODING_CONFIG_ARTIFACT,
+            "agent_control_script": agent_control_script_ref,
+            "decoding_config": decoding_config_ref,
         },
     )
     replay_agent_run = run_and_persist_agent_task_attempt_to_dir(
@@ -523,11 +738,15 @@ def _replay_agent_task_run_artifact(
             "error_class": replay_agent_result.error_class,
             "candidate_patch_hash": replay_agent_result.candidate_patch_hash,
         },
-        payload_refs={"agent_task_run": str(replay_agent_dir / "agent_task_run.json")},
+        payload_refs={
+            "agent_task_run": str(
+                replay_agent_dir / AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_run"]
+            )
+        },
     )
 
     field_matches = _agent_field_matches(source_agent_result, replay_agent_result)
-    artifact_refs = _agent_artifact_refs(source_run_dir)
+    artifact_refs = _agent_artifact_refs(source_manifest)
     artifact_matches = _compare_artifacts(
         source_run_dir,
         replay_agent_dir,
@@ -565,6 +784,92 @@ def _replay_agent_task_run_artifact(
     return comparison
 
 
+def _validate_agent_result_matches_manifest(
+    result: AgentTaskRunResult,
+    manifest: dict[str, object],
+    source_path: Path,
+) -> None:
+    if result.agent_attempt_id != _required_str(manifest, "agent_attempt_id"):
+        raise ValueError(
+            f"agent_attempt_id mismatch between result and manifest: {source_path}"
+        )
+    if result.task_id != _required_str(manifest, "task_id"):
+        raise ValueError(
+            f"task_id mismatch between agent result and manifest: {source_path}"
+        )
+    if result.task_manifest_path != _required_str(manifest, "task_manifest_path"):
+        raise ValueError(
+            f"task_manifest_path mismatch between agent result and manifest: {source_path}"
+        )
+    if result.status != _required_str(manifest, "status"):
+        raise ValueError(
+            f"status mismatch between agent result and manifest: {source_path}"
+        )
+    prompt_loop_status = manifest.get("prompt_loop_status")
+    if result.prompt_loop_status != prompt_loop_status:
+        raise ValueError(
+            f"prompt_loop_status mismatch between agent result and manifest: {source_path}"
+        )
+    if _attempt_status(result.attempt_result) != manifest.get("attempt_status"):
+        raise ValueError(
+            f"attempt_status mismatch between agent result and manifest: {source_path}"
+        )
+
+
+def _validate_agent_result_matches_eval_parent(
+    result: AgentTaskRunResult,
+    parent_attempt_record: dict[str, object],
+    source_path: Path,
+) -> None:
+    agent_summary = parent_attempt_record.get("agent")
+    if not isinstance(agent_summary, dict):
+        raise ValueError(
+            f"Agent eval attempt record missing agent summary: {source_path}"
+        )
+    if result.agent_attempt_id != _required_str(agent_summary, "agent_attempt_id"):
+        raise ValueError(
+            f"agent_attempt_id mismatch between agent result and eval parent: {source_path}"
+        )
+    if result.task_id != _required_str(parent_attempt_record, "task_id"):
+        raise ValueError(
+            f"task_id mismatch between agent result and eval parent: {source_path}"
+        )
+    if result.status != _required_str(agent_summary, "status"):
+        raise ValueError(
+            f"status mismatch between agent result and eval parent: {source_path}"
+        )
+    if result.prompt_loop_status != agent_summary.get("prompt_loop_status"):
+        raise ValueError(
+            f"prompt_loop_status mismatch between agent result and eval parent: {source_path}"
+        )
+    if result.candidate_patch_hash != agent_summary.get("candidate_patch_hash"):
+        raise ValueError(
+            f"candidate_patch_hash mismatch between agent result and eval parent: {source_path}"
+        )
+    scorer_summary = agent_summary.get("scorer_attempt")
+    if result.attempt_result is None:
+        if scorer_summary is not None:
+            raise ValueError(
+                f"agent result missing scorer attempt referenced by eval parent: {source_path}"
+            )
+        return
+    if not isinstance(scorer_summary, dict):
+        raise ValueError(f"Eval parent missing nested scorer summary: {source_path}")
+    if result.attempt_result.scorer_attempt_id != _required_str(
+        scorer_summary,
+        "scorer_attempt_id",
+    ):
+        raise ValueError(
+            f"scorer_attempt_id mismatch between agent result and eval parent: {source_path}"
+        )
+    _validate_scorer_result_matches_summary(
+        result.attempt_result,
+        scorer_summary,
+        source_path,
+        context="eval parent",
+    )
+
+
 def _write_replay_artifacts(
     replay_run: ReplayRun,
     created_at: str,
@@ -584,37 +889,48 @@ def _write_replay_artifacts(
         },
     )
 
+    replay_manifest = ReplayRunManifest.model_validate(
+        _replay_manifest(replay_run, created_at, source_manifest)
+    )
+    replay_result = ReplayResult.model_validate(_replay_result(replay_run))
+    replay_comparisons = [
+        ReplayComparisonRecord.model_validate(
+            _comparison_record(
+                comparison,
+                replay_run.source_run_dir,
+                replay_run.out_dir,
+            )
+        )
+        for comparison in replay_run.comparisons
+    ]
+
     (replay_run.out_dir / MANIFEST_FILENAME).write_text(
         json.dumps(
-            _replay_manifest(replay_run, created_at, source_manifest),
+            replay_manifest.model_dump(mode="json"),
             indent=2,
             sort_keys=True,
         )
         + "\n"
     )
-    (replay_run.out_dir / "replay_result.json").write_text(
+    (replay_run.out_dir / REPLAY_RUN_ARTIFACT_REFS["replay_result"]).write_text(
         json.dumps(
-            _replay_result(replay_run),
+            replay_result.model_dump(mode="json"),
             indent=2,
             sort_keys=True,
         )
         + "\n"
     )
-    (replay_run.out_dir / "replay_results.jsonl").write_text(
+    (replay_run.out_dir / REPLAY_RUN_ARTIFACT_REFS["replay_results"]).write_text(
         "".join(
             json.dumps(
-                _comparison_record(
-                    comparison,
-                    replay_run.source_run_dir,
-                    replay_run.out_dir,
-                ),
+                comparison.model_dump(mode="json", exclude_none=True),
                 sort_keys=True,
             )
             + "\n"
-            for comparison in replay_run.comparisons
+            for comparison in replay_comparisons
         )
     )
-    (replay_run.out_dir / "trace.jsonl").write_text(
+    (replay_run.out_dir / REPLAY_RUN_ARTIFACT_REFS["trace"]).write_text(
         "".join(json.dumps(event, sort_keys=True) + "\n" for event in trace_events)
     )
 
@@ -625,18 +941,18 @@ def _replay_manifest(
     source_manifest: dict[str, object],
 ) -> dict[str, object]:
     artifacts = {
-        "replay_result": "replay_result.json",
-        "replay_results": "replay_results.jsonl",
-        "trace": "trace.jsonl",
+        "replay_result": REPLAY_RUN_ARTIFACT_REFS["replay_result"],
+        "replay_results": REPLAY_RUN_ARTIFACT_REFS["replay_results"],
+        "trace": REPLAY_RUN_ARTIFACT_REFS["trace"],
     }
     source_artifact_type = source_manifest.get("artifact_type")
     comparison_types = {
         comparison.comparison_type for comparison in replay_run.comparisons
     }
     if source_artifact_type == ArtifactType.EVAL_RUN.value:
-        artifacts["attempts"] = "attempts"
+        artifacts["attempts"] = REPLAY_RUN_ARTIFACT_REFS["attempts"]
     elif "agent_task_run" in comparison_types:
-        artifacts["agent_task_run"] = "agent_task_run"
+        artifacts["agent_task_run"] = REPLAY_RUN_ARTIFACT_REFS["agent_task_run"]
     return {
         "artifact_type": ArtifactType.REPLAY_RUN,
         "artifact_schema_version": REPLAY_RUN_ARTIFACT_SCHEMA_VERSION,
@@ -644,6 +960,7 @@ def _replay_manifest(
         "created_at": created_at,
         "source_run_dir": str(replay_run.source_run_dir),
         "source_eval_run_id": source_manifest.get("eval_run_id"),
+        "source_agent_attempt_id": source_manifest.get("agent_attempt_id"),
         "source_artifact_type": source_manifest.get("artifact_type"),
         "source_artifact_schema_version": source_manifest.get(
             "artifact_schema_version"
@@ -673,8 +990,12 @@ def _comparison_record(
     source_run_dir: Path,
     replay_out_dir: Path,
 ) -> dict[str, object]:
-    source_artifact_ref = str(comparison.source_artifact_dir.relative_to(source_run_dir))
-    replay_artifact_ref = str(comparison.replay_artifact_dir.relative_to(replay_out_dir))
+    source_artifact_ref = str(
+        comparison.source_artifact_dir.relative_to(source_run_dir)
+    )
+    replay_artifact_ref = str(
+        comparison.replay_artifact_dir.relative_to(replay_out_dir)
+    )
     return {
         "comparison_type": comparison.comparison_type,
         "task_id": comparison.task_id,
@@ -755,10 +1076,7 @@ def _normalize_json_value(value: object, *, repo_roots: tuple[Path, ...]) -> obj
                 )
         return normalized
     if isinstance(value, list):
-        return [
-            _normalize_json_value(item, repo_roots=repo_roots)
-            for item in value
-        ]
+        return [_normalize_json_value(item, repo_roots=repo_roots) for item in value]
     if isinstance(value, str):
         return _normalize_text(value, repo_roots=repo_roots)
     return value
@@ -840,7 +1158,8 @@ def _agent_field_matches(
             source_agent_result.candidate_patch_hash
             == replay_agent_result.candidate_patch_hash
         ),
-        "error_class": source_agent_result.error_class == replay_agent_result.error_class,
+        "error_class": source_agent_result.error_class
+        == replay_agent_result.error_class,
         "error_message": (
             source_agent_result.error_message == replay_agent_result.error_message
         ),
@@ -851,29 +1170,53 @@ def _attempt_status(attempt_result: AttemptResult | None) -> str | None:
     return attempt_result.status if attempt_result is not None else None
 
 
-def _agent_artifact_refs(source_agent_dir: Path) -> tuple[str, ...]:
-    artifact_refs: list[str] = []
-    for artifact_ref in AGENT_BASE_ARTIFACTS:
-        if (source_agent_dir / artifact_ref).is_file():
-            artifact_refs.append(artifact_ref)
-    if (source_agent_dir / "candidate.patch").is_file():
-        artifact_refs.append("candidate.patch")
-    if (source_agent_dir / "attempt").is_dir():
-        artifact_refs.extend(
-            f"attempt/{artifact_ref}" for artifact_ref in SCORER_ATTEMPT_ARTIFACTS
-        )
-    return tuple(artifact_refs)
+def _scorer_artifact_refs(source_manifest: ScorerAttemptManifest) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys((MANIFEST_FILENAME, *source_manifest.artifacts.values()))
+    )
 
 
-def _source_agent_model_id(source_agent_dir: Path) -> str:
-    prompt_loop_result = _load_json_object(source_agent_dir / "prompt_loop_result.json")
-    model_responses = prompt_loop_result.get("model_responses")
-    if isinstance(model_responses, list):
-        for raw_response in model_responses:
-            if isinstance(raw_response, dict):
-                model_id = raw_response.get("model_id")
-                if isinstance(model_id, str) and model_id:
-                    return model_id
+def _agent_artifact_refs(source_manifest: dict[str, object]) -> tuple[str, ...]:
+    artifacts = source_manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("Agent replay source manifest is missing artifacts object")
+    artifact_refs = [MANIFEST_FILENAME]
+    for artifact_name, raw_ref in artifacts.items():
+        if not isinstance(artifact_name, str):
+            raise ValueError(
+                "Agent replay source manifest has non-string artifact name"
+            )
+        if not isinstance(raw_ref, str) or not raw_ref:
+            raise ValueError(
+                f"Agent replay source manifest has invalid {artifact_name!r} ref"
+            )
+        artifact_ref = raw_ref.rstrip("/")
+        if artifact_name == "attempt":
+            artifact_refs.extend(
+                f"{artifact_ref}/{nested_ref}"
+                for nested_ref in SCORER_ATTEMPT_ARTIFACTS
+            )
+            continue
+        artifact_refs.append(artifact_ref)
+    return tuple(dict.fromkeys(artifact_refs))
+
+
+def _source_agent_model_id(
+    source_agent_dir: Path,
+    source_manifest: dict[str, object],
+) -> str:
+    artifacts = source_manifest.get("artifacts")
+    prompt_loop_ref = (
+        artifacts.get("prompt_loop_result") if isinstance(artifacts, dict) else None
+    )
+    if not isinstance(prompt_loop_ref, str):
+        return "agent-control-scripted-v0"
+    prompt_loop_result = load_prompt_loop_result(
+        resolve_relative_artifact_ref(source_agent_dir, prompt_loop_ref)
+    )
+    for response in prompt_loop_result.model_responses:
+        if response.model_id:
+            return response.model_id
     return "agent-control-scripted-v0"
 
 
@@ -902,39 +1245,6 @@ def _load_json_object(path: Path) -> dict[str, object]:
     return raw
 
 
-def _config_payload(value: dict[str, object]) -> dict[str, object]:
-    config = value.get("config")
-    if isinstance(config, dict):
-        return config
-    return value
-
-
-def _require_supported_source_manifest(
-    source_manifest: dict[str, object],
-    source_manifest_path: Path,
-) -> None:
-    artifact_type = source_manifest.get("artifact_type")
-    artifact_schema_version = source_manifest.get("artifact_schema_version")
-    expected_schema_versions = {
-        ArtifactType.EVAL_RUN.value: EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
-        ArtifactType.AGENT_ATTEMPT.value: AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
-    }
-    if not isinstance(artifact_type, str) or artifact_type not in expected_schema_versions:
-        raise ValueError(
-            "Replay input artifact_type must be one of "
-            f"{ArtifactType.EVAL_RUN.value!r}, "
-            f"{ArtifactType.AGENT_ATTEMPT.value!r}; got {artifact_type!r} "
-            f"at {source_manifest_path}"
-        )
-    expected_schema_version = expected_schema_versions[artifact_type]
-    if artifact_schema_version != expected_schema_version:
-        raise ValueError(
-            "Unsupported replay source artifact_schema_version "
-            f"{artifact_schema_version!r} for artifact_type {artifact_type!r}; "
-            f"expected {expected_schema_version!r} at {source_manifest_path}"
-        )
-
-
 def _source_manifest_provenance(
     replay_run_id: str,
     source_manifest: dict[str, object],
@@ -947,6 +1257,21 @@ def _source_manifest_provenance(
     if isinstance(source_agent_attempt_id, str):
         provenance["source_agent_attempt_id"] = source_agent_attempt_id
     return provenance
+
+
+def _required_manifest_artifact_ref(
+    manifest: dict[str, object],
+    artifact_name: str,
+) -> str:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("Replay source manifest is missing artifacts object")
+    artifact_ref = artifacts.get(artifact_name)
+    if not isinstance(artifact_ref, str) or not artifact_ref:
+        raise ValueError(
+            f"Agent attempt replay sources require {artifact_name!r} artifact evidence"
+        )
+    return artifact_ref
 
 
 def _required_str(data: dict[str, object], key: str) -> str:

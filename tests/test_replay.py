@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+from agentenv.artifacts.manifests import load_replay_run_manifest
+from agentenv.artifacts.payloads import load_replay_comparison_records
+from agentenv.artifacts.payloads import load_replay_result
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_run import (
@@ -71,10 +74,10 @@ def _write_eval_with_child_attempt_manifest(
     child_dir.mkdir(parents=True, exist_ok=True)
     (child_dir / "manifest.json").write_text(
         json.dumps(
-            {
-                "artifact_type": child_artifact_type,
-                "artifact_schema_version": child_artifact_schema_version,
-            },
+            _child_attempt_manifest(
+                artifact_type=child_artifact_type,
+                artifact_schema_version=child_artifact_schema_version,
+            ),
             indent=2,
         )
         + "\n"
@@ -85,13 +88,69 @@ def _write_eval_with_child_attempt_manifest(
                 "artifact_type": "eval_run",
                 "artifact_schema_version": "eval_run_artifact_v0",
                 "eval_run_id": "eval_run_child_validation_001",
+                "created_at": "2026-01-01T00:00:00Z",
+                "config_path": "configs/eval/scorer_control_policies.yaml",
+                "config_hash": "xxh64:config",
+                "config_name": "unit",
+                "task_pack": "data/task_packs/repo_patch_python_v0",
+                "split": "dev",
+                "task_hashes": {
+                    "schema_version": "eval_task_hashes_v0",
+                    "task_pack_id": "repo_patch_python_v0",
+                    "selected_task_hash_set": "xxh64:selected",
+                    "selected_tasks": [
+                        {
+                            "task_id": "toy_python_fix_001",
+                            "split": "dev",
+                            "task_record_hash": "xxh64:task",
+                            "task_yaml_hash": "xxh64:yaml",
+                            "required_task_files_hash": "xxh64:required",
+                            "full_task_dir_hash": "xxh64:full",
+                            "required_task_files": [
+                                {
+                                    "path": "task.yaml",
+                                    "kind": "file",
+                                    "hash": "xxh64:file",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                "policy": "oracle",
+                "policy_type": "scorer_control_patch",
+                "policy_family": "control",
+                "control_layer": "scorer",
+                "control_name": "oracle",
+                "attempts_per_task": 1,
+                "replay_repeats": 0,
+                "attempt_count": 1,
+                "layer_counts": {
+                    "scorer_hidden_status": {"PASS": 1},
+                    "scorer_public_status": {"PASS": 1},
+                    "scorer_status": {"PASS": 1},
+                },
+                "artifacts": {
+                    "trace": "trace.jsonl",
+                    "attempts": "attempts",
+                },
                 "attempts": [
                     {
                         "eval_attempt_id": "eval_attempt_child_validation_001",
                         "task_id": "toy_python_fix_001",
+                        "attempt_index": 0,
                         "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
                         "artifact_type": parent_artifact_type,
                         "artifact_schema_version": parent_artifact_schema_version,
+                        "scorer": {
+                            "scorer_attempt_id": "scorer_attempt_child_validation_001",
+                            "status": "PASS",
+                            "public_status": "PASS",
+                            "hidden_status": "PASS",
+                            "error_class": None,
+                            "final_diff_hash": "xxh64:diff",
+                            "duration_ms": 1,
+                        },
+                        "agent": None,
                     }
                 ],
             },
@@ -100,6 +159,57 @@ def _write_eval_with_child_attempt_manifest(
         + "\n"
     )
     return source_eval_dir
+
+
+def _child_attempt_manifest(
+    *,
+    artifact_type: str,
+    artifact_schema_version: str,
+) -> dict[str, object]:
+    if artifact_type == "scorer_attempt":
+        return {
+            "artifact_type": artifact_type,
+            "artifact_schema_version": artifact_schema_version,
+            "orchestrator_version": "scorer_attempt_orchestrator_v0",
+            "scorer_attempt_id": "scorer_attempt_child_validation_001",
+            "task_id": "toy_python_fix_001",
+            "task_manifest_path": str(TOY_TASK_MANIFEST),
+            "submission_path": "submission.patch",
+            "status": "PASS",
+            "artifacts": {
+                "attempt": "attempt.json",
+                "stdout": "stdout.txt",
+                "stderr": "stderr.txt",
+                "error": "error.txt",
+                "trace": "trace.jsonl",
+                "final_diff": "final.diff",
+            },
+        }
+    if artifact_type == "agent_attempt":
+        return {
+            "artifact_type": artifact_type,
+            "artifact_schema_version": artifact_schema_version,
+            "orchestrator_version": "agent_task_run_orchestrator_v0",
+            "agent_attempt_id": "agent_attempt_child_validation_001",
+            "task_id": "toy_python_fix_001",
+            "task_manifest_path": str(TOY_TASK_MANIFEST),
+            "status": "scored",
+            "prompt_loop_status": "completed",
+            "attempt_status": "PASS",
+            "artifacts": {
+                "agent_task_run": "agent_task_run.json",
+                "decoding_config": "decoding_config.json",
+                "agent_task_view": "agent_task_view.json",
+                "prompt_loop_result": "prompt_loop_result.json",
+                "candidate_patch": "candidate.patch",
+                "attempt": "attempt",
+                "error": "error.txt",
+            },
+        }
+    return {
+        "artifact_type": artifact_type,
+        "artifact_schema_version": artifact_schema_version,
+    }
 
 
 def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
@@ -114,9 +224,7 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
     source_manifest = json.loads((tmp_path / "source_run/manifest.json").read_text())
     source_attempt_record = source_manifest["attempts"][0]
     replay_result = json.loads((tmp_path / "replay_run/replay_result.json").read_text())
-    replay_manifest = json.loads(
-        (tmp_path / "replay_run/manifest.json").read_text()
-    )
+    replay_manifest = json.loads((tmp_path / "replay_run/manifest.json").read_text())
     replay_records = [
         json.loads(line)
         for line in (tmp_path / "replay_run/replay_results.jsonl")
@@ -137,8 +245,22 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
     assert replay_manifest["replay_run_id"] == replay_run.replay_run_id
     assert "replay_id" not in replay_manifest
     assert replay_manifest["source_eval_run_id"] == source_run.eval_run_id
+    assert replay_manifest["source_agent_attempt_id"] is None
     assert replay_manifest["artifacts"]["attempts"] == "attempts"
     assert "agent_task_run" not in replay_manifest["artifacts"]
+    assert (
+        load_replay_run_manifest(tmp_path / "replay_run/manifest.json").replay_run_id
+        == replay_run.replay_run_id
+    )
+    assert load_replay_result(tmp_path / "replay_run/replay_result.json").status == (
+        "PASS"
+    )
+    assert (
+        len(
+            load_replay_comparison_records(tmp_path / "replay_run/replay_results.jsonl")
+        )
+        == 1
+    )
     assert len(replay_records) == 1
     assert replay_records[0]["matched"] is True
     assert replay_records[0]["comparison_type"] == "scorer_attempt"
@@ -146,12 +268,8 @@ def test_run_replay_matches_oracle_eval_run(tmp_path: Path) -> None:
         replay_records[0]["source_eval_attempt_id"]
         == source_attempt_record["eval_attempt_id"]
     )
-    assert replay_records[0]["source_scorer_attempt_id"].startswith(
-        "scorer_attempt_"
-    )
-    assert replay_records[0]["replayed_scorer_attempt_id"].startswith(
-        "scorer_attempt_"
-    )
+    assert replay_records[0]["source_scorer_attempt_id"].startswith("scorer_attempt_")
+    assert replay_records[0]["replayed_scorer_attempt_id"].startswith("scorer_attempt_")
     assert "source_id" not in replay_records[0]
     assert "replay_id" not in replay_records[0]
     assert "source_attempt_id" not in replay_records[0]
@@ -283,8 +401,10 @@ def test_replay_normalizes_elided_pytest_tmp_path_fragments() -> None:
         repo_roots=(),
     )
 
-    assert first == second == (
-        "...<PYTEST_TMP>/test_duplicate_id_exits_with_i0/records.jsonl"
+    assert (
+        first
+        == second
+        == ("...<PYTEST_TMP>/test_duplicate_id_exits_with_i0/records.jsonl")
     )
 
 
@@ -297,9 +417,7 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
     replay_run = run_replay(tmp_path / "source_agent", tmp_path / "replay_run")
 
     replay_result = json.loads((tmp_path / "replay_run/replay_result.json").read_text())
-    replay_manifest = json.loads(
-        (tmp_path / "replay_run/manifest.json").read_text()
-    )
+    replay_manifest = json.loads((tmp_path / "replay_run/manifest.json").read_text())
     source_manifest = json.loads((tmp_path / "source_agent/manifest.json").read_text())
     replay_records = [
         json.loads(line)
@@ -316,19 +434,26 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
     assert replay_manifest["replay_run_id"] == replay_run.replay_run_id
     assert "replay_id" not in replay_manifest
     assert replay_manifest["source_artifact_type"] == "agent_attempt"
+    assert replay_manifest["source_eval_run_id"] is None
     assert (
-        replay_manifest["source_artifact_schema_version"]
-        == "agent_attempt_artifact_v0"
+        replay_manifest["source_agent_attempt_id"]
+        == source_manifest["agent_attempt_id"]
+    )
+    assert (
+        replay_manifest["source_artifact_schema_version"] == "agent_attempt_artifact_v0"
     )
     assert replay_manifest["artifacts"]["agent_task_run"] == "agent_task_run"
     assert len(replay_records) == 1
     assert replay_records[0]["comparison_type"] == "agent_task_run"
-    assert replay_records[0]["source_agent_attempt_id"].startswith(
-        "agent_attempt_"
+    assert replay_records[0]["source_artifact_ref"] == "."
+    assert (
+        load_replay_comparison_records(tmp_path / "replay_run/replay_results.jsonl")[
+            0
+        ].source_artifact_ref
+        == "."
     )
-    assert replay_records[0]["replayed_agent_attempt_id"].startswith(
-        "agent_attempt_"
-    )
+    assert replay_records[0]["source_agent_attempt_id"].startswith("agent_attempt_")
+    assert replay_records[0]["replayed_agent_attempt_id"].startswith("agent_attempt_")
     assert "source_eval_attempt_id" not in replay_records[0]
     assert "source_id" not in replay_records[0]
     assert "replay_id" not in replay_records[0]
@@ -355,8 +480,7 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
     second_provenance = trace_events[1].provenance_config
     assert isinstance(second_provenance, ReplayTraceProvenance)
     assert (
-        second_provenance.source_agent_attempt_id
-        == source_manifest["agent_attempt_id"]
+        second_provenance.source_agent_attempt_id == source_manifest["agent_attempt_id"]
     )
     assert "source_artifact_id" not in second_provenance.model_dump()
     assert second_provenance.source_eval_run_id is None
@@ -365,10 +489,7 @@ def test_run_replay_matches_agent_control_artifact(tmp_path: Path) -> None:
         json.loads(line)
         for line in (tmp_path / "replay_run/trace.jsonl").read_text().splitlines()
     ]
-    assert (
-        "source_eval_attempt_id"
-        not in raw_trace_events[1]["provenance_config"]
-    )
+    assert "source_eval_attempt_id" not in raw_trace_events[1]["provenance_config"]
 
 
 def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> None:
@@ -380,6 +501,10 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
         TOY_HAPPY_AGENT_CONTROL,
         source_agent_attempt_dir,
     )
+    agent_task_result = json.loads(
+        (source_agent_attempt_dir / "agent_task_run.json").read_text()
+    )
+    attempt_result = agent_task_result["attempt_result"]
     source_eval_dir.mkdir(parents=True, exist_ok=True)
     (source_eval_dir / "manifest.json").write_text(
         json.dumps(
@@ -387,13 +512,83 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
                 "artifact_type": "eval_run",
                 "artifact_schema_version": "eval_run_artifact_v0",
                 "eval_run_id": "eval_run_agent_001",
+                "created_at": "2026-01-01T00:00:00Z",
+                "config_path": "configs/eval/agent_control_policies.yaml",
+                "config_hash": "xxh64:config",
+                "config_name": "unit",
+                "task_pack": "data/task_packs/repo_patch_python_v0",
+                "split": "dev",
+                "task_hashes": {
+                    "schema_version": "eval_task_hashes_v0",
+                    "task_pack_id": "repo_patch_python_v0",
+                    "selected_task_hash_set": "xxh64:selected",
+                    "selected_tasks": [
+                        {
+                            "task_id": "toy_python_fix_001",
+                            "split": "dev",
+                            "task_record_hash": "xxh64:task",
+                            "task_yaml_hash": "xxh64:yaml",
+                            "required_task_files_hash": "xxh64:required",
+                            "full_task_dir_hash": "xxh64:full",
+                            "required_task_files": [
+                                {
+                                    "path": "task.yaml",
+                                    "kind": "file",
+                                    "hash": "xxh64:file",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                "policy": "agent-happy",
+                "policy_type": "agent_control_script",
+                "policy_family": "control",
+                "control_layer": "agent",
+                "control_name": "happy",
+                "attempts_per_task": 1,
+                "replay_repeats": 0,
+                "attempt_count": 1,
+                "layer_counts": {
+                    "agent_scorer_hidden_status": {"PASS": 1},
+                    "agent_scorer_public_status": {"PASS": 1},
+                    "agent_scorer_status": {"PASS": 1},
+                    "agent_status": {"scored": 1},
+                    "prompt_loop_status": {"completed": 1},
+                },
+                "artifacts": {
+                    "trace": "trace.jsonl",
+                    "attempts": "attempts",
+                },
                 "attempts": [
                     {
                         "eval_attempt_id": "eval_attempt_agent_001",
                         "task_id": "toy_python_fix_001",
+                        "attempt_index": 0,
                         "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
                         "artifact_type": "agent_attempt",
                         "artifact_schema_version": "agent_attempt_artifact_v0",
+                        "scorer": None,
+                        "agent": {
+                            "agent_attempt_id": agent_task_result["agent_attempt_id"],
+                            "status": "scored",
+                            "prompt_loop_status": "completed",
+                            "error_class": None,
+                            "candidate_patch_hash": agent_task_result[
+                                "candidate_patch_hash"
+                            ],
+                            "duration_ms": 1,
+                            "scorer_attempt": {
+                                "scorer_attempt_id": attempt_result[
+                                    "scorer_attempt_id"
+                                ],
+                                "status": "PASS",
+                                "public_status": "PASS",
+                                "hidden_status": "PASS",
+                                "error_class": None,
+                                "final_diff_hash": attempt_result["final_diff_hash"],
+                                "duration_ms": 1,
+                            },
+                        },
                     }
                 ],
             },
@@ -404,9 +599,7 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
 
     replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
 
-    replay_manifest = json.loads(
-        (tmp_path / "replay_run/manifest.json").read_text()
-    )
+    replay_manifest = json.loads((tmp_path / "replay_run/manifest.json").read_text())
     replay_records = [
         json.loads(line)
         for line in (tmp_path / "replay_run/replay_results.jsonl")
@@ -421,16 +614,9 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
     assert replay_manifest["artifacts"]["attempts"] == "attempts"
     assert "agent_task_run" not in replay_manifest["artifacts"]
     assert replay_records[0]["comparison_type"] == "agent_task_run"
-    assert (
-        replay_records[0]["source_eval_attempt_id"]
-        == "eval_attempt_agent_001"
-    )
-    assert replay_records[0]["source_agent_attempt_id"].startswith(
-        "agent_attempt_"
-    )
-    assert replay_records[0]["replayed_agent_attempt_id"].startswith(
-        "agent_attempt_"
-    )
+    assert replay_records[0]["source_eval_attempt_id"] == "eval_attempt_agent_001"
+    assert replay_records[0]["source_agent_attempt_id"].startswith("agent_attempt_")
+    assert replay_records[0]["replayed_agent_attempt_id"].startswith("agent_attempt_")
     assert "source_id" not in replay_records[0]
     assert "replay_id" not in replay_records[0]
     assert (
@@ -449,10 +635,7 @@ def test_run_replay_dispatches_eval_agent_attempt_artifact(tmp_path: Path) -> No
     trace_events = load_trace_events(tmp_path / "replay_run/trace.jsonl")
     source_attempt_provenance = trace_events[2].provenance_config
     assert isinstance(source_attempt_provenance, ReplayTraceProvenance)
-    assert (
-        source_attempt_provenance.source_eval_attempt_id
-        == "eval_attempt_agent_001"
-    )
+    assert source_attempt_provenance.source_eval_attempt_id == "eval_attempt_agent_001"
 
 
 def test_run_replay_rejects_eval_child_attempt_with_bad_schema(
@@ -465,10 +648,39 @@ def test_run_replay_rejects_eval_child_attempt_with_bad_schema(
     )
 
     replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
+    replay_manifest = json.loads((tmp_path / "replay_run/manifest.json").read_text())
 
     assert replay_run.status == "REPLAY_ERROR"
+    assert replay_manifest["source_eval_run_id"] == "eval_run_child_validation_001"
     trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
-    assert "Unsupported eval run child artifact_schema_version" in trace_text
+    assert "artifact_schema_version must be 'scorer_attempt_artifact_v0'" in trace_text
+
+
+def test_run_replay_rejects_malformed_empty_eval_source_manifest(
+    tmp_path: Path,
+) -> None:
+    source_eval_dir = tmp_path / "source_eval"
+    source_eval_dir.mkdir()
+    (source_eval_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_type": "eval_run",
+                "artifact_schema_version": "eval_run_artifact_v0",
+                "attempts": [],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+    replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
+    replay_result = json.loads((tmp_path / "replay_run/replay_result.json").read_text())
+
+    assert replay_run.status == "REPLAY_ERROR"
+    assert replay_result["status"] == "REPLAY_ERROR"
+    assert replay_result["attempt_count"] == 0
+    assert replay_result["error_count"] == 1
 
 
 def test_run_replay_rejects_eval_child_attempt_with_unsupported_type(
@@ -484,7 +696,7 @@ def test_run_replay_rejects_eval_child_attempt_with_unsupported_type(
 
     assert replay_run.status == "REPLAY_ERROR"
     trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
-    assert "Eval run child artifact_type must be one of" in trace_text
+    assert "Expected scorer or agent attempt manifest" in trace_text
 
 
 def test_run_replay_rejects_eval_attempt_record_with_bad_schema(
@@ -501,7 +713,7 @@ def test_run_replay_rejects_eval_attempt_record_with_bad_schema(
 
     assert replay_run.status == "REPLAY_ERROR"
     trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
-    assert "Unsupported eval run child artifact_schema_version" in trace_text
+    assert "artifact_schema_version does not match artifact_type" in trace_text
 
 
 def test_run_replay_rejects_eval_attempt_record_child_manifest_mismatch(
@@ -520,6 +732,70 @@ def test_run_replay_rejects_eval_attempt_record_child_manifest_mismatch(
     assert replay_run.status == "REPLAY_ERROR"
     trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
     assert "Eval run child artifact_type mismatch" in trace_text
+
+
+def test_run_replay_rejects_eval_child_manifest_task_id_mismatch(
+    tmp_path: Path,
+) -> None:
+    source_eval_dir = _write_eval_with_child_attempt_manifest(
+        tmp_path,
+        child_artifact_type="scorer_attempt",
+        child_artifact_schema_version="scorer_attempt_artifact_v0",
+    )
+    child_manifest_path = (
+        source_eval_dir / "attempts/toy_python_fix_001__attempt_001/manifest.json"
+    )
+    child_manifest = json.loads(child_manifest_path.read_text())
+    child_manifest["task_id"] = "different_task"
+    child_manifest_path.write_text(json.dumps(child_manifest, indent=2) + "\n")
+
+    replay_run = run_replay(source_eval_dir, tmp_path / "replay_run")
+
+    assert replay_run.status == "REPLAY_ERROR"
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "Eval run child task_id mismatch" in trace_text
+
+
+def test_run_replay_rejects_eval_parent_agent_attempt_id_mismatch(
+    tmp_path: Path,
+) -> None:
+    source_run = run_eval_config(
+        Path("configs/eval/agent_control_policies.yaml"),
+        "agent-happy",
+        tmp_path / "source_agent_eval",
+    )
+    manifest_path = source_run.out_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["attempts"][0]["agent"]["agent_attempt_id"] = "agent_attempt_wrong"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+    replay_run = run_replay(source_run.out_dir, tmp_path / "replay_run")
+
+    assert replay_run.status == "REPLAY_ERROR"
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "agent_attempt_id mismatch" in trace_text
+
+
+def test_run_replay_rejects_eval_parent_nested_scorer_summary_mismatch(
+    tmp_path: Path,
+) -> None:
+    source_run = run_eval_config(
+        Path("configs/eval/agent_control_policies.yaml"),
+        "agent-happy",
+        tmp_path / "source_agent_eval",
+    )
+    manifest_path = source_run.out_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["attempts"][0]["agent"]["scorer_attempt"]["final_diff_hash"] = (
+        "xxh64:wrong"
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+    replay_run = run_replay(source_run.out_dir, tmp_path / "replay_run")
+
+    assert replay_run.status == "REPLAY_ERROR"
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "final_diff_hash mismatch" in trace_text
 
 
 def test_run_replay_detects_agent_trajectory_artifact_mismatch(
@@ -550,6 +826,67 @@ def test_run_replay_detects_agent_trajectory_artifact_mismatch(
     assert replay_records[0]["matched"] is False
     assert replay_records[0]["field_matches"] == AGENT_FIELD_MATCHES
     assert replay_records[0]["artifact_matches"]["prompt_loop_result.json"] is False
+
+
+def test_run_replay_marks_missing_declared_agent_artifact_mismatch(
+    tmp_path: Path,
+) -> None:
+    source_agent_dir = tmp_path / "source_agent"
+    _write_agent_control_source_artifact(TOY_HAPPY_AGENT_CONTROL, source_agent_dir)
+    (source_agent_dir / "candidate.patch").unlink()
+
+    replay_run = run_replay(source_agent_dir, tmp_path / "replay_run")
+
+    replay_result = json.loads((tmp_path / "replay_run/replay_result.json").read_text())
+    replay_records = [
+        json.loads(line)
+        for line in (tmp_path / "replay_run/replay_results.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+
+    assert replay_run.status == "MISMATCH"
+    assert replay_result["status"] == "MISMATCH"
+    assert replay_records[0]["comparison_type"] == "agent_task_run"
+    assert replay_records[0]["matched"] is False
+    assert replay_records[0]["artifact_matches"]["candidate.patch"] is False
+
+
+def test_run_replay_rejects_unversioned_decoding_config_artifact(
+    tmp_path: Path,
+) -> None:
+    source_agent_dir = tmp_path / "source_agent"
+    _write_agent_control_source_artifact(TOY_HAPPY_AGENT_CONTROL, source_agent_dir)
+    decoding_path = source_agent_dir / "decoding_config.json"
+    decoding_provenance = json.loads(decoding_path.read_text())
+    decoding_path.write_text(
+        json.dumps(decoding_provenance["config"], indent=2, sort_keys=True) + "\n"
+    )
+
+    replay_run = run_replay(source_agent_dir, tmp_path / "replay_run")
+    replay_manifest = json.loads((tmp_path / "replay_run/manifest.json").read_text())
+
+    assert replay_run.status == "REPLAY_ERROR"
+    assert replay_manifest["source_agent_attempt_id"].startswith("agent_attempt_")
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "schema_version" in trace_text
+
+
+def test_run_replay_rejects_malformed_prompt_loop_artifact(
+    tmp_path: Path,
+) -> None:
+    source_agent_dir = tmp_path / "source_agent"
+    _write_agent_control_source_artifact(TOY_HAPPY_AGENT_CONTROL, source_agent_dir)
+    prompt_loop_path = source_agent_dir / "prompt_loop_result.json"
+    prompt_loop = json.loads(prompt_loop_path.read_text())
+    del prompt_loop["status"]
+    prompt_loop_path.write_text(json.dumps(prompt_loop, indent=2) + "\n")
+
+    replay_run = run_replay(source_agent_dir, tmp_path / "replay_run")
+
+    assert replay_run.status == "REPLAY_ERROR"
+    trace_text = (tmp_path / "replay_run/trace.jsonl").read_text()
+    assert "PromptLoopResult at" in trace_text
 
 
 def test_run_replay_rejects_replay_artifact_input(tmp_path: Path) -> None:

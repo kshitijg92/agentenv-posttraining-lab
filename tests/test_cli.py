@@ -153,14 +153,10 @@ def test_eval_compare_task_hashes_cli_matches_and_writes_json(
     comparison = json.loads(comparison_out.read_text())
     assert comparison["status"] == "matched"
     assert comparison["reference"]["artifact_type"] == "eval_run"
-    assert (
-        comparison["reference"]["artifact_schema_version"]
-        == "eval_run_artifact_v0"
-    )
+    assert comparison["reference"]["artifact_schema_version"] == "eval_run_artifact_v0"
     assert comparison["candidate"]["artifact_type"] == "eval_suite"
     assert (
-        comparison["candidate"]["artifact_schema_version"]
-        == "eval_suite_artifact_v0"
+        comparison["candidate"]["artifact_schema_version"] == "eval_suite_artifact_v0"
     )
 
 
@@ -212,36 +208,148 @@ def _write_eval_hash_manifest(
     task_record_hash: str,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    task_hashes = {
+        "schema_version": "eval_task_hashes_v0",
+        "task_pack_id": "repo_patch_python_v0",
+        "selected_task_hash_set": selected_task_hash_set,
+        "selected_tasks": [
+            {
+                "task_id": "toy_python_fix_001",
+                "split": "practice",
+                "task_record_hash": task_record_hash,
+                "task_yaml_hash": "xxh64:task-yaml",
+                "required_task_files_hash": "xxh64:required-files",
+                "full_task_dir_hash": "xxh64:full-task-dir",
+                "required_task_files": [
+                    {
+                        "path": "task.yaml",
+                        "kind": "file",
+                        "hash": "xxh64:task-yaml",
+                    }
+                ],
+            }
+        ],
+    }
+    payload = (
+        _eval_hash_run_manifest(
+            artifact_schema_version=artifact_schema_version,
+            task_hashes=task_hashes,
+        )
+        if artifact_type == "eval_run"
+        else _eval_hash_suite_manifest(
+            artifact_schema_version=artifact_schema_version,
+            task_hashes=task_hashes,
+        )
+    )
     path.write_text(
         json.dumps(
-            {
-                "artifact_type": artifact_type,
-                "artifact_schema_version": artifact_schema_version,
-                "task_hashes": {
-                    "schema_version": "eval_task_hashes_v0",
-                    "task_pack_id": "repo_patch_python_v0",
-                    "selected_task_hash_set": selected_task_hash_set,
-                    "selected_tasks": [
-                        {
-                            "task_id": "toy_python_fix_001",
-                            "split": "practice",
-                            "task_record_hash": task_record_hash,
-                            "task_yaml_hash": "xxh64:task-yaml",
-                            "required_task_files_hash": "xxh64:required-files",
-                            "full_task_dir_hash": "xxh64:full-task-dir",
-                            "required_task_files": [
-                                {
-                                    "path": "task.yaml",
-                                    "kind": "file",
-                                    "hash": "xxh64:task-yaml",
-                                }
-                            ],
-                        }
-                    ],
-                },
-            },
+            payload,
             indent=2,
             sort_keys=True,
         )
         + "\n"
     )
+
+
+def _eval_hash_run_manifest(
+    *,
+    artifact_schema_version: str,
+    task_hashes: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "artifact_type": "eval_run",
+        "artifact_schema_version": artifact_schema_version,
+        "eval_run_id": "eval_run_test",
+        "created_at": "2026-06-30T00:00:00Z",
+        "config_path": "configs/eval/test.yaml",
+        "config_hash": "xxh64:config",
+        "config_name": "test",
+        "task_pack": "data/task_packs/repo_patch_python_v0",
+        "split": "practice",
+        "task_hashes": task_hashes,
+        "policy": "oracle",
+        "policy_type": "scorer_control_patch",
+        "policy_family": "control",
+        "control_layer": "scorer",
+        "control_name": "oracle",
+        "attempts_per_task": 1,
+        "replay_repeats": 0,
+        "attempt_count": 1,
+        "layer_counts": _eval_hash_layer_counts(),
+        "artifacts": {"trace": "trace.jsonl", "attempts": "attempts"},
+        "attempts": [_eval_hash_attempt_record()],
+    }
+
+
+def _eval_hash_suite_manifest(
+    *,
+    artifact_schema_version: str,
+    task_hashes: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "artifact_type": "eval_suite",
+        "artifact_schema_version": artifact_schema_version,
+        "eval_suite_id": "eval_suite_test",
+        "created_at": "2026-06-30T00:00:00Z",
+        "config_path": "configs/eval/test.yaml",
+        "config_hash": "xxh64:config",
+        "config_name": "test",
+        "task_pack": "data/task_packs/repo_patch_python_v0",
+        "split": "practice",
+        "task_hashes": task_hashes,
+        "tasks": ["toy_python_fix_001"],
+        "task_count": 1,
+        "policy_count": 1,
+        "attempt_count": 1,
+        "layer_counts": _eval_hash_layer_counts(),
+        "artifacts": {"policies": "policies"},
+        "policy_runs": [
+            {
+                "policy": "oracle",
+                "policy_type": "scorer_control_patch",
+                "policy_family": "control",
+                "control_layer": "scorer",
+                "control_name": "oracle",
+                "attempts_per_task": 1,
+                "replay_repeats": 0,
+                "eval_run_id": "eval_run_test",
+                "artifact_dir": "policies/oracle",
+                "manifest": "policies/oracle/manifest.json",
+                "attempt_count": 1,
+                "layer_counts": _eval_hash_layer_counts(),
+            }
+        ],
+        "replay_run_count": 0,
+        "replay_policy_count": 0,
+        "replay_run_success_summary": "0/0",
+        "replay_runs": [],
+    }
+
+
+def _eval_hash_attempt_record() -> dict[str, object]:
+    return {
+        "eval_attempt_id": "eval_attempt_test",
+        "task_id": "toy_python_fix_001",
+        "attempt_index": 0,
+        "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
+        "artifact_type": "scorer_attempt",
+        "artifact_schema_version": "scorer_attempt_artifact_v0",
+        "scorer": {
+            "scorer_attempt_id": "scorer_attempt_test",
+            "status": "PASS",
+            "public_status": "PASS",
+            "hidden_status": "PASS",
+            "error_class": None,
+            "final_diff_hash": "xxh64:final-diff",
+            "duration_ms": 0,
+        },
+        "agent": None,
+    }
+
+
+def _eval_hash_layer_counts() -> dict[str, dict[str, int]]:
+    return {
+        "scorer_status": {"PASS": 1},
+        "scorer_public_status": {"PASS": 1},
+        "scorer_hidden_status": {"PASS": 1},
+    }

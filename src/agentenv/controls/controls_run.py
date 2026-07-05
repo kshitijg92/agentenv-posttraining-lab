@@ -9,6 +9,12 @@ from uuid import uuid4
 import xxhash
 
 from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType
+from agentenv.artifacts.manifests import CONTROL_CALIBRATION_ARTIFACT_REFS
+from agentenv.artifacts.manifests import CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION
+from agentenv.artifacts.manifests import ControlCalibrationManifest
+from agentenv.artifacts.payloads import CONTROL_FLAKE_DETECTION_SCHEMA_VERSION
+from agentenv.artifacts.payloads import ControlFlakeDetection
+from agentenv.artifacts.payloads import ControlCalibrationResultRecord
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     ExpectedAgentControlResult,
@@ -16,7 +22,8 @@ from agentenv.controls.agent_control_scripts import (
 )
 from agentenv.controls.reporting import render_control_report
 from agentenv.evals.resolve import scorer_control_patch_path
-from agentenv.evals.schema import ScorerControlName
+from agentenv.evals.schema import AGENT_CONTROL_LAYER, SCORER_CONTROL_LAYER
+from agentenv.evals.schema import ControlLayer, ScorerControlName
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_run import (
     AgentTaskRun,
@@ -28,11 +35,8 @@ from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_paths
 
 
-CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION = "control_calibration_artifact_v0"
-CONTROL_FLAKE_DETECTION_SCHEMA_VERSION = "control_flake_detection_v0"
 SCORER_ARTIFACT_NORMALIZATION_VERSION = "scorer_artifact_normalization_v0"
 AGENT_ARTIFACT_NORMALIZATION_VERSION = "agent_artifact_normalization_v0"
-ControlLayer = Literal["scorer", "agent"]
 FlakeDetectionStatus = Literal["stable", "drifted"]
 JsonObject = dict[str, Any]
 
@@ -112,8 +116,12 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
     task_pack_path = task_pack.resolve()
     out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    scorer_control_dir = out_dir / "scorer_control_patches"
-    agent_control_dir = out_dir / "agent_control_scripts"
+    scorer_control_dir = (
+        out_dir / CONTROL_CALIBRATION_ARTIFACT_REFS["scorer_control_patches"]
+    )
+    agent_control_dir = (
+        out_dir / CONTROL_CALIBRATION_ARTIFACT_REFS["agent_control_scripts"]
+    )
     scorer_control_dir.mkdir(parents=True, exist_ok=True)
     agent_control_dir.mkdir(parents=True, exist_ok=True)
 
@@ -216,7 +224,7 @@ def _run_scorer_control(
     actual = _scorer_actual_json(attempt_run.result)
     return ControlRecord(
         task_id=task.task_id,
-        control_layer="scorer",
+        control_layer=SCORER_CONTROL_LAYER,
         control_name=control,
         repeat_index=repeat_index,
         artifact_dir=artifact_dir,
@@ -254,7 +262,7 @@ def _run_agent_control(
     actual = _agent_actual_json(agent_task_run)
     return ControlRecord(
         task_id=task.task_id,
-        control_layer="agent",
+        control_layer=AGENT_CONTROL_LAYER,
         control_name=control_name,
         repeat_index=repeat_index,
         artifact_dir=artifact_dir,
@@ -345,9 +353,14 @@ def _resolve_task_control_path(task: ControlTask, raw_path: str) -> Path:
 
 
 def _write_jsonl(control_run: ControlRun) -> Path:
-    path = control_run.out_dir / "control_results.jsonl"
+    path = control_run.out_dir / CONTROL_CALIBRATION_ARTIFACT_REFS["results"]
     lines = [
-        json.dumps(_record_json(control_run, record), sort_keys=True)
+        json.dumps(
+            _control_result_record_json(
+                _build_control_result_record(control_run, record)
+            ),
+            sort_keys=True,
+        )
         for record in control_run.records
     ]
     path.write_text("\n".join(lines) + ("\n" if lines else ""))
@@ -356,56 +369,84 @@ def _write_jsonl(control_run: ControlRun) -> Path:
 
 def _write_manifest(control_run: ControlRun) -> Path:
     path = control_run.out_dir / MANIFEST_FILENAME
+    manifest = _build_control_calibration_manifest(control_run)
+    payload = manifest.model_dump(mode="json")
+    payload["records"] = [
+        _control_result_record_json(record) for record in manifest.records
+    ]
     path.write_text(
-        json.dumps(_control_run_manifest(control_run), indent=2, sort_keys=True) + "\n"
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
     )
     return path
 
 
 def _write_markdown(control_run: ControlRun) -> Path:
-    path = control_run.out_dir / "control_report.md"
+    path = control_run.out_dir / CONTROL_CALIBRATION_ARTIFACT_REFS["report"]
     path.write_text(render_control_report(control_run))
     return path
 
 
-def _control_run_manifest(control_run: ControlRun) -> dict[str, object]:
-    return {
-        "artifact_type": ArtifactType.CONTROL_CALIBRATION,
-        "artifact_schema_version": CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION,
-        "control_run_id": control_run.control_run_id,
-        "created_at": control_run.created_at,
-        "task_pack_path": str(control_run.task_pack_path),
-        "repeats": control_run.repeats,
-        "record_count": len(control_run.records),
-        "overall_match": control_run.overall_match,
-        "flake_detection": control_run.flake_detection,
-        "artifacts": {
-            "agent_control_scripts": "agent_control_scripts",
-            "scorer_control_patches": "scorer_control_patches",
-            "report": "control_report.md",
-            "results": "control_results.jsonl",
-        },
-        "records": [
-            _record_json(control_run, record) for record in control_run.records
-        ],
-    }
+def _build_control_calibration_manifest(
+    control_run: ControlRun,
+) -> ControlCalibrationManifest:
+    return ControlCalibrationManifest.model_validate(
+        {
+            "artifact_type": ArtifactType.CONTROL_CALIBRATION,
+            "artifact_schema_version": CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION,
+            "control_run_id": control_run.control_run_id,
+            "created_at": control_run.created_at,
+            "task_pack_path": str(control_run.task_pack_path),
+            "repeats": control_run.repeats,
+            "record_count": len(control_run.records),
+            "overall_match": control_run.overall_match,
+            "flake_detection": control_run.flake_detection,
+            "artifacts": dict(CONTROL_CALIBRATION_ARTIFACT_REFS),
+            "records": [
+                _control_result_record_json(
+                    _build_control_result_record(control_run, record)
+                )
+                for record in control_run.records
+            ],
+        }
+    )
 
 
-def _record_json(
+def _build_control_result_record(
     control_run: ControlRun,
     record: ControlRecord,
+) -> ControlCalibrationResultRecord:
+    return ControlCalibrationResultRecord.model_validate(
+        {
+            "control_run_id": control_run.control_run_id,
+            "task_id": record.task_id,
+            "control_layer": record.control_layer,
+            "control_name": record.control_name,
+            "repeat_index": record.repeat_index,
+            "artifact_dir": str(record.artifact_dir.relative_to(control_run.out_dir)),
+            "expected": record.expected,
+            "actual": record.actual,
+            "match": record.match,
+        }
+    )
+
+
+def _control_result_record_json(
+    record: ControlCalibrationResultRecord,
 ) -> dict[str, object]:
-    return {
-        "control_run_id": control_run.control_run_id,
-        "task_id": record.task_id,
-        "control_layer": record.control_layer,
-        "control_name": record.control_name,
-        "repeat_index": record.repeat_index,
-        "artifact_dir": str(record.artifact_dir.relative_to(control_run.out_dir)),
-        "expected": record.expected,
-        "actual": record.actual,
-        "match": record.match,
-    }
+    payload = record.model_dump(mode="json")
+    expected = payload.get("expected")
+    if (
+        record.control_layer == AGENT_CONTROL_LAYER
+        and isinstance(expected, dict)
+        and expected.get("tool_results") is None
+    ):
+        expected.pop("tool_results", None)
+    return payload
 
 
 def _build_flake_detection(
@@ -415,14 +456,10 @@ def _build_flake_detection(
     records: list[ControlRecord],
 ) -> JsonObject:
     scorer_records = [
-        record
-        for record in records
-        if record.control_layer == "scorer"
+        record for record in records if record.control_layer == SCORER_CONTROL_LAYER
     ]
     agent_records = [
-        record
-        for record in records
-        if record.control_layer == "agent"
+        record for record in records if record.control_layer == AGENT_CONTROL_LAYER
     ]
     scorer_groups = [
         _scorer_flake_detection_group(
@@ -439,21 +476,22 @@ def _build_flake_detection(
         for task_id, control_name in _summary_keys(agent_records)
     ]
     drifted_groups = sum(
-        group["status"] == "drifted"
-        for group in [*scorer_groups, *agent_groups]
+        group["status"] == "drifted" for group in [*scorer_groups, *agent_groups]
     )
     status: FlakeDetectionStatus = "drifted" if drifted_groups else "stable"
-    return {
-        "schema_version": CONTROL_FLAKE_DETECTION_SCHEMA_VERSION,
-        "status": status,
-        "repeats": repeats,
-        "groups_checked": len(scorer_groups) + len(agent_groups),
-        "drifted_groups": drifted_groups,
-        "groups": {
-            "scorer": scorer_groups,
-            "agent": agent_groups,
-        },
-    }
+    return ControlFlakeDetection.model_validate(
+        {
+            "schema_version": CONTROL_FLAKE_DETECTION_SCHEMA_VERSION,
+            "status": status,
+            "repeats": repeats,
+            "groups_checked": len(scorer_groups) + len(agent_groups),
+            "drifted_groups": drifted_groups,
+            "groups": {
+                SCORER_CONTROL_LAYER: scorer_groups,
+                AGENT_CONTROL_LAYER: agent_groups,
+            },
+        }
+    ).model_dump(mode="json")
 
 
 def _scorer_flake_detection_group(
@@ -514,9 +552,7 @@ def _control_artifact_flake_detection_group(
                 "files": file_drifts,
             }
 
-    status: FlakeDetectionStatus = (
-        "drifted" if drifted_repeats else "stable"
-    )
+    status: FlakeDetectionStatus = "drifted" if drifted_repeats else "stable"
     return {
         "task_id": reference.task_id,
         "control_name": reference.control_name,
@@ -655,12 +691,7 @@ def _find_repo_root(path: Path) -> Path | None:
 
 
 def _summary_keys(records: list[ControlRecord]) -> list[tuple[str, str]]:
-    return sorted(
-        {
-            (record.task_id, record.control_name)
-            for record in records
-        }
-    )
+    return sorted({(record.task_id, record.control_name) for record in records})
 
 
 def _record_group(

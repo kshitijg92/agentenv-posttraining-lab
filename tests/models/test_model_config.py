@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
+from agentenv.artifacts.payloads import MODEL_CONFIG_PROVENANCE_SCHEMA_VERSION
 from agentenv.models.config import load_decoding_config, load_model_config
 from agentenv.models.config_schema import OpenAICompatibleChatModelConfig
 from agentenv.orchestrators.agent_task_run import (
@@ -52,8 +54,9 @@ def test_model_config_provenance_artifact_records_sanitized_config() -> None:
         model_config=config,
         model_config_path=MODEL_CONFIG,
         model_config_hash="xxh64:testhash",
-    )
+    ).model_dump(mode="json")
 
+    assert artifact["schema_version"] == MODEL_CONFIG_PROVENANCE_SCHEMA_VERSION
     assert artifact["source_path"] == str(MODEL_CONFIG)
     assert artifact["source_hash"] == "xxh64:testhash"
     assert artifact["config"] == {
@@ -79,8 +82,9 @@ def test_file_backed_decoding_config_provenance_artifact_records_source() -> Non
         decoding_config=config,
         decoding_config_path=DECODING_CONFIG,
         decoding_config_hash="xxh64:testhash",
-    )
+    ).model_dump(mode="json")
 
+    assert artifact["schema_version"] == DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
     assert artifact["source_path"] == str(DECODING_CONFIG)
     assert artifact["source_hash"] == "xxh64:testhash"
     assert artifact["config"]["max_new_tokens"] == 1024
@@ -90,8 +94,11 @@ def test_file_backed_decoding_config_provenance_artifact_records_source() -> Non
 def test_generated_decoding_config_provenance_artifact_records_null_source() -> None:
     config = load_decoding_config(DECODING_CONFIG)
 
-    artifact = generated_decoding_config_provenance_artifact(config)
+    artifact = generated_decoding_config_provenance_artifact(config).model_dump(
+        mode="json"
+    )
 
+    assert artifact["schema_version"] == DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
     assert artifact["source_path"] is None
     assert artifact["source_hash"] is None
     assert artifact["config"]["max_new_tokens"] == 1024

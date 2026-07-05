@@ -5,8 +5,9 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+from agentenv.evals.schema import AGENT_CONTROL_LAYER, SCORER_CONTROL_LAYER
+from agentenv.evals.schema import ControlLayer
 
-ControlLayer = Literal["scorer", "agent"]
 FlakeDetectionStatus = Literal["stable", "drifted"]
 MatchStatus = Literal["PASS", "FAIL"]
 JsonObject = dict[str, Any]
@@ -62,8 +63,8 @@ class ControlRunView(Protocol):
 
 
 def render_control_report(control_run: ControlRunView) -> str:
-    scorer_records = _records_for_layer(control_run, "scorer")
-    agent_records = _records_for_layer(control_run, "agent")
+    scorer_records = _records_for_layer(control_run, SCORER_CONTROL_LAYER)
+    agent_records = _records_for_layer(control_run, AGENT_CONTROL_LAYER)
     lines = [
         "# Control Calibration",
         "",
@@ -160,7 +161,7 @@ def _flake_detection_table(flake_detection: JsonObject | None) -> list[str]:
             flake_detection["drifted_groups"],
         )
     )
-    for layer in ("scorer", "agent"):
+    for layer in (SCORER_CONTROL_LAYER, AGENT_CONTROL_LAYER):
         status, groups_checked, drifted_groups = _flake_detection_layer_counts(
             flake_detection,
             layer,
@@ -176,10 +177,7 @@ def _flake_detection_table(flake_detection: JsonObject | None) -> list[str]:
     rows.extend(
         [
             "",
-            (
-                "Per-file normalized hashes and drift details are in "
-                "`manifest.json`."
-            ),
+            ("Per-file normalized hashes and drift details are in `manifest.json`."),
         ]
     )
     return rows
@@ -190,10 +188,7 @@ def _flake_detection_layer_counts(
     layer: ControlLayer,
 ) -> tuple[FlakeDetectionStatus, int, int]:
     layer_groups = flake_detection["groups"][layer]
-    drifted_groups = sum(
-        group["status"] == "drifted"
-        for group in layer_groups
-    )
+    drifted_groups = sum(group["status"] == "drifted" for group in layer_groups)
     status: FlakeDetectionStatus = "drifted" if drifted_groups else "stable"
     return status, len(layer_groups), drifted_groups
 
@@ -360,12 +355,7 @@ def _agent_detail_table(
 
 
 def _summary_keys(records: Sequence[ControlRecordView]) -> list[tuple[str, str]]:
-    return sorted(
-        {
-            (record.task_id, record.control_name)
-            for record in records
-        }
-    )
+    return sorted({(record.task_id, record.control_name) for record in records})
 
 
 def _record_group(
@@ -387,9 +377,7 @@ def _overview_rows(
     rows.append(_overview_row("all controls", records))
     for control_name in sorted({record.control_name for record in records}):
         control_records = [
-            record
-            for record in records
-            if record.control_name == control_name
+            record for record in records if record.control_name == control_name
         ]
         rows.append(_overview_row(control_name, control_records))
     return rows

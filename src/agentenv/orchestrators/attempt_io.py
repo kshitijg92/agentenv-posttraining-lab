@@ -9,13 +9,15 @@ from agentenv.artifacts import (
     ArtifactType,
     prepare_artifact_output_dir,
 )
+from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
+from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_REFS
+from agentenv.artifacts.manifests import ScorerAttemptManifest
 from agentenv.orchestrators.attempt import AttemptResult, AttemptRun
 from agentenv.security.secrets import redact_jsonable, redact_secrets
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
 TraceEvent = dict[str, object]
-SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION = "scorer_attempt_artifact_v0"
 
 
 @dataclass(frozen=True)
@@ -31,7 +33,7 @@ class AttemptArtifactPaths:
 
 def write_attempt_result(result: AttemptResult, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    attempt_path = out_dir / "attempt.json"
+    attempt_path = out_dir / SCORER_ATTEMPT_ARTIFACT_REFS["attempt"]
     attempt_path.write_text(_redacted_model_json(result))
     return attempt_path
 
@@ -42,11 +44,11 @@ def write_attempt_artifacts(
     out_dir = prepare_artifact_output_dir(out_dir)
     manifest_path = out_dir / MANIFEST_FILENAME
     attempt_path = write_attempt_result(attempt_run.result, out_dir)
-    stdout_path = out_dir / "stdout.txt"
-    stderr_path = out_dir / "stderr.txt"
-    error_path = out_dir / "error.txt"
-    trace_path = out_dir / "trace.jsonl"
-    final_diff_path = out_dir / "final.diff"
+    stdout_path = out_dir / SCORER_ATTEMPT_ARTIFACT_REFS["stdout"]
+    stderr_path = out_dir / SCORER_ATTEMPT_ARTIFACT_REFS["stderr"]
+    error_path = out_dir / SCORER_ATTEMPT_ARTIFACT_REFS["error"]
+    trace_path = out_dir / SCORER_ATTEMPT_ARTIFACT_REFS["trace"]
+    final_diff_path = out_dir / SCORER_ATTEMPT_ARTIFACT_REFS["final_diff"]
 
     stdout_path.write_text(
         redact_secrets(
@@ -63,7 +65,9 @@ def write_attempt_artifacts(
     final_diff_path.write_text(attempt_run.final_diff)
     manifest_path.write_text(
         json.dumps(
-            redact_jsonable(_run_manifest(attempt_run)),
+            redact_jsonable(
+                _build_scorer_attempt_manifest(attempt_run).model_dump(mode="json")
+            ),
             indent=2,
             sort_keys=True,
         )
@@ -132,12 +136,15 @@ def _trace_jsonl(attempt_run: AttemptRun) -> str:
                 "stdout_bytes": len(command.result.stdout.encode()),
                 "stderr_bytes": len(command.result.stderr.encode()),
             },
-            payload_refs={"stdout": "stdout.txt", "stderr": "stderr.txt"},
+            payload_refs={
+                "stdout": SCORER_ATTEMPT_ARTIFACT_REFS["stdout"],
+                "stderr": SCORER_ATTEMPT_ARTIFACT_REFS["stderr"],
+            },
         )
 
-    payload_refs = {"final_diff": "final.diff"}
+    payload_refs = {"final_diff": SCORER_ATTEMPT_ARTIFACT_REFS["final_diff"]}
     if attempt_run.error_details is not None:
-        payload_refs["error"] = "error.txt"
+        payload_refs["error"] = SCORER_ATTEMPT_ARTIFACT_REFS["error"]
 
     _append_trace(
         events,
@@ -207,25 +214,18 @@ def _attempt_provenance(result: AttemptResult) -> dict[str, object]:
     }
 
 
-def _run_manifest(attempt_run: AttemptRun) -> dict[str, object]:
-    return {
-        "artifact_type": ArtifactType.SCORER_ATTEMPT,
-        "artifact_schema_version": SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
-        "orchestrator_version": attempt_run.result.orchestrator_version,
-        "scorer_attempt_id": attempt_run.result.scorer_attempt_id,
-        "task_id": attempt_run.result.task_id,
-        "task_manifest_path": attempt_run.result.task_manifest_path,
-        "submission_path": attempt_run.result.submission_path,
-        "status": attempt_run.result.status,
-        "artifacts": {
-            "attempt": "attempt.json",
-            "stdout": "stdout.txt",
-            "stderr": "stderr.txt",
-            "error": "error.txt",
-            "trace": "trace.jsonl",
-            "final_diff": "final.diff",
-        },
-    }
+def _build_scorer_attempt_manifest(attempt_run: AttemptRun) -> ScorerAttemptManifest:
+    return ScorerAttemptManifest(
+        artifact_type=ArtifactType.SCORER_ATTEMPT,
+        artifact_schema_version=SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
+        orchestrator_version=attempt_run.result.orchestrator_version,
+        scorer_attempt_id=attempt_run.result.scorer_attempt_id,
+        task_id=attempt_run.result.task_id,
+        task_manifest_path=attempt_run.result.task_manifest_path,
+        submission_path=attempt_run.result.submission_path,
+        status=attempt_run.result.status,
+        artifacts=dict(SCORER_ATTEMPT_ARTIFACT_REFS),
+    )
 
 
 def _utc_now() -> str:

@@ -14,9 +14,9 @@ from agentenv.controls.agent_control_scripts import (
 )
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.models.schema import ModelFinishReason
+from agentenv.orchestrators.agent_task_schema import AgentTaskRunStatus
 from agentenv.orchestrators.agent_task_run import (
     AgentTaskRun,
-    AgentTaskRunStatus,
     run_and_persist_agent_task_attempt_to_dir,
 )
 from agentenv.orchestrators.attempt import AttemptStatus, CheckStatus
@@ -304,7 +304,9 @@ def _actual_value(
         return result.prompt_loop_status
     if field == "prompt_loop_error_class":
         prompt_loop_result = agent_task_run.prompt_loop_result
-        return prompt_loop_result.error_class if prompt_loop_result is not None else None
+        return (
+            prompt_loop_result.error_class if prompt_loop_result is not None else None
+        )
     if field == "model_finish_reasons":
         prompt_loop_result = agent_task_run.prompt_loop_result
         if prompt_loop_result is None:

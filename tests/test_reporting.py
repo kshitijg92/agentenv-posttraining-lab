@@ -110,8 +110,27 @@ def test_write_agent_model_eval_report_includes_model_and_decoding_config(
                 "artifact_type": "eval_run",
                 "artifact_schema_version": "eval_run_artifact_v0",
                 "artifacts": {"attempts": "attempts", "trace": "trace.jsonl"},
-                "attempt_count": 0,
-                "attempts": [],
+                "attempt_count": 1,
+                "attempts": [
+                    {
+                        "eval_attempt_id": "eval_attempt_test",
+                        "task_id": "toy_python_fix_001",
+                        "attempt_index": 0,
+                        "artifact_dir": "attempts/toy_python_fix_001__attempt_001",
+                        "artifact_type": "agent_attempt",
+                        "artifact_schema_version": "agent_attempt_artifact_v0",
+                        "scorer": None,
+                        "agent": {
+                            "agent_attempt_id": "agent_attempt_test",
+                            "status": "agent_loop_failed",
+                            "prompt_loop_status": "model_error",
+                            "error_class": "MissingModelEnv",
+                            "candidate_patch_hash": None,
+                            "duration_ms": 0,
+                            "scorer_attempt": None,
+                        },
+                    }
+                ],
                 "attempts_per_task": 1,
                 "config_hash": "xxh64:test",
                 "config_name": "agent_model_smoke",
@@ -119,14 +138,41 @@ def test_write_agent_model_eval_report_includes_model_and_decoding_config(
                 "created_at": "2026-06-30T00:00:00Z",
                 "decoding_config": "configs/decoding/greedy_1024.yaml",
                 "eval_run_id": "eval_run_test",
-                "layer_counts": {},
+                "layer_counts": {
+                    "agent_status": {"agent_loop_failed": 1},
+                    "prompt_loop_status": {"model_error": 1},
+                },
                 "model_config": "configs/models/openai_compatible_chat_placeholder.yaml",
                 "policy": "local-model-smoke",
                 "policy_family": "agent",
                 "policy_type": "agent_model",
+                "control_layer": None,
+                "control_name": None,
                 "replay_repeats": 0,
                 "split": "practice",
                 "task_pack": "data/task_packs/repo_patch_python_v0",
+                "task_hashes": {
+                    "schema_version": "eval_task_hashes_v0",
+                    "task_pack_id": "repo_patch_python_v0",
+                    "selected_task_hash_set": "xxh64:selected",
+                    "selected_tasks": [
+                        {
+                            "task_id": "toy_python_fix_001",
+                            "split": "practice",
+                            "task_record_hash": "xxh64:task-record",
+                            "task_yaml_hash": "xxh64:task-yaml",
+                            "required_task_files_hash": "xxh64:required",
+                            "full_task_dir_hash": "xxh64:full",
+                            "required_task_files": [
+                                {
+                                    "path": "task.yaml",
+                                    "kind": "file",
+                                    "hash": "xxh64:task-yaml",
+                                }
+                            ],
+                        }
+                    ],
+                },
             },
             indent=2,
         )
@@ -139,7 +185,10 @@ def test_write_agent_model_eval_report_includes_model_and_decoding_config(
     )
     report = report_path.read_text()
 
-    assert "- Model config: configs/models/openai_compatible_chat_placeholder.yaml" in report
+    assert (
+        "- Model config: configs/models/openai_compatible_chat_placeholder.yaml"
+        in report
+    )
     assert "- Decoding config: configs/decoding/greedy_1024.yaml" in report
 
 
@@ -172,14 +221,12 @@ def test_eval_report_rejects_bad_attempt_schema(tmp_path: Path) -> None:
     run_eval_config(CONTROL_EVAL_CONFIG, "oracle", tmp_path / "eval_run")
     manifest_path = tmp_path / "eval_run/manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    manifest["attempts"][0][
-        "artifact_schema_version"
-    ] = "scorer_attempt_artifact_v999"
+    manifest["attempts"][0]["artifact_schema_version"] = "scorer_attempt_artifact_v999"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
     with pytest.raises(
         ValueError,
-        match="Unsupported eval report attempt artifact_schema_version",
+        match="eval attempt artifact_schema_version does not match artifact_type",
     ):
         write_markdown_report(
             tmp_path / "eval_run",
@@ -240,14 +287,11 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
         tmp_path / "eval_matrix",
     )
     bad_public_only_manifest = json.loads(
-        (
-            tmp_path
-            / "eval_matrix/policies/bad-public-only/manifest.json"
-        ).read_text()
+        (tmp_path / "eval_matrix/policies/bad-public-only/manifest.json").read_text()
     )
-    bad_public_only_eval_attempt_id = (
-        bad_public_only_manifest["attempts"][0]["eval_attempt_id"]
-    )
+    bad_public_only_eval_attempt_id = bad_public_only_manifest["attempts"][0][
+        "eval_attempt_id"
+    ]
 
     report_path = write_markdown_report(
         tmp_path / "eval_matrix",
@@ -291,8 +335,7 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
     assert "### Replay Checks" in report
     assert (
         "| oracle | PASS | 1/1 (100%) | 0 | "
-        "replays/oracle__replay_001/replay_result.json |"
-        in report
+        "replays/oracle__replay_001/replay_result.json |" in report
     )
     assert (
         "| bad-public-only | PASS | 1/1 (100%) | 0 | "
@@ -308,12 +351,10 @@ def test_write_eval_matrix_markdown_report(tmp_path: Path) -> None:
         '<span style="color: green">ON_TRACK</span> |'
     ) in report
     assert (
-        "| oracle | oracle | 1 | 1/1 (100%) | 1/1 (100%) | "
-        "1/1 (100%) | 0 | 0 | 0 |"
+        "| oracle | oracle | 1 | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 0 | 0 | 0 |"
     ) in report
     assert (
-        "| bad-noop | bad.noop | 1 | 0/1 (0%) | 1/1 (100%) | "
-        "0/1 (0%) | 1 | 0 | 0 |"
+        "| bad-noop | bad.noop | 1 | 0/1 (0%) | 1/1 (100%) | 0/1 (0%) | 1 | 0 | 0 |"
     ) in report
     assert (
         f"| {bad_public_only_eval_attempt_id} | toy_python_fix_001 | "
@@ -335,7 +376,7 @@ def test_eval_matrix_report_rejects_bad_nested_policy_manifest(
     nested_manifest["artifact_schema_version"] = "replay_run_artifact_v0"
     nested_manifest_path.write_text(json.dumps(nested_manifest, indent=2) + "\n")
 
-    with pytest.raises(ValueError, match="Unsupported artifact_type"):
+    with pytest.raises(ValueError, match="artifact_type must be 'eval_run'"):
         write_markdown_report(
             tmp_path / "eval_matrix",
             tmp_path / "reports/bad_nested_policy.md",
@@ -351,18 +392,89 @@ def test_eval_matrix_report_rejects_bad_nested_attempt_schema(
     )
     nested_manifest_path = tmp_path / "eval_matrix/policies/oracle/manifest.json"
     nested_manifest = json.loads(nested_manifest_path.read_text())
-    nested_manifest["attempts"][0][
-        "artifact_schema_version"
-    ] = "scorer_attempt_artifact_v999"
+    nested_manifest["attempts"][0]["artifact_schema_version"] = (
+        "scorer_attempt_artifact_v999"
+    )
     nested_manifest_path.write_text(json.dumps(nested_manifest, indent=2) + "\n")
 
     with pytest.raises(
         ValueError,
-        match="Unsupported eval report attempt artifact_schema_version",
+        match="eval attempt artifact_schema_version does not match artifact_type",
     ):
         write_markdown_report(
             tmp_path / "eval_matrix",
             tmp_path / "reports/bad_nested_attempt.md",
+        )
+
+
+def test_eval_matrix_report_rejects_child_policy_summary_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_eval_config_all_policies(
+        CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+    )
+    nested_manifest_path = tmp_path / "eval_matrix/policies/oracle/manifest.json"
+    nested_manifest = json.loads(nested_manifest_path.read_text())
+    nested_manifest["eval_run_id"] = "eval_run_child_mismatch"
+    nested_manifest_path.write_text(json.dumps(nested_manifest, indent=2) + "\n")
+
+    with pytest.raises(
+        ValueError,
+        match="policy run record does not match child manifest",
+    ):
+        write_markdown_report(
+            tmp_path / "eval_matrix",
+            tmp_path / "reports/policy_summary_mismatch.md",
+        )
+
+
+def test_eval_matrix_report_rejects_child_replay_result_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_eval_config_all_policies(
+        CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+    )
+    replay_result_path = (
+        tmp_path / "eval_matrix/replays/oracle__replay_001/replay_result.json"
+    )
+    replay_result = json.loads(replay_result_path.read_text())
+    replay_result["matched_attempts"] = 0
+    replay_result["mismatched_attempts"] = 1
+    replay_result["status"] = "MISMATCH"
+    replay_result_path.write_text(json.dumps(replay_result, indent=2) + "\n")
+
+    with pytest.raises(
+        ValueError,
+        match="replay run record does not match child replay result",
+    ):
+        write_markdown_report(
+            tmp_path / "eval_matrix",
+            tmp_path / "reports/replay_result_mismatch.md",
+        )
+
+
+def test_eval_matrix_report_rejects_stale_agent_decoding_payload(
+    tmp_path: Path,
+) -> None:
+    run_eval_config_all_policies(
+        AGENT_CONTROL_EVAL_CONFIG,
+        tmp_path / "eval_matrix",
+    )
+    decoding_path = (
+        tmp_path / "eval_matrix/policies/agent-happy/attempts/"
+        "toy_python_fix_001__attempt_001/decoding_config.json"
+    )
+    decoding_payload = json.loads(decoding_path.read_text())
+    decoding_path.write_text(
+        json.dumps(decoding_payload["config"], indent=2, sort_keys=True) + "\n"
+    )
+
+    with pytest.raises(ValueError, match="DecodingConfigProvenance at"):
+        write_markdown_report(
+            tmp_path / "eval_matrix",
+            tmp_path / "reports/stale_agent_decoding.md",
         )
 
 
@@ -375,15 +487,10 @@ def test_write_agent_eval_matrix_markdown_report(tmp_path: Path) -> None:
         (tmp_path / "eval_matrix/policies/agent-happy/manifest.json").read_text()
     )
     malformed_manifest = json.loads(
-        (
-            tmp_path
-            / "eval_matrix/policies/agent-malformed/manifest.json"
-        ).read_text()
+        (tmp_path / "eval_matrix/policies/agent-malformed/manifest.json").read_text()
     )
     happy_eval_attempt_id = happy_manifest["attempts"][0]["eval_attempt_id"]
-    malformed_eval_attempt_id = (
-        malformed_manifest["attempts"][0]["eval_attempt_id"]
-    )
+    malformed_eval_attempt_id = malformed_manifest["attempts"][0]["eval_attempt_id"]
 
     report_path = write_markdown_report(
         tmp_path / "eval_matrix",
@@ -496,10 +603,7 @@ def test_write_mixed_agent_control_and_model_eval_matrix_report(
         (tmp_path / "eval_matrix/policies/agent-happy/manifest.json").read_text()
     )
     model_manifest = json.loads(
-        (
-            tmp_path
-            / "eval_matrix/policies/real-agent-smoke/manifest.json"
-        ).read_text()
+        (tmp_path / "eval_matrix/policies/real-agent-smoke/manifest.json").read_text()
     )
     happy_eval_attempt_id = happy_manifest["attempts"][0]["eval_attempt_id"]
     model_eval_attempt_id = model_manifest["attempts"][0]["eval_attempt_id"]

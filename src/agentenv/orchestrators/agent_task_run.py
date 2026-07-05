@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 from agentenv.agents.loop import run_prompt_loop
 from agentenv.agents.schema import AgentTaskView, PromptLoopResult, PromptLoopStatus
@@ -16,11 +16,27 @@ from agentenv.artifacts import (
     ArtifactType,
     prepare_artifact_output_dir,
 )
+from agentenv.artifacts.manifests import (
+    AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
+    AGENT_ATTEMPT_ARTIFACT_REFS,
+    AgentTaskRunManifest,
+)
+from agentenv.artifacts.payloads import (
+    DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION,
+    MODEL_CONFIG_PROVENANCE_SCHEMA_VERSION,
+    DecodingConfigProvenance,
+    ModelConfigProvenance,
+)
+from agentenv.controls.agent_control_scripts import AgentControlScriptCase
 from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.ids import new_agent_attempt_id
 from agentenv.models.client import ModelClient
 from agentenv.models.config_schema import ModelConfig
 from agentenv.models.schema import DecodingConfig
+from agentenv.orchestrators.agent_task_schema import (
+    AgentTaskRunResult,
+    AgentTaskRunStatus,
+)
 from agentenv.orchestrators.attempt import (
     AttemptResult,
     AttemptRun,
@@ -35,28 +51,6 @@ from agentenv.tasks.validate import load_task_manifest
 
 
 AGENT_TASK_RUN_ORCHESTRATOR_VERSION = "agent_task_run_orchestrator_v0"
-AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION = "agent_attempt_artifact_v0"
-
-AgentTaskRunStatus = Literal["scored", "agent_loop_failed", "orchestrator_error"]
-
-
-class AgentTaskRunResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    agent_attempt_id: str = Field(min_length=1)
-    task_id: str = Field(min_length=1)
-    task_manifest_path: str = Field(min_length=1)
-    status: AgentTaskRunStatus
-    prompt_loop_status: PromptLoopStatus | None
-    candidate_patch_path: str | None
-    candidate_patch_hash: str | None
-    attempt_result: AttemptResult | None
-    error_class: str | None
-    error_message: str | None
-    started_at: str = Field(min_length=1)
-    ended_at: str = Field(min_length=1)
-    duration_ms: int = Field(ge=0)
-    orchestrator_version: str = Field(min_length=1)
 
 
 @dataclass(frozen=True)
@@ -158,7 +152,7 @@ def run_agent_task_attempt(
             agent_interaction_workspace.task_dir / manifest.seed_workspace,
             agent_interaction_workspace.path,
         )
-        candidate_patch_path = run_root / "candidate.patch"
+        candidate_patch_path = run_root / AGENT_ATTEMPT_ARTIFACT_REFS["candidate_patch"]
         candidate_patch_path.write_text(candidate_patch)
         attempt_run = run_patch_attempt(
             task_manifest_path,
@@ -188,9 +182,7 @@ def run_agent_task_attempt(
         )
     except Exception as exc:
         task_id = (
-            agent_task_view.task_id
-            if agent_task_view is not None
-            else "unknown_task"
+            agent_task_view.task_id if agent_task_view is not None else "unknown_task"
         )
         return AgentTaskRun(
             result=_result(
@@ -229,9 +221,9 @@ def run_and_persist_agent_task_attempt_to_dir(
     decoding_config: DecodingConfig,
     out_dir: Path,
     *,
-    agent_control_script: BaseModel | dict[str, Any] | None = None,
-    model_config_provenance: dict[str, Any] | None = None,
-    decoding_config_provenance: dict[str, Any] | None = None,
+    agent_control_script: AgentControlScriptCase | dict[str, Any] | None = None,
+    model_config_provenance: ModelConfigProvenance | dict[str, Any] | None = None,
+    decoding_config_provenance: DecodingConfigProvenance | dict[str, Any] | None = None,
 ) -> AgentTaskRun:
     agent_task_run = run_agent_task_attempt(
         task_manifest_path,
@@ -254,66 +246,86 @@ def write_agent_task_run_artifacts(
     out_dir: Path,
     *,
     decoding_config: DecodingConfig | None = None,
-    agent_control_script: BaseModel | dict[str, Any] | None = None,
-    model_config_provenance: dict[str, Any] | None = None,
-    decoding_config_provenance: dict[str, Any] | None = None,
+    agent_control_script: AgentControlScriptCase | dict[str, Any] | None = None,
+    model_config_provenance: ModelConfigProvenance | dict[str, Any] | None = None,
+    decoding_config_provenance: DecodingConfigProvenance | dict[str, Any] | None = None,
 ) -> AgentTaskRunArtifactPaths:
     out_dir = prepare_artifact_output_dir(out_dir)
+    validated_agent_control_script = _validated_agent_control_script_artifact(
+        agent_control_script
+    )
+    validated_model_config_provenance = _validated_model_config_provenance_artifact(
+        model_config_provenance
+    )
+    validated_decoding_config_provenance = (
+        _validated_decoding_config_provenance_artifact(
+            decoding_config_provenance
+            if decoding_config_provenance is not None
+            else (
+                generated_decoding_config_provenance_artifact(decoding_config)
+                if decoding_config is not None
+                else None
+            )
+        )
+    )
     manifest_path = out_dir / MANIFEST_FILENAME
-    agent_task_run_path = out_dir / "agent_task_run.json"
+    agent_task_run_path = out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_run"]
     decoding_config_path = (
-        out_dir / "decoding_config.json" if decoding_config is not None else None
+        out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["decoding_config"]
+        if validated_decoding_config_provenance is not None
+        else None
     )
     model_config_path = (
-        out_dir / "model_config.json"
-        if model_config_provenance is not None
+        out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["model_config"]
+        if validated_model_config_provenance is not None
         else None
     )
     agent_control_script_path = (
-        out_dir / "agent_control_script.json"
-        if agent_control_script is not None
+        out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["agent_control_script"]
+        if validated_agent_control_script is not None
         else None
     )
     agent_task_view_path = (
-        out_dir / "agent_task_view.json"
+        out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_view"]
         if agent_task_run.agent_task_view is not None
         else None
     )
     prompt_loop_result_path = (
-        out_dir / "prompt_loop_result.json"
+        out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["prompt_loop_result"]
         if agent_task_run.prompt_loop_result is not None
         else None
     )
     candidate_patch_path = (
-        out_dir / "candidate.patch"
+        out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["candidate_patch"]
         if agent_task_run.result.candidate_patch_hash is not None
         else None
     )
-    error_path = out_dir / "error.txt"
-    attempt_dir = out_dir / "attempt" if agent_task_run.attempt_run is not None else None
+    error_path = out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["error"]
+    attempt_dir = (
+        out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["attempt"]
+        if agent_task_run.attempt_run is not None
+        else None
+    )
 
     agent_task_run_path.write_text(_redacted_model_json(agent_task_run.result))
-    if decoding_config_path is not None and decoding_config is not None:
-        decoding_artifact = (
-            decoding_config_provenance
-            if decoding_config_provenance is not None
-            else generated_decoding_config_provenance_artifact(decoding_config)
-        )
+    if (
+        decoding_config_path is not None
+        and validated_decoding_config_provenance is not None
+    ):
         decoding_config_path.write_text(
-            json.dumps(redact_jsonable(decoding_artifact), indent=2, sort_keys=True)
-            + "\n"
+            _redacted_model_json(validated_decoding_config_provenance)
         )
-    if model_config_path is not None and model_config_provenance is not None:
+    if model_config_path is not None and validated_model_config_provenance is not None:
         model_config_path.write_text(
-            json.dumps(
-                redact_jsonable(model_config_provenance),
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n"
+            _redacted_model_json(validated_model_config_provenance)
         )
-    if agent_control_script_path is not None and agent_control_script is not None:
-        agent_control_script_path.write_text(_json_artifact(agent_control_script))
+    if (
+        agent_control_script_path is not None
+        and validated_agent_control_script is not None
+    ):
+        agent_control_script_path.write_text(
+            _redacted_model_json(validated_agent_control_script)
+        )
     agent_task_view = agent_task_run.agent_task_view
     if agent_task_view_path is not None and agent_task_view is not None:
         agent_task_view_path.write_text(_redacted_model_json(agent_task_view))
@@ -332,9 +344,9 @@ def write_agent_task_run_artifacts(
     manifest_path.write_text(
         _manifest_json(
             agent_task_run,
-            include_decoding_config=decoding_config is not None,
-            include_model_config=model_config_provenance is not None,
-            include_agent_control_script=agent_control_script is not None,
+            include_decoding_config=validated_decoding_config_provenance is not None,
+            include_model_config=validated_model_config_provenance is not None,
+            include_agent_control_script=validated_agent_control_script is not None,
         )
     )
 
@@ -359,6 +371,36 @@ def _json_artifact(value: BaseModel | dict[str, Any]) -> str:
     return json.dumps(redact_jsonable(value), indent=2, sort_keys=True) + "\n"
 
 
+def _validated_agent_control_script_artifact(
+    value: AgentControlScriptCase | dict[str, Any] | None,
+) -> AgentControlScriptCase | None:
+    if value is None:
+        return None
+    return AgentControlScriptCase.model_validate(_jsonable_payload(value))
+
+
+def _validated_model_config_provenance_artifact(
+    value: ModelConfigProvenance | dict[str, Any] | None,
+) -> ModelConfigProvenance | None:
+    if value is None:
+        return None
+    return ModelConfigProvenance.model_validate(value)
+
+
+def _validated_decoding_config_provenance_artifact(
+    value: DecodingConfigProvenance | dict[str, Any] | None,
+) -> DecodingConfigProvenance | None:
+    if value is None:
+        return None
+    return DecodingConfigProvenance.model_validate(value)
+
+
+def _jsonable_payload(value: BaseModel | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    return value
+
+
 def _redacted_model_json(value: BaseModel) -> str:
     return json.dumps(redact_jsonable(value.model_dump(mode="json")), indent=2) + "\n"
 
@@ -368,12 +410,15 @@ def model_config_provenance_artifact(
     model_config: ModelConfig,
     model_config_path: Path,
     model_config_hash: str,
-) -> dict[str, Any]:
-    return {
-        "source_path": str(model_config_path),
-        "source_hash": model_config_hash,
-        "config": redact_jsonable(json.loads(model_config.model_dump_json())),
-    }
+) -> ModelConfigProvenance:
+    return ModelConfigProvenance.model_validate(
+        {
+            "schema_version": MODEL_CONFIG_PROVENANCE_SCHEMA_VERSION,
+            "source_path": str(model_config_path),
+            "source_hash": model_config_hash,
+            "config": redact_jsonable(json.loads(model_config.model_dump_json())),
+        }
+    )
 
 
 def decoding_config_provenance_artifact(
@@ -381,22 +426,28 @@ def decoding_config_provenance_artifact(
     decoding_config: DecodingConfig,
     decoding_config_path: Path,
     decoding_config_hash: str,
-) -> dict[str, Any]:
-    return {
-        "source_path": str(decoding_config_path),
-        "source_hash": decoding_config_hash,
-        "config": redact_jsonable(json.loads(decoding_config.model_dump_json())),
-    }
+) -> DecodingConfigProvenance:
+    return DecodingConfigProvenance.model_validate(
+        {
+            "schema_version": DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION,
+            "source_path": str(decoding_config_path),
+            "source_hash": decoding_config_hash,
+            "config": redact_jsonable(json.loads(decoding_config.model_dump_json())),
+        }
+    )
 
 
 def generated_decoding_config_provenance_artifact(
     decoding_config: DecodingConfig,
-) -> dict[str, Any]:
-    return {
-        "source_path": None,
-        "source_hash": None,
-        "config": redact_jsonable(json.loads(decoding_config.model_dump_json())),
-    }
+) -> DecodingConfigProvenance:
+    return DecodingConfigProvenance.model_validate(
+        {
+            "schema_version": DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION,
+            "source_path": None,
+            "source_hash": None,
+            "config": redact_jsonable(json.loads(decoding_config.model_dump_json())),
+        }
+    )
 
 
 def _run_root(workspace_parent: Path | None, agent_attempt_id: str) -> Path:
@@ -446,7 +497,9 @@ def _exception_details(exc: Exception) -> AgentTaskRunErrorDetails:
     return AgentTaskRunErrorDetails(
         error_class=type(exc).__name__,
         message=str(exc),
-        traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        traceback="".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__)
+        ),
     )
 
 
@@ -471,23 +524,27 @@ def _manifest_json(
     include_agent_control_script: bool,
 ) -> str:
     artifacts: dict[str, str] = {
-        "agent_task_run": "agent_task_run.json",
-        "error": "error.txt",
+        "agent_task_run": AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_run"],
+        "error": AGENT_ATTEMPT_ARTIFACT_REFS["error"],
     }
     if include_decoding_config:
-        artifacts["decoding_config"] = "decoding_config.json"
+        artifacts["decoding_config"] = AGENT_ATTEMPT_ARTIFACT_REFS["decoding_config"]
     if include_model_config:
-        artifacts["model_config"] = "model_config.json"
+        artifacts["model_config"] = AGENT_ATTEMPT_ARTIFACT_REFS["model_config"]
     if include_agent_control_script:
-        artifacts["agent_control_script"] = "agent_control_script.json"
+        artifacts["agent_control_script"] = AGENT_ATTEMPT_ARTIFACT_REFS[
+            "agent_control_script"
+        ]
     if agent_task_run.agent_task_view is not None:
-        artifacts["agent_task_view"] = "agent_task_view.json"
+        artifacts["agent_task_view"] = AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_view"]
     if agent_task_run.prompt_loop_result is not None:
-        artifacts["prompt_loop_result"] = "prompt_loop_result.json"
+        artifacts["prompt_loop_result"] = AGENT_ATTEMPT_ARTIFACT_REFS[
+            "prompt_loop_result"
+        ]
     if agent_task_run.result.candidate_patch_hash is not None:
-        artifacts["candidate_patch"] = "candidate.patch"
+        artifacts["candidate_patch"] = AGENT_ATTEMPT_ARTIFACT_REFS["candidate_patch"]
     if agent_task_run.attempt_run is not None:
-        artifacts["attempt"] = "attempt/"
+        artifacts["attempt"] = AGENT_ATTEMPT_ARTIFACT_REFS["attempt"]
 
     manifest = AgentTaskRunManifest(
         artifact_type=ArtifactType.AGENT_ATTEMPT,
@@ -502,21 +559,6 @@ def _manifest_json(
         artifacts=artifacts,
     )
     return _redacted_model_json(manifest)
-
-
-class AgentTaskRunManifest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    artifact_type: str = Field(min_length=1)
-    artifact_schema_version: str = Field(min_length=1)
-    orchestrator_version: str = Field(min_length=1)
-    agent_attempt_id: str = Field(min_length=1)
-    task_id: str = Field(min_length=1)
-    task_manifest_path: str = Field(min_length=1)
-    status: AgentTaskRunStatus
-    prompt_loop_status: PromptLoopStatus | None
-    attempt_status: AttemptStatus | None
-    artifacts: dict[str, str]
 
 
 def _attempt_status(attempt_result: AttemptResult | None) -> AttemptStatus | None:

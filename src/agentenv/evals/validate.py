@@ -8,7 +8,12 @@ from agentenv.evals.resolve import (
     scorer_control_patch_path,
     resolve_eval_tasks,
 )
-from agentenv.evals.schema import EvalConfig
+from agentenv.evals.schema import (
+    AGENT_CONTROL_SCRIPT_POLICY_TYPE,
+    AGENT_MODEL_POLICY_TYPE,
+    SCORER_CONTROL_PATCH_POLICY_TYPE,
+    EvalConfig,
+)
 from agentenv.models.config import load_decoding_config, load_model_config
 from agentenv.tasks.validate import validate_task_manifest_paths
 
@@ -25,25 +30,25 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
     for task in resolved_tasks:
         validate_task_manifest_paths(task.manifest, task.manifest_path)
         for policy in config.policies.values():
-            if policy.type == "scorer_control_patch":
+            if policy.type == SCORER_CONTROL_PATCH_POLICY_TYPE:
                 scorer_control_patch_path(
                     task.manifest_path.parent,
                     task.manifest,
                     policy.control,
                 )
-            elif policy.type == "agent_control_script":
+            elif policy.type == AGENT_CONTROL_SCRIPT_POLICY_TYPE:
                 agent_control_script_path(
                     task.manifest_path.parent,
                     task.manifest,
                     policy.control,
                 )
-            elif policy.type == "agent_model":
+            elif policy.type == AGENT_MODEL_POLICY_TYPE:
                 pass
             else:
                 raise AssertionError(f"Unhandled eval policy type: {policy.type}")
 
     for policy in config.policies.values():
-        if policy.type != "agent_model":
+        if policy.type != AGENT_MODEL_POLICY_TYPE:
             continue
         load_model_config(
             resolve_config_file_ref(

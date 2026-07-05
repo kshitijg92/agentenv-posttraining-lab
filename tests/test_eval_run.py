@@ -4,6 +4,10 @@ from pathlib import Path
 import pytest
 
 from agentenv.artifacts import ArtifactDirectoryError
+from agentenv.artifacts.manifests import load_eval_run_manifest
+from agentenv.artifacts.manifests import load_eval_suite_manifest
+from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
+from agentenv.artifacts.payloads import load_decoding_config_provenance
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.orchestrators.eval_run import (
     EvalAttemptRecord,
@@ -184,8 +188,10 @@ def test_agent_model_eval_records_missing_model_env_failure(
     eval_run = run_eval_config(config_path, "real-agent-smoke", tmp_path / "eval")
 
     run_manifest = json.loads((tmp_path / "eval/manifest.json").read_text())
+    loaded_manifest = load_eval_run_manifest(tmp_path / "eval/manifest.json")
 
     assert len(eval_run.attempts) == 2
+    assert loaded_manifest.eval_run_id == eval_run.eval_run_id
     assert run_manifest["policy_type"] == "agent_model"
     assert run_manifest["policy_family"] == "agent"
     assert run_manifest["model_config"] == (
@@ -268,13 +274,14 @@ def test_agent_model_eval_records_missing_model_env_failure(
     attempt_trace_events = [
         event
         for event in trace_events
-        if event.event_type
-        in {"eval_attempt_started", "eval_attempt_finished"}
+        if event.event_type in {"eval_attempt_started", "eval_attempt_finished"}
     ]
     assert len(attempt_trace_events) == 4
     for attempt_index, eval_attempt_id in enumerate(eval_attempt_ids):
         started_provenance = attempt_trace_events[attempt_index * 2].provenance_config
-        finished_provenance = attempt_trace_events[attempt_index * 2 + 1].provenance_config
+        finished_provenance = attempt_trace_events[
+            attempt_index * 2 + 1
+        ].provenance_config
         assert isinstance(started_provenance, EvalTraceProvenance)
         assert isinstance(finished_provenance, EvalTraceProvenance)
         assert started_provenance.attempt_index == attempt_index
@@ -283,6 +290,7 @@ def test_agent_model_eval_records_missing_model_env_failure(
         assert finished_provenance.eval_attempt_id == eval_attempt_id
     assert trace_events[3].payload_refs == {
         "agent_task_run": "attempts/toy_python_fix_001__attempt_001/agent_task_run.json",
+        "agent_task_view": "attempts/toy_python_fix_001__attempt_001/agent_task_view.json",
         "decoding_config": "attempts/toy_python_fix_001__attempt_001/decoding_config.json",
         "model_config": "attempts/toy_python_fix_001__attempt_001/model_config.json",
         "prompt_loop_result": (
@@ -302,8 +310,10 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
 
     run_manifest_path = tmp_path / "eval/manifest.json"
     run_manifest = json.loads(run_manifest_path.read_text())
+    loaded_manifest = load_eval_run_manifest(run_manifest_path)
 
     assert eval_run.config.name == "agent_control_policies"
+    assert loaded_manifest.eval_run_id == eval_run.eval_run_id
     assert eval_run.policy == "agent-happy"
     assert eval_run.eval_run_id.startswith("eval_run_")
     assert len(eval_run.attempts) == 1
@@ -331,9 +341,7 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
     assert attempt_record["artifact_type"] == "agent_attempt"
     assert attempt_record["artifact_schema_version"] == "agent_attempt_artifact_v0"
     assert attempt_record["scorer"] is None
-    assert attempt_record["agent"]["agent_attempt_id"].startswith(
-        "agent_attempt_"
-    )
+    assert attempt_record["agent"]["agent_attempt_id"].startswith("agent_attempt_")
     assert "run_id" not in attempt_record["agent"]
     assert attempt_record["agent"]["status"] == "scored"
     assert attempt_record["agent"]["prompt_loop_status"] == "completed"
@@ -350,8 +358,15 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
     assert (attempt_dir / "decoding_config.json").is_file()
     assert (attempt_dir / "agent_control_script.json").is_file()
     decoding_config = json.loads((attempt_dir / "decoding_config.json").read_text())
+    decoding_provenance = load_decoding_config_provenance(
+        attempt_dir / "decoding_config.json"
+    )
+    assert (
+        decoding_config["schema_version"] == DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
+    )
     assert decoding_config["source_path"] is None
     assert decoding_config["source_hash"] is None
+    assert decoding_provenance.source_path is None
     assert decoding_config["config"]["max_new_tokens"] == 512
     assert decoding_config["config"]["timeout_seconds"] == 30
     validate_trace_file(tmp_path / "eval/trace.jsonl")
@@ -359,16 +374,14 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
     attempt_started_provenance = trace_events[2].provenance_config
     assert isinstance(attempt_started_provenance, EvalTraceProvenance)
     assert (
-        attempt_started_provenance.eval_attempt_id
-        == attempt_record["eval_attempt_id"]
+        attempt_started_provenance.eval_attempt_id == attempt_record["eval_attempt_id"]
     )
     assert trace_events[3].output_payload is not None
     assert trace_events[3].output_payload["agent"]["status"] == "scored"
     attempt_finished_provenance = trace_events[3].provenance_config
     assert isinstance(attempt_finished_provenance, EvalTraceProvenance)
     assert (
-        attempt_finished_provenance.eval_attempt_id
-        == attempt_record["eval_attempt_id"]
+        attempt_finished_provenance.eval_attempt_id == attempt_record["eval_attempt_id"]
     )
     assert (
         attempt_finished_provenance.agent_attempt_id
@@ -383,6 +396,7 @@ def test_run_eval_config_writes_agent_control_happy_manifest(
             "attempts/toy_python_fix_001__attempt_001/agent_control_script.json"
         ),
         "agent_task_run": "attempts/toy_python_fix_001__attempt_001/agent_task_run.json",
+        "agent_task_view": "attempts/toy_python_fix_001__attempt_001/agent_task_view.json",
         "candidate_patch": "attempts/toy_python_fix_001__attempt_001/candidate.patch",
         "decoding_config": "attempts/toy_python_fix_001__attempt_001/decoding_config.json",
         "nested_attempt": "attempts/toy_python_fix_001__attempt_001/attempt/attempt.json",
@@ -413,9 +427,7 @@ def test_run_eval_config_records_agent_control_malformed_failure(
     assert attempt_record["artifact_type"] == "agent_attempt"
     assert attempt_record["artifact_schema_version"] == "agent_attempt_artifact_v0"
     assert attempt_record["scorer"] is None
-    assert attempt_record["agent"]["agent_attempt_id"].startswith(
-        "agent_attempt_"
-    )
+    assert attempt_record["agent"]["agent_attempt_id"].startswith("agent_attempt_")
     assert "run_id" not in attempt_record["agent"]
     assert attempt_record["agent"]["status"] == "agent_loop_failed"
     assert attempt_record["agent"]["prompt_loop_status"] == "invalid_model_output"
@@ -487,9 +499,7 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert attempt_record["attempt_index"] == 0
     assert attempt_record["artifact_dir"] == "attempts/toy_python_fix_001__attempt_001"
     assert attempt_record["artifact_type"] == "scorer_attempt"
-    assert (
-        attempt_record["artifact_schema_version"] == "scorer_attempt_artifact_v0"
-    )
+    assert attempt_record["artifact_schema_version"] == "scorer_attempt_artifact_v0"
     assert attempt_record["agent"] is None
     assert attempt_record["scorer"]["status"] == "PASS"
     assert attempt_record["scorer"]["public_status"] == "PASS"
@@ -517,8 +527,7 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert attempt_finished_provenance.task_index == 0
     assert attempt_finished_provenance.attempt_index == 0
     assert (
-        attempt_finished_provenance.eval_attempt_id
-        == attempt_record["eval_attempt_id"]
+        attempt_finished_provenance.eval_attempt_id == attempt_record["eval_attempt_id"]
     )
     assert (
         attempt_finished_provenance.scorer_attempt_id
@@ -723,9 +732,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     ]
     assert (tmp_path / "eval_matrix/policies/oracle/manifest.json").is_file()
     assert (tmp_path / "eval_matrix/policies/bad-noop/manifest.json").is_file()
-    assert (
-        tmp_path / "eval_matrix/policies/bad-public-only/manifest.json"
-    ).is_file()
+    assert (tmp_path / "eval_matrix/policies/bad-public-only/manifest.json").is_file()
     assert matrix_manifest["replay_policy_count"] == 3
     assert matrix_manifest["replay_run_count"] == 3
     assert matrix_manifest["replay_run_success_summary"] == "3/3"
@@ -784,12 +791,8 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
             "replay_run_id": eval_matrix.replay_runs[2].replay_run.replay_run_id,
             "status": "PASS",
             "artifact_dir": "replays/bad-public-only__replay_001",
-            "manifest": (
-                "replays/bad-public-only__replay_001/manifest.json"
-            ),
-            "replay_result": (
-                "replays/bad-public-only__replay_001/replay_result.json"
-            ),
+            "manifest": ("replays/bad-public-only__replay_001/manifest.json"),
+            "replay_result": ("replays/bad-public-only__replay_001/replay_result.json"),
             "attempt_count": 1,
             "matched_attempts": 1,
             "mismatched_attempts": 0,
@@ -803,8 +806,7 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
         tmp_path / "eval_matrix/replays/bad-noop__replay_001/replay_result.json"
     ).is_file()
     assert (
-        tmp_path
-        / "eval_matrix/replays/bad-public-only__replay_001/replay_result.json"
+        tmp_path / "eval_matrix/replays/bad-public-only__replay_001/replay_result.json"
     ).is_file()
 
 
@@ -816,8 +818,9 @@ def test_run_eval_config_all_policies_replays_agent_control_policies(
         tmp_path / "eval_matrix",
     )
 
-    matrix_manifest = json.loads(
-        (tmp_path / "eval_matrix/manifest.json").read_text()
+    matrix_manifest = json.loads((tmp_path / "eval_matrix/manifest.json").read_text())
+    loaded_matrix_manifest = load_eval_suite_manifest(
+        tmp_path / "eval_matrix/manifest.json"
     )
 
     assert [run.policy for run in eval_matrix.policy_runs] == [
@@ -826,6 +829,7 @@ def test_run_eval_config_all_policies_replays_agent_control_policies(
         "agent-recoverable",
     ]
     assert len(eval_matrix.replay_runs) == 3
+    assert loaded_matrix_manifest.eval_suite_id == eval_matrix.eval_suite_id
     assert matrix_manifest["task_count"] == 1
     assert matrix_manifest["layer_counts"] == {
         "agent_scorer_hidden_status": {"PASS": 2},
@@ -846,24 +850,16 @@ def test_run_eval_config_all_policies_replays_agent_control_policies(
     } == {"PASS"}
     assert matrix_manifest["replay_run_success_summary"] == "3/3"
     happy_manifest = json.loads(
-        (
-            tmp_path
-            / "eval_matrix/policies/agent-happy/manifest.json"
-        ).read_text()
+        (tmp_path / "eval_matrix/policies/agent-happy/manifest.json").read_text()
     )
     malformed_manifest = json.loads(
-        (
-            tmp_path
-            / "eval_matrix/policies/agent-malformed/manifest.json"
-        ).read_text()
+        (tmp_path / "eval_matrix/policies/agent-malformed/manifest.json").read_text()
     )
     assert happy_manifest["attempts"][0]["agent"]["scorer_attempt"]["status"] == "PASS"
     assert malformed_manifest["attempts"][0]["agent"]["scorer_attempt"] is None
     assert (
-        tmp_path
-        / "eval_matrix/replays/agent-happy__replay_001/replay_result.json"
+        tmp_path / "eval_matrix/replays/agent-happy__replay_001/replay_result.json"
     ).is_file()
     assert (
-        tmp_path
-        / "eval_matrix/replays/agent-malformed__replay_001/replay_result.json"
+        tmp_path / "eval_matrix/replays/agent-malformed__replay_001/replay_result.json"
     ).is_file()

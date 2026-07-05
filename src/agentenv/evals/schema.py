@@ -7,6 +7,32 @@ from agentenv.tasks.schema import TaskSplit
 
 ScorerControlName = Literal["oracle", "bad.noop", "bad.public_only"]
 AgentControlName = Literal["happy", "malformed", "recoverable"]
+ScorerControlPatchPolicyType = Literal["scorer_control_patch"]
+AgentControlScriptPolicyType = Literal["agent_control_script"]
+AgentModelPolicyType = Literal["agent_model"]
+PolicyType = (
+    ScorerControlPatchPolicyType | AgentControlScriptPolicyType | AgentModelPolicyType
+)
+ControlPolicyFamily = Literal["control"]
+AgentPolicyFamily = Literal["agent"]
+PolicyFamily = ControlPolicyFamily | AgentPolicyFamily
+ScorerControlLayer = Literal["scorer"]
+AgentControlLayer = Literal["agent"]
+ControlLayer = ScorerControlLayer | AgentControlLayer
+
+SCORER_CONTROL_PATCH_POLICY_TYPE: ScorerControlPatchPolicyType = "scorer_control_patch"
+AGENT_CONTROL_SCRIPT_POLICY_TYPE: AgentControlScriptPolicyType = "agent_control_script"
+AGENT_MODEL_POLICY_TYPE: AgentModelPolicyType = "agent_model"
+CONTROL_POLICY_FAMILY: ControlPolicyFamily = "control"
+AGENT_POLICY_FAMILY: AgentPolicyFamily = "agent"
+SCORER_CONTROL_LAYER: ScorerControlLayer = "scorer"
+AGENT_CONTROL_LAYER: AgentControlLayer = "agent"
+AGENT_EVAL_POLICY_TYPES: frozenset[PolicyType] = frozenset(
+    {
+        AGENT_CONTROL_SCRIPT_POLICY_TYPE,
+        AGENT_MODEL_POLICY_TYPE,
+    }
+)
 
 
 class PolicyReplayConfig(BaseModel):
@@ -23,17 +49,17 @@ class EvalPolicyBase(BaseModel):
 
 
 class ScorerControlPatchPolicy(EvalPolicyBase):
-    type: Literal["scorer_control_patch"]
+    type: ScorerControlPatchPolicyType
     control: ScorerControlName
 
 
 class AgentControlScriptPolicy(EvalPolicyBase):
-    type: Literal["agent_control_script"]
+    type: AgentControlScriptPolicyType
     control: AgentControlName
 
 
 class AgentModelPolicy(EvalPolicyBase):
-    type: Literal["agent_model"]
+    type: AgentModelPolicyType
     model_config_path: str = Field(alias="model_config", min_length=1)
     decoding_config_path: str = Field(alias="decoding_config", min_length=1)
 

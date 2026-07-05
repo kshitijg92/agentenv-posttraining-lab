@@ -2,6 +2,8 @@ from dataclasses import replace
 import json
 from pathlib import Path
 
+from agentenv.artifacts.manifests import load_control_calibration_manifest
+from agentenv.artifacts.payloads import load_control_calibration_result_records
 from agentenv.controls import controls_run as controls_run_module
 from agentenv.controls.controls_run import expected_control_outcome, run_controls
 
@@ -45,24 +47,20 @@ def test_expected_control_outcome_is_inferred_from_control_name() -> None:
 
 def test_flake_detection_normalizes_ellipsized_pytest_tmp_paths() -> None:
     reference = (
-        "CompletedProcess(args=['...pytest-1022/test_a0/input.jsonl'], "
-        "returncode=0)"
+        "CompletedProcess(args=['...pytest-1022/test_a0/input.jsonl'], returncode=0)"
     )
     actual = (
-        "CompletedProcess(args=['...pytest-1024/test_a0/input.jsonl'], "
-        "returncode=0)"
+        "CompletedProcess(args=['...pytest-1024/test_a0/input.jsonl'], returncode=0)"
     )
     assert controls_run_module._normalize_text(reference, None) == (
         controls_run_module._normalize_text(actual, None)
     )
 
     reference_without_first_char = (
-        "CompletedProcess(args=['...ytest-1022/test_a0/input.jsonl'], "
-        "returncode=0)"
+        "CompletedProcess(args=['...ytest-1022/test_a0/input.jsonl'], returncode=0)"
     )
     actual_without_first_char = (
-        "CompletedProcess(args=['...ytest-1024/test_a0/input.jsonl'], "
-        "returncode=0)"
+        "CompletedProcess(args=['...ytest-1024/test_a0/input.jsonl'], returncode=0)"
     )
     assert controls_run_module._normalize_text(reference_without_first_char, None) == (
         controls_run_module._normalize_text(actual_without_first_char, None)
@@ -89,6 +87,10 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         for line in (out_dir / "control_results.jsonl").read_text().splitlines()
         if line.strip()
     ]
+    loaded_records = load_control_calibration_result_records(
+        out_dir / "control_results.jsonl"
+    )
+    assert len(loaded_records) == expected_record_count
     assert len(records) == expected_record_count
     assert {record["task_id"] for record in records} == TASK_IDS
     assert {record["control_layer"] for record in records} == {"scorer", "agent"}
@@ -156,6 +158,17 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
                 ("agent", task_id, "recoverable", repeat_index)
             ]
             assert recovery["actual"]["prompt_loop_status"] == "completed"
+            happy = records_by_control[("agent", task_id, "happy", repeat_index)]
+            malformed = records_by_control[
+                ("agent", task_id, "malformed", repeat_index)
+            ]
+            assert "tool_results" not in happy["expected"]
+            assert "tool_results" not in malformed["expected"]
+            assert {
+                "tool_name": "read_file",
+                "status": "error",
+                "error_class": "InvalidToolInput",
+            } in recovery["expected"]["tool_results"]
             assert recovery["actual"]["tool_results"][0] == {
                 "tool_name": "read_file",
                 "status": "error",
@@ -163,37 +176,36 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
             }
 
     manifest = json.loads((out_dir / "manifest.json").read_text())
+    loaded_manifest = load_control_calibration_manifest(out_dir / "manifest.json")
+    assert loaded_manifest.control_run_id == control_run.control_run_id
+    assert loaded_manifest.record_count == expected_record_count
     assert manifest["artifact_type"] == "control_calibration"
-    assert (
-        manifest["artifact_schema_version"] == "control_calibration_artifact_v0"
-    )
+    assert manifest["artifact_schema_version"] == "control_calibration_artifact_v0"
     assert manifest["repeats"] == 2
     assert manifest["record_count"] == expected_record_count
     assert len(manifest["records"]) == expected_record_count
+    assert manifest["records"] == records
     assert manifest["overall_match"] is True
     flake_detection = manifest["flake_detection"]
     assert flake_detection["schema_version"] == "control_flake_detection_v0"
     assert flake_detection["status"] == "stable"
     assert flake_detection["repeats"] == 2
     assert flake_detection["groups_checked"] == (
-        len(TASK_IDS) * len(CONTROL_NAMES)
-        + len(TASK_IDS) * len(AGENT_CONTROL_NAMES)
+        len(TASK_IDS) * len(CONTROL_NAMES) + len(TASK_IDS) * len(AGENT_CONTROL_NAMES)
     )
     assert flake_detection["drifted_groups"] == 0
     assert set(flake_detection["groups"]) == {"scorer", "agent"}
     scorer_flake_groups = flake_detection["groups"]["scorer"]
     agent_flake_groups = flake_detection["groups"]["agent"]
     assert {
-        (group["task_id"], group["control_name"])
-        for group in scorer_flake_groups
+        (group["task_id"], group["control_name"]) for group in scorer_flake_groups
     } == {
         (task_id, control_name)
         for task_id in TASK_IDS
         for control_name in CONTROL_NAMES
     }
     assert {
-        (group["task_id"], group["control_name"])
-        for group in agent_flake_groups
+        (group["task_id"], group["control_name"]) for group in agent_flake_groups
     } == {
         (task_id, control_name)
         for task_id in TASK_IDS
@@ -256,8 +268,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     toy_happy_agent_flake_group = next(
         group
         for group in agent_flake_groups
-        if group["task_id"] == "toy_python_fix_001"
-        and group["control_name"] == "happy"
+        if group["task_id"] == "toy_python_fix_001" and group["control_name"] == "happy"
     )
     assert {
         file_record["path"]
@@ -305,27 +316,24 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert report.index("## Scorer Record Details") < report.index(
         "## Agent Record Details"
     )
-    assert (
-        "| control | tasks | records | matches | failures | status |" in report
-    )
+    assert "| control | tasks | records | matches | failures | status |" in report
     assert "| scope | stability | groups checked | drifted groups |" in report
     assert (
         f"| overall | stable | {len(TASK_IDS) * (len(CONTROL_NAMES) + len(AGENT_CONTROL_NAMES))} "
         "| 0 |"
     ) in report
     assert f"| scorer | stable | {len(TASK_IDS) * len(CONTROL_NAMES)} | 0 |" in report
-    assert f"| agent | stable | {len(TASK_IDS) * len(AGENT_CONTROL_NAMES)} | 0 |" in report
     assert (
-        "Per-file normalized hashes and drift details are in "
-        "`manifest.json`."
+        f"| agent | stable | {len(TASK_IDS) * len(AGENT_CONTROL_NAMES)} | 0 |" in report
+    )
+    assert (
+        "Per-file normalized hashes and drift details are in `manifest.json`."
     ) in report
     assert "| all controls | 4 | 24 | 24/24 | 0 | " in report
     assert "| malformed | 4 | 8 | 8/8 | 0 | " in report
     assert "| oracle | 4 | 8 | 8/8 | 0 | " in report
     assert "background-color: #dcfce7" in report
-    assert (
-        "| toy_python_fix_001 | oracle | 2 | 2/2 | PASS | PASS | PASS |"
-    ) in report
+    assert ("| toy_python_fix_001 | oracle | 2 | 2/2 | PASS | PASS | PASS |") in report
     assert (
         "| toy_python_fix_001 | malformed | 2 | 2/2 | invalid_model_output |  |"
     ) in report
@@ -393,7 +401,9 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert agent_file_drift["status"] == "changed"
     assert agent_file_drift["actual_hash"].startswith("xxh64:")
     assert (
-        replace(control_run, flake_detection=agent_drifted_flake_detection).overall_match
+        replace(
+            control_run, flake_detection=agent_drifted_flake_detection
+        ).overall_match
         is False
     )
     drifted_agent_error.write_text(original_agent_error)

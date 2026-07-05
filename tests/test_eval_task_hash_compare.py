@@ -127,8 +127,7 @@ def test_compare_eval_task_hashes_detects_selected_task_drift(
         "full_task_dir_hash",
     )
     assert [
-        (drift.path, drift.status)
-        for drift in changed_task.required_task_file_drifts
+        (drift.path, drift.status) for drift in changed_task.required_task_file_drifts
     ] == [
         ("seed_workspace", "removed"),
         ("hidden_tests", "added"),
@@ -193,7 +192,7 @@ def test_load_eval_task_hash_source_rejects_unsupported_manifest(
         + "\n"
     )
 
-    with pytest.raises(ValueError, match="Expected eval_run or eval_suite"):
+    with pytest.raises(ValueError, match="Expected eval run or eval suite"):
         load_eval_task_hash_source(manifest_path)
 
 
@@ -203,12 +202,12 @@ def test_load_eval_task_hash_source_rejects_unsupported_manifest(
         (
             "eval_run",
             "eval_run_artifact_v999",
-            "Unsupported eval_run artifact_schema_version",
+            "artifact_schema_version must be",
         ),
         (
             "eval_suite",
             "eval_suite_artifact_v999",
-            "Unsupported eval_suite artifact_schema_version",
+            "artifact_schema_version must be",
         ),
     ],
 )
@@ -239,23 +238,152 @@ def _write_manifest(
     selected_tasks: list[dict[str, object]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    task_hashes = {
+        "schema_version": "eval_task_hashes_v0",
+        "task_pack_id": "repo_patch_python_v0",
+        "selected_task_hash_set": selected_task_hash_set,
+        "selected_tasks": selected_tasks,
+    }
+    task_ids = [
+        task["task_id"] for task in selected_tasks if isinstance(task["task_id"], str)
+    ]
+    if artifact_type == "eval_run":
+        payload = _eval_run_manifest(
+            artifact_schema_version=artifact_schema_version,
+            task_hashes=task_hashes,
+            task_ids=task_ids,
+        )
+    elif artifact_type == "eval_suite":
+        payload = _eval_suite_manifest(
+            artifact_schema_version=artifact_schema_version,
+            task_hashes=task_hashes,
+            task_ids=task_ids,
+        )
+    else:
+        payload = {
+            "artifact_type": artifact_type,
+            "artifact_schema_version": artifact_schema_version,
+            "task_hashes": task_hashes,
+        }
     path.write_text(
         json.dumps(
-            {
-                "artifact_type": artifact_type,
-                "artifact_schema_version": artifact_schema_version,
-                "task_hashes": {
-                    "schema_version": "eval_task_hashes_v0",
-                    "task_pack_id": "repo_patch_python_v0",
-                    "selected_task_hash_set": selected_task_hash_set,
-                    "selected_tasks": selected_tasks,
-                },
-            },
+            payload,
             indent=2,
             sort_keys=True,
         )
         + "\n"
     )
+
+
+def _eval_run_manifest(
+    *,
+    artifact_schema_version: str,
+    task_hashes: dict[str, object],
+    task_ids: list[str],
+) -> dict[str, object]:
+    attempts = _scorer_attempt_records(task_ids)
+    return {
+        "artifact_type": "eval_run",
+        "artifact_schema_version": artifact_schema_version,
+        "eval_run_id": "eval_run_test",
+        "created_at": "2026-06-30T00:00:00Z",
+        "config_path": "configs/eval/test.yaml",
+        "config_hash": "xxh64:config",
+        "config_name": "test",
+        "task_pack": "data/task_packs/repo_patch_python_v0",
+        "split": "practice",
+        "task_hashes": task_hashes,
+        "policy": "oracle",
+        "policy_type": "scorer_control_patch",
+        "policy_family": "control",
+        "control_layer": "scorer",
+        "control_name": "oracle",
+        "attempts_per_task": 1,
+        "replay_repeats": 0,
+        "attempt_count": len(attempts),
+        "layer_counts": _scorer_pass_layer_counts(len(attempts)),
+        "artifacts": {"trace": "trace.jsonl", "attempts": "attempts"},
+        "attempts": attempts,
+    }
+
+
+def _eval_suite_manifest(
+    *,
+    artifact_schema_version: str,
+    task_hashes: dict[str, object],
+    task_ids: list[str],
+) -> dict[str, object]:
+    layer_counts = _scorer_pass_layer_counts(len(task_ids))
+    return {
+        "artifact_type": "eval_suite",
+        "artifact_schema_version": artifact_schema_version,
+        "eval_suite_id": "eval_suite_test",
+        "created_at": "2026-06-30T00:00:00Z",
+        "config_path": "configs/eval/test.yaml",
+        "config_hash": "xxh64:config",
+        "config_name": "test",
+        "task_pack": "data/task_packs/repo_patch_python_v0",
+        "split": "practice",
+        "task_hashes": task_hashes,
+        "tasks": task_ids,
+        "task_count": len(task_ids),
+        "policy_count": 1,
+        "attempt_count": len(task_ids),
+        "layer_counts": layer_counts,
+        "artifacts": {"policies": "policies"},
+        "policy_runs": [
+            {
+                "policy": "oracle",
+                "policy_type": "scorer_control_patch",
+                "policy_family": "control",
+                "control_layer": "scorer",
+                "control_name": "oracle",
+                "attempts_per_task": 1,
+                "replay_repeats": 0,
+                "eval_run_id": "eval_run_test",
+                "artifact_dir": "policies/oracle",
+                "manifest": "policies/oracle/manifest.json",
+                "attempt_count": len(task_ids),
+                "layer_counts": layer_counts,
+            }
+        ],
+        "replay_run_count": 0,
+        "replay_policy_count": 0,
+        "replay_run_success_summary": "0/0",
+        "replay_runs": [],
+    }
+
+
+def _scorer_attempt_records(task_ids: list[str]) -> list[dict[str, object]]:
+    return [
+        {
+            "eval_attempt_id": f"eval_attempt_{index:03d}",
+            "task_id": task_id,
+            "attempt_index": 0,
+            "artifact_dir": f"attempts/{task_id}__attempt_001",
+            "artifact_type": "scorer_attempt",
+            "artifact_schema_version": "scorer_attempt_artifact_v0",
+            "scorer": {
+                "scorer_attempt_id": f"scorer_attempt_{index:03d}",
+                "status": "PASS",
+                "public_status": "PASS",
+                "hidden_status": "PASS",
+                "error_class": None,
+                "final_diff_hash": f"xxh64:final-diff-{index:03d}",
+                "duration_ms": 0,
+            },
+            "agent": None,
+        }
+        for index, task_id in enumerate(task_ids, start=1)
+    ]
+
+
+def _scorer_pass_layer_counts(count: int) -> dict[str, dict[str, int]]:
+    return {
+        "scorer_status": {"PASS": count},
+        "scorer_public_status": {"PASS": count},
+        "scorer_hidden_status": {"PASS": count},
+    }
 
 
 def _selected_task(

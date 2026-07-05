@@ -222,20 +222,25 @@ def test_scan_agent_visible_artifacts_skips_nested_scorer_attempt(
     nested_attempt_dir = artifact_dir / "attempt"
     nested_attempt_dir.mkdir(parents=True)
     (artifact_dir / "agent_task_run.json").write_text("clean")
+    (artifact_dir / "decoding_config.json").write_text("clean")
+    (artifact_dir / "agent_task_view.json").write_text("clean")
+    (artifact_dir / "error.txt").write_text("clean")
     (artifact_dir / "prompt_loop_result.json").write_text("clean")
     (artifact_dir / "candidate.patch").write_text("clean")
     (nested_attempt_dir / "trace.jsonl").write_text("hidden_tests")
     (artifact_dir / "manifest.json").write_text(
         json.dumps(
-            {
-                "artifact_type": "agent_attempt",
-                "artifacts": {
+            _agent_attempt_manifest(
+                artifacts={
                     "agent_task_run": "agent_task_run.json",
+                    "decoding_config": "decoding_config.json",
+                    "agent_task_view": "agent_task_view.json",
+                    "error": "error.txt",
                     "prompt_loop_result": "prompt_loop_result.json",
                     "candidate_patch": "candidate.patch",
-                    "attempt": "attempt/",
-                },
-            }
+                    "attempt": "attempt",
+                }
+            )
         )
         + "\n"
     )
@@ -245,7 +250,10 @@ def test_scan_agent_visible_artifacts_skips_nested_scorer_attempt(
 
     assert tuple(path.relative_to(artifact_dir).as_posix() for path in files) == (
         "agent_task_run.json",
+        "agent_task_view.json",
         "candidate.patch",
+        "decoding_config.json",
+        "error.txt",
         "manifest.json",
         "prompt_loop_result.json",
     )
@@ -260,13 +268,34 @@ def test_list_agent_visible_artifact_files_rejects_path_traversal(
     artifact_dir.mkdir()
     (artifact_dir / "manifest.json").write_text(
         json.dumps(
-            {
-                "artifact_type": "agent_attempt",
-                "artifacts": {"agent_task_run": "../agent_task_run.json"},
-            }
+            _agent_attempt_manifest(
+                artifacts={
+                    "agent_task_run": "agent_task_run.json",
+                    "decoding_config": "decoding_config.json",
+                    "agent_task_view": "agent_task_view.json",
+                    "error": "error.txt",
+                    "prompt_loop_result": "prompt_loop_result.json",
+                }
+                | {"agent_task_run": "../agent_task_run.json"}
+            )
         )
         + "\n"
     )
 
-    with pytest.raises(ValueError, match="must stay inside artifact directory"):
+    with pytest.raises(ValueError, match="parent traversal"):
         list_agent_visible_artifact_files(artifact_dir)
+
+
+def _agent_attempt_manifest(*, artifacts: dict[str, str]) -> dict[str, object]:
+    return {
+        "artifact_type": "agent_attempt",
+        "artifact_schema_version": "agent_attempt_artifact_v0",
+        "orchestrator_version": "agent_task_run_orchestrator_v0",
+        "agent_attempt_id": "agent_attempt_test",
+        "task_id": "toy_python_fix_001",
+        "task_manifest_path": str(TOY_TASK_MANIFEST),
+        "status": "agent_loop_failed",
+        "prompt_loop_status": "model_error",
+        "attempt_status": None,
+        "artifacts": artifacts,
+    }

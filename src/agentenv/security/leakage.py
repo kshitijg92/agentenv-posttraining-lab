@@ -1,12 +1,11 @@
-import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import xxhash
 
-from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType
+from agentenv.artifacts import MANIFEST_FILENAME
+from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.tasks.schema import (
     TaskManifest,
     agent_private_task_manifest_field_names,
@@ -126,28 +125,17 @@ def scan_agent_visible_artifacts(
 
 
 def list_agent_visible_artifact_files(artifact_dir: Path) -> tuple[Path, ...]:
+    from agentenv.artifacts.manifests import load_agent_attempt_manifest
+
     artifact_root = artifact_dir.resolve()
     manifest_path = artifact_root / MANIFEST_FILENAME
-    artifact_manifest = _load_json_object(manifest_path)
-    artifact_type = artifact_manifest.get("artifact_type")
-    if artifact_type != ArtifactType.AGENT_ATTEMPT:
-        raise ValueError(
-            f"Expected {ArtifactType.AGENT_ATTEMPT} artifact_type in {manifest_path}; "
-            f"got {artifact_type!r}"
-        )
-
-    artifacts = artifact_manifest.get("artifacts")
-    if not isinstance(artifacts, dict):
-        raise ValueError(f"Expected artifacts object in {manifest_path}")
+    artifact_manifest = load_agent_attempt_manifest(manifest_path)
 
     paths = {manifest_path}
-    for artifact_ref in artifacts.values():
-        if not isinstance(artifact_ref, str):
-            raise ValueError(f"Expected artifact path strings in {manifest_path}")
-        relative_path = Path(artifact_ref)
-        if _is_nested_scorer_attempt_ref(relative_path):
+    for artifact_name, artifact_ref in artifact_manifest.artifacts.items():
+        if artifact_name == "attempt":
             continue
-        artifact_path = _resolve_artifact_ref_path(artifact_root, relative_path)
+        artifact_path = resolve_relative_artifact_ref(artifact_root, artifact_ref)
         if artifact_path.is_file():
             paths.add(artifact_path)
     return tuple(sorted(paths))
@@ -187,10 +175,6 @@ def scan_files_for_leakage(
     )
 
 
-def _is_nested_scorer_attempt_ref(relative_path: Path) -> bool:
-    return relative_path.parts[:1] == ("attempt",)
-
-
 def _build_structured_field_markers(field_name: str) -> tuple[str, ...]:
     return (
         f"{field_name}:",
@@ -208,25 +192,5 @@ def _format_path_ref(path: Path, root: Path | None) -> str:
         return path.as_posix()
 
 
-def _resolve_artifact_ref_path(artifact_root: Path, relative_path: Path) -> Path:
-    if relative_path.is_absolute():
-        raise ValueError(f"Artifact ref must be relative: {relative_path}")
-    artifact_path = (artifact_root / relative_path).resolve()
-    try:
-        artifact_path.relative_to(artifact_root)
-    except ValueError as exc:
-        raise ValueError(
-            f"Artifact ref must stay inside artifact directory: {relative_path}"
-        ) from exc
-    return artifact_path
-
-
 def _redact_canary(text: str, canary: str) -> str:
     return text.replace(canary, "[REDACTED_CANARY]")
-
-
-def _load_json_object(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text())
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected JSON object in {path}")
-    return payload

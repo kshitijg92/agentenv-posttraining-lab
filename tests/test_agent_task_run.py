@@ -4,13 +4,18 @@ from pathlib import Path
 import pytest
 
 from agentenv.agents.schema import AgentTaskView, PromptLoopResult, TokenUsage
+from agentenv.artifacts.manifests import load_agent_attempt_manifest
+from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
+from agentenv.artifacts.payloads import load_agent_task_run_result
+from agentenv.artifacts.payloads import load_decoding_config_provenance
+from agentenv.controls.agent_control_scripts import AGENT_CONTROL_SCRIPT_SCHEMA_VERSION
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig, Message, ModelResponse
+from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.agent_task_run import (
     AGENT_TASK_RUN_ORCHESTRATOR_VERSION,
     AgentTaskRun,
     AgentTaskRunErrorDetails,
-    AgentTaskRunResult,
     run_and_persist_agent_task_attempt_to_dir,
     run_agent_task_attempt,
     write_agent_task_run_artifacts,
@@ -27,9 +32,9 @@ PUBLIC_CHECK_COMMAND = "uv run pytest tests/test_public.py"
 CANARY = "agentenv-canary-secret-000000000000"
 FIXED_MATHLIB = (
     "def normalize_ratio(numerator: int | float, denominator: int | float) -> float:\n"
-    "    \"\"\"Return numerator divided by denominator as a normalized ratio.\"\"\"\n"
+    '    """Return numerator divided by denominator as a normalized ratio."""\n'
     "    if denominator == 0:\n"
-    "        raise ValueError(\"denominator must not be zero\")\n"
+    '        raise ValueError("denominator must not be zero")\n'
     "    return float(numerator / denominator)\n"
 )
 
@@ -55,34 +60,42 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
         model_id="fake-scripted-v0",
         script=[
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "read_file",
-                    "arguments": {"path": "src/mathlib.py"},
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "read_file",
+                        "arguments": {"path": "src/mathlib.py"},
+                    }
+                ),
             ),
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "write_file",
-                    "arguments": {
-                        "path": "src/mathlib.py",
-                        "content": FIXED_MATHLIB,
-                    },
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "write_file",
+                        "arguments": {
+                            "path": "src/mathlib.py",
+                            "content": FIXED_MATHLIB,
+                        },
+                    }
+                ),
             ),
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "run_tests",
-                    "arguments": {"command": PUBLIC_CHECK_COMMAND},
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "run_tests",
+                        "arguments": {"command": PUBLIC_CHECK_COMMAND},
+                    }
+                ),
             ),
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "final_answer",
-                    "text": "done",
-                }),
+                output_text=_action(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
             ),
         ],
     )
@@ -125,11 +138,12 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
     artifact_paths = write_agent_task_run_artifacts(
         agent_task_run,
         tmp_path / "out",
+        decoding_config=_decoding_config(),
     )
 
     assert artifact_paths.manifest_json == tmp_path / "out/manifest.json"
     assert artifact_paths.agent_task_run_json == tmp_path / "out/agent_task_run.json"
-    assert artifact_paths.decoding_config_json is None
+    assert artifact_paths.decoding_config_json == tmp_path / "out/decoding_config.json"
     assert artifact_paths.agent_control_script_json is None
     assert artifact_paths.agent_task_view_json == tmp_path / "out/agent_task_view.json"
     assert (
@@ -153,30 +167,25 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
     run_manifest = json.loads(artifact_paths.manifest_json.read_text())
     agent_task_result = json.loads(artifact_paths.agent_task_run_json.read_text())
     agent_task_view = json.loads(artifact_paths.agent_task_view_json.read_text())
-    prompt_loop_result = json.loads(
-        artifact_paths.prompt_loop_result_json.read_text()
+    prompt_loop_result = json.loads(artifact_paths.prompt_loop_result_json.read_text())
+    attempt_result = json.loads(
+        artifact_paths.attempt_artifacts.attempt_json.read_text()
     )
-    attempt_result = json.loads(artifact_paths.attempt_artifacts.attempt_json.read_text())
 
     assert run_manifest["artifact_type"] == "agent_attempt"
     assert run_manifest["artifact_schema_version"] == "agent_attempt_artifact_v0"
-    assert (
-        run_manifest["orchestrator_version"]
-        == AGENT_TASK_RUN_ORCHESTRATOR_VERSION
-    )
+    assert run_manifest["orchestrator_version"] == AGENT_TASK_RUN_ORCHESTRATOR_VERSION
     assert run_manifest["status"] == "scored"
     assert run_manifest["prompt_loop_status"] == "completed"
     assert run_manifest["attempt_status"] == "PASS"
     assert run_manifest["agent_attempt_id"].startswith("agent_attempt_")
     assert "run_id" not in run_manifest
-    assert run_manifest["artifacts"]["attempt"] == "attempt/"
+    assert run_manifest["artifacts"]["decoding_config"] == "decoding_config.json"
+    assert run_manifest["artifacts"]["attempt"] == "attempt"
     assert (
-        agent_task_result["orchestrator_version"]
-        == AGENT_TASK_RUN_ORCHESTRATOR_VERSION
+        agent_task_result["orchestrator_version"] == AGENT_TASK_RUN_ORCHESTRATOR_VERSION
     )
-    assert (
-        agent_task_result["agent_attempt_id"] == run_manifest["agent_attempt_id"]
-    )
+    assert agent_task_result["agent_attempt_id"] == run_manifest["agent_attempt_id"]
     assert "run_id" not in agent_task_result
     assert agent_task_result["attempt_result"]["status"] == "PASS"
     assert agent_task_result["attempt_result"]["public_status"] == "PASS"
@@ -230,14 +239,13 @@ def test_run_agent_task_attempt_does_not_score_failed_prompt_loop(
     artifact_paths = write_agent_task_run_artifacts(
         agent_task_run,
         tmp_path / "out",
+        decoding_config=_decoding_config(),
     )
 
     run_manifest = json.loads(artifact_paths.manifest_json.read_text())
     agent_task_result = json.loads(artifact_paths.agent_task_run_json.read_text())
     assert artifact_paths.prompt_loop_result_json is not None
-    prompt_loop_result = json.loads(
-        artifact_paths.prompt_loop_result_json.read_text()
-    )
+    prompt_loop_result = json.loads(artifact_paths.prompt_loop_result_json.read_text())
 
     assert artifact_paths.candidate_patch is None
     assert artifact_paths.attempt_dir is None
@@ -248,9 +256,7 @@ def test_run_agent_task_attempt_does_not_score_failed_prompt_loop(
     assert "run_id" not in run_manifest
     assert "candidate_patch" not in run_manifest["artifacts"]
     assert "attempt" not in run_manifest["artifacts"]
-    assert (
-        agent_task_result["agent_attempt_id"] == run_manifest["agent_attempt_id"]
-    )
+    assert agent_task_result["agent_attempt_id"] == run_manifest["agent_attempt_id"]
     assert "run_id" not in agent_task_result
     assert agent_task_result["attempt_result"] is None
     assert prompt_loop_result["status"] == "invalid_model_output"
@@ -337,7 +343,11 @@ def test_write_agent_task_run_artifacts_redacts_secret_canary(
         ),
     )
 
-    artifact_paths = write_agent_task_run_artifacts(agent_task_run, tmp_path / "out")
+    artifact_paths = write_agent_task_run_artifacts(
+        agent_task_run,
+        tmp_path / "out",
+        decoding_config=_decoding_config(),
+    )
     written_text = "\n".join(
         path.read_text()
         for path in [
@@ -366,32 +376,53 @@ def test_run_and_persist_agent_task_attempt_keeps_scratch_out_of_artifacts(
         model_id="fake-scripted-v0",
         script=[
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "read_file",
-                    "arguments": {"path": "src/mathlib.py"},
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "read_file",
+                        "arguments": {"path": "src/mathlib.py"},
+                    }
+                ),
             ),
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "write_file",
-                    "arguments": {
-                        "path": "src/mathlib.py",
-                        "content": FIXED_MATHLIB,
-                    },
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "write_file",
+                        "arguments": {
+                            "path": "src/mathlib.py",
+                            "content": FIXED_MATHLIB,
+                        },
+                    }
+                ),
             ),
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "final_answer",
-                    "text": "done",
-                }),
+                output_text=_action(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
             ),
         ],
     )
     out_dir = tmp_path / "out"
-    agent_control_script = {"schema_version": "test_agent_control_script_v0"}
+    agent_control_script = {
+        "schema_version": AGENT_CONTROL_SCRIPT_SCHEMA_VERSION,
+        "script": {
+            "steps": [
+                {
+                    "output_text": _action({"action": "final_answer", "text": "done"}),
+                    "finish_reason": "stop_criteria_met",
+                    "error_class": None,
+                }
+            ]
+        },
+        "expected_result": {
+            "prompt_loop_status": "completed",
+            "tool_results": None,
+        },
+    }
 
     agent_task_run = run_and_persist_agent_task_attempt_to_dir(
         TOY_TASK_MANIFEST,
@@ -402,19 +433,29 @@ def test_run_and_persist_agent_task_attempt_keeps_scratch_out_of_artifacts(
     )
 
     run_manifest = json.loads((out_dir / "manifest.json").read_text())
+    loaded_manifest = load_agent_attempt_manifest(out_dir / "manifest.json")
+    loaded_result = load_agent_task_run_result(out_dir / "agent_task_run.json")
     assert agent_task_run.result.prompt_loop_status == "completed"
+    assert loaded_manifest.agent_attempt_id == agent_task_run.result.agent_attempt_id
+    assert loaded_result.agent_attempt_id == agent_task_run.result.agent_attempt_id
     assert (out_dir / "agent_task_run.json").is_file()
     assert (out_dir / "decoding_config.json").is_file()
     assert (out_dir / "agent_control_script.json").is_file()
     assert (out_dir / "prompt_loop_result.json").is_file()
     assert run_manifest["artifacts"]["decoding_config"] == "decoding_config.json"
     assert (
-        run_manifest["artifacts"]["agent_control_script"]
-        == "agent_control_script.json"
+        run_manifest["artifacts"]["agent_control_script"] == "agent_control_script.json"
     )
     decoding_artifact = json.loads((out_dir / "decoding_config.json").read_text())
+    decoding_provenance = load_decoding_config_provenance(
+        out_dir / "decoding_config.json"
+    )
+    assert (
+        decoding_artifact["schema_version"] == DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
+    )
     assert decoding_artifact["source_path"] is None
     assert decoding_artifact["source_hash"] is None
+    assert decoding_provenance.source_path is None
     assert decoding_artifact["config"]["max_new_tokens"] == 512
     assert decoding_artifact["config"]["timeout_seconds"] == 30
     assert json.loads((out_dir / "agent_control_script.json").read_text()) == (

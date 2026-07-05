@@ -2,16 +2,39 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import xxhash
 
-from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType, prepare_artifact_output_dir
+from agentenv.artifacts import (
+    MANIFEST_FILENAME,
+    ArtifactType,
+    prepare_artifact_output_dir,
+)
+from agentenv.artifacts.manifests import AGENT_ATTEMPT_ARTIFACT_REFS
+from agentenv.artifacts.manifests import EVAL_RUN_ARTIFACT_REFS
+from agentenv.artifacts.manifests import EVAL_RUN_ARTIFACT_SCHEMA_VERSION
+from agentenv.artifacts.manifests import EVAL_SUITE_ARTIFACT_REFS
+from agentenv.artifacts.manifests import EVAL_SUITE_ARTIFACT_SCHEMA_VERSION
+from agentenv.artifacts.manifests import EvalRunManifest
+from agentenv.artifacts.manifests import EvalSuiteManifest
+from agentenv.artifacts.manifests import REPLAY_RUN_ARTIFACT_REFS
+from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_REFS
+from agentenv.artifacts.payloads import EvalTaskHashes
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     load_agent_control_script_case,
 )
-from agentenv.evals.schema import EvalConfig
+from agentenv.evals.schema import (
+    AGENT_CONTROL_LAYER,
+    AGENT_CONTROL_SCRIPT_POLICY_TYPE,
+    AGENT_MODEL_POLICY_TYPE,
+    AGENT_POLICY_FAMILY,
+    CONTROL_POLICY_FAMILY,
+    SCORER_CONTROL_LAYER,
+    SCORER_CONTROL_PATCH_POLICY_TYPE,
+    EvalConfig,
+)
 from agentenv.evals.resolve import (
     agent_control_script_path,
     ResolvedEvalTask,
@@ -30,8 +53,8 @@ from agentenv.ids import (
 from agentenv.models.config import load_decoding_config, load_model_config
 from agentenv.models.factory import build_model_client
 from agentenv.models.fake import ScriptedFakeModelClient
+from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.agent_task_run import (
-    AgentTaskRunResult,
     decoding_config_provenance_artifact,
     model_config_provenance_artifact,
     run_and_persist_agent_task_attempt_to_dir,
@@ -46,8 +69,6 @@ if TYPE_CHECKING:
     from agentenv.replay.runner import ReplayRun
 
 
-EVAL_RUN_ARTIFACT_SCHEMA_VERSION = "eval_run_artifact_v0"
-EVAL_SUITE_ARTIFACT_SCHEMA_VERSION = "eval_suite_artifact_v0"
 TraceEvent = dict[str, object]
 
 
@@ -97,7 +118,7 @@ class EvalRun:
     config: EvalConfig
     config_path: Path
     config_hash: str
-    task_hashes: dict[str, object]
+    task_hashes: EvalTaskHashes
     policy: str
     out_dir: Path
     created_at: str
@@ -110,7 +131,7 @@ class EvalMatrixRun:
     config: EvalConfig
     config_path: Path
     config_hash: str
-    task_hashes: dict[str, object]
+    task_hashes: EvalTaskHashes
     out_dir: Path
     created_at: str
     policy_runs: list[EvalRun]
@@ -143,7 +164,7 @@ def run_eval_config(
     created_at = _utc_now()
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
-    attempts_dir = out_dir / "attempts"
+    attempts_dir = out_dir / EVAL_RUN_ARTIFACT_REFS["attempts"]
     attempts_dir.mkdir(parents=True, exist_ok=True)
 
     resolved_tasks = resolve_eval_tasks(config, config_path)
@@ -205,7 +226,7 @@ def run_eval_config(
             artifact_dir_ref = str(attempt_dir.relative_to(out_dir))
             scorer_attempt_id: str | None = None
             agent_attempt_id: str | None = None
-            if selected_policy.type == "scorer_control_patch":
+            if selected_policy.type == SCORER_CONTROL_PATCH_POLICY_TYPE:
                 submission_path = scorer_control_patch_path(
                     task.manifest_path.parent,
                     task.manifest,
@@ -228,14 +249,12 @@ def run_eval_config(
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
                 )
-                scorer_attempt_id = _required_scorer(
-                    attempt_record
-                ).scorer_attempt_id
+                scorer_attempt_id = _required_scorer(attempt_record).scorer_attempt_id
                 payload_refs = {
                     "attempt": f"{artifact_dir_ref}/attempt.json",
                     "attempt_trace": f"{artifact_dir_ref}/trace.jsonl",
                 }
-            elif selected_policy.type == "agent_control_script":
+            elif selected_policy.type == AGENT_CONTROL_SCRIPT_POLICY_TYPE:
                 script_path = agent_control_script_path(
                     task.manifest_path.parent,
                     task.manifest,
@@ -267,7 +286,7 @@ def run_eval_config(
                     artifact_dir_ref,
                     attempt_dir,
                 )
-            elif selected_policy.type == "agent_model":
+            elif selected_policy.type == AGENT_MODEL_POLICY_TYPE:
                 model_config_path = resolve_config_file_ref(
                     config_path,
                     selected_policy.model_config_path,
@@ -390,7 +409,7 @@ def run_eval_config_all_policies(
     created_at = _utc_now()
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
-    policies_dir = out_dir / "policies"
+    policies_dir = out_dir / EVAL_SUITE_ARTIFACT_REFS["policies"]
     policies_dir.mkdir(parents=True, exist_ok=True)
 
     policy_runs = [
@@ -420,14 +439,13 @@ def _replay_configured_policy_runs(
 ) -> list[EvalMatrixReplayRecord]:
     from agentenv.replay.runner import run_replay
 
-    replays_dir = out_dir / "replays"
+    replays_dir = out_dir / EVAL_SUITE_ARTIFACT_REFS["replays"]
     replay_records: list[EvalMatrixReplayRecord] = []
     for policy_run in policy_runs:
         policy = config.policies[policy_run.policy]
         for replay_index in range(policy.replay.repeats):
             replay_dir = (
-                replays_dir
-                / f"{policy_run.policy}__replay_{replay_index + 1:03d}"
+                replays_dir / f"{policy_run.policy}__replay_{replay_index + 1:03d}"
             )
             replay_run = run_replay(policy_run.out_dir, replay_dir)
             replay_records.append(
@@ -442,7 +460,7 @@ def _replay_configured_policy_runs(
 
 
 def _write_eval_trace(eval_run: EvalRun, trace_events: list[TraceEvent]) -> Path:
-    trace_path = eval_run.out_dir / "trace.jsonl"
+    trace_path = eval_run.out_dir / EVAL_RUN_ARTIFACT_REFS["trace"]
     trace_path.write_text(
         "".join(json.dumps(event, sort_keys=True) + "\n" for event in trace_events)
     )
@@ -453,7 +471,7 @@ def _write_eval_run_manifest(eval_run: EvalRun) -> Path:
     manifest_path = eval_run.out_dir / MANIFEST_FILENAME
     manifest_path.write_text(
         json.dumps(
-            _eval_run_manifest(eval_run),
+            _manifest_payload(_build_eval_run_manifest(eval_run)),
             indent=2,
             sort_keys=True,
         )
@@ -466,7 +484,7 @@ def _write_eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> Path:
     manifest_path = eval_matrix.out_dir / MANIFEST_FILENAME
     manifest_path.write_text(
         json.dumps(
-            _eval_matrix_manifest(eval_matrix),
+            _manifest_payload(_build_eval_suite_manifest(eval_matrix)),
             indent=2,
             sort_keys=True,
         )
@@ -475,8 +493,8 @@ def _write_eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> Path:
     return manifest_path
 
 
-def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
-    return {
+def _build_eval_run_manifest(eval_run: EvalRun) -> EvalRunManifest:
+    payload: dict[str, object] = {
         "artifact_type": ArtifactType.EVAL_RUN,
         "artifact_schema_version": EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
         "eval_run_id": eval_run.eval_run_id,
@@ -488,73 +506,94 @@ def _eval_run_manifest(eval_run: EvalRun) -> dict[str, object]:
         "split": eval_run.config.split,
         "task_hashes": eval_run.task_hashes,
         "policy": eval_run.policy,
-        **_policy_metadata(eval_run.config, eval_run.policy),
         "attempt_count": len(eval_run.attempts),
         "layer_counts": count_eval_run_layers(eval_run),
-        "artifacts": {
-            "trace": "trace.jsonl",
-            "attempts": "attempts",
-        },
-        "attempts": [_eval_attempt_record(eval_run, attempt) for attempt in eval_run.attempts],
+        "artifacts": dict(EVAL_RUN_ARTIFACT_REFS),
+        "attempts": [
+            _eval_attempt_record(eval_run, attempt) for attempt in eval_run.attempts
+        ],
     }
+    payload.update(_policy_metadata(eval_run.config, eval_run.policy))
+    return EvalRunManifest.model_validate(payload)
 
 
-def _eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> dict[str, object]:
+def _build_eval_suite_manifest(eval_matrix: EvalMatrixRun) -> EvalSuiteManifest:
     policy_attempt_counts = {
         policy_run.policy: len(policy_run.attempts)
         for policy_run in eval_matrix.policy_runs
     }
-    artifacts = {
-        "policies": "policies",
-    }
+    artifacts = {"policies": EVAL_SUITE_ARTIFACT_REFS["policies"]}
     if eval_matrix.replay_runs:
-        artifacts["replays"] = "replays"
+        artifacts["replays"] = EVAL_SUITE_ARTIFACT_REFS["replays"]
 
-    return {
-        "artifact_type": ArtifactType.EVAL_SUITE,
-        "artifact_schema_version": EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
-        "eval_suite_id": eval_matrix.eval_suite_id,
-        "created_at": eval_matrix.created_at,
-        "config_path": str(eval_matrix.config_path),
-        "config_hash": eval_matrix.config_hash,
-        "config_name": eval_matrix.config.name,
-        "task_pack": eval_matrix.config.task_pack,
-        "split": eval_matrix.config.split,
-        "task_hashes": eval_matrix.task_hashes,
-        "tasks": eval_matrix.config.tasks,
-        "task_count": len(eval_matrix.config.tasks),
-        "policy_count": len(eval_matrix.policy_runs),
-        "attempt_count": sum(policy_attempt_counts.values()),
-        "layer_counts": count_eval_matrix_layers(eval_matrix),
-        "artifacts": artifacts,
-        "policy_runs": [
-            {
-                "policy": policy_run.policy,
-                **_policy_metadata(eval_matrix.config, policy_run.policy),
-                "eval_run_id": policy_run.eval_run_id,
-                "artifact_dir": str(
-                    policy_run.out_dir.relative_to(eval_matrix.out_dir)
-                ),
-                "manifest": str(
-                    (policy_run.out_dir / MANIFEST_FILENAME).relative_to(
-                        eval_matrix.out_dir
-                    )
-                ),
-                "attempt_count": len(policy_run.attempts),
-                "layer_counts": count_eval_run_layers(policy_run),
-            }
-            for policy_run in eval_matrix.policy_runs
-        ],
-        "replay_run_count": len(eval_matrix.replay_runs),
-        "replay_policy_count": _replayed_policy_count(eval_matrix.config),
-        "replay_run_success_summary": _replay_run_success_summary(
-            eval_matrix.replay_runs
-        ),
-        "replay_runs": [
-            _eval_matrix_replay_record(eval_matrix, replay_record)
-            for replay_record in eval_matrix.replay_runs
-        ],
-    }
+    return EvalSuiteManifest.model_validate(
+        {
+            "artifact_type": ArtifactType.EVAL_SUITE,
+            "artifact_schema_version": EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
+            "eval_suite_id": eval_matrix.eval_suite_id,
+            "created_at": eval_matrix.created_at,
+            "config_path": str(eval_matrix.config_path),
+            "config_hash": eval_matrix.config_hash,
+            "config_name": eval_matrix.config.name,
+            "task_pack": eval_matrix.config.task_pack,
+            "split": eval_matrix.config.split,
+            "task_hashes": eval_matrix.task_hashes,
+            "tasks": eval_matrix.config.tasks,
+            "task_count": len(eval_matrix.config.tasks),
+            "policy_count": len(eval_matrix.policy_runs),
+            "attempt_count": sum(policy_attempt_counts.values()),
+            "layer_counts": count_eval_matrix_layers(eval_matrix),
+            "artifacts": artifacts,
+            "policy_runs": [
+                {
+                    "policy": policy_run.policy,
+                    **_policy_metadata(eval_matrix.config, policy_run.policy),
+                    "eval_run_id": policy_run.eval_run_id,
+                    "artifact_dir": str(
+                        policy_run.out_dir.relative_to(eval_matrix.out_dir)
+                    ),
+                    "manifest": str(
+                        (policy_run.out_dir / MANIFEST_FILENAME).relative_to(
+                            eval_matrix.out_dir
+                        )
+                    ),
+                    "attempt_count": len(policy_run.attempts),
+                    "layer_counts": count_eval_run_layers(policy_run),
+                }
+                for policy_run in eval_matrix.policy_runs
+            ],
+            "replay_run_count": len(eval_matrix.replay_runs),
+            "replay_policy_count": _replayed_policy_count(eval_matrix.config),
+            "replay_run_success_summary": _replay_run_success_summary(
+                eval_matrix.replay_runs
+            ),
+            "replay_runs": [
+                _eval_matrix_replay_record(eval_matrix, replay_record)
+                for replay_record in eval_matrix.replay_runs
+            ],
+        }
+    )
+
+
+def _manifest_payload(
+    manifest: EvalRunManifest | EvalSuiteManifest,
+) -> dict[str, object]:
+    payload = cast(dict[str, object], manifest.model_dump(mode="json", by_alias=True))
+    _remove_null_policy_config_refs(payload)
+    return payload
+
+
+def _remove_null_policy_config_refs(value: object) -> None:
+    if isinstance(value, dict):
+        for key in ("model_config", "decoding_config"):
+            if value.get(key) is None:
+                value.pop(key, None)
+        for child in value.values():
+            _remove_null_policy_config_refs(child)
+        return
+    if isinstance(value, list):
+        for child in value:
+            _remove_null_policy_config_refs(child)
 
 
 def _eval_matrix_replay_record(
@@ -577,9 +616,9 @@ def _eval_matrix_replay_record(
             )
         ),
         "replay_result": str(
-            (replay_record.replay_dir / "replay_result.json").relative_to(
-                eval_matrix.out_dir
-            )
+            (
+                replay_record.replay_dir / REPLAY_RUN_ARTIFACT_REFS["replay_result"]
+            ).relative_to(eval_matrix.out_dir)
         ),
         "attempt_count": attempt_count,
         "matched_attempts": matched_attempts,
@@ -709,23 +748,39 @@ def _agent_eval_attempt_payload_refs(
     attempt_dir: Path,
 ) -> dict[str, str]:
     payload_refs = {
-        "agent_task_run": f"{artifact_dir_ref}/agent_task_run.json",
-        "decoding_config": f"{artifact_dir_ref}/decoding_config.json",
+        "agent_task_run": (
+            f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['agent_task_run']}"
+        ),
+        "decoding_config": (
+            f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['decoding_config']}"
+        ),
     }
-    if (attempt_dir / "model_config.json").is_file():
-        payload_refs["model_config"] = f"{artifact_dir_ref}/model_config.json"
-    if (attempt_dir / "agent_control_script.json").is_file():
+    if (attempt_dir / AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_view"]).is_file():
+        payload_refs["agent_task_view"] = (
+            f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['agent_task_view']}"
+        )
+    if (attempt_dir / AGENT_ATTEMPT_ARTIFACT_REFS["model_config"]).is_file():
+        payload_refs["model_config"] = (
+            f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['model_config']}"
+        )
+    if (attempt_dir / AGENT_ATTEMPT_ARTIFACT_REFS["agent_control_script"]).is_file():
         payload_refs["agent_control_script"] = (
-            f"{artifact_dir_ref}/agent_control_script.json"
+            f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['agent_control_script']}"
         )
-    if (attempt_dir / "prompt_loop_result.json").is_file():
+    if (attempt_dir / AGENT_ATTEMPT_ARTIFACT_REFS["prompt_loop_result"]).is_file():
         payload_refs["prompt_loop_result"] = (
-            f"{artifact_dir_ref}/prompt_loop_result.json"
+            f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['prompt_loop_result']}"
         )
-    if (attempt_dir / "candidate.patch").is_file():
-        payload_refs["candidate_patch"] = f"{artifact_dir_ref}/candidate.patch"
-    if (attempt_dir / "attempt/attempt.json").is_file():
-        payload_refs["nested_attempt"] = f"{artifact_dir_ref}/attempt/attempt.json"
+    if (attempt_dir / AGENT_ATTEMPT_ARTIFACT_REFS["candidate_patch"]).is_file():
+        payload_refs["candidate_patch"] = (
+            f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['candidate_patch']}"
+        )
+    nested_attempt_ref = (
+        f"{AGENT_ATTEMPT_ARTIFACT_REFS['attempt']}/"
+        f"{SCORER_ATTEMPT_ARTIFACT_REFS['attempt']}"
+    )
+    if (attempt_dir / nested_attempt_ref).is_file():
+        payload_refs["nested_attempt"] = f"{artifact_dir_ref}/{nested_attempt_ref}"
     return payload_refs
 
 
@@ -735,26 +790,26 @@ def _policy_metadata(config: EvalConfig, policy_name: str) -> dict[str, object]:
         "attempts_per_task": policy.attempts,
         "replay_repeats": policy.replay.repeats,
     }
-    if policy.type == "scorer_control_patch":
+    if policy.type == SCORER_CONTROL_PATCH_POLICY_TYPE:
         return {
             "policy_type": policy.type,
-            "policy_family": "control",
-            "control_layer": "scorer",
+            "policy_family": CONTROL_POLICY_FAMILY,
+            "control_layer": SCORER_CONTROL_LAYER,
             "control_name": policy.control,
             **common_metadata,
         }
-    if policy.type == "agent_control_script":
+    if policy.type == AGENT_CONTROL_SCRIPT_POLICY_TYPE:
         return {
             "policy_type": policy.type,
-            "policy_family": "control",
-            "control_layer": "agent",
+            "policy_family": CONTROL_POLICY_FAMILY,
+            "control_layer": AGENT_CONTROL_LAYER,
             "control_name": policy.control,
             **common_metadata,
         }
-    if policy.type == "agent_model":
+    if policy.type == AGENT_MODEL_POLICY_TYPE:
         return {
             "policy_type": policy.type,
-            "policy_family": "agent",
+            "policy_family": AGENT_POLICY_FAMILY,
             "control_layer": None,
             "control_name": None,
             "model_config": policy.model_config_path,
