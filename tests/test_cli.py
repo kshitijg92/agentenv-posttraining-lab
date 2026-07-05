@@ -367,6 +367,40 @@ def test_trajectories_review_init_cli_writes_review_artifact(tmp_path: Path) -> 
     assert "rejected=0" in validate_result.output
     assert "needs_followup=0" in validate_result.output
 
+    training_out = tmp_path / "training_candidates"
+    training_result = runner.invoke(
+        app,
+        [
+            "training",
+            "candidates",
+            "export",
+            "--trajectories",
+            str(trajectory_out),
+            "--reviews",
+            str(review_out),
+            "--out",
+            str(training_out),
+        ],
+    )
+
+    assert training_result.exit_code == 0, training_result.output
+    assert "training candidate export complete" in training_result.output
+    assert "records=1" in training_result.output
+    assert "trainable=0" in training_result.output
+    assert "analysis_only=1" in training_result.output
+    assert "not_trainable=0" in training_result.output
+    assert "positive_sft=0" in training_result.output
+    assert "negative_examples=0" in training_result.output
+    assert "preference_data=0" in training_result.output
+    assert "manifest.json" in training_result.output
+    assert "training_candidates.jsonl" in training_result.output
+    training_manifest = json.loads((training_out / "manifest.json").read_text())
+    assert training_manifest["artifact_type"] == "training_candidate_export"
+    assert training_manifest["record_count"] == 1
+    assert training_manifest["trainable_count"] == 0
+    assert training_manifest["analysis_only_count"] == 1
+    assert (training_out / "training_candidates.jsonl").is_file()
+
 
 def _write_eval_hash_manifest(
     path: Path,

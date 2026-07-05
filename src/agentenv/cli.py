@@ -43,6 +43,7 @@ from agentenv.tasks.validate import (
 )
 from agentenv.tasks.hashing import write_task_hash_report
 from agentenv.tasks.splits import check_splits_lock
+from agentenv.training.export import export_training_candidate_records
 from agentenv.trajectories.export import export_trajectory_records_from_eval_artifact
 from agentenv.trajectories.review import (
     initialize_trajectory_review_artifact,
@@ -57,6 +58,8 @@ agents_app = typer.Typer(no_args_is_help=True)
 controls_app = typer.Typer(no_args_is_help=True)
 eval_app = typer.Typer(no_args_is_help=False)
 trajectories_app = typer.Typer(no_args_is_help=True)
+training_app = typer.Typer(no_args_is_help=True)
+training_candidates_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 local_model_app = typer.Typer(no_args_is_help=True)
@@ -67,9 +70,11 @@ app.add_typer(agents_app, name="agents")
 app.add_typer(controls_app, name="controls")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trajectories_app, name="trajectories")
+app.add_typer(training_app, name="training")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
 app.add_typer(local_model_app, name="local-model")
+training_app.add_typer(training_candidates_app, name="candidates")
 local_model_app.add_typer(ollama_app, name="ollama")
 
 console = Console()
@@ -626,6 +631,61 @@ def validate_trajectory_review(
         f"accepted={decision_counts['accepted']} "
         f"rejected={decision_counts['rejected']} "
         f"needs_followup={decision_counts['needs_followup']}"
+    )
+
+
+@training_candidates_app.command("export")
+def export_training_candidates(
+    trajectories: Path = typer.Option(
+        ...,
+        "--trajectories",
+        help="Trajectory export artifact directory.",
+    ),
+    reviews: Path = typer.Option(
+        ...,
+        "--reviews",
+        help="Trajectory review artifact directory.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for training candidate export artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before exporting.",
+    ),
+) -> None:
+    try:
+        export = export_training_candidate_records(
+            trajectories,
+            reviews,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(
+            str(exc), param_hint="--trajectories/--reviews"
+        ) from exc
+
+    manifest = export.manifest
+    console.print(
+        "[green]training candidate export complete[/green] "
+        f"records={manifest.record_count} "
+        f"trainable={manifest.trainable_count} "
+        f"analysis_only={manifest.analysis_only_count} "
+        f"not_trainable={manifest.not_trainable_count} "
+        f"positive_sft={manifest.positive_sft_allowed_count} "
+        f"negative_examples={manifest.negative_example_allowed_count} "
+        f"preference_data={manifest.preference_data_allowed_count}"
+    )
+    console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {export.out_dir / manifest.artifacts['training_candidates']}",
+        soft_wrap=True,
     )
 
 

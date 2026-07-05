@@ -15,6 +15,7 @@ uv run agentenv attempt --help
 uv run agentenv agents --help
 uv run agentenv eval --help
 uv run agentenv trajectories --help
+uv run agentenv training --help
 uv run agentenv replay --help
 uv run agentenv report --help
 uv run agentenv scorers --help
@@ -253,6 +254,29 @@ uv run agentenv trajectories review-validate \
 This checks that the review artifact still points to the same trajectory export
 and that `reviews.jsonl` has exactly one row per trajectory with matching
 identity fields.
+
+## Export Training Candidates
+
+Create a training-candidate artifact from a trajectory export and validated
+review artifact:
+
+```bash
+uv run agentenv training candidates export \
+  --trajectories experiments/runs/dev_baseline_trajectory_export \
+  --reviews experiments/runs/dev_baseline_trajectory_review \
+  --out experiments/runs/dev_baseline_training_candidates
+```
+
+Main outputs:
+
+```text
+experiments/runs/dev_baseline_training_candidates/manifest.json
+experiments/runs/dev_baseline_training_candidates/training_candidates.jsonl
+```
+
+This export validates the trajectory/review join, builds candidate records in
+memory, and persists the resulting eligibility surface. It is not an SFT dataset
+or a preference dataset.
 
 ## Replay An Artifact Directory
 
