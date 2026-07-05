@@ -13,12 +13,14 @@ from agentenv.tasks.schema import TaskSplit
 
 
 TrajectoryRecordSchemaVersion = Literal["trajectory_record_v0"]
+TrajectoryReviewSchemaVersion = Literal["trajectory_review_v0"]
 RewardComponentsVersion = Literal["reward_components_v0"]
 GradeState = Literal["scored_pass", "scored_fail", "cannot_grade"]
 ReviewStatus = Literal["not_reviewed", "reviewed"]
 ReviewDecision = Literal["accepted", "rejected", "needs_followup"]
 
 TRAJECTORY_RECORD_SCHEMA_VERSION: TrajectoryRecordSchemaVersion = "trajectory_record_v0"
+TRAJECTORY_REVIEW_SCHEMA_VERSION: TrajectoryReviewSchemaVersion = "trajectory_review_v0"
 REWARD_COMPONENTS_VERSION: RewardComponentsVersion = "reward_components_v0"
 REWARD_COMPONENT_METADATA_SCHEMA_EXTRA_KEY = "reward_component_metadata"
 NON_TRAINING_SPLITS = frozenset({"heldout_private", "public_calibration"})
@@ -225,9 +227,14 @@ class TrainingEligibility(BaseModel):
     eligibility_reason: str = Field(min_length=1)
 
 
-class TrajectoryReview(BaseModel):
+class TrajectoryReviewRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    schema_version: TrajectoryReviewSchemaVersion = TRAJECTORY_REVIEW_SCHEMA_VERSION
+    trajectory_id: str = Field(min_length=1)
+    eval_attempt_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    policy_id: str = Field(min_length=1)
     review_status: ReviewStatus
     review_id: str | None = Field(default=None, min_length=1)
     reviewer_id: str | None = Field(default=None, min_length=1)
@@ -235,7 +242,7 @@ class TrajectoryReview(BaseModel):
     review_notes_ref: ArtifactRef | None = None
 
     @model_validator(mode="after")
-    def validate_review_state(self) -> "TrajectoryReview":
+    def validate_review_state(self) -> "TrajectoryReviewRecord":
         if self.review_status == "not_reviewed":
             if any(
                 value is not None
@@ -270,7 +277,6 @@ class TrajectoryRecord(BaseModel):
     reward_components: RewardComponents
     leakage: LeakageEvidence
     training_eligibility: TrainingEligibility
-    review: TrajectoryReview
 
     @model_validator(mode="after")
     def validate_cross_section_invariants(self) -> "TrajectoryRecord":

@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from agentenv.trajectories.schema import (
     LeakageEvidence,
     TrajectoryRecord,
+    TrajectoryReviewRecord,
     list_reward_component_signal_field_names,
 )
 
@@ -103,13 +104,6 @@ def _base_record_payload() -> dict[str, Any]:
             "negative_example_allowed": False,
             "preference_data_allowed": True,
             "eligibility_reason": "dev successful no-shortcut trajectory",
-        },
-        "review": {
-            "review_status": "not_reviewed",
-            "review_id": None,
-            "reviewer_id": None,
-            "review_decision": None,
-            "review_notes_ref": None,
         },
     }
 
@@ -818,61 +812,84 @@ def test_preference_data_requires_gradable_trajectory() -> None:
         TrajectoryRecord.model_validate(payload)
 
 
+def _base_review_payload() -> dict[str, Any]:
+    return {
+        "schema_version": "trajectory_review_v0",
+        "trajectory_id": "traj_001",
+        "eval_attempt_id": "eval_attempt_001",
+        "task_id": "repair_jsonl_deduper",
+        "policy_id": "agent-happy",
+        "review_status": "not_reviewed",
+        "review_id": None,
+        "reviewer_id": None,
+        "review_decision": None,
+        "review_notes_ref": None,
+    }
+
+
+def _review_payload(**updates: Any) -> dict[str, Any]:
+    payload = _base_review_payload()
+    payload.update(updates)
+    return payload
+
+
+def test_trajectory_record_rejects_embedded_review() -> None:
+    payload = _base_record_payload()
+    payload["review"] = _base_review_payload()
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        TrajectoryRecord.model_validate(payload)
+
+
 def test_not_reviewed_records_cannot_include_review_details() -> None:
-    payload = _record_payload(review={"reviewer_id": "kshitij"})
+    payload = _review_payload(reviewer_id="kshitij")
 
     with pytest.raises(
         ValidationError,
         match="not_reviewed records cannot include review details",
     ):
-        TrajectoryRecord.model_validate(payload)
+        TrajectoryReviewRecord.model_validate(payload)
 
 
 def test_reviewed_records_require_review_decision() -> None:
-    payload = _record_payload(
-        review={
-            "review_status": "reviewed",
-            "review_id": "review_001",
-            "reviewer_id": "kshitij",
-            "review_decision": None,
-        }
+    payload = _review_payload(
+        review_status="reviewed",
+        review_id="review_001",
+        reviewer_id="kshitij",
+        review_decision=None,
     )
 
     with pytest.raises(
         ValidationError,
         match="reviewed records require review_decision",
     ):
-        TrajectoryRecord.model_validate(payload)
+        TrajectoryReviewRecord.model_validate(payload)
 
 
 def test_reviewed_records_accept_review_decision_enum() -> None:
-    payload = _record_payload(
-        review={
-            "review_status": "reviewed",
-            "review_id": "review_001",
-            "reviewer_id": "kshitij",
-            "review_decision": "accepted",
-            "review_notes_ref": _artifact("review_notes.jsonl"),
-        }
+    payload = _review_payload(
+        review_status="reviewed",
+        review_id="review_001",
+        reviewer_id="kshitij",
+        review_decision="accepted",
+        review_notes_ref=_artifact("review_notes.jsonl"),
     )
 
-    record = TrajectoryRecord.model_validate(payload)
+    record = TrajectoryReviewRecord.model_validate(payload)
 
-    assert record.review.review_decision == "accepted"
+    assert record.review_decision == "accepted"
 
 
 def test_reviewed_records_reject_freeform_review_decision() -> None:
-    payload = _record_payload(
-        review={
-            "review_status": "reviewed",
-            "review_id": "review_001",
-            "reviewer_id": "kshitij",
-            "review_decision": "looks pretty good to me",
-        }
+    payload = _review_payload(
+        review_status="reviewed",
+        review_id="review_001",
+        reviewer_id="kshitij",
+        review_decision="looks pretty good to me",
     )
 
     with pytest.raises(ValidationError, match="Input should be"):
-        TrajectoryRecord.model_validate(payload)
+        TrajectoryReviewRecord.model_validate(payload)
 
 
 def test_identity_and_provenance_task_ids_must_match() -> None:

@@ -55,7 +55,6 @@ from agentenv.trajectories.schema import (
     TrajectoryIdentity,
     TrajectoryPolicy,
     TrajectoryRecord,
-    TrajectoryReview,
     TrajectoryStatuses,
     list_reward_component_signal_field_names,
 )
@@ -229,7 +228,6 @@ def build_trajectory_record_from_eval_attempt(
             reward_components=reward_components,
             leakage=leakage,
         ),
-        review=TrajectoryReview(review_status="not_reviewed"),
     )
 
 
