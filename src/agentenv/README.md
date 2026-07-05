@@ -242,6 +242,18 @@ experiments/runs/dev_baseline_trajectory_review/review_queue.md
 human decisions. Review rows are keyed by `trajectory_id`; the source
 trajectory export remains unchanged.
 
+Validate a review workspace after editing `reviews.jsonl`:
+
+```bash
+uv run agentenv trajectories review-validate \
+  --source experiments/runs/dev_baseline_trajectory_export \
+  --reviews experiments/runs/dev_baseline_trajectory_review
+```
+
+This checks that the review artifact still points to the same trajectory export
+and that `reviews.jsonl` has exactly one row per trajectory with matching
+identity fields.
+
 ## Replay An Artifact Directory
 
 Replay a scorer eval run:

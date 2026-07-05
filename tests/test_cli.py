@@ -346,6 +346,27 @@ def test_trajectories_review_init_cli_writes_review_artifact(tmp_path: Path) -> 
     assert (review_out / "reviews.jsonl").is_file()
     assert (review_out / "review_queue.md").is_file()
 
+    validate_result = runner.invoke(
+        app,
+        [
+            "trajectories",
+            "review-validate",
+            "--source",
+            str(trajectory_out),
+            "--reviews",
+            str(review_out),
+        ],
+    )
+
+    assert validate_result.exit_code == 0, validate_result.output
+    assert "trajectory review valid" in validate_result.output
+    assert "records=1" in validate_result.output
+    assert "not_reviewed=1" in validate_result.output
+    assert "reviewed=0" in validate_result.output
+    assert "accepted=0" in validate_result.output
+    assert "rejected=0" in validate_result.output
+    assert "needs_followup=0" in validate_result.output
+
 
 def _write_eval_hash_manifest(
     path: Path,

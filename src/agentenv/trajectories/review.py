@@ -39,6 +39,15 @@ class TrajectoryReviewArtifact:
     reviews: tuple[TrajectoryReviewRecord, ...]
 
 
+@dataclass(frozen=True)
+class TrajectoryReviewValidation:
+    source_export: TrajectoryExport
+    review_artifact: TrajectoryReviewArtifact
+    record_count: int
+    review_status_counts: dict[str, int]
+    review_decision_counts: dict[str, int]
+
+
 def initialize_trajectory_review_artifact(
     trajectory_export_dir: Path,
     out_dir: Path,
@@ -66,6 +75,29 @@ def initialize_trajectory_review_artifact(
     return load_trajectory_review_artifact(out_dir)
 
 
+def validate_trajectory_review_artifact(
+    trajectory_export_dir: Path,
+    review_dir: Path,
+) -> TrajectoryReviewValidation:
+    source_export = load_trajectory_export_artifact(trajectory_export_dir)
+    review_artifact = load_trajectory_review_artifact(review_dir)
+    validate_review_manifest_matches_source_export(
+        review_artifact.manifest,
+        source_export,
+    )
+    validate_review_records_match_trajectories(
+        review_artifact.reviews,
+        source_export.records,
+    )
+    return TrajectoryReviewValidation(
+        source_export=source_export,
+        review_artifact=review_artifact,
+        record_count=len(review_artifact.reviews),
+        review_status_counts=count_review_statuses(review_artifact.reviews),
+        review_decision_counts=count_review_decisions(review_artifact.reviews),
+    )
+
+
 def load_trajectory_review_artifact(review_dir: Path) -> TrajectoryReviewArtifact:
     review_dir = review_dir.resolve()
     manifest = load_trajectory_review_manifest(review_dir / MANIFEST_FILENAME)
@@ -91,6 +123,144 @@ def load_trajectory_review_artifact(review_dir: Path) -> TrajectoryReviewArtifac
         manifest=manifest,
         reviews=reviews,
     )
+
+
+def validate_review_manifest_matches_source_export(
+    manifest: TrajectoryReviewManifest,
+    source_export: TrajectoryExport,
+) -> None:
+    source_manifest_path = source_export.out_dir / MANIFEST_FILENAME
+    compared_fields = (
+        (
+            "source_artifact_dir",
+            manifest.source_artifact_dir,
+            str(source_export.out_dir),
+        ),
+        (
+            "source_manifest_path",
+            manifest.source_manifest_path,
+            str(source_manifest_path),
+        ),
+        (
+            "source_manifest_hash",
+            manifest.source_manifest_hash,
+            hash_file(source_manifest_path),
+        ),
+        (
+            "source_eval_run_id",
+            manifest.source_eval_run_id,
+            source_export.manifest.source_eval_run_id,
+        ),
+        (
+            "source_eval_suite_id",
+            manifest.source_eval_suite_id,
+            source_export.manifest.source_eval_suite_id,
+        ),
+        (
+            "source_trajectories_jsonl_hash",
+            manifest.source_trajectories_jsonl_hash,
+            source_export.manifest.trajectories_jsonl_hash,
+        ),
+        (
+            "trajectory_record_schema_version",
+            manifest.trajectory_record_schema_version,
+            source_export.manifest.trajectory_record_schema_version,
+        ),
+        ("record_count", manifest.record_count, len(source_export.records)),
+    )
+    for field_name, observed, expected in compared_fields:
+        if observed != expected:
+            raise ValueError(
+                f"Trajectory review manifest {field_name} mismatch: "
+                f"{observed!r} != {expected!r}"
+            )
+
+
+def validate_review_records_match_trajectories(
+    reviews: tuple[TrajectoryReviewRecord, ...],
+    trajectories: tuple[TrajectoryRecord, ...],
+) -> None:
+    trajectory_by_id = build_trajectory_record_index(trajectories)
+    review_by_id = build_review_record_index(reviews)
+
+    missing_trajectory_ids = sorted(set(trajectory_by_id) - set(review_by_id))
+    if missing_trajectory_ids:
+        raise ValueError(
+            "Trajectory review is missing review rows for trajectory_id: "
+            f"{', '.join(missing_trajectory_ids)}"
+        )
+
+    unknown_trajectory_ids = sorted(set(review_by_id) - set(trajectory_by_id))
+    if unknown_trajectory_ids:
+        raise ValueError(
+            "Trajectory review contains unknown trajectory_id: "
+            f"{', '.join(unknown_trajectory_ids)}"
+        )
+
+    for trajectory_id, review in review_by_id.items():
+        trajectory = trajectory_by_id[trajectory_id]
+        compared_fields = (
+            (
+                "eval_attempt_id",
+                review.eval_attempt_id,
+                trajectory.identity.eval_attempt_id,
+            ),
+            ("task_id", review.task_id, trajectory.identity.task_id),
+            ("policy_id", review.policy_id, trajectory.identity.policy_id),
+        )
+        for field_name, observed, expected in compared_fields:
+            if observed != expected:
+                raise ValueError(
+                    f"Trajectory review row {trajectory_id} {field_name} mismatch: "
+                    f"{observed!r} != {expected!r}"
+                )
+
+
+def build_trajectory_record_index(
+    records: tuple[TrajectoryRecord, ...],
+) -> dict[str, TrajectoryRecord]:
+    record_by_id: dict[str, TrajectoryRecord] = {}
+    for record in records:
+        trajectory_id = record.identity.trajectory_id
+        if trajectory_id in record_by_id:
+            raise ValueError(
+                f"Trajectory export contains duplicate trajectory_id: {trajectory_id}"
+            )
+        record_by_id[trajectory_id] = record
+    return record_by_id
+
+
+def build_review_record_index(
+    reviews: tuple[TrajectoryReviewRecord, ...],
+) -> dict[str, TrajectoryReviewRecord]:
+    review_by_id: dict[str, TrajectoryReviewRecord] = {}
+    for review in reviews:
+        if review.trajectory_id in review_by_id:
+            raise ValueError(
+                "Trajectory review contains duplicate trajectory_id: "
+                f"{review.trajectory_id}"
+            )
+        review_by_id[review.trajectory_id] = review
+    return review_by_id
+
+
+def count_review_statuses(
+    reviews: tuple[TrajectoryReviewRecord, ...],
+) -> dict[str, int]:
+    counts = {"not_reviewed": 0, "reviewed": 0}
+    for review in reviews:
+        counts[review.review_status] += 1
+    return counts
+
+
+def count_review_decisions(
+    reviews: tuple[TrajectoryReviewRecord, ...],
+) -> dict[str, int]:
+    counts = {"accepted": 0, "rejected": 0, "needs_followup": 0}
+    for review in reviews:
+        if review.review_decision is not None:
+            counts[review.review_decision] += 1
+    return counts
 
 
 def build_initial_review_records(

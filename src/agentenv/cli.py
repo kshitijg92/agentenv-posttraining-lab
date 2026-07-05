@@ -44,7 +44,10 @@ from agentenv.tasks.validate import (
 from agentenv.tasks.hashing import write_task_hash_report
 from agentenv.tasks.splits import check_splits_lock
 from agentenv.trajectories.export import export_trajectory_records_from_eval_artifact
-from agentenv.trajectories.review import initialize_trajectory_review_artifact
+from agentenv.trajectories.review import (
+    initialize_trajectory_review_artifact,
+    validate_trajectory_review_artifact,
+)
 
 
 app = typer.Typer(no_args_is_help=True)
@@ -592,6 +595,37 @@ def initialize_trajectory_review(
     console.print(
         f"wrote {review_artifact.out_dir / manifest.artifacts['review_queue']}",
         soft_wrap=True,
+    )
+
+
+@trajectories_app.command("review-validate")
+def validate_trajectory_review(
+    source: Path = typer.Option(
+        ...,
+        "--source",
+        help="Trajectory export artifact directory.",
+    ),
+    reviews: Path = typer.Option(
+        ...,
+        "--reviews",
+        help="Trajectory review artifact directory.",
+    ),
+) -> None:
+    try:
+        validation = validate_trajectory_review_artifact(source, reviews)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--reviews") from exc
+
+    status_counts = validation.review_status_counts
+    decision_counts = validation.review_decision_counts
+    console.print(
+        "[green]trajectory review valid[/green] "
+        f"records={validation.record_count} "
+        f"not_reviewed={status_counts['not_reviewed']} "
+        f"reviewed={status_counts['reviewed']} "
+        f"accepted={decision_counts['accepted']} "
+        f"rejected={decision_counts['rejected']} "
+        f"needs_followup={decision_counts['needs_followup']}"
     )
 
 
