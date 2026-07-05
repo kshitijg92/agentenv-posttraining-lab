@@ -10,6 +10,7 @@ from agentenv.tasks.schema import (
     TaskManifest,
     agent_private_task_manifest_field_names,
 )
+from agentenv.models.schema import Message
 
 
 LEAKAGE_CHECK_VERSION = "leakage_check_v0"
@@ -30,6 +31,12 @@ class LeakageScanResult:
     @property
     def hidden_validators_visible_to_model(self) -> bool:
         return bool(self.private_marker_matches)
+
+
+@dataclass(frozen=True)
+class LeakageScanText:
+    ref: str
+    text: str
 
 
 def hash_canary(canary: str | None) -> str | None:
@@ -141,11 +148,58 @@ def list_agent_visible_artifact_files(artifact_dir: Path) -> tuple[Path, ...]:
     return tuple(sorted(paths))
 
 
+def scan_messages_for_leakage(
+    messages: Iterable[Message],
+    manifest: TaskManifest,
+) -> LeakageScanResult:
+    return scan_texts_for_leakage(
+        (
+            LeakageScanText(
+                ref=f"message:{index}:{message.role}",
+                text=message.model_dump_json(),
+            )
+            for index, message in enumerate(messages)
+        ),
+        manifest,
+    )
+
+
+def scan_texts_for_leakage(
+    texts: Iterable[LeakageScanText],
+    manifest: TaskManifest,
+) -> LeakageScanResult:
+    return _scan_named_contents_for_leakage(
+        ((text.ref, text.text.encode()) for text in texts),
+        manifest,
+    )
+
+
 def scan_files_for_leakage(
     paths: Iterable[Path],
     manifest: TaskManifest,
     *,
     root: Path | None = None,
+) -> LeakageScanResult:
+    return _scan_named_contents_for_leakage(
+        _read_file_contents_for_leakage(paths, root=root),
+        manifest,
+    )
+
+
+def _read_file_contents_for_leakage(
+    paths: Iterable[Path],
+    *,
+    root: Path | None = None,
+) -> Iterable[tuple[str, bytes]]:
+    for path in sorted({candidate.resolve() for candidate in paths}):
+        if not path.is_file():
+            raise ValueError(f"Expected file to scan: {path}")
+        yield _format_path_ref(path, root), path.read_bytes()
+
+
+def _scan_named_contents_for_leakage(
+    named_contents: Iterable[tuple[str, bytes]],
+    manifest: TaskManifest,
 ) -> LeakageScanResult:
     canary = manifest.leakage_canary.encode()
     hidden_markers = tuple(
@@ -155,16 +209,15 @@ def scan_files_for_leakage(
     private_marker_matches: list[str] = []
     scanned_files: list[str] = []
 
-    for path in sorted({candidate.resolve() for candidate in paths}):
-        if not path.is_file():
-            raise ValueError(f"Expected file to scan: {path}")
-        path_ref = _redact_canary(_format_path_ref(path, root), manifest.leakage_canary)
-        contents = path.read_bytes()
-        scanned_files.append(path_ref)
+    for ref, contents in named_contents:
+        if not ref:
+            raise ValueError("Leakage scan refs must be non-empty")
+        redacted_ref = _redact_canary(ref, manifest.leakage_canary)
+        scanned_files.append(redacted_ref)
         if canary and canary in contents:
-            canary_matches.append(path_ref)
+            canary_matches.append(redacted_ref)
         if any(marker in contents for marker in hidden_markers if marker):
-            private_marker_matches.append(path_ref)
+            private_marker_matches.append(redacted_ref)
 
     return LeakageScanResult(
         leakage_check_version=LEAKAGE_CHECK_VERSION,

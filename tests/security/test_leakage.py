@@ -4,8 +4,10 @@ from typing import Any, cast
 
 import pytest
 
+from agentenv.models.schema import Message
 from agentenv.security.leakage import (
     LEAKAGE_CHECK_VERSION,
+    LeakageScanText,
     assert_hidden_validator_files_absent,
     build_private_task_metadata_markers,
     contains_hidden_validator_asset_reference,
@@ -15,6 +17,8 @@ from agentenv.security.leakage import (
     scan_agent_visible_artifacts,
     scan_directory_for_leakage,
     scan_files_for_leakage,
+    scan_messages_for_leakage,
+    scan_texts_for_leakage,
 )
 from agentenv.tasks.schema import agent_private_task_manifest_field_names
 from agentenv.tasks.validate import load_task_manifest
@@ -200,6 +204,100 @@ def test_scan_files_for_leakage_redacts_canary_from_path_refs(
 
     assert result.scanned_files == ("[REDACTED_CANARY].txt",)
     assert manifest.leakage_canary not in repr(result)
+
+
+def test_scan_texts_for_leakage_reports_canary_and_private_markers() -> None:
+    manifest = load_task_manifest(TOY_TASK_MANIFEST)
+
+    result = scan_texts_for_leakage(
+        (
+            LeakageScanText("task_input", "clean public text"),
+            LeakageScanText(
+                f"message:{manifest.leakage_canary}",
+                f"assistant repeated {manifest.leakage_canary}",
+            ),
+            LeakageScanText("message:hidden", '"controls": {}'),
+        ),
+        manifest,
+    )
+
+    assert result.canary_leaked
+    assert result.hidden_validators_visible_to_model
+    assert result.canary_matches == ("message:[REDACTED_CANARY]",)
+    assert result.private_marker_matches == ("message:hidden",)
+    assert result.scanned_files == (
+        "task_input",
+        "message:[REDACTED_CANARY]",
+        "message:hidden",
+    )
+    assert manifest.leakage_canary not in repr(result)
+
+
+def test_scan_texts_for_leakage_rejects_empty_refs() -> None:
+    manifest = load_task_manifest(TOY_TASK_MANIFEST)
+
+    with pytest.raises(ValueError, match="refs must be non-empty"):
+        scan_texts_for_leakage((LeakageScanText("", "clean"),), manifest)
+
+
+def test_scan_messages_for_leakage_accepts_model_visible_messages() -> None:
+    manifest = load_task_manifest(TOY_TASK_MANIFEST)
+    messages = (
+        Message(role="system", name="agentenv", content="Use JSON actions only."),
+        Message(role="user", name="task_view", content="Fix src/mathlib.py."),
+        Message(
+            role="assistant",
+            content='{"action": "tool_call", "tool_name": "run_tests"}',
+        ),
+        Message(
+            role="tool",
+            name="run_tests",
+            tool_call_id="tool_call_0001",
+            content='{"status": "failed", "output": "public test failed"}',
+        ),
+    )
+
+    result = scan_messages_for_leakage(messages, manifest)
+
+    assert not result.canary_leaked
+    assert not result.hidden_validators_visible_to_model
+    assert result.scanned_files == (
+        "message:0:system",
+        "message:1:user",
+        "message:2:assistant",
+        "message:3:tool",
+    )
+
+
+def test_scan_messages_for_leakage_scans_content_and_metadata() -> None:
+    manifest = load_task_manifest(TOY_TASK_MANIFEST)
+    messages = (
+        Message(
+            role="assistant",
+            content=f"I saw {manifest.leakage_canary}",
+        ),
+        Message(
+            role="tool",
+            name="run_tests",
+            tool_call_id="tool_call_0001",
+            content="public output",
+            metadata={"controls": "private field key leaked"},
+        ),
+        Message(
+            role="tool",
+            name="read_file",
+            tool_call_id="tool_call_0002",
+            content="hidden_tests/test_behavior.py",
+        ),
+    )
+
+    result = scan_messages_for_leakage(messages, manifest)
+
+    assert result.canary_matches == ("message:0:assistant",)
+    assert result.private_marker_matches == (
+        "message:1:tool",
+        "message:2:tool",
+    )
 
 
 def test_assert_hidden_validator_files_absent_rejects_copied_hidden_asset(

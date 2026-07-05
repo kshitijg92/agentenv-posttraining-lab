@@ -677,3 +677,33 @@ to those source artifacts.
 
 The export remains a candidate/index layer. It is not an SFT dataset or a
 preference dataset.
+
+## Message-Level Leakage Scan
+
+Before designing the SFT dataset row, add a security primitive for the exact
+payload the dataset exporter will emit:
+
+```text
+scan_messages_for_leakage(messages, task_manifest)
+scan_texts_for_leakage(texts, task_manifest)
+```
+
+The trajectory builder already scans agent-visible artifacts, including
+`prompt_loop_result.json`, but SFT export is a new trust boundary. It should
+validate the exact model-visible messages that would be written to the training
+dataset, rather than only trusting an upstream artifact scan.
+
+The message scanner serializes each `Message` object and scans content,
+metadata, names, and tool-call ids with the same canary/private-marker rules as
+file scanning. Match refs use synthetic message labels such as:
+
+```text
+message:0:system
+message:1:user
+message:2:assistant
+message:3:tool
+```
+
+The result shape stays compatible with `LeakageScanResult`; for message/text
+scans, `scanned_files` contains these synthetic refs. This preserves one leakage
+result contract while allowing the next exporter to gate on in-memory payloads.
