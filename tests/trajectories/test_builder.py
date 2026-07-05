@@ -4,9 +4,13 @@ from pathlib import Path
 import pytest
 
 from agentenv.artifacts import MANIFEST_FILENAME
-from agentenv.orchestrators.eval_run import run_eval_config
+from agentenv.orchestrators.eval_run import (
+    run_eval_config,
+    run_eval_config_all_policies,
+)
 from agentenv.trajectories.builder import (
     build_trajectory_record_from_eval_attempt,
+    build_trajectory_records_from_eval_suite,
     build_training_eligibility,
 )
 from agentenv.trajectories.schema import LeakageEvidence
@@ -91,6 +95,68 @@ def test_build_trajectory_record_from_scorer_control_eval_attempt(
     assert record.artifacts.agent_task_view_json is None
     assert record.artifacts.attempt_json is not None
     assert record.artifacts.final_diff is not None
+
+
+def test_build_trajectory_records_from_eval_suite_uses_original_eval_attempts(
+    tmp_path: Path,
+) -> None:
+    eval_suite = run_eval_config_all_policies(
+        AGENT_CONTROL_CONFIG,
+        tmp_path / "agent-suite",
+    )
+    assert eval_suite.replay_runs
+
+    records = build_trajectory_records_from_eval_suite(eval_suite.out_dir)
+
+    expected_attempt_count = sum(len(run.attempts) for run in eval_suite.policy_runs)
+    assert len(records) == expected_attempt_count
+    assert {record.identity.eval_suite_id for record in records} == {
+        eval_suite.eval_suite_id
+    }
+    assert {record.identity.eval_run_id for record in records} == {
+        run.eval_run_id for run in eval_suite.policy_runs
+    }
+    assert {record.policy.policy_id for record in records} == {
+        run.policy for run in eval_suite.policy_runs
+    }
+    assert all(record.identity.replay_run_id is None for record in records)
+
+
+def test_build_trajectory_records_from_scorer_control_eval_suite(
+    tmp_path: Path,
+) -> None:
+    eval_suite = run_eval_config_all_policies(
+        SCORER_CONTROL_CONFIG,
+        tmp_path / "scorer-suite",
+    )
+
+    records = build_trajectory_records_from_eval_suite(eval_suite.out_dir)
+
+    assert len(records) == sum(len(run.attempts) for run in eval_suite.policy_runs)
+    assert {record.identity.eval_suite_id for record in records} == {
+        eval_suite.eval_suite_id
+    }
+    assert all(record.identity.agent_attempt_id is None for record in records)
+    assert all(record.identity.scorer_attempt_id is not None for record in records)
+    assert all(
+        record.policy.policy_spec.type == "scorer_control_patch" for record in records
+    )
+
+
+def test_build_trajectory_records_from_eval_suite_rejects_child_run_mismatch(
+    tmp_path: Path,
+) -> None:
+    eval_suite = run_eval_config_all_policies(
+        AGENT_CONTROL_CONFIG,
+        tmp_path / "agent-suite",
+    )
+    child_manifest_path = eval_suite.policy_runs[0].out_dir / MANIFEST_FILENAME
+    child_manifest = json.loads(child_manifest_path.read_text())
+    child_manifest["eval_run_id"] = "eval_run_wrong"
+    child_manifest_path.write_text(json.dumps(child_manifest, indent=2) + "\n")
+
+    with pytest.raises(ValueError, match="eval_run_id mismatch"):
+        build_trajectory_records_from_eval_suite(eval_suite.out_dir)
 
 
 def test_training_eligibility_blocks_all_training_flags_on_non_trainable_split() -> (

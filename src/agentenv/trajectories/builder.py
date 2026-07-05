@@ -14,9 +14,12 @@ from agentenv.artifacts.manifests import (
     EvalRunAttemptManifestRecord,
     EvalRunManifest,
     EvalRunScorerAttemptSummary,
+    EvalSuiteManifest,
+    EvalSuitePolicyRunManifestRecord,
     ScorerAttemptManifest,
     load_attempt_manifest,
     load_eval_run_manifest,
+    load_eval_suite_manifest,
     load_scorer_attempt_manifest,
 )
 from agentenv.artifacts.payloads import (
@@ -68,6 +71,41 @@ class ScorerArtifactRefs:
     stdout: ArtifactRef | None
     stderr: ArtifactRef | None
     final_diff: ArtifactRef | None
+
+
+def build_trajectory_records_from_eval_suite(
+    eval_suite_dir: Path,
+) -> list[TrajectoryRecord]:
+    eval_suite_dir = eval_suite_dir.resolve()
+    eval_suite_manifest_path = eval_suite_dir / MANIFEST_FILENAME
+    eval_suite_manifest = load_eval_suite_manifest(eval_suite_manifest_path)
+
+    records: list[TrajectoryRecord] = []
+    for policy_run in eval_suite_manifest.policy_runs:
+        eval_run_manifest_path = resolve_relative_artifact_ref(
+            eval_suite_dir,
+            policy_run.manifest,
+        )
+        eval_run_manifest = load_eval_run_manifest(eval_run_manifest_path)
+        validate_eval_run_manifest_matches_suite_policy_run(
+            eval_suite_manifest=eval_suite_manifest,
+            policy_run=policy_run,
+            eval_run_manifest=eval_run_manifest,
+            source_path=eval_run_manifest_path,
+        )
+        eval_run_dir = eval_run_manifest_path.parent
+        for attempt_record in eval_run_manifest.attempts:
+            record = build_trajectory_record_from_eval_attempt(
+                eval_run_dir,
+                eval_attempt_id=attempt_record.eval_attempt_id,
+            )
+            records.append(
+                build_trajectory_record_with_eval_suite_id(
+                    record,
+                    eval_suite_manifest.eval_suite_id,
+                )
+            )
+    return records
 
 
 def build_trajectory_record_from_eval_attempt(
@@ -179,6 +217,68 @@ def build_trajectory_record_from_eval_attempt(
         ),
         review=TrajectoryReview(review_status="not_reviewed"),
     )
+
+
+def validate_eval_run_manifest_matches_suite_policy_run(
+    *,
+    eval_suite_manifest: EvalSuiteManifest,
+    policy_run: EvalSuitePolicyRunManifestRecord,
+    eval_run_manifest: EvalRunManifest,
+    source_path: Path,
+) -> None:
+    compared_fields = (
+        ("eval_run_id", policy_run.eval_run_id, eval_run_manifest.eval_run_id),
+        ("policy", policy_run.policy, eval_run_manifest.policy),
+        ("config_path", eval_suite_manifest.config_path, eval_run_manifest.config_path),
+        ("config_hash", eval_suite_manifest.config_hash, eval_run_manifest.config_hash),
+        ("config_name", eval_suite_manifest.config_name, eval_run_manifest.config_name),
+        ("task_pack", eval_suite_manifest.task_pack, eval_run_manifest.task_pack),
+        ("split", eval_suite_manifest.split, eval_run_manifest.split),
+        ("policy_type", policy_run.policy_type, eval_run_manifest.policy_type),
+        ("policy_family", policy_run.policy_family, eval_run_manifest.policy_family),
+        ("control_layer", policy_run.control_layer, eval_run_manifest.control_layer),
+        ("control_name", policy_run.control_name, eval_run_manifest.control_name),
+        (
+            "model_config",
+            policy_run.model_config_ref,
+            eval_run_manifest.model_config_ref,
+        ),
+        (
+            "decoding_config",
+            policy_run.decoding_config_ref,
+            eval_run_manifest.decoding_config_ref,
+        ),
+        (
+            "attempts_per_task",
+            policy_run.attempts_per_task,
+            eval_run_manifest.attempts_per_task,
+        ),
+        ("replay_repeats", policy_run.replay_repeats, eval_run_manifest.replay_repeats),
+        ("attempt_count", policy_run.attempt_count, eval_run_manifest.attempt_count),
+        ("layer_counts", policy_run.layer_counts, eval_run_manifest.layer_counts),
+    )
+    for field_name, suite_value, child_value in compared_fields:
+        if suite_value != child_value:
+            raise ValueError(
+                f"Eval suite policy_run {field_name} mismatch at {source_path}: "
+                f"{suite_value!r} != {child_value!r}"
+            )
+
+    if eval_suite_manifest.task_hashes.model_dump(
+        mode="json"
+    ) != eval_run_manifest.task_hashes.model_dump(mode="json"):
+        raise ValueError(f"Eval suite policy_run task_hashes mismatch at {source_path}")
+
+
+def build_trajectory_record_with_eval_suite_id(
+    record: TrajectoryRecord,
+    eval_suite_id: str,
+) -> TrajectoryRecord:
+    payload = record.model_dump(mode="python")
+    identity = record.identity.model_dump(mode="python")
+    identity["eval_suite_id"] = eval_suite_id
+    payload["identity"] = identity
+    return TrajectoryRecord.model_validate(payload)
 
 
 def select_eval_attempt_record(
