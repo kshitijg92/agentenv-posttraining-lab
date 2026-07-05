@@ -43,6 +43,7 @@ from agentenv.tasks.validate import (
 )
 from agentenv.tasks.hashing import write_task_hash_report
 from agentenv.tasks.splits import check_splits_lock
+from agentenv.trajectories.export import export_trajectory_records_from_eval_artifact
 
 
 app = typer.Typer(no_args_is_help=True)
@@ -51,6 +52,7 @@ attempt_app = typer.Typer(no_args_is_help=True)
 agents_app = typer.Typer(no_args_is_help=True)
 controls_app = typer.Typer(no_args_is_help=True)
 eval_app = typer.Typer(no_args_is_help=False)
+trajectories_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 local_model_app = typer.Typer(no_args_is_help=True)
@@ -60,6 +62,7 @@ app.add_typer(attempt_app, name="attempt")
 app.add_typer(agents_app, name="agents")
 app.add_typer(controls_app, name="controls")
 app.add_typer(eval_app, name="eval")
+app.add_typer(trajectories_app, name="trajectories")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
 app.add_typer(local_model_app, name="local-model")
@@ -497,6 +500,49 @@ def compare_task_hashes(
         console.print(f"wrote {out}", soft_wrap=True)
     if comparison.status != "matched":
         raise typer.Exit(1)
+
+
+@trajectories_app.command("export")
+def export_trajectories(
+    source: Path = typer.Option(
+        ...,
+        "--source",
+        help="Eval run or eval suite artifact directory.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for trajectory export artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before exporting.",
+    ),
+) -> None:
+    try:
+        export = export_trajectory_records_from_eval_artifact(
+            source,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--source") from exc
+
+    manifest = export.manifest
+    source_id = manifest.source_eval_run_id or manifest.source_eval_suite_id
+    console.print(
+        "[green]trajectory export complete[/green] "
+        f"source={manifest.source_artifact_type} "
+        f"source_id={source_id} records={manifest.record_count}"
+    )
+    console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {export.out_dir / manifest.artifacts['trajectories']}",
+        soft_wrap=True,
+    )
 
 
 @app.command("replay")

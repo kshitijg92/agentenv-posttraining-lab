@@ -14,6 +14,7 @@ uv run agentenv tasks --help
 uv run agentenv attempt --help
 uv run agentenv agents --help
 uv run agentenv eval --help
+uv run agentenv trajectories --help
 uv run agentenv replay --help
 uv run agentenv report --help
 uv run agentenv scorers --help
@@ -187,6 +188,36 @@ uv run agentenv eval compare-task-hashes \
 The command accepts `eval_run` and `eval_suite` artifact directories, or direct
 manifest JSON paths. It exits `0` when task input provenance matches and
 non-zero when drift is detected.
+
+## Export Private Trajectory Records
+
+Export trajectory records from a single eval run:
+
+```bash
+uv run agentenv trajectories export \
+  --source experiments/runs/scorer_control_policies_oracle \
+  --out experiments/runs/scorer_control_policies_oracle_trajectory_export
+```
+
+Export trajectory records from an eval suite:
+
+```bash
+uv run agentenv trajectories export \
+  --source experiments/runs/dev_baseline \
+  --out experiments/runs/dev_baseline_trajectory_export
+```
+
+Main outputs:
+
+```text
+experiments/runs/dev_baseline_trajectory_export/manifest.json
+experiments/runs/dev_baseline_trajectory_export/trajectories.jsonl
+```
+
+The export manifest records the source eval artifact type/id, source manifest
+hash, trajectory record schema version, JSONL hash, and record count. This is a
+private eval artifact for analysis and later training-data conversion; it does
+not run replay, harness-audit, or training-eligibility gates.
 
 ## Replay An Artifact Directory
 

@@ -199,6 +199,93 @@ def test_eval_compare_task_hashes_cli_exits_nonzero_on_drift(
     assert "changed_task=toy_python_fix_001" in result.output
 
 
+def test_trajectories_export_cli_writes_eval_run_export(tmp_path: Path) -> None:
+    eval_out = tmp_path / "eval_run"
+    trajectory_out = tmp_path / "trajectory_export"
+    runner = CliRunner()
+    eval_result = runner.invoke(
+        app,
+        [
+            "eval",
+            "--config",
+            "configs/eval/scorer_control_policies.yaml",
+            "--policy",
+            "oracle",
+            "--out",
+            str(eval_out),
+        ],
+    )
+    assert eval_result.exit_code == 0, eval_result.output
+
+    result = runner.invoke(
+        app,
+        [
+            "trajectories",
+            "export",
+            "--source",
+            str(eval_out),
+            "--out",
+            str(trajectory_out),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "trajectory export complete" in result.output
+    assert "source=eval_run" in result.output
+    assert "records=1" in result.output
+    assert "manifest.json" in result.output
+    assert "trajectories.jsonl" in result.output
+    manifest = json.loads((trajectory_out / "manifest.json").read_text())
+    assert manifest["artifact_type"] == "trajectory_export"
+    assert manifest["source_artifact_type"] == "eval_run"
+    assert manifest["source_eval_run_id"].startswith("eval_run_")
+    assert manifest["source_eval_suite_id"] is None
+    assert manifest["record_count"] == 1
+    assert (trajectory_out / "trajectories.jsonl").is_file()
+
+
+def test_trajectories_export_cli_writes_eval_suite_export(tmp_path: Path) -> None:
+    eval_out = tmp_path / "eval_suite"
+    trajectory_out = tmp_path / "trajectory_export"
+    runner = CliRunner()
+    eval_result = runner.invoke(
+        app,
+        [
+            "eval",
+            "--config",
+            "configs/eval/scorer_control_policies.yaml",
+            "--all-policies",
+            "--out",
+            str(eval_out),
+        ],
+    )
+    assert eval_result.exit_code == 0, eval_result.output
+
+    result = runner.invoke(
+        app,
+        [
+            "trajectories",
+            "export",
+            "--source",
+            str(eval_out),
+            "--out",
+            str(trajectory_out),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "trajectory export complete" in result.output
+    assert "source=eval_suite" in result.output
+    assert "records=3" in result.output
+    manifest = json.loads((trajectory_out / "manifest.json").read_text())
+    assert manifest["artifact_type"] == "trajectory_export"
+    assert manifest["source_artifact_type"] == "eval_suite"
+    assert manifest["source_eval_run_id"] is None
+    assert manifest["source_eval_suite_id"].startswith("eval_suite_")
+    assert manifest["record_count"] == 3
+    assert (trajectory_out / "trajectories.jsonl").is_file()
+
+
 def _write_eval_hash_manifest(
     path: Path,
     *,
