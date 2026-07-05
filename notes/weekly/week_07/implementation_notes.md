@@ -497,3 +497,92 @@ eval run artifacts -> TrajectoryRecord sections
 Do not implement export yet until the mapping identifies which fields can be read
 directly from `manifest.json`, attempt records, agent task artifacts, task
 hash reports, and split lock evidence.
+
+## Trajectory Review Workflow Ergonomics
+
+The v0 review workflow intentionally keeps review as a separate artifact:
+
+```text
+TrajectoryExport -> review-init -> human edits reviews.jsonl -> review-validate
+```
+
+This preserves the provenance boundary, but the manual edit step is clunky.
+`review-init` creates complete pending rows with nullable review fields:
+
+```text
+review_status = not_reviewed
+review_id = null
+reviewer_id = null
+review_decision = null
+```
+
+To mark a row reviewed, the reviewer currently has to edit several JSONL fields
+by hand. This is acceptable for the first audit path, but it is not a good
+long-term review interface.
+
+Later improvement options:
+
+- a small CLI/script to mark one or more trajectories reviewed;
+- a generated spreadsheet-style review file that round-trips into validated
+  review JSONL;
+- a simple local review app that reads the trajectory export and writes
+  review records.
+
+Do not solve this before the review artifact and validator are stable. The
+important v0 boundary is that manual review does not mutate trajectory records,
+and `review-validate` catches row deletion, duplication, unknown trajectory IDs,
+identity drift, and incomplete reviewed rows before any training-candidate
+export consumes the review artifact.
+
+## Training Candidate Schema Boundary
+
+The first training-candidate step is only a record schema, not an exporter.
+
+`TrainingCandidateRecord` should be a joined eligibility surface over existing
+artifacts, not a copy of those artifacts:
+
+```text
+TrajectoryExport + validated TrajectoryReview -> TrainingCandidateRecord
+```
+
+The row carries stable identity and review summary:
+
+```text
+trajectory_id
+eval_attempt_id
+task_id
+policy_id
+review_status
+review_id
+reviewer_id
+review_decision
+final_eligibility
+```
+
+It does not embed the full `TrajectoryRecord` or `TrajectoryReviewRecord`.
+Future export manifests should pin the source trajectory/review artifacts by
+path and hash, and rows should join by `trajectory_id`.
+
+Final eligibility remains multi-path:
+
+```text
+analysis_allowed
+positive_sft_allowed
+negative_example_allowed
+preference_data_allowed
+```
+
+Each path has a separate reason because a trajectory can be allowed for one
+downstream use and blocked for another. Convenience properties such as
+`is_trainable`, `is_analysis_only`, and `is_not_trainable` are derived in code,
+not persisted as fields.
+
+Review is a strict gate:
+
+```text
+any training path allowed -> review_status=reviewed and review_decision=accepted
+```
+
+Accepted review is necessary but not sufficient for trainability. The underlying
+trajectory eligibility, split, leakage, orchestration, and reward-component
+rules still decide which paths are allowed.
