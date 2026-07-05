@@ -68,9 +68,7 @@ def _tool_action_lines(allowed_tools: list[str]) -> list[str]:
     lines: list[str] = []
     for tool_name in allowed_tools:
         tool_definition = (
-            TOOL_REGISTRY.get(tool_name)
-            if tool_name in TOOL_REGISTRY
-            else None
+            TOOL_REGISTRY.get(tool_name) if tool_name in TOOL_REGISTRY else None
         )
         description = (
             tool_definition.description
@@ -78,9 +76,7 @@ def _tool_action_lines(allowed_tools: list[str]) -> list[str]:
             else "No registered description."
         )
         example_arguments = (
-            tool_definition.example_arguments
-            if tool_definition is not None
-            else {}
+            tool_definition.example_arguments if tool_definition is not None else {}
         )
         lines.append(f"- {tool_name}: {description}")
         example = _tool_action_example(tool_name, example_arguments)

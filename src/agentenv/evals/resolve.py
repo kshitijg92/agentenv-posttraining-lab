@@ -99,9 +99,7 @@ def resolve_config_file_ref(
         if candidate_path.is_file():
             return candidate_path
         if candidate_path.exists():
-            raise ValueError(
-                f"{field_name} path is not a file: {candidate_path}"
-            )
+            raise ValueError(f"{field_name} path is not a file: {candidate_path}")
 
     candidates = ", ".join(str(path) for path in candidate_paths)
     raise ValueError(f"{field_name} path does not exist: {ref} ({candidates})")

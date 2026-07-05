@@ -10,6 +10,5 @@ def run_public_checks(
     timeout_seconds: int,
 ) -> list[CommandResult]:
     return [
-        run_shell(check.command, workspace, timeout_seconds)
-        for check in public_checks
+        run_shell(check.command, workspace, timeout_seconds) for check in public_checks
     ]

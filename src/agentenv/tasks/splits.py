@@ -78,8 +78,7 @@ def validate_split_membership(
         for task_id in task_ids:
             if task_id in seen:
                 raise ValueError(
-                    f"Task {task_id!r} appears in both "
-                    f"{seen[task_id]!r} and {split!r}"
+                    f"Task {task_id!r} appears in both {seen[task_id]!r} and {split!r}"
                 )
             seen[task_id] = split
 

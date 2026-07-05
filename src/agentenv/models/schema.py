@@ -94,9 +94,7 @@ class ModelResponse(BaseModel):
 
         if self.finish_reason in {"timeout", "error"}:
             if self.error_class is None:
-                raise ValueError(
-                    f"{self.finish_reason} responses require error_class"
-                )
+                raise ValueError(f"{self.finish_reason} responses require error_class")
             return self
 
         if self.error_class is not None or self.error_message is not None:

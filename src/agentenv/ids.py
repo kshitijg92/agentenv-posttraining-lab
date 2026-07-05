@@ -27,4 +27,3 @@ def new_scorer_attempt_id() -> str:
 
 def new_replay_run_id() -> str:
     return _new_id("replay_run")
-

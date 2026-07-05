@@ -174,7 +174,9 @@ def _prompt_loop_model_error_class(model_response: ModelResponse) -> str:
 
 
 def _model_error_message(model_response: ModelResponse) -> str:
-    message = f"Model generation stopped with finish_reason={model_response.finish_reason}."
+    message = (
+        f"Model generation stopped with finish_reason={model_response.finish_reason}."
+    )
     if model_response.error_message is None:
         return message
     return redact_secrets(f"{message} {model_response.error_message}")

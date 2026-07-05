@@ -323,7 +323,7 @@ def _truncate_error_message(message: str) -> str:
     max_length = 1000
     if len(message) <= max_length:
         return message
-    return f"{message[:max_length - 3]}..."
+    return f"{message[: max_length - 3]}..."
 
 
 def _optional_int(value: object) -> int | None:

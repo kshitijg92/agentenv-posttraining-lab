@@ -89,13 +89,11 @@ EVAL_SMOKE_PROFILES: dict[str, EvalSmokeProfile] = {
     ),
     DEEPSEEK_R1_DISTILL_QWEN_14B_MODEL_ID: EvalSmokeProfile(
         config_path=(
-            "configs/eval/"
-            "agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b.yaml"
+            "configs/eval/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b.yaml"
         ),
         policy="local-deepseek-r1-distill-qwen-smoke",
         out_dir=(
-            "experiments/runs/"
-            "agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b"
+            "experiments/runs/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b"
         ),
         smoke_system_suffix="",
     ),
@@ -131,21 +129,25 @@ def render_setup_plan(
         "Run the eval smoke after the server is healthy:",
     ]
     if profile is None:
-        lines.extend([
-            "  # Add or choose a matching config under configs/eval/",
-            "  # agent_model_smoke_ollama_*.yaml, then run:",
-            "  uv run agentenv eval \\",
-            "    --config <matching-eval-config.yaml> \\",
-            "    --policy <matching-policy> \\",
-            "    --out experiments/runs/<matching-run-name>",
-        ])
+        lines.extend(
+            [
+                "  # Add or choose a matching config under configs/eval/",
+                "  # agent_model_smoke_ollama_*.yaml, then run:",
+                "  uv run agentenv eval \\",
+                "    --config <matching-eval-config.yaml> \\",
+                "    --policy <matching-policy> \\",
+                "    --out experiments/runs/<matching-run-name>",
+            ]
+        )
     else:
-        lines.extend([
-            "  uv run agentenv eval \\",
-            f"    --config {profile.config_path} \\",
-            f"    --policy {profile.policy} \\",
-            f"    --out {profile.out_dir}",
-        ])
+        lines.extend(
+            [
+                "  uv run agentenv eval \\",
+                f"    --config {profile.config_path} \\",
+                f"    --policy {profile.policy} \\",
+                f"    --out {profile.out_dir}",
+            ]
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -160,9 +162,7 @@ def _model_command_lines(
     ]
     if profile is not None and profile.smoke_system_suffix is not None:
         lines[-1] += " \\"
-        lines.append(
-            f"    --system-suffix {json.dumps(profile.smoke_system_suffix)}"
-        )
+        lines.append(f"    --system-suffix {json.dumps(profile.smoke_system_suffix)}")
     return lines
 
 
@@ -441,7 +441,9 @@ def run_chat_smoke(
             output_text="",
             finish_reason=None,
             error_class="ProviderHTTPError",
-            error_message=_provider_error_message(response.status_code, response_payload),
+            error_message=_provider_error_message(
+                response.status_code, response_payload
+            ),
         )
 
     choice = _first_choice(response_payload)
