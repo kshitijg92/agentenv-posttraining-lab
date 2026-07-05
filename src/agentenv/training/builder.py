@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
 from agentenv.training.schema import (
     FinalTrainingEligibility,
     TrainingCandidateRecord,
@@ -72,6 +73,19 @@ def build_final_training_eligibility(
             negative_example_reason=review_block_reason,
             preference_data_allowed=False,
             preference_data_reason=review_block_reason,
+        )
+
+    if trajectory.policy.policy_spec.type != AGENT_MODEL_POLICY_TYPE:
+        non_model_policy_reason = "policy is not model-generated training data"
+        return FinalTrainingEligibility(
+            analysis_allowed=trajectory.training_eligibility.analysis_allowed,
+            analysis_reason=build_analysis_reason(trajectory),
+            positive_sft_allowed=False,
+            positive_sft_reason=non_model_policy_reason,
+            negative_example_allowed=False,
+            negative_example_reason=non_model_policy_reason,
+            preference_data_allowed=False,
+            preference_data_reason=non_model_policy_reason,
         )
 
     return FinalTrainingEligibility(

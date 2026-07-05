@@ -80,7 +80,7 @@ def test_export_training_candidate_records_writes_pending_review_artifact(
     assert (export.out_dir / "training_candidates.jsonl").is_file()
 
 
-def test_export_training_candidate_records_counts_accepted_review_paths(
+def test_export_training_candidate_records_keeps_accepted_controls_analysis_only(
     tmp_path: Path,
 ) -> None:
     trajectory_export_dir, review_dir, review_artifact = build_review_fixture(
@@ -97,13 +97,13 @@ def test_export_training_candidate_records_counts_accepted_review_paths(
 
     assert export.manifest.record_count == 1
     assert export.manifest.analysis_allowed_count == 1
-    assert export.manifest.positive_sft_allowed_count == 1
+    assert export.manifest.positive_sft_allowed_count == 0
     assert export.manifest.negative_example_allowed_count == 0
-    assert export.manifest.preference_data_allowed_count == 1
-    assert export.manifest.trainable_count == 1
-    assert export.manifest.analysis_only_count == 0
+    assert export.manifest.preference_data_allowed_count == 0
+    assert export.manifest.trainable_count == 0
+    assert export.manifest.analysis_only_count == 1
     assert export.manifest.not_trainable_count == 0
-    assert export.records[0].final_eligibility.is_trainable
+    assert export.records[0].final_eligibility.is_analysis_only
 
 
 def test_load_training_candidate_export_rejects_jsonl_hash_mismatch(

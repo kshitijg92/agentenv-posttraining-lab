@@ -610,12 +610,20 @@ Reason precedence:
 
 1. If review is not accepted, all training paths are blocked regardless of the
    trajectory's mechanical eligibility.
-2. If review is accepted, final path booleans mirror the trajectory's mechanical
-   eligibility.
+2. If review is accepted but the trajectory policy is not an agent-model policy,
+   all training paths remain blocked and the record stays analysis-only.
+3. If review is accepted and the trajectory policy is an agent-model policy,
+   final path booleans mirror the trajectory's mechanical eligibility.
 
 This keeps human review as a strict gate without letting it override split,
-leakage, orchestration, reward, or status rules. A reviewer can block a
-candidate, but cannot make an otherwise ineligible trajectory trainable.
+leakage, orchestration, reward, status, or policy-origin rules. A reviewer can
+block a candidate, but cannot make an otherwise ineligible trajectory trainable.
+
+Control policies are still useful in trajectory exports, review artifacts, and
+training-candidate exports because they support harness analysis and calibration.
+They are not model-generated behavior, so even accepted control trajectories
+must remain analysis-only. Training paths require a policy whose eval policy
+type is the shared `AGENT_MODEL_POLICY_TYPE` constant from the eval schema.
 
 This step deliberately does not write `manifest.json` or
 `training_candidates.jsonl`; that artifact boundary comes next.
