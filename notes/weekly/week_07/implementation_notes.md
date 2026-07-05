@@ -586,3 +586,36 @@ any training path allowed -> review_status=reviewed and review_decision=accepted
 Accepted review is necessary but not sufficient for trainability. The underlying
 trajectory eligibility, split, leakage, orchestration, and reward-component
 rules still decide which paths are allowed.
+
+## Training Candidate Builder
+
+The first builder is in-memory only:
+
+```text
+build_training_candidate_records(trajectory_export_dir, review_dir)
+  -> tuple[TrainingCandidateRecord, ...]
+```
+
+It takes artifact directories, not raw JSONL paths. The builder first runs
+`validate_trajectory_review_artifact(...)`, so it only joins review rows after
+the review artifact has passed the whole-artifact one-to-one validation.
+
+Join key:
+
+```text
+trajectory_id
+```
+
+Reason precedence:
+
+1. If review is not accepted, all training paths are blocked regardless of the
+   trajectory's mechanical eligibility.
+2. If review is accepted, final path booleans mirror the trajectory's mechanical
+   eligibility.
+
+This keeps human review as a strict gate without letting it override split,
+leakage, orchestration, reward, or status rules. A reviewer can block a
+candidate, but cannot make an otherwise ineligible trajectory trainable.
+
+This step deliberately does not write `manifest.json` or
+`training_candidates.jsonl`; that artifact boundary comes next.
