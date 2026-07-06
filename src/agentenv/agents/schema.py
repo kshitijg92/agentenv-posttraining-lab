@@ -61,6 +61,8 @@ class PromptLoopResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str = Field(min_length=1)
+    prompt_builder_version: str = Field(min_length=1)
+    prompt_builder_code_hash: str = Field(min_length=1)
     status: PromptLoopStatus
     turns_executed: int = Field(ge=0)
     duration_ms: int = Field(ge=0)

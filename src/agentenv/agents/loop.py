@@ -3,7 +3,11 @@ from time import perf_counter
 
 from pydantic import ValidationError
 
-from agentenv.agents.prompts import build_initial_messages
+from agentenv.agents.prompts import (
+    AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+    build_initial_messages,
+    compute_agent_task_initial_prompt_builder_code_hash,
+)
 from agentenv.agents.schema import (
     AgentTaskView,
     FinalAnswerAction,
@@ -205,6 +209,8 @@ def _build_result(
 ) -> PromptLoopResult:
     return PromptLoopResult(
         task_id=agent_task_view.task_id,
+        prompt_builder_version=AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+        prompt_builder_code_hash=compute_agent_task_initial_prompt_builder_code_hash(),
         status=status,
         turns_executed=turns_executed,
         duration_ms=_duration_ms(started),

@@ -5,6 +5,10 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from agentenv.agents.prompts import (
+    AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+    compute_agent_task_initial_prompt_builder_code_hash,
+)
 from agentenv.artifacts.payloads import (
     DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION,
     EVAL_TASK_HASHES_SCHEMA_VERSION,
@@ -667,6 +671,8 @@ def _agent_task_view() -> dict[str, Any]:
 def _prompt_loop_result() -> dict[str, Any]:
     return {
         "task_id": "task_001",
+        "prompt_builder_version": AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+        "prompt_builder_code_hash": compute_agent_task_initial_prompt_builder_code_hash(),
         "status": "completed",
         "turns_executed": 0,
         "duration_ms": 1,

@@ -1,4 +1,7 @@
 import json
+from pathlib import Path
+
+import xxhash
 
 from agentenv.agents.schema import AgentTaskPromptInput
 from agentenv.models.schema import Message
@@ -6,6 +9,10 @@ from agentenv.tools.schema import TOOL_REGISTRY
 
 
 AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION = "agent_task_initial_prompt_builder_v0"
+
+
+def compute_agent_task_initial_prompt_builder_code_hash() -> str:
+    return f"xxh64:{xxhash.xxh64_hexdigest(Path(__file__).read_bytes())}"
 
 
 def build_initial_messages(prompt_input: AgentTaskPromptInput) -> list[Message]:

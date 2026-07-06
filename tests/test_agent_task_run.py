@@ -3,6 +3,10 @@ from pathlib import Path
 
 import pytest
 
+from agentenv.agents.prompts import (
+    AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+    compute_agent_task_initial_prompt_builder_code_hash,
+)
 from agentenv.agents.schema import AgentTaskView, PromptLoopResult, TokenUsage
 from agentenv.artifacts.manifests import load_agent_attempt_manifest
 from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
@@ -200,6 +204,11 @@ def test_run_agent_task_attempt_scores_fake_agent_patch_and_writes_artifacts(
         "run_tests",
     ]
     assert prompt_loop_result["status"] == "completed"
+    assert (
+        prompt_loop_result["prompt_builder_version"]
+        == AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
+    )
+    assert prompt_loop_result["prompt_builder_code_hash"].startswith("xxh64:")
     assert attempt_result["status"] == "PASS"
     assert artifact_paths.candidate_patch.read_text() == agent_task_run.candidate_patch
     assert artifact_paths.attempt_artifacts.final_diff.read_text() == (
@@ -296,6 +305,10 @@ def test_write_agent_task_run_artifacts_redacts_secret_canary(
         ),
         prompt_loop_result=PromptLoopResult(
             task_id="task_001",
+            prompt_builder_version=AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+            prompt_builder_code_hash=(
+                compute_agent_task_initial_prompt_builder_code_hash()
+            ),
             status="model_error",
             turns_executed=1,
             duration_ms=1,

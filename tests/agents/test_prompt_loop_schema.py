@@ -1,9 +1,20 @@
 import pytest
 from pydantic import ValidationError
 
+from agentenv.agents.prompts import (
+    AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+    compute_agent_task_initial_prompt_builder_code_hash,
+)
 from agentenv.agents.schema import PromptLoopResult, TokenUsage
 from agentenv.models.schema import Message, ModelResponse
 from agentenv.tools.schema import ReadFileOutput, ToolResult
+
+
+def _prompt_builder_fields() -> dict[str, str]:
+    return {
+        "prompt_builder_version": AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+        "prompt_builder_code_hash": compute_agent_task_initial_prompt_builder_code_hash(),
+    }
 
 
 def _messages() -> list[Message]:
@@ -83,6 +94,7 @@ def test_token_usage_rejects_inconsistent_total() -> None:
 def test_prompt_loop_result_accepts_completed_result() -> None:
     result = PromptLoopResult(
         task_id="repair_jsonl_deduper",
+        **_prompt_builder_fields(),
         status="completed",
         turns_executed=1,
         duration_ms=5,
@@ -95,12 +107,15 @@ def test_prompt_loop_result_accepts_completed_result() -> None:
     )
 
     assert result.status == "completed"
+    assert result.prompt_builder_version == AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
+    assert result.prompt_builder_code_hash.startswith("xxh64:")
     assert result.error_class is None
 
 
 def test_prompt_loop_result_accepts_non_completed_result() -> None:
     result = PromptLoopResult(
         task_id="repair_jsonl_deduper",
+        **_prompt_builder_fields(),
         status="max_turns_exceeded",
         turns_executed=8,
         duration_ms=1000,
@@ -123,6 +138,7 @@ def test_prompt_loop_result_rejects_completed_with_error_fields() -> None:
     ):
         PromptLoopResult(
             task_id="repair_jsonl_deduper",
+            **_prompt_builder_fields(),
             status="completed",
             turns_executed=1,
             duration_ms=5,
@@ -142,6 +158,7 @@ def test_prompt_loop_result_rejects_non_completed_without_error_class() -> None:
     ):
         PromptLoopResult(
             task_id="repair_jsonl_deduper",
+            **_prompt_builder_fields(),
             status="invalid_model_output",
             turns_executed=1,
             duration_ms=5,
@@ -158,6 +175,8 @@ def test_prompt_loop_result_rejects_non_completed_without_error_class() -> None:
     ("field_name", "value"),
     [
         ("task_id", ""),
+        ("prompt_builder_version", ""),
+        ("prompt_builder_code_hash", ""),
         ("turns_executed", -1),
         ("duration_ms", -1),
         ("error_class", ""),
@@ -170,6 +189,7 @@ def test_prompt_loop_result_rejects_invalid_common_fields(
 ) -> None:
     payload: dict[str, object] = {
         "task_id": "repair_jsonl_deduper",
+        **_prompt_builder_fields(),
         "status": "model_error",
         "turns_executed": 1,
         "duration_ms": 5,

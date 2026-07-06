@@ -796,3 +796,23 @@ record is created.
 
 Leakage scanning remains outside the Pydantic model. The future SFT builder must
 scan the exact `PositiveSFTMessage` payloads before writing a dataset export.
+
+## Prompt Provenance Persistence
+
+Persist prompt provenance at the prompt-loop artifact boundary:
+
+```text
+PromptLoopResult.prompt_builder_version
+PromptLoopResult.prompt_builder_code_hash
+```
+
+This is stronger than only adding prompt provenance during SFT export. The
+prompt loop owns the generated `messages`, and the initial prompt builder
+directly determines the opening system/user messages. Downstream exporters
+should copy this provenance from `PromptLoopResult` instead of recomputing it
+from whatever prompt code exists when the export runs.
+
+This means prompt-loop artifacts generated before this field existed are stale
+for future SFT export and should fail typed payload validation. That is
+intentional: a training row should not claim prompt provenance that the source
+artifact never recorded.

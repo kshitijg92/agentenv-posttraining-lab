@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from agentenv.agents.prompts import AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
 from agentenv.artifacts import ArtifactDirectoryError
 from agentenv.artifacts.manifests import load_eval_run_manifest
 from agentenv.artifacts.manifests import load_eval_suite_manifest
@@ -242,6 +243,11 @@ def test_agent_model_eval_records_missing_model_env_failure(
     prompt_loop_result = json.loads(
         (attempt_dir / "prompt_loop_result.json").read_text()
     )
+    assert (
+        prompt_loop_result["prompt_builder_version"]
+        == AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
+    )
+    assert prompt_loop_result["prompt_builder_code_hash"].startswith("xxh64:")
     assert prompt_loop_result["model_responses"][0]["finish_reason"] == "error"
     assert (
         prompt_loop_result["model_responses"][0]["error_class"]
