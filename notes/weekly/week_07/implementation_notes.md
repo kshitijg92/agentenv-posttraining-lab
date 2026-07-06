@@ -920,3 +920,38 @@ The document keeps reward design scoped to v0 observability:
 This closes the explicit Week 7 documentation requirement that the reward doc
 state when reward evidence is untrusted, while preserving the Week 7 non-claim:
 the repo has reward observability, not reward validity or model improvement.
+
+## Week 7 Manual Deviations
+
+Week 7 followed the manual's goal and learning objective, but intentionally did
+not copy every suggested filename or loose JSONL shape.
+
+The original manual listed these likely artifacts:
+
+```text
+src/agentenv/rewards/schema.py
+src/agentenv/rewards/components.py
+scripts/export_trajectories.py
+configs/eval/week07_baseline.yaml
+data/processed/trajectories/
+data/processed/trajectories/week07_review_notes.jsonl
+```
+
+The implemented equivalents are:
+
+- `RewardComponents` lives inside `src/agentenv/trajectories/schema.py` because
+  v0 reward evidence is part of the trajectory artifact contract, not yet a
+  standalone reward subsystem.
+- `agentenv trajectories export` replaced a standalone
+  `scripts/export_trajectories.py` script.
+- The Qwen eval suite config replaced a duplicate `week07_baseline.yaml`.
+- Manifest-backed artifacts under `experiments/runs/` replaced loose
+  `data/processed/trajectories/` JSONL files.
+- `trajectory_review` artifacts with `reviews.jsonl`, `review_queue.md`, and
+  validation replaced ad hoc review notes.
+
+These deviations are intentional. They preserve the Week 7 boundary more
+strongly than the sketch: each downstream artifact pins source manifests,
+source JSONL hashes, schema versions, and review joins instead of relying on
+untyped processed files. Future work can still add compatibility exports if a
+later workflow needs flat `data/processed/...` files.
