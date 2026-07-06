@@ -216,6 +216,39 @@ Heldout-private and public-calibration examples must never become positive SFT
 data. Environment failures and leakage cases must also be blocked from positive
 training paths.
 
+### Reward Trust vs Training Eligibility
+
+Reward trust is a measurement question:
+
+```text
+Can we believe the public/hidden/format/tool/reward-hack signals?
+```
+
+Training eligibility is a data-use question:
+
+```text
+Given trusted evidence, review, split policy, and policy origin, what uses are
+allowed?
+```
+
+The important invariant is:
+
+```text
+untrusted reward evidence -> no reward-dependent training use
+trusted reward evidence -> maybe training eligible
+```
+
+Reward trust is necessary but not sufficient. A failed hidden-validator outcome
+can be a trustworthy failure signal and still be forbidden for positive SFT. A
+control-policy success can be trustworthy measurement evidence and still remain
+analysis-only because it is not model-generated behavior.
+
+This distinction prevents two opposite mistakes:
+
+- treating every trusted reward signal as trainable data;
+- treating every non-trainable trajectory as if its measurement evidence is
+  worthless.
+
 ### Leakage Discipline
 
 Raw canaries should not be copied into trajectory records.

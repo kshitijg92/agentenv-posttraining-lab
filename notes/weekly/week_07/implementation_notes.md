@@ -899,3 +899,24 @@ agentenv training sft export
 owns the downstream positive-SFT dataset artifact. The SFT command takes
 `--candidates` as input because the candidate export is the trust boundary it
 consumes.
+
+## Reward Design v0
+
+Added the Week 7 reward-boundary document:
+
+```text
+docs/reward_design_v0.md
+```
+
+The document keeps reward design scoped to v0 observability:
+
+- `RewardComponents` are decomposed audit signals, not a scalar reward;
+- reward trust is a measurement prerequisite, not a training permission;
+- untrusted reward evidence blocks reward-dependent training paths;
+- trusted reward evidence can still be analysis-only or non-positive-SFT;
+- suite-level controls and audits remain part of reward trust, even though they
+  are not embedded inside each `RewardComponents` object.
+
+This closes the explicit Week 7 documentation requirement that the reward doc
+state when reward evidence is untrusted, while preserving the Week 7 non-claim:
+the repo has reward observability, not reward validity or model improvement.
