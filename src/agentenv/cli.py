@@ -43,7 +43,10 @@ from agentenv.tasks.validate import (
 )
 from agentenv.tasks.hashing import write_task_hash_report
 from agentenv.tasks.splits import check_splits_lock
-from agentenv.training.export import export_training_candidate_records
+from agentenv.training.export import (
+    export_positive_sft_examples,
+    export_training_candidate_records,
+)
 from agentenv.trajectories.export import export_trajectory_records_from_eval_artifact
 from agentenv.trajectories.review import (
     initialize_trajectory_review_artifact,
@@ -60,6 +63,7 @@ eval_app = typer.Typer(no_args_is_help=False)
 trajectories_app = typer.Typer(no_args_is_help=True)
 training_app = typer.Typer(no_args_is_help=True)
 training_candidates_app = typer.Typer(no_args_is_help=True)
+training_sft_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 local_model_app = typer.Typer(no_args_is_help=True)
@@ -75,6 +79,7 @@ app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
 app.add_typer(local_model_app, name="local-model")
 training_app.add_typer(training_candidates_app, name="candidates")
+training_app.add_typer(training_sft_app, name="sft")
 local_model_app.add_typer(ollama_app, name="ollama")
 
 console = Console()
@@ -685,6 +690,46 @@ def export_training_candidates(
     console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
     console.print(
         f"wrote {export.out_dir / manifest.artifacts['training_candidates']}",
+        soft_wrap=True,
+    )
+
+
+@training_sft_app.command("export")
+def export_training_sft(
+    candidates: Path = typer.Option(
+        ...,
+        "--candidates",
+        help="Training candidate export artifact directory.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for positive SFT export artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before exporting.",
+    ),
+) -> None:
+    try:
+        export = export_positive_sft_examples(
+            candidates,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--candidates") from exc
+
+    manifest = export.manifest
+    console.print(
+        f"[green]positive SFT export complete[/green] records={manifest.record_count}"
+    )
+    console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {export.out_dir / manifest.artifacts['positive_sft_examples']}",
         soft_wrap=True,
     )
 

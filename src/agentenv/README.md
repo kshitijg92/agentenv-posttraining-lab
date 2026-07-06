@@ -278,6 +278,26 @@ This export validates the trajectory/review join, builds candidate records in
 memory, and persists the resulting eligibility surface. It is not an SFT dataset
 or a preference dataset.
 
+## Export Positive SFT Examples
+
+Create a positive-SFT artifact from a training-candidate export:
+
+```bash
+uv run agentenv training sft export \
+  --candidates experiments/runs/dev_baseline_training_candidates \
+  --out experiments/runs/dev_baseline_positive_sft
+```
+
+Main outputs:
+
+```text
+experiments/runs/dev_baseline_positive_sft/manifest.json
+experiments/runs/dev_baseline_positive_sft/positive_sft_examples.jsonl
+```
+
+This export rebuilds positive SFT rows from eligible training candidates and
+reruns the source hash and leakage checks before writing the JSONL.
+
 ## Replay An Artifact Directory
 
 Replay a scorer eval run:

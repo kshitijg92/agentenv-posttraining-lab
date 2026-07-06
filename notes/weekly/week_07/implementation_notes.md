@@ -887,3 +887,15 @@ of trust back to review and trajectory evidence.
 The export allows zero records. A valid candidate export can contain no positive
 SFT examples, especially when all reviewed rows are controls, failures,
 negative-example candidates, or analysis-only records.
+
+CLI grouping:
+
+```text
+agentenv training candidates export
+agentenv training sft export
+```
+
+`training candidates` owns the review-to-eligibility artifact. `training sft`
+owns the downstream positive-SFT dataset artifact. The SFT command takes
+`--candidates` as input because the candidate export is the trust boundary it
+consumes.

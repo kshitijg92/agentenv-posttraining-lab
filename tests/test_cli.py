@@ -401,6 +401,48 @@ def test_trajectories_review_init_cli_writes_review_artifact(tmp_path: Path) -> 
     assert training_manifest["analysis_only_count"] == 1
     assert (training_out / "training_candidates.jsonl").is_file()
 
+    sft_out = tmp_path / "positive_sft"
+    sft_result = runner.invoke(
+        app,
+        [
+            "training",
+            "sft",
+            "export",
+            "--candidates",
+            str(training_out),
+            "--out",
+            str(sft_out),
+        ],
+    )
+
+    assert sft_result.exit_code == 0, sft_result.output
+    assert "positive SFT export complete" in sft_result.output
+    assert "records=0" in sft_result.output
+    assert "manifest.json" in sft_result.output
+    assert "positive_sft_examples.jsonl" in sft_result.output
+    sft_manifest = json.loads((sft_out / "manifest.json").read_text())
+    assert sft_manifest["artifact_type"] == "positive_sft_export"
+    assert sft_manifest["record_count"] == 0
+    assert (sft_out / "positive_sft_examples.jsonl").is_file()
+
+    sft_overwrite_result = runner.invoke(
+        app,
+        [
+            "training",
+            "sft",
+            "export",
+            "--candidates",
+            str(training_out),
+            "--out",
+            str(sft_out),
+            "--overwrite",
+        ],
+    )
+
+    assert sft_overwrite_result.exit_code == 0, sft_overwrite_result.output
+    assert "positive SFT export complete" in sft_overwrite_result.output
+    assert "records=0" in sft_overwrite_result.output
+
 
 def _write_eval_hash_manifest(
     path: Path,
