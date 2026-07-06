@@ -10,6 +10,10 @@ def test_artifact_type_values_are_stable_json_strings() -> None:
     assert ArtifactType.EVAL_SUITE == "eval_suite"
     assert ArtifactType.CONTROL_CALIBRATION == "control_calibration"
     assert ArtifactType.REPLAY_RUN == "replay_run"
+    assert ArtifactType.TRAJECTORY_EXPORT == "trajectory_export"
+    assert ArtifactType.TRAJECTORY_REVIEW == "trajectory_review"
+    assert ArtifactType.TRAINING_CANDIDATE_EXPORT == "training_candidate_export"
+    assert ArtifactType.POSITIVE_SFT_EXPORT == "positive_sft_export"
     assert json.dumps({"artifact_type": ArtifactType.EVAL_RUN}) == (
         '{"artifact_type": "eval_run"}'
     )

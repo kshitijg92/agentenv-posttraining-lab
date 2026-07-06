@@ -4,10 +4,20 @@ from pathlib import Path
 import pytest
 
 from agentenv.artifacts import MANIFEST_FILENAME
-from agentenv.artifacts.manifests import load_trajectory_export_manifest
+from agentenv.artifacts.manifests import (
+    POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION,
+    TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION,
+    load_positive_sft_export_manifest,
+    load_trajectory_export_manifest,
+)
 from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
 from agentenv.orchestrators.eval_run import run_eval_config
-from agentenv.training.export import export_training_candidate_records
+from agentenv.training.export import (
+    export_positive_sft_examples,
+    export_training_candidate_records,
+    load_positive_sft_export_artifact,
+)
+from agentenv.training.schema import POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
 from agentenv.training.sft_builder import build_positive_sft_examples
 from agentenv.trajectories.export import (
     export_trajectory_records_from_eval_artifact,
@@ -135,6 +145,76 @@ def test_build_positive_sft_examples_scans_full_record_not_only_messages(
         match="Positive SFT example record failed leakage scan",
     ):
         build_positive_sft_examples(candidate_export_dir)
+
+
+def test_export_positive_sft_examples_writes_manifest_and_jsonl(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+
+    export = export_positive_sft_examples(
+        candidate_export_dir,
+        tmp_path / "positive-sft-export",
+    )
+
+    manifest = load_positive_sft_export_manifest(export.out_dir / MANIFEST_FILENAME)
+    assert manifest.artifact_type == "positive_sft_export"
+    assert (
+        manifest.artifact_schema_version == POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION
+    )
+    assert manifest.source_training_candidate_export_dir == str(
+        candidate_export_dir.resolve()
+    )
+    assert (
+        manifest.source_training_candidate_export_artifact_schema_version
+        == TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION
+    )
+    assert manifest.source_training_candidate_export_manifest_hash.startswith("xxh64:")
+    assert manifest.source_training_candidates_jsonl_hash.startswith("xxh64:")
+    assert (
+        manifest.positive_sft_example_record_schema_version
+        == POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
+    )
+    assert manifest.record_count == 1
+    assert manifest.positive_sft_examples_jsonl_hash.startswith("xxh64:")
+    assert manifest.artifacts == {
+        "positive_sft_examples": "positive_sft_examples.jsonl",
+    }
+    assert len(export.records) == 1
+    assert (
+        export.records[0].schema_version == POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
+    )
+    assert (export.out_dir / "positive_sft_examples.jsonl").is_file()
+
+
+def test_export_positive_sft_examples_allows_empty_export(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_control_training_candidate_export(tmp_path)
+
+    export = export_positive_sft_examples(
+        candidate_export_dir,
+        tmp_path / "positive-sft-export",
+    )
+
+    assert export.manifest.record_count == 0
+    assert export.records == ()
+    assert (export.out_dir / "positive_sft_examples.jsonl").read_text() == ""
+
+
+def test_load_positive_sft_export_rejects_jsonl_hash_mismatch(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    export = export_positive_sft_examples(
+        candidate_export_dir,
+        tmp_path / "positive-sft-export",
+    )
+    examples_path = export.out_dir / export.manifest.artifacts["positive_sft_examples"]
+    examples_path.write_text(examples_path.read_text() + "\n")
+
+    with pytest.raises(ValueError, match="Positive SFT examples JSONL hash mismatch"):
+        load_positive_sft_export_artifact(export.out_dir)
 
 
 def build_positive_sft_candidate_export(

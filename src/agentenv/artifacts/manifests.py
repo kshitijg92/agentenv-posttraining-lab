@@ -43,7 +43,9 @@ from agentenv.orchestrators.attempt import (
 )
 from agentenv.tasks.schema import TaskSplit
 from agentenv.training.schema import (
+    POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
     TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
+    PositiveSFTExampleRecordSchemaVersion,
     TrainingCandidateRecordSchemaVersion,
 )
 from agentenv.trajectories.schema import (
@@ -115,6 +117,9 @@ TRAJECTORY_REVIEW_ARTIFACT_REFS = {
 TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS = {
     "training_candidates": "training_candidates.jsonl",
 }
+POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
+    "positive_sft_examples": "positive_sft_examples.jsonl",
+}
 EVAL_RUN_REQUIRED_ARTIFACTS = frozenset(EVAL_RUN_ARTIFACT_REFS)
 EVAL_SUITE_REQUIRED_ARTIFACTS = frozenset({"policies"})
 CONTROL_CALIBRATION_REQUIRED_ARTIFACTS = frozenset(CONTROL_CALIBRATION_ARTIFACT_REFS)
@@ -126,6 +131,7 @@ TRAJECTORY_REVIEW_REQUIRED_ARTIFACTS = frozenset(TRAJECTORY_REVIEW_ARTIFACT_REFS
 TRAINING_CANDIDATE_EXPORT_REQUIRED_ARTIFACTS = frozenset(
     TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS
 )
+POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_REFS)
 
 
 ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
@@ -139,6 +145,7 @@ TrajectoryReviewArtifactSchemaVersion = Literal["trajectory_review_artifact_v0"]
 TrainingCandidateExportArtifactSchemaVersion = Literal[
     "training_candidate_export_artifact_v0"
 ]
+PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 TrajectoryExportSourceArtifactType = Literal["eval_run", "eval_suite"]
 TrajectoryReviewSourceArtifactType = Literal["trajectory_export"]
 
@@ -165,6 +172,9 @@ TRAJECTORY_REVIEW_ARTIFACT_SCHEMA_VERSION: TrajectoryReviewArtifactSchemaVersion
     "trajectory_review_artifact_v0"
 )
 TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateExportArtifactSchemaVersion = "training_candidate_export_artifact_v0"
+POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVersion = (
+    "positive_sft_export_artifact_v0"
+)
 
 
 class ArtifactManifest(BaseModel):
@@ -997,6 +1007,63 @@ class TrainingCandidateExportManifest(ArtifactManifest):
         return self
 
 
+class PositiveSFTExportManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.POSITIVE_SFT_EXPORT.value
+    expected_artifact_schema_version = POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION
+
+    created_at: str = Field(min_length=1)
+    source_training_candidate_export_dir: str = Field(min_length=1)
+    source_training_candidate_export_artifact_schema_version: (
+        TrainingCandidateExportArtifactSchemaVersion
+    )
+    source_training_candidate_export_manifest_hash: str = Field(min_length=1)
+    source_training_candidates_jsonl_hash: str = Field(min_length=1)
+    training_candidate_record_schema_version: TrainingCandidateRecordSchemaVersion
+    positive_sft_example_record_schema_version: PositiveSFTExampleRecordSchemaVersion
+    record_count: NonNegativeInt
+    positive_sft_examples_jsonl_hash: str = Field(min_length=1)
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_positive_sft_export_contract(self) -> "PositiveSFTExportManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=POSITIVE_SFT_EXPORT_ARTIFACT_REFS,
+            owner="positive SFT export manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS,
+            owner="positive SFT export manifests",
+        )
+        if (
+            self.source_training_candidate_export_artifact_schema_version
+            != TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "source_training_candidate_export_artifact_schema_version must be "
+                f"{TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION!r}"
+            )
+        if (
+            self.training_candidate_record_schema_version
+            != TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "training_candidate_record_schema_version must be "
+                f"{TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION!r}"
+            )
+        if (
+            self.positive_sft_example_record_schema_version
+            != POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "positive_sft_example_record_schema_version must be "
+                f"{POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION!r}"
+            )
+        return self
+
+
 def load_scorer_attempt_manifest(path: Path) -> ScorerAttemptManifest:
     return _validate_manifest(ScorerAttemptManifest, path)
 
@@ -1033,6 +1100,10 @@ def load_training_candidate_export_manifest(
     path: Path,
 ) -> TrainingCandidateExportManifest:
     return _validate_manifest(TrainingCandidateExportManifest, path)
+
+
+def load_positive_sft_export_manifest(path: Path) -> PositiveSFTExportManifest:
+    return _validate_manifest(PositiveSFTExportManifest, path)
 
 
 def load_attempt_manifest(path: Path) -> ScorerAttemptManifest | AgentTaskRunManifest:

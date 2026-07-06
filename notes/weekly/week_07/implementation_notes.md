@@ -853,6 +853,37 @@ For each positive candidate, the builder:
 - scans the assembled `PositiveSFTExampleRecord` for leakage before returning
   it.
 
-This is still not a dataset export. It produces validated in-memory rows only;
-the next artifact boundary is a persisted positive-SFT export manifest plus
-JSONL.
+## Positive SFT Export
+
+Added the persisted artifact boundary for positive SFT rows:
+
+```text
+PositiveSFTExport
+  manifest.json
+  positive_sft_examples.jsonl
+```
+
+The export consumes a `TrainingCandidateExport` directory, rebuilds
+`PositiveSFTExampleRecord` rows through the in-memory builder, and writes only
+records that survive the candidate/review gates, source artifact hash checks,
+prompt-loop payload validation, and whole-record leakage scan.
+
+The positive SFT export manifest pins the immediate source artifact:
+
+```text
+source_training_candidate_export_dir
+source_training_candidate_export_artifact_schema_version
+source_training_candidate_export_manifest_hash
+source_training_candidates_jsonl_hash
+training_candidate_record_schema_version
+positive_sft_example_record_schema_version
+```
+
+It does not duplicate the full trajectory/review provenance because those
+boundaries are already pinned by the training-candidate export manifest. This
+keeps the SFT export as a downstream dataset artifact while preserving the chain
+of trust back to review and trajectory evidence.
+
+The export allows zero records. A valid candidate export can contain no positive
+SFT examples, especially when all reviewed rows are controls, failures,
+negative-example candidates, or analysis-only records.
