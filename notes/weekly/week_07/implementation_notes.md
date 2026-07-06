@@ -707,3 +707,30 @@ message:3:tool
 The result shape stays compatible with `LeakageScanResult`; for message/text
 scans, `scanned_files` contains these synthetic refs. This preserves one leakage
 result contract while allowing the next exporter to gate on in-memory payloads.
+
+## Prompt Input Boundary
+
+Split the runtime agent task view from the prompt-visible task input:
+
+```text
+AgentTaskPromptInput
+  task_id
+  instruction
+  allowed_tools
+  public_checks
+  max_turns
+  timeout_seconds
+  network
+
+AgentTaskView extends AgentTaskPromptInput
+  workspace_path
+```
+
+`build_initial_messages(...)` now depends on `AgentTaskPromptInput`, while the
+prompt loop and local tools still use `AgentTaskView` because they need the
+runtime workspace path.
+
+This gives the future positive-SFT task input a safe base type. The SFT row can
+reuse the prompt-visible fields without inheriting `workspace_path`, task
+manifest refs, hidden validators, scorer state, review data, or other
+harness-only context.

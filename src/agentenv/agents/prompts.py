@@ -1,38 +1,38 @@
 import json
 
-from agentenv.agents.schema import AgentTaskView
+from agentenv.agents.schema import AgentTaskPromptInput
 from agentenv.models.schema import Message
 from agentenv.tools.schema import TOOL_REGISTRY
 
 
-def build_initial_messages(agent_task_view: AgentTaskView) -> list[Message]:
+def build_initial_messages(prompt_input: AgentTaskPromptInput) -> list[Message]:
     return [
         Message(
             role="system",
-            content=_system_prompt(agent_task_view),
+            content=_system_prompt(prompt_input),
             name="agentenv",
             metadata={"source": "agentenv_protocol"},
         ),
         Message(
             role="user",
-            content=_user_prompt(agent_task_view),
+            content=_user_prompt(prompt_input),
             name="task_view",
             metadata={
                 "source": "agent_task_view",
-                "task_id": agent_task_view.task_id,
+                "task_id": prompt_input.task_id,
             },
         ),
     ]
 
 
-def _system_prompt(agent_task_view: AgentTaskView) -> str:
+def _system_prompt(prompt_input: AgentTaskPromptInput) -> str:
     sections = [
         "You are a coding agent operating through a restricted tool interface.",
         "Do not output free-form chat, markdown, or multiple actions.",
         "Only interact through tool_call or final_answer actions.",
         "",
         "Allowed tool-call actions:",
-        *_tool_action_lines(agent_task_view.allowed_tools),
+        *_tool_action_lines(prompt_input.allowed_tools),
         "",
         "Valid final-answer action:",
         '{"action":"final_answer","text":"done"}',
@@ -44,22 +44,22 @@ def _system_prompt(agent_task_view: AgentTaskView) -> str:
     return "\n".join(sections)
 
 
-def _user_prompt(agent_task_view: AgentTaskView) -> str:
+def _user_prompt(prompt_input: AgentTaskPromptInput) -> str:
     sections = [
         "Task instruction:",
-        agent_task_view.instruction,
+        prompt_input.instruction,
         "",
         "Workspace:",
         "Files are available only through tools in the prepared workspace.",
         "Do not use absolute host paths.",
         "",
         "Public checks:",
-        *[f"- {command}" for command in agent_task_view.public_checks],
+        *[f"- {command}" for command in prompt_input.public_checks],
         "",
         "Limits:",
-        f"- max_turns: {agent_task_view.max_turns}",
-        f"- timeout_seconds: {agent_task_view.timeout_seconds}",
-        f"- network: {agent_task_view.network}",
+        f"- max_turns: {prompt_input.max_turns}",
+        f"- timeout_seconds: {prompt_input.timeout_seconds}",
+        f"- network: {prompt_input.network}",
     ]
     return "\n".join(sections)
 

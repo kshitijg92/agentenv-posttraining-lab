@@ -1,7 +1,19 @@
 from pathlib import Path
 
 from agentenv.agents.prompts import build_initial_messages
-from agentenv.agents.schema import AgentTaskView
+from agentenv.agents.schema import AgentTaskPromptInput, AgentTaskView
+
+
+def _agent_task_prompt_input() -> AgentTaskPromptInput:
+    return AgentTaskPromptInput(
+        task_id="repair_jsonl_deduper",
+        instruction="Fix the JSONL deduper.",
+        allowed_tools=["list_files", "read_file", "write_file", "run_tests"],
+        public_checks=["uv run pytest tests/test_public.py"],
+        max_turns=8,
+        timeout_seconds=30,
+        network="off",
+    )
 
 
 def _agent_task_view(tmp_path: Path) -> AgentTaskView:
@@ -30,6 +42,14 @@ def test_build_initial_messages_returns_system_and_user_messages(
         "source": "agent_task_view",
         "task_id": "repair_jsonl_deduper",
     }
+
+
+def test_build_initial_messages_accepts_prompt_input_without_workspace_path() -> None:
+    messages = build_initial_messages(_agent_task_prompt_input())
+
+    assert [message.role for message in messages] == ["system", "user"]
+    assert "Fix the JSONL deduper." in messages[1].content
+    assert "Do not use absolute host paths." in messages[1].content
 
 
 def test_system_message_defines_strict_json_action_protocol(

@@ -20,17 +20,20 @@ PromptLoopStatus = Literal[
 ]
 
 
-class AgentTaskView(BaseModel):
+class AgentTaskPromptInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str = Field(min_length=1)
     instruction: str = Field(min_length=1)
-    workspace_path: Path
     allowed_tools: list[str] = Field(min_length=1)
     public_checks: list[str] = Field(min_length=1)
     max_turns: int = Field(gt=0)
     timeout_seconds: int = Field(gt=0)
     network: AgentNetworkMode
+
+
+class AgentTaskView(AgentTaskPromptInput):
+    workspace_path: Path
 
 
 class TokenUsage(BaseModel):
