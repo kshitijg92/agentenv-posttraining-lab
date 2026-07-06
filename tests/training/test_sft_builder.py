@@ -1,0 +1,315 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from agentenv.artifacts import MANIFEST_FILENAME
+from agentenv.artifacts.manifests import load_trajectory_export_manifest
+from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
+from agentenv.orchestrators.eval_run import run_eval_config
+from agentenv.training.export import export_training_candidate_records
+from agentenv.training.sft_builder import build_positive_sft_examples
+from agentenv.trajectories.export import (
+    export_trajectory_records_from_eval_artifact,
+    hash_file,
+    write_trajectory_records_jsonl,
+)
+from agentenv.trajectories.review import (
+    TrajectoryReviewArtifact,
+    initialize_trajectory_review_artifact,
+    write_trajectory_review_records_jsonl,
+)
+from agentenv.trajectories.schema import (
+    ArtifactRef,
+    ReviewDecision,
+    TrajectoryRecord,
+)
+
+
+AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
+
+
+def test_build_positive_sft_examples_from_training_candidate_export(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+
+    examples = build_positive_sft_examples(candidate_export_dir)
+
+    assert len(examples) == 1
+    example = examples[0]
+    assert example.example_id.startswith("positive_sft_example_")
+    assert example.provenance_ids.trajectory_id.startswith("trajectory_")
+    assert example.provenance_ids.eval_attempt_id.startswith("eval_attempt_")
+    assert example.provenance_ids.agent_attempt_id.startswith("agent_attempt_")
+    assert example.provenance_ids.task_id == "toy_python_fix_001"
+    assert example.provenance_ids.policy_id == "local-model"
+    assert example.prompt_provenance.prompt_builder_version == (
+        "agent_task_initial_prompt_builder_v0"
+    )
+    assert example.prompt_provenance.prompt_builder_code_hash.startswith("xxh64:")
+    assert example.task_input.task_id == "toy_python_fix_001"
+    assert [message.role for message in example.messages[:2]] == ["system", "user"]
+    assert any(message.role == "assistant" for message in example.messages)
+    assert "metadata" not in example.messages[0].model_dump(mode="json")
+    assert "final_patch" not in example.model_dump(mode="json")
+
+
+def test_build_positive_sft_examples_skips_non_positive_candidates(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_control_training_candidate_export(tmp_path)
+
+    examples = build_positive_sft_examples(candidate_export_dir)
+
+    assert examples == ()
+
+
+def test_build_positive_sft_examples_rejects_source_trajectory_jsonl_drift(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    manifest = json.loads((candidate_export_dir / MANIFEST_FILENAME).read_text())
+    trajectory_export_dir = Path(manifest["source_trajectory_export_dir"])
+    trajectories_path = trajectory_export_dir / "trajectories.jsonl"
+    trajectories_path.write_text(trajectories_path.read_text() + "\n")
+
+    with pytest.raises(ValueError, match="Source trajectory JSONL hash mismatch"):
+        build_positive_sft_examples(candidate_export_dir)
+
+
+def test_build_positive_sft_examples_rejects_source_review_jsonl_drift(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    manifest = json.loads((candidate_export_dir / MANIFEST_FILENAME).read_text())
+    review_dir = Path(manifest["source_review_dir"])
+    reviews_path = review_dir / "reviews.jsonl"
+    reviews_path.write_text(reviews_path.read_text() + "\n")
+
+    with pytest.raises(ValueError, match="Source reviews JSONL hash mismatch"):
+        build_positive_sft_examples(candidate_export_dir)
+
+
+def test_build_positive_sft_examples_rejects_prompt_loop_artifact_hash_mismatch(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    manifest = json.loads((candidate_export_dir / MANIFEST_FILENAME).read_text())
+    trajectory_export_dir = Path(manifest["source_trajectory_export_dir"])
+    record = load_trajectory_record(trajectory_export_dir)
+    prompt_loop_path = (
+        Path(record.artifacts.eval_run_path) / require_prompt_loop_ref(record).path
+    )
+    prompt_loop_path.write_text(prompt_loop_path.read_text() + "\n")
+
+    with pytest.raises(ValueError, match="Artifact hash mismatch"):
+        build_positive_sft_examples(candidate_export_dir)
+
+
+def test_build_positive_sft_examples_rejects_leaked_sft_payload(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(
+        tmp_path,
+        leak_prompt_loop=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Positive SFT example record failed leakage scan",
+    ):
+        build_positive_sft_examples(candidate_export_dir)
+
+
+def test_build_positive_sft_examples_scans_full_record_not_only_messages(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(
+        tmp_path,
+        leak_prompt_provenance=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Positive SFT example record failed leakage scan",
+    ):
+        build_positive_sft_examples(candidate_export_dir)
+
+
+def build_positive_sft_candidate_export(
+    tmp_path: Path,
+    *,
+    leak_prompt_loop: bool = False,
+    leak_prompt_provenance: bool = False,
+) -> Path:
+    trajectory_export_dir = build_agent_model_trajectory_export(
+        tmp_path,
+        leak_prompt_loop=leak_prompt_loop,
+        leak_prompt_provenance=leak_prompt_provenance,
+    )
+    review_artifact = initialize_trajectory_review_artifact(
+        trajectory_export_dir,
+        tmp_path / "trajectory-review",
+    )
+    write_single_review_decision(review_artifact, "accepted")
+    candidate_export = export_training_candidate_records(
+        trajectory_export_dir,
+        review_artifact.out_dir,
+        tmp_path / "training-candidates",
+    )
+    return candidate_export.out_dir
+
+
+def build_control_training_candidate_export(tmp_path: Path) -> Path:
+    eval_run = run_eval_config(
+        AGENT_CONTROL_CONFIG,
+        "agent-happy",
+        tmp_path / "eval-run",
+    )
+    trajectory_export = export_trajectory_records_from_eval_artifact(
+        eval_run.out_dir,
+        tmp_path / "trajectory-export",
+    )
+    review_artifact = initialize_trajectory_review_artifact(
+        trajectory_export.out_dir,
+        tmp_path / "trajectory-review",
+    )
+    write_single_review_decision(review_artifact, "accepted")
+    candidate_export = export_training_candidate_records(
+        trajectory_export.out_dir,
+        review_artifact.out_dir,
+        tmp_path / "training-candidates",
+    )
+    return candidate_export.out_dir
+
+
+def build_agent_model_trajectory_export(
+    tmp_path: Path,
+    *,
+    leak_prompt_loop: bool,
+    leak_prompt_provenance: bool,
+) -> Path:
+    eval_run = run_eval_config(
+        AGENT_CONTROL_CONFIG,
+        "agent-happy",
+        tmp_path / "eval-run",
+    )
+    trajectory_export = export_trajectory_records_from_eval_artifact(
+        eval_run.out_dir,
+        tmp_path / "trajectory-export",
+    )
+    record = build_agent_model_trajectory_record(trajectory_export.records[0])
+    if leak_prompt_loop:
+        record = leak_prompt_loop_artifact(record)
+    if leak_prompt_provenance:
+        record = leak_prompt_provenance_artifact(record)
+    rewrite_trajectory_export_records(trajectory_export.out_dir, (record,))
+    return trajectory_export.out_dir
+
+
+def write_single_review_decision(
+    review_artifact: TrajectoryReviewArtifact,
+    decision: ReviewDecision,
+) -> None:
+    review = review_artifact.reviews[0].model_copy(
+        update={
+            "review_status": "reviewed",
+            "review_id": "review_001",
+            "reviewer_id": "kshitij",
+            "review_decision": decision,
+        }
+    )
+    write_trajectory_review_records_jsonl(
+        review_artifact.out_dir / review_artifact.manifest.artifacts["reviews"],
+        (review,),
+    )
+
+
+def build_agent_model_trajectory_record(
+    trajectory: TrajectoryRecord,
+) -> TrajectoryRecord:
+    payload = trajectory.model_dump(mode="json")
+    payload["identity"]["policy_id"] = "local-model"
+    payload["policy"] = {
+        "policy_id": "local-model",
+        "policy_name": "local-model",
+        "policy_spec": {
+            "type": AGENT_MODEL_POLICY_TYPE,
+            "model_config": "configs/models/local_model.yaml",
+            "decoding_config": "configs/decoding/local_model.yaml",
+            "attempts": 1,
+            "replay": {"repeats": 0},
+        },
+    }
+    return type(trajectory).model_validate(payload)
+
+
+def leak_prompt_loop_artifact(
+    trajectory: TrajectoryRecord,
+) -> TrajectoryRecord:
+    prompt_loop_ref = require_prompt_loop_ref(trajectory)
+    prompt_loop_path = Path(trajectory.artifacts.eval_run_path) / prompt_loop_ref.path
+    payload = json.loads(prompt_loop_path.read_text())
+    payload["messages"][1]["content"] += "\nhidden_tests"
+    prompt_loop_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    record_payload = trajectory.model_dump(mode="json")
+    record_payload["artifacts"]["prompt_loop_result_json"]["content_hash"] = hash_file(
+        prompt_loop_path
+    )
+    return type(trajectory).model_validate(record_payload)
+
+
+def leak_prompt_provenance_artifact(
+    trajectory: TrajectoryRecord,
+) -> TrajectoryRecord:
+    prompt_loop_ref = require_prompt_loop_ref(trajectory)
+    prompt_loop_path = Path(trajectory.artifacts.eval_run_path) / prompt_loop_ref.path
+    payload = json.loads(prompt_loop_path.read_text())
+    payload["prompt_builder_version"] += "_hidden_tests"
+    prompt_loop_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    record_payload = trajectory.model_dump(mode="json")
+    record_payload["artifacts"]["prompt_loop_result_json"]["content_hash"] = hash_file(
+        prompt_loop_path
+    )
+    return type(trajectory).model_validate(record_payload)
+
+
+def require_prompt_loop_ref(trajectory: TrajectoryRecord) -> ArtifactRef:
+    prompt_loop_ref = trajectory.artifacts.prompt_loop_result_json
+    if prompt_loop_ref is None:
+        raise AssertionError("expected prompt_loop_result_json")
+    return prompt_loop_ref
+
+
+def rewrite_trajectory_export_records(
+    trajectory_export_dir: Path,
+    records: tuple[TrajectoryRecord, ...],
+) -> None:
+    trajectories_path = trajectory_export_dir / "trajectories.jsonl"
+    write_trajectory_records_jsonl(trajectories_path, list(records))
+    manifest = load_trajectory_export_manifest(
+        trajectory_export_dir / MANIFEST_FILENAME
+    )
+    updated_manifest = manifest.model_copy(
+        update={
+            "record_count": len(records),
+            "trajectories_jsonl_hash": hash_file(trajectories_path),
+        }
+    )
+    (trajectory_export_dir / MANIFEST_FILENAME).write_text(
+        json.dumps(
+            updated_manifest.model_dump(mode="json"),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
+def load_trajectory_record(trajectory_export_dir: Path) -> TrajectoryRecord:
+    trajectories_path = trajectory_export_dir / "trajectories.jsonl"
+    payload = json.loads(trajectories_path.read_text().splitlines()[0])
+    return TrajectoryRecord.model_validate(payload)

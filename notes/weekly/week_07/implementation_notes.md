@@ -794,8 +794,9 @@ prompt_builder_code_hash
 The future SFT builder should fill these from the prompt module used when the
 record is created.
 
-Leakage scanning remains outside the Pydantic model. The future SFT builder must
-scan the exact `PositiveSFTMessage` payloads before writing a dataset export.
+Leakage scanning remains outside the Pydantic model. The SFT builder scans the
+assembled `PositiveSFTExampleRecord` before returning it, so future
+model-visible fields fail closed if they contain private task markers.
 
 ## Prompt Provenance Persistence
 
@@ -816,3 +817,42 @@ This means prompt-loop artifacts generated before this field existed are stale
 for future SFT export and should fail typed payload validation. That is
 intentional: a training row should not claim prompt provenance that the source
 artifact never recorded.
+
+## Positive SFT Builder
+
+Added an in-memory positive SFT builder:
+
+```text
+build_positive_sft_examples(training_candidate_export_dir)
+  -> tuple[PositiveSFTExampleRecord, ...]
+```
+
+The builder consumes only a `TrainingCandidateExport` artifact directory and
+filters rows where:
+
+```text
+final_eligibility.positive_sft_allowed == true
+```
+
+Before building examples, it validates the source trajectory export and source
+review artifact hashes pinned by the training-candidate manifest. This matters
+because positive SFT eligibility depends on both the trajectory evidence and the
+accepted human review.
+
+For each positive candidate, the builder:
+
+- joins the candidate to its `TrajectoryRecord` by `trajectory_id`;
+- verifies candidate identity fields match the trajectory;
+- requires the source trajectory to remain mechanically positive-SFT eligible;
+- verifies pinned `agent_task_view_json` and `prompt_loop_result_json` content
+  hashes before loading;
+- builds `PositiveSFTTaskInput` from the prompt-visible fields of
+  `AgentTaskView`;
+- strips runtime message metadata into `PositiveSFTMessage`;
+- copies prompt provenance from `PromptLoopResult`;
+- scans the assembled `PositiveSFTExampleRecord` for leakage before returning
+  it.
+
+This is still not a dataset export. It produces validated in-memory rows only;
+the next artifact boundary is a persisted positive-SFT export manifest plus
+JSONL.
