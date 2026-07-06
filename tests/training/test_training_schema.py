@@ -3,10 +3,16 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from agentenv.agents.prompts import AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
 from agentenv.training.schema import (
+    POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
     TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
     FinalTrainingEligibility,
+    PositiveSFTExampleRecord,
+    PositiveSFTMessage,
+    PositiveSFTTaskInput,
     TrainingCandidateRecord,
+    build_positive_sft_example_id,
 )
 
 
@@ -37,6 +43,77 @@ def _candidate_payload(**updates: Any) -> dict[str, Any]:
         "reviewer_id": "kshitij",
         "review_decision": "accepted",
         "final_eligibility": _eligibility_payload(),
+    }
+    payload.update(updates)
+    return payload
+
+
+def _positive_sft_task_input_payload(**updates: Any) -> dict[str, Any]:
+    payload = {
+        "task_id": "repair_jsonl_deduper",
+        "instruction": "Fix the JSONL deduper.",
+        "allowed_tools": ["list_files", "read_file", "write_file", "run_tests"],
+        "public_checks": ["uv run pytest tests/test_public.py"],
+        "max_turns": 8,
+        "timeout_seconds": 30,
+        "network": "off",
+    }
+    payload.update(updates)
+    return payload
+
+
+def _positive_sft_messages_payload() -> list[dict[str, object]]:
+    return [
+        {
+            "role": "system",
+            "content": "Historical persisted system prompt.",
+            "name": "agentenv",
+        },
+        {
+            "role": "user",
+            "content": "Historical persisted task prompt.",
+            "name": "task_view",
+        },
+        {
+            "role": "assistant",
+            "content": (
+                '{"action":"tool_call","tool_name":"run_tests","arguments":'
+                '{"command":"uv run pytest tests/test_public.py"}}'
+            ),
+        },
+        {
+            "role": "tool",
+            "content": '{"status":"ok","output":"1 passed"}',
+            "name": "run_tests",
+            "tool_call_id": "tool_call_0001",
+        },
+        {
+            "role": "assistant",
+            "content": '{"action":"final_answer","text":"done"}',
+        },
+    ]
+
+
+def _positive_sft_payload(**updates: Any) -> dict[str, Any]:
+    task_input = PositiveSFTTaskInput.model_validate(_positive_sft_task_input_payload())
+    payload = {
+        "schema_version": "positive_sft_example_record_v0",
+        "example_id": build_positive_sft_example_id("trajectory_001"),
+        "provenance_ids": {
+            "trajectory_id": "trajectory_001",
+            "eval_suite_id": "eval_suite_001",
+            "eval_run_id": "eval_run_001",
+            "eval_attempt_id": "eval_attempt_001",
+            "agent_attempt_id": "agent_attempt_001",
+            "task_id": "repair_jsonl_deduper",
+            "policy_id": "local-qwen-dev",
+        },
+        "prompt_provenance": {
+            "prompt_builder_version": AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
+            "prompt_builder_code_hash": "xxh64:promptbuilder",
+        },
+        "task_input": task_input.model_dump(mode="json"),
+        "messages": _positive_sft_messages_payload(),
     }
     payload.update(updates)
     return payload
@@ -165,3 +242,175 @@ def test_final_training_eligibility_requires_path_reasons() -> None:
         ValidationError, match="String should have at least 1 character"
     ):
         FinalTrainingEligibility.model_validate(payload)
+
+
+def test_positive_sft_example_record_accepts_model_visible_row() -> None:
+    record = PositiveSFTExampleRecord.model_validate(_positive_sft_payload())
+
+    assert record.schema_version == POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
+    assert record.example_id == "positive_sft_example_001"
+    assert record.provenance_ids.trajectory_id == "trajectory_001"
+    assert record.provenance_ids.task_id == record.task_input.task_id
+    assert (
+        record.prompt_provenance.prompt_builder_version
+        == AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
+    )
+    assert record.prompt_provenance.prompt_builder_code_hash == "xxh64:promptbuilder"
+    assert [message.role for message in record.messages[:2]] == ["system", "user"]
+    assert any(message.role == "assistant" for message in record.messages)
+
+
+def test_positive_sft_task_input_rejects_workspace_path() -> None:
+    payload = _positive_sft_task_input_payload(workspace_path="/tmp/workspace")
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        PositiveSFTTaskInput.model_validate(payload)
+
+
+def test_positive_sft_message_rejects_metadata() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        PositiveSFTMessage.model_validate(
+            {
+                "role": "assistant",
+                "content": '{"action":"final_answer","text":"done"}',
+                "metadata": {"source": "private"},
+            }
+        )
+
+
+def test_positive_sft_tool_message_requires_name_and_tool_call_id() -> None:
+    with pytest.raises(ValidationError, match="tool messages require name"):
+        PositiveSFTMessage.model_validate(
+            {
+                "role": "tool",
+                "content": '{"status":"ok"}',
+                "tool_call_id": "tool_call_0001",
+            }
+        )
+
+    with pytest.raises(ValidationError, match="tool messages require tool_call_id"):
+        PositiveSFTMessage.model_validate(
+            {
+                "role": "tool",
+                "content": '{"status":"ok"}',
+                "name": "run_tests",
+            }
+        )
+
+
+def test_positive_sft_system_and_user_messages_reject_tool_call_id() -> None:
+    with pytest.raises(ValidationError, match="system messages cannot include"):
+        PositiveSFTMessage.model_validate(
+            {
+                "role": "system",
+                "content": "Use JSON actions.",
+                "tool_call_id": "tool_call_0001",
+            }
+        )
+
+    with pytest.raises(ValidationError, match="user messages cannot include"):
+        PositiveSFTMessage.model_validate(
+            {
+                "role": "user",
+                "content": "Fix the task.",
+                "tool_call_id": "tool_call_0001",
+            }
+        )
+
+
+def test_positive_sft_assistant_message_can_include_tool_call_id() -> None:
+    message = PositiveSFTMessage.model_validate(
+        {
+            "role": "assistant",
+            "content": '{"action":"tool_call","tool_name":"run_tests"}',
+            "tool_call_id": "tool_call_0001",
+        }
+    )
+
+    assert message.tool_call_id == "tool_call_0001"
+
+
+def test_positive_sft_example_rejects_wrong_example_id() -> None:
+    payload = _positive_sft_payload(example_id="positive_sft_example_wrong")
+
+    with pytest.raises(
+        ValidationError,
+        match="positive SFT example_id must be derived from trajectory_id",
+    ):
+        PositiveSFTExampleRecord.model_validate(payload)
+
+
+def test_positive_sft_example_rejects_task_id_mismatch() -> None:
+    payload = _positive_sft_payload(
+        task_input=_positive_sft_task_input_payload(task_id="other_task")
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="positive SFT provenance task_id must match task_input",
+    ):
+        PositiveSFTExampleRecord.model_validate(payload)
+
+
+def test_positive_sft_example_requires_assistant_message() -> None:
+    payload = _positive_sft_payload(
+        messages=[
+            {
+                "role": "system",
+                "content": "Historical persisted system prompt.",
+                "name": "agentenv",
+            },
+            {
+                "role": "user",
+                "content": "Historical persisted task prompt.",
+                "name": "task_view",
+            },
+        ]
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="positive SFT examples require an assistant message",
+    ):
+        PositiveSFTExampleRecord.model_validate(payload)
+
+
+def test_positive_sft_example_requires_system_then_user_start() -> None:
+    payload = _positive_sft_payload()
+    payload["messages"][0] = {
+        "role": "user",
+        "content": "Historical persisted task prompt.",
+        "name": "task_view",
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="positive SFT messages must start with system and user messages",
+    ):
+        PositiveSFTExampleRecord.model_validate(payload)
+
+
+def test_positive_sft_example_requires_prompt_provenance() -> None:
+    payload = _positive_sft_payload()
+    del payload["prompt_provenance"]
+
+    with pytest.raises(ValidationError, match="prompt_provenance"):
+        PositiveSFTExampleRecord.model_validate(payload)
+
+
+def test_positive_sft_example_allows_historical_prompt_text() -> None:
+    payload = _positive_sft_payload()
+    payload["messages"][0]["content"] = "Historical system prompt v1."
+    payload["messages"][1]["content"] = "Historical task prompt v1."
+
+    record = PositiveSFTExampleRecord.model_validate(payload)
+
+    assert record.messages[0].content == "Historical system prompt v1."
+    assert record.messages[1].content == "Historical task prompt v1."
+
+
+def test_positive_sft_example_rejects_review_or_scorer_fields() -> None:
+    payload = _positive_sft_payload(review_id="review_001")
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        PositiveSFTExampleRecord.model_validate(payload)

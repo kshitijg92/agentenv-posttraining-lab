@@ -15,17 +15,16 @@ ModelFinishReason = Literal[
 ]
 
 
-class Message(BaseModel):
+class MessageWithoutMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: MessageRole
     content: str
     name: str | None = Field(default=None, min_length=1)
     tool_call_id: str | None = Field(default=None, min_length=1)
-    metadata: dict[str, MessageMetadataValue] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_tool_call_fields(self) -> "Message":
+    def validate_tool_call_fields(self) -> "MessageWithoutMetadata":
         if self.role == "tool":
             if self.name is None:
                 raise ValueError("tool messages require name")
@@ -37,6 +36,10 @@ class Message(BaseModel):
             raise ValueError(f"{self.role} messages cannot include tool_call_id")
 
         return self
+
+
+class Message(MessageWithoutMetadata):
+    metadata: dict[str, MessageMetadataValue] = Field(default_factory=dict)
 
 
 class DecodingConfig(BaseModel):

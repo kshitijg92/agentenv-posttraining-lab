@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agentenv.models.schema import Message
+from agentenv.models.schema import Message, MessageWithoutMetadata
 
 
 def test_message_accepts_plain_system_message() -> None:
@@ -12,6 +12,30 @@ def test_message_accepts_plain_system_message() -> None:
     assert message.name is None
     assert message.tool_call_id is None
     assert message.metadata == {}
+
+
+def test_message_without_metadata_reuses_message_field_contract() -> None:
+    message = MessageWithoutMetadata(
+        role="tool",
+        content="file contents",
+        name="read_file",
+        tool_call_id="tool_call_001",
+    )
+
+    assert message.role == "tool"
+    assert message.name == "read_file"
+    assert message.tool_call_id == "tool_call_001"
+
+
+def test_message_without_metadata_rejects_metadata() -> None:
+    with pytest.raises(ValidationError):
+        MessageWithoutMetadata.model_validate(
+            {
+                "role": "assistant",
+                "content": "{}",
+                "metadata": {"source": "runtime"},
+            }
+        )
 
 
 def test_message_accepts_task_user_metadata() -> None:

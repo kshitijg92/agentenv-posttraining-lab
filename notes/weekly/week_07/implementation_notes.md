@@ -734,3 +734,65 @@ This gives the future positive-SFT task input a safe base type. The SFT row can
 reuse the prompt-visible fields without inheriting `workspace_path`, task
 manifest refs, hidden validators, scorer state, review data, or other
 harness-only context.
+
+## Positive SFT Schema Boundary
+
+Added schema-only positive SFT records:
+
+```text
+PositiveSFTTaskInput extends AgentTaskPromptInput
+PositiveSFTMessage extends MessageWithoutMetadata
+PositiveSFTProvenanceIds
+PositiveSFTPromptProvenance
+PositiveSFTExampleRecord
+```
+
+The positive SFT row is the first model-viewable training row shape. It carries:
+
+```text
+schema_version
+example_id
+provenance_ids
+prompt_provenance
+task_input
+messages
+```
+
+It intentionally does not carry:
+
+```text
+final_patch
+workspace_path
+message metadata
+review fields
+scorer fields
+hidden validator refs
+task manifest refs
+```
+
+`PositiveSFTMessage` reuses a shared metadata-free message base instead of
+copying runtime `Message` validation. Runtime `Message` extends the same base
+and adds harness metadata. This keeps the role/name/tool-call contract in one
+place while making SFT messages unable to carry metadata.
+
+The schema enforces:
+
+- `example_id` is deterministically derived from `trajectory_id`;
+- provenance `task_id` matches `task_input.task_id`;
+- at least one assistant message exists;
+- the message transcript starts with `system` then `user`.
+
+The schema does not recompute `build_initial_messages(task_input)`. Persisted
+training examples must remain valid if prompt rendering changes later. Instead,
+positive SFT records carry prompt provenance:
+
+```text
+prompt_builder_version
+prompt_builder_code_hash
+```
+
+The future SFT builder should fill these from the prompt module used when the
+record is created.
+
+Leakage scanning remains outside the Pydantic model. The future SFT builder must
+scan the exact `PositiveSFTMessage` payloads before writing a dataset export.
