@@ -19,6 +19,7 @@ from agentenv.artifacts.manifests import (
     TrajectoryReviewManifest,
     load_trajectory_review_manifest,
 )
+from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
 from agentenv.trajectories.export import (
     TrajectoryExport,
     hash_file,
@@ -354,6 +355,14 @@ def render_review_queue_markdown(
     reviews: tuple[TrajectoryReviewRecord, ...],
 ) -> str:
     review_by_trajectory_id = {review.trajectory_id: review for review in reviews}
+    agent_model_records = tuple(
+        record for record in source_export.records if is_agent_model_trajectory(record)
+    )
+    control_records = tuple(
+        record
+        for record in source_export.records
+        if not is_agent_model_trajectory(record)
+    )
     lines = [
         "# Trajectory Review Queue",
         "",
@@ -361,16 +370,44 @@ def render_review_queue_markdown(
         f"Source artifact type: `{ArtifactType.TRAJECTORY_EXPORT.value}`",
         f"Source eval artifact type: `{source_export.manifest.source_artifact_type}`",
         f"Record count: `{source_export.manifest.record_count}`",
+        f"Agent model trajectory count: `{len(agent_model_records)}`",
+        f"Control trajectory count: `{len(control_records)}`",
         "",
         "Edit `reviews.jsonl` to record human decisions. Keep one row per trajectory.",
         "",
     ]
+    lines.extend(
+        render_review_queue_section(
+            "Agent Model Run Trajectories",
+            agent_model_records,
+            review_by_trajectory_id,
+        )
+    )
+    lines.extend(
+        render_review_queue_section(
+            "Control Trajectories",
+            control_records,
+            review_by_trajectory_id,
+        )
+    )
+    return "\n".join(lines)
 
-    for index, record in enumerate(source_export.records, start=1):
+
+def render_review_queue_section(
+    title: str,
+    records: tuple[TrajectoryRecord, ...],
+    review_by_trajectory_id: dict[str, TrajectoryReviewRecord],
+) -> list[str]:
+    lines = [f"## {title}", ""]
+    if not records:
+        lines.extend(["No trajectories in this section.", ""])
+        return lines
+
+    for index, record in enumerate(records, start=1):
         review = review_by_trajectory_id[record.identity.trajectory_id]
         lines.extend(
             [
-                f"## {index}. {record.identity.trajectory_id}",
+                f"### {index}. {record.identity.trajectory_id}",
                 "",
                 f"- task_id: `{record.identity.task_id}`",
                 f"- policy_id: `{record.identity.policy_id}`",
@@ -385,6 +422,8 @@ def render_review_queue_markdown(
                 f"`{format_markdown_value(record.statuses.public_status)}`",
                 f"- hidden_status: "
                 f"`{format_markdown_value(record.statuses.hidden_status)}`",
+                f"- candidate_patch_empty: "
+                f"`{format_markdown_value(is_candidate_patch_empty(record))}`",
                 f"- positive_sft_allowed: "
                 f"`{record.training_eligibility.positive_sft_allowed}`",
                 f"- negative_example_allowed: "
@@ -405,7 +444,7 @@ def render_review_queue_markdown(
         lines.extend(
             [
                 "",
-                "Pending review row:",
+                "Review row:",
                 "",
                 "```json",
                 json.dumps(review.model_dump(mode="json"), sort_keys=True),
@@ -414,7 +453,22 @@ def render_review_queue_markdown(
             ]
         )
 
-    return "\n".join(lines)
+    return lines
+
+
+def is_agent_model_trajectory(record: TrajectoryRecord) -> bool:
+    return record.policy.policy_spec.type == AGENT_MODEL_POLICY_TYPE
+
+
+def is_candidate_patch_empty(record: TrajectoryRecord) -> bool | None:
+    candidate_patch = record.artifacts.candidate_patch
+    if candidate_patch is None:
+        return None
+    candidate_patch_path = resolve_relative_artifact_ref(
+        Path(record.artifacts.eval_run_path),
+        candidate_patch.path,
+    )
+    return candidate_patch_path.read_bytes() == b""
 
 
 def render_artifact_ref_lines(record: TrajectoryRecord) -> list[str]:

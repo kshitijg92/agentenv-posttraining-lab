@@ -45,7 +45,7 @@ policies:
   local-qwen-dev:
     type: agent_model
     model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
-    decoding_config: configs/decoding/greedy_1024.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
     attempts: 1
     replay:
       repeats: 0

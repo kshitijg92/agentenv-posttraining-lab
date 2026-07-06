@@ -1,0 +1,9 @@
+strategy: sampling
+temperature: 0.6
+top_p: 0.95
+top_k: null
+max_new_tokens: 4096
+num_return_sequences: 1
+seed: null
+stop: []
+timeout_seconds: 180

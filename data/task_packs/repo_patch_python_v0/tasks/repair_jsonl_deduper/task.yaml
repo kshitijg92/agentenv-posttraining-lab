@@ -14,7 +14,7 @@ scoring:
   primary: hidden_pytest_pass
 limits:
   timeout_seconds: 120
-  max_turns: 10
+  max_turns: 20
   network: "off"
 controls:
   scorer_control_patches:
