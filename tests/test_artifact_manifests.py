@@ -28,6 +28,7 @@ from agentenv.artifacts.manifests import (
     load_eval_artifact_manifest,
     load_eval_run_manifest,
     load_eval_suite_manifest,
+    load_report_artifact_manifest,
     load_replay_run_manifest,
     load_replay_source_manifest,
     load_reward_hack_audit_manifest,
@@ -76,6 +77,13 @@ def test_root_manifest_loaders_accept_current_shapes(tmp_path: Path) -> None:
     assert isinstance(load_attempt_manifest(agent_path), AgentTaskRunManifest)
     assert isinstance(load_eval_artifact_manifest(eval_run_path), EvalRunManifest)
     assert isinstance(load_eval_artifact_manifest(eval_suite_path), EvalSuiteManifest)
+    assert isinstance(load_report_artifact_manifest(eval_run_path), EvalRunManifest)
+    assert isinstance(load_report_artifact_manifest(eval_suite_path), EvalSuiteManifest)
+    assert isinstance(load_report_artifact_manifest(replay_path), ReplayRunManifest)
+    assert isinstance(
+        load_report_artifact_manifest(reward_hack_audit_path),
+        RewardHackAuditManifest,
+    )
     assert isinstance(load_replay_source_manifest(eval_run_path), EvalRunManifest)
     assert isinstance(load_replay_source_manifest(agent_path), AgentTaskRunManifest)
 

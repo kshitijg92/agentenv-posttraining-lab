@@ -1173,7 +1173,7 @@ def load_eval_artifact_manifest(path: Path) -> EvalRunManifest | EvalSuiteManife
 
 def load_report_artifact_manifest(
     path: Path,
-) -> EvalRunManifest | EvalSuiteManifest | ReplayRunManifest:
+) -> EvalRunManifest | EvalSuiteManifest | ReplayRunManifest | RewardHackAuditManifest:
     payload = load_json_object(path)
     artifact_type = payload.get("artifact_type")
     if artifact_type == ArtifactType.EVAL_RUN.value:
@@ -1182,6 +1182,8 @@ def load_report_artifact_manifest(
         return _validate_manifest_payload(EvalSuiteManifest, path, payload)
     if artifact_type == ArtifactType.REPLAY_RUN.value:
         return _validate_manifest_payload(ReplayRunManifest, path, payload)
+    if artifact_type == ArtifactType.REWARD_HACK_AUDIT.value:
+        return _validate_manifest_payload(RewardHackAuditManifest, path, payload)
     raise ValueError(f"Expected reportable artifact manifest at {path}")
 
 

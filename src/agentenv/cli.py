@@ -181,6 +181,11 @@ def audit_agent_tasks(
 def audit_reward_hacks(
     cases: Path = typer.Option(..., "--cases", help="Directory of reward-hack cases."),
     out: Path = typer.Option(..., "--out", help="Directory for reward audit artifacts."),
+    report_out: Path | None = typer.Option(
+        None,
+        "--report-out",
+        help="Optional Markdown report path.",
+    ),
     overwrite: bool = typer.Option(
         False,
         "--overwrite",
@@ -210,6 +215,9 @@ def audit_reward_hacks(
         f"wrote {artifact.out_dir / manifest.artifacts['results']}",
         soft_wrap=True,
     )
+    if report_out is not None:
+        report_path = write_markdown_report(artifact.out_dir, report_out)
+        console.print(f"wrote {report_path}", soft_wrap=True)
 
 
 @controls_app.command("run")

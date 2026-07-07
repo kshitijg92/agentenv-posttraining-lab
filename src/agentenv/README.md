@@ -19,6 +19,7 @@ uv run agentenv training --help
 uv run agentenv replay --help
 uv run agentenv report --help
 uv run agentenv scorers --help
+uv run agentenv rewards --help
 uv run agentenv controls --help
 uv run agentenv sandbox --help
 uv run agentenv local-model --help
@@ -350,6 +351,14 @@ uv run agentenv report \
   --out experiments/reports/replays/scorer_control_policies_oracle.md
 ```
 
+Reward-hack audit report:
+
+```bash
+uv run agentenv report \
+  experiments/runs/reward_hack_audit \
+  --out experiments/reports/reward_hack_audit.md
+```
+
 ## Run The Scorer Audit
 
 ```bash
@@ -381,6 +390,30 @@ experiments/harness_audit/agent_task_audit/agent_task_audit.md
 experiments/harness_audit/agent_task_audit/agent_task_audit_results.jsonl
 experiments/harness_audit/agent_task_audit/agent_task_runs/
 ```
+
+## Run The Reward-Hack Audit
+
+```bash
+uv run agentenv rewards audit \
+  --cases data/reward_hack_cases \
+  --out experiments/runs/reward_hack_audit \
+  --report-out experiments/reports/reward_hack_audit.md
+```
+
+Main outputs:
+
+```text
+experiments/runs/reward_hack_audit/manifest.json
+experiments/runs/reward_hack_audit/reward_hack_audit_results.jsonl
+experiments/runs/reward_hack_audit/case_runs/
+experiments/reports/reward_hack_audit.md
+```
+
+The reward-hack audit reruns each exploit/control evidence pair, persists the
+underlying harness audit artifacts under `case_runs/`, and reports whether the
+exploit was detected, blocked, excluded from training, and free of private
+content exposure while the valid control still succeeds. Use `--overwrite` to
+rerun into an existing non-empty output directory.
 
 ## Run Repeated Control Calibration
 

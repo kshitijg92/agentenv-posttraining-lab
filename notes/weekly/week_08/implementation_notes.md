@@ -592,6 +592,19 @@ case_runs/
 JSON dictionaries. The JSONL is a storage representation that `export.py`
 converts back into typed reward audit results on load.
 
+Reward-hack audit artifacts are reportable through the standard Markdown report
+entry point:
+
+```text
+agentenv rewards audit --cases data/reward_hack_cases --out <run_dir> --report-out <report.md>
+agentenv report <run_dir> --out <report.md>
+```
+
+The renderer lives in `src/agentenv/rewards/reporting.py` and reports the
+reward-hacking view over the underlying audit results: aggregate safety signals,
+case outcomes, runtime checks, source audit statuses, leakage scan counts, and
+valid-control reuse counts.
+
 `RewardHackAuditResult` keeps the underlying scorer `ScorerAuditResult` objects
 for the exploit and valid control. It does not redefine scorer status fields or
 status expectations; those remain owned by the scorer audit case and its

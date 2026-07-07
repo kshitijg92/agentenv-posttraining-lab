@@ -11,6 +11,7 @@ from agentenv.artifacts.manifests import (
     EvalRunManifest,
     EvalSuiteManifest,
     ReplayRunManifest,
+    RewardHackAuditManifest,
     load_agent_attempt_manifest,
     load_eval_run_manifest,
     load_report_artifact_manifest,
@@ -23,6 +24,8 @@ from agentenv.artifacts.payloads import (
     load_replay_comparison_records,
     load_replay_result,
 )
+from agentenv.rewards.export import load_reward_hack_audit_artifact
+from agentenv.rewards.reporting import render_reward_hack_audit_report
 
 
 def write_markdown_report(artifact_dir: Path, out_path: Path) -> Path:
@@ -36,6 +39,10 @@ def write_markdown_report(artifact_dir: Path, out_path: Path) -> Path:
         markdown = render_eval_matrix_report(artifact_dir, manifest)
     elif isinstance(manifest_model, ReplayRunManifest):
         markdown = render_replay_report(artifact_dir, manifest)
+    elif isinstance(manifest_model, RewardHackAuditManifest):
+        markdown = render_reward_hack_audit_report(
+            load_reward_hack_audit_artifact(artifact_dir)
+        )
     else:
         raise AssertionError(f"Unhandled report manifest type: {type(manifest_model)}")
 
@@ -1576,7 +1583,9 @@ def _comparison_row(comparison: dict[str, object]) -> str:
     )
 
 
-ReportArtifactManifest = EvalRunManifest | EvalSuiteManifest | ReplayRunManifest
+ReportArtifactManifest = (
+    EvalRunManifest | EvalSuiteManifest | ReplayRunManifest | RewardHackAuditManifest
+)
 
 
 def _load_report_artifact_manifest(artifact_dir: Path) -> ReportArtifactManifest:
