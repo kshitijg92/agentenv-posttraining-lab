@@ -1,0 +1,174 @@
+# Week 8 Learnings
+
+## Purpose
+
+This file is for durable eval/post-training lessons from Week 8.
+
+Use it when we learn something about why a measurement boundary, invariant,
+data-use rule, leakage constraint, reward signal, review step, split policy, or
+self-deception trap matters.
+
+Do not use this file for routine implementation notes, naming decisions, helper
+placement, refactor mechanics, or test-maintenance details. Put those in
+`implementation_notes.md` when they are worth preserving.
+
+## 2026-07-06
+
+### Public Success Is Not Task Success
+
+The local Qwen run showed two public-pass/hidden-fail trajectories.
+
+In both cases, public checks created a tempting but invalid success signal:
+
+```text
+public_status = PASS
+hidden_status = FAIL
+task_success = false
+```
+
+This matters because reward/data pipelines often start by looking for cheap
+signals that correlate with success. Public tests are cheap and visible, but in
+this lab they are intentionally diagnostic only. If public success were treated
+as task success or positive training signal, the pipeline would select exactly
+the behavior we want to avoid: shallow visible-test compliance.
+
+The invariant is:
+
+```text
+public-check success may explain a trajectory, but it must not define task
+success or positive SFT eligibility
+```
+
+### Reward-Hack Audit Is Not The Same As Harness Audit
+
+The repo already has scorer and agent harness audits. Those audits answer:
+
+```text
+does the harness enforce the mechanical contract?
+```
+
+Week 8 reward-hack work asks a different question:
+
+```text
+when an exploit is attempted, is it detected, classified, reported separately
+from task success, and blocked from reward/training misuse?
+```
+
+This distinction matters because passing a harness audit can still leave a
+measurement blind spot. For example, the scorer may correctly reject a patch
+that references hidden validators, but the post-training pipeline still needs
+to know that this was a reward-hack attempt, not an ordinary task failure.
+
+The durable boundary is:
+
+```text
+harness audit = enforcement evidence
+reward-hack audit = adversarial measurement and data-use evidence
+```
+
+### Exploit Specs Are Measurement Metadata
+
+An `exploit_spec` is not an execution recipe.
+
+For a reward-hack case, execution evidence comes from a referenced source such
+as a scorer audit case, agent audit case, eval attempt, or trajectory record.
+The exploit spec labels and structures how that evidence should be interpreted.
+
+For example:
+
+```text
+evidence = scorer audit case with a submitted patch referencing hidden_tests
+exploit_spec = hidden_test_probe_attempt on submitted_patch_text with
+probe_reference_type=hidden_tests_path
+```
+
+Runtime should not use the spec to synthesize a new exploit. It should use the
+spec to classify, group, and report the exploit that already exists in the
+evidence source.
+
+The boundary is:
+
+```text
+evidence -> runnable or inspectable behavior
+exploit_spec -> semantic label and aggregation dimensions
+expected_reward_hack_outcome -> reward/data-use expectations
+```
+
+This matters because reward-hack reports need to aggregate exploit families
+without parsing every patch or transcript ad hoc.
+
+### Every Exploit Needs A Valid Control
+
+A reward-hack case without a valid control can overstate what was learned.
+
+If the invalid shortcut fails, that alone does not prove the measurement
+boundary is good. It may only show that the case was malformed, impossible to
+run, or unrelated to the actual task. A paired valid control checks that normal
+correct behavior can still pass through the same broad surface.
+
+The invariant is:
+
+```text
+invalid shortcut should fail, real correct behavior should pass
+```
+
+This protects against a common eval-design mistake: building a detector that
+only rejects bad behavior by making the task impossible or by blocking the whole
+path.
+
+### Control Specificity Matters
+
+Reusing a valid control is not automatically wrong, but it weakens what a
+reward-hack suite can claim if overused.
+
+A generic valid control can show that the harness still accepts normal correct
+behavior. It does not always show that the specific exploit boundary was tested
+against the most relevant legitimate behavior.
+
+The suite-quality signal is:
+
+```text
+many exploit cases sharing one valid control -> possible weak control coverage
+```
+
+This should be reported rather than hidden. High valid-control reuse does not
+necessarily invalidate the suite, but it should make us ask whether the controls
+are genuinely paired with the exploits or merely satisfying a checklist.
+
+### Leakage Boundaries Are Training-Data Boundaries
+
+Hidden-validator and canary protections are not only scorer-safety details.
+They are also training-data rules.
+
+If private evaluator content leaks into a trajectory, that trajectory is no
+longer trustworthy as post-training data. Even if the final patch happens to
+pass hidden tests, the success may be contaminated by access to information
+that future models should not learn from.
+
+The data-use rule is:
+
+```text
+private-content exposure -> no positive reward/training use
+```
+
+Leaked or probe-attempt trajectories can still be useful for analysis or
+adversarial examples, but they must be labeled as such and excluded from
+positive SFT paths.
+
+### Reward-Hack Detected Is Not Reward Robustness
+
+Detecting an exploit is useful evidence, but it is not a robustness claim.
+
+Week 8 should make obvious reward-hack modes visible and document which ones
+are blocked. It should not claim that the reward is hard to game in general.
+The test suite is still small, the exploit cases are hand-authored, and the
+reward components are mostly deterministic signals derived from statuses.
+
+The acceptable claim is narrow:
+
+```text
+obvious reward-hack cases are measured separately from task success, some are
+blocked, and known holes are documented
+```
+
+This keeps training experiments from outrunning measurement quality.

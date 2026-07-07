@@ -3,33 +3,22 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 import subprocess
-import unicodedata
 from typing import Any, Literal
-
-import xxhash
 
 from agentenv.artifacts.payloads import EvalTaskHashes
 from agentenv.artifacts.payloads import EVAL_TASK_HASHES_SCHEMA_VERSION
 from agentenv.artifacts.payloads import TASK_HASH_REPORT_SCHEMA_VERSION
 from agentenv.artifacts.payloads import TaskHashReport as TaskHashReportPayload
+from agentenv.hashing import hash_file as _hash_file
+from agentenv.hashing import hash_json as _hash_json
+from agentenv.hashing import hash_normalized_text as _hash_normalized_text
+from agentenv.hashing import iter_hashable_files as _iter_hashable_files
+from agentenv.hashing import relative_path as _relative_path
 from agentenv.tasks.validate import (
     load_splits_lock,
     load_task_manifest,
     load_task_pack_manifest,
 )
-
-
-_NOISY_NAMES = {
-    ".git",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".venv",
-    "__pycache__",
-    "build",
-    "dist",
-    "node_modules",
-}
 
 
 HashableKind = Literal["file", "directory"]
@@ -245,10 +234,6 @@ def _extra_task_files(task_dir: Path, required_task_files: list[str]) -> list[st
     return sorted(extras)
 
 
-def _hash_file(path: Path) -> str:
-    return _hash_bytes(path.read_bytes())
-
-
 def _hash_directory(path: Path) -> str:
     entries = [
         {
@@ -274,45 +259,6 @@ def _hash_normalized_directory_text(path: Path) -> str | None:
     return _hash_json(entries)
 
 
-def _hash_normalized_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKC", text).lower()
-    normalized = " ".join(normalized.split())
-    return _hash_bytes(normalized.encode())
-
-
-def _hash_json(value: object) -> str:
-    payload = json.dumps(
-        value,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    return _hash_bytes(payload.encode())
-
-
-def _hash_bytes(payload: bytes) -> str:
-    return f"xxh64:{xxhash.xxh64_hexdigest(payload)}"
-
-
-def _iter_hashable_files(root: Path) -> list[Path]:
-    if not root.exists():
-        return []
-    if root.is_file():
-        return [root.resolve()]
-
-    files: list[Path] = []
-    for path in sorted(root.rglob("*")):
-        if _is_noisy_path(path):
-            continue
-        if path.is_file():
-            files.append(path.resolve())
-    return files
-
-
-def _is_noisy_path(path: Path) -> bool:
-    return any(part in _NOISY_NAMES for part in path.parts)
-
-
 def _resolve_pack_path(task_pack_path: Path, raw_path: str) -> Path:
     path = Path(raw_path)
     if path.is_absolute():
@@ -333,10 +279,6 @@ def _resolve_task_path(task_dir: Path, raw_path: str) -> Path:
     if not resolved.is_relative_to(task_dir):
         raise ValueError(f"Task path escapes task directory: {raw_path}")
     return resolved
-
-
-def _relative_path(path: Path, root: Path) -> str:
-    return path.resolve().relative_to(root.resolve()).as_posix()
 
 
 def _display_path(path: Path) -> str:
