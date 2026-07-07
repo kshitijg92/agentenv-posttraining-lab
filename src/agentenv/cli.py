@@ -34,6 +34,7 @@ from agentenv.orchestrators.eval_run import (
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
+from agentenv.rewards.export import run_and_persist_reward_hack_audit
 from agentenv.sandbox.docker_smoke import run_docker_smoke
 from agentenv.scorers.audit import run_scorer_audit
 from agentenv.tasks.validate import (
@@ -66,6 +67,7 @@ training_candidates_app = typer.Typer(no_args_is_help=True)
 training_sft_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
+rewards_app = typer.Typer(no_args_is_help=True)
 local_model_app = typer.Typer(no_args_is_help=True)
 ollama_app = typer.Typer(no_args_is_help=True)
 app.add_typer(tasks_app, name="tasks")
@@ -77,6 +79,7 @@ app.add_typer(trajectories_app, name="trajectories")
 app.add_typer(training_app, name="training")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
+app.add_typer(rewards_app, name="rewards")
 app.add_typer(local_model_app, name="local-model")
 training_app.add_typer(training_candidates_app, name="candidates")
 training_app.add_typer(training_sft_app, name="sft")
@@ -172,6 +175,41 @@ def audit_agent_tasks(
         f"cases={len(results)} failed={failed}"
     )
     console.print(f"wrote {out / 'agent_task_audit.md'}")
+
+
+@rewards_app.command("audit")
+def audit_reward_hacks(
+    cases: Path = typer.Option(..., "--cases", help="Directory of reward-hack cases."),
+    out: Path = typer.Option(..., "--out", help="Directory for reward audit artifacts."),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before auditing.",
+    ),
+) -> None:
+    try:
+        artifact = run_and_persist_reward_hack_audit(
+            cases,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--cases") from exc
+
+    manifest = artifact.manifest
+    style = "green" if manifest.fail_count == 0 else "red"
+    console.print(
+        f"[{style}]reward-hack audit complete[/{style}] "
+        f"records={manifest.record_count} "
+        f"passed={manifest.pass_count} failed={manifest.fail_count}"
+    )
+    console.print(f"wrote {artifact.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['results']}",
+        soft_wrap=True,
+    )
 
 
 @controls_app.command("run")

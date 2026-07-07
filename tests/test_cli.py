@@ -244,6 +244,39 @@ def test_trajectories_export_cli_writes_eval_run_export(tmp_path: Path) -> None:
     assert (trajectory_out / "trajectories.jsonl").is_file()
 
 
+def test_rewards_audit_cli_writes_reward_hack_audit_artifact(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "reward_hack_audit"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "rewards",
+            "audit",
+            "--cases",
+            "data/reward_hack_cases",
+            "--out",
+            str(out_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "reward-hack audit complete" in result.output
+    assert "records=1" in result.output
+    assert "passed=1" in result.output
+    assert "failed=0" in result.output
+    assert "manifest.json" in result.output
+    assert "reward_hack_audit_results.jsonl" in result.output
+    manifest = json.loads((out_dir / "manifest.json").read_text())
+    assert manifest["artifact_type"] == "reward_hack_audit"
+    assert manifest["record_count"] == 1
+    assert manifest["pass_count"] == 1
+    assert manifest["fail_count"] == 0
+    assert (out_dir / "reward_hack_audit_results.jsonl").is_file()
+    assert (out_dir / "case_runs").is_dir()
+
+
 def test_trajectories_export_cli_writes_eval_suite_export(tmp_path: Path) -> None:
     eval_out = tmp_path / "eval_suite"
     trajectory_out = tmp_path / "trajectory_export"

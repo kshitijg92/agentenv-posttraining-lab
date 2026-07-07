@@ -21,9 +21,9 @@ from agentenv.scorers.audit import (
     load_scorer_audit_case,
     run_scorer_audit,
 )
-from agentenv.security.leakage import build_hidden_validator_asset_markers
 from agentenv.security.leakage import LeakageScanResult
 from agentenv.security.leakage import scan_directory_for_leakage
+from agentenv.security.leakage import scan_files_for_leakage
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
@@ -242,11 +242,15 @@ def detect_private_content_access_attempt(
         )
     spec = case.exploit.exploit_spec
     if spec.probe_surface == "submitted_patch_text":
-        submission_text = (exploit_case_dir / exploit_case.submission).read_text()
-        return _submitted_patch_contains_probe_reference(
-            submission_text,
+        submission_path = exploit_case_dir / exploit_case.submission
+        scan = scan_files_for_leakage(
+            [submission_path],
+            task_manifest,
+            root=exploit_case_dir,
+        )
+        return _submitted_patch_scan_contains_probe_reference(
+            scan,
             spec=spec,
-            task_manifest=task_manifest,
         )
     raise ValueError(f"Unsupported hidden-test probe surface: {spec.probe_surface}")
 
@@ -316,24 +320,15 @@ def _private_content_exposed(scan: LeakageScanResult) -> bool:
     return scan.canary_leaked or scan.hidden_validators_visible_to_model
 
 
-def _submitted_patch_contains_probe_reference(
-    text: str,
+def _submitted_patch_scan_contains_probe_reference(
+    scan: LeakageScanResult,
     *,
     spec: HiddenTestProbeExploitSpec,
-    task_manifest: TaskManifest,
 ) -> bool:
-    if spec.probe_reference_type == "hidden_tests_path":
-        return any(
-            marker in text
-            for marker in build_hidden_validator_asset_markers(task_manifest)
-        )
     if spec.probe_reference_type == "leakage_canary":
-        return task_manifest.leakage_canary in text
-    if spec.probe_reference_type == "absolute_private_path":
-        return any(
-            f"/{marker}" in text
-            for marker in build_hidden_validator_asset_markers(task_manifest)
-        )
+        return scan.canary_leaked
+    if spec.probe_reference_type in {"hidden_tests_path", "absolute_private_path"}:
+        return scan.hidden_validators_visible_to_model
     raise ValueError(f"Unsupported probe reference type: {spec.probe_reference_type}")
 
 

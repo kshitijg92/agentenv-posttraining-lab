@@ -11,6 +11,7 @@ from agentenv.artifacts.manifests import (
     EVAL_RUN_ARTIFACT_SCHEMA_VERSION,
     EVAL_SUITE_ARTIFACT_SCHEMA_VERSION,
     REPLAY_RUN_ARTIFACT_SCHEMA_VERSION,
+    REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION,
     SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
     TRAJECTORY_EXPORT_ARTIFACT_SCHEMA_VERSION,
     AgentTaskRunManifest,
@@ -18,6 +19,7 @@ from agentenv.artifacts.manifests import (
     EvalRunManifest,
     EvalSuiteManifest,
     ReplayRunManifest,
+    RewardHackAuditManifest,
     ScorerAttemptManifest,
     TrajectoryExportManifest,
     load_agent_attempt_manifest,
@@ -28,6 +30,7 @@ from agentenv.artifacts.manifests import (
     load_eval_suite_manifest,
     load_replay_run_manifest,
     load_replay_source_manifest,
+    load_reward_hack_audit_manifest,
     load_scorer_attempt_manifest,
     load_trajectory_export_manifest,
 )
@@ -46,6 +49,10 @@ def test_root_manifest_loaders_accept_current_shapes(tmp_path: Path) -> None:
         tmp_path / "trajectory_export.json",
         _trajectory_export_manifest(),
     )
+    reward_hack_audit_path = _write_json(
+        tmp_path / "reward_hack_audit.json",
+        _reward_hack_audit_manifest(),
+    )
 
     assert isinstance(load_scorer_attempt_manifest(scorer_path), ScorerAttemptManifest)
     assert isinstance(load_agent_attempt_manifest(agent_path), AgentTaskRunManifest)
@@ -59,6 +66,10 @@ def test_root_manifest_loaders_accept_current_shapes(tmp_path: Path) -> None:
     assert isinstance(
         load_trajectory_export_manifest(trajectory_export_path),
         TrajectoryExportManifest,
+    )
+    assert isinstance(
+        load_reward_hack_audit_manifest(reward_hack_audit_path),
+        RewardHackAuditManifest,
     )
 
     assert isinstance(load_attempt_manifest(scorer_path), ScorerAttemptManifest)
@@ -78,6 +89,31 @@ def test_trajectory_export_manifest_rejects_missing_trajectories_ref(
 
     with pytest.raises(ValidationError, match="trajectory export manifests require"):
         load_trajectory_export_manifest(path)
+
+
+def test_reward_hack_audit_manifest_rejects_missing_results_ref(
+    tmp_path: Path,
+) -> None:
+    manifest = _reward_hack_audit_manifest()
+    manifest["artifacts"] = {"case_runs": "case_runs"}
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    with pytest.raises(ValidationError, match="reward-hack audit manifests require"):
+        load_reward_hack_audit_manifest(path)
+
+
+def test_reward_hack_audit_manifest_requires_counts_to_sum(
+    tmp_path: Path,
+) -> None:
+    manifest = _reward_hack_audit_manifest()
+    manifest["fail_count"] = 1
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    with pytest.raises(
+        ValidationError,
+        match="pass_count and fail_count must sum",
+    ):
+        load_reward_hack_audit_manifest(path)
 
 
 def test_trajectory_export_manifest_rejects_eval_run_with_suite_id(
@@ -1417,5 +1453,24 @@ def _trajectory_export_manifest() -> dict[str, Any]:
         "trajectories_jsonl_hash": "xxh64:trajectories",
         "artifacts": {
             "trajectories": "trajectories.jsonl",
+        },
+    }
+
+
+def _reward_hack_audit_manifest() -> dict[str, Any]:
+    return {
+        "artifact_type": "reward_hack_audit",
+        "artifact_schema_version": REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION,
+        "created_at": "2026-01-01T00:00:00Z",
+        "runtime_version": "reward_hack_audit_runtime_v0",
+        "case_root": "data/reward_hack_cases",
+        "reward_hack_case_schema_version": "reward_hack_case_v0",
+        "record_count": 1,
+        "pass_count": 1,
+        "fail_count": 0,
+        "results_jsonl_hash": "xxh64:results",
+        "artifacts": {
+            "results": "reward_hack_audit_results.jsonl",
+            "case_runs": "case_runs",
         },
     }

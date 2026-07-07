@@ -120,6 +120,10 @@ TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS = {
 POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
     "positive_sft_examples": "positive_sft_examples.jsonl",
 }
+REWARD_HACK_AUDIT_ARTIFACT_REFS = {
+    "results": "reward_hack_audit_results.jsonl",
+    "case_runs": "case_runs",
+}
 EVAL_RUN_REQUIRED_ARTIFACTS = frozenset(EVAL_RUN_ARTIFACT_REFS)
 EVAL_SUITE_REQUIRED_ARTIFACTS = frozenset({"policies"})
 CONTROL_CALIBRATION_REQUIRED_ARTIFACTS = frozenset(CONTROL_CALIBRATION_ARTIFACT_REFS)
@@ -132,6 +136,7 @@ TRAINING_CANDIDATE_EXPORT_REQUIRED_ARTIFACTS = frozenset(
     TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS
 )
 POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_REFS)
+REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS = frozenset(REWARD_HACK_AUDIT_ARTIFACT_REFS)
 
 
 ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
@@ -146,6 +151,7 @@ TrainingCandidateExportArtifactSchemaVersion = Literal[
     "training_candidate_export_artifact_v0"
 ]
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
+RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v0"]
 TrajectoryExportSourceArtifactType = Literal["eval_run", "eval_suite"]
 TrajectoryReviewSourceArtifactType = Literal["trajectory_export"]
 
@@ -174,6 +180,9 @@ TRAJECTORY_REVIEW_ARTIFACT_SCHEMA_VERSION: TrajectoryReviewArtifactSchemaVersion
 TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateExportArtifactSchemaVersion = "training_candidate_export_artifact_v0"
 POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVersion = (
     "positive_sft_export_artifact_v0"
+)
+REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION: RewardHackAuditArtifactSchemaVersion = (
+    "reward_hack_audit_artifact_v0"
 )
 
 
@@ -1064,6 +1073,38 @@ class PositiveSFTExportManifest(ArtifactManifest):
         return self
 
 
+class RewardHackAuditManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.REWARD_HACK_AUDIT.value
+    expected_artifact_schema_version = REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION
+
+    created_at: str = Field(min_length=1)
+    runtime_version: str = Field(min_length=1)
+    case_root: str = Field(min_length=1)
+    reward_hack_case_schema_version: str = Field(min_length=1)
+    record_count: NonNegativeInt
+    pass_count: NonNegativeInt
+    fail_count: NonNegativeInt
+    results_jsonl_hash: str = Field(min_length=1)
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_reward_hack_audit_contract(self) -> "RewardHackAuditManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=REWARD_HACK_AUDIT_ARTIFACT_REFS,
+            owner="reward-hack audit manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS,
+            owner="reward-hack audit manifests",
+        )
+        if self.pass_count + self.fail_count != self.record_count:
+            raise ValueError("pass_count and fail_count must sum to record_count")
+        return self
+
+
 def load_scorer_attempt_manifest(path: Path) -> ScorerAttemptManifest:
     return _validate_manifest(ScorerAttemptManifest, path)
 
@@ -1104,6 +1145,10 @@ def load_training_candidate_export_manifest(
 
 def load_positive_sft_export_manifest(path: Path) -> PositiveSFTExportManifest:
     return _validate_manifest(PositiveSFTExportManifest, path)
+
+
+def load_reward_hack_audit_manifest(path: Path) -> RewardHackAuditManifest:
+    return _validate_manifest(RewardHackAuditManifest, path)
 
 
 def load_attempt_manifest(path: Path) -> ScorerAttemptManifest | AgentTaskRunManifest:

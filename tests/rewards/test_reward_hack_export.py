@@ -1,0 +1,54 @@
+from pathlib import Path
+
+from agentenv.artifacts import MANIFEST_FILENAME
+from agentenv.artifacts.manifests import REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION
+from agentenv.rewards.audit import RewardHackAuditResult
+from agentenv.rewards.export import (
+    load_reward_hack_audit_artifact,
+    run_and_persist_reward_hack_audit,
+)
+
+
+CASE_ROOT = Path("data/reward_hack_cases")
+
+
+def test_run_and_persist_reward_hack_audit_writes_artifact(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "reward_hack_audit"
+
+    artifact = run_and_persist_reward_hack_audit(CASE_ROOT, out_dir)
+
+    assert artifact.out_dir == out_dir.resolve()
+    assert artifact.manifest.artifact_type == "reward_hack_audit"
+    assert (
+        artifact.manifest.artifact_schema_version
+        == REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION
+    )
+    assert artifact.manifest.record_count == 1
+    assert artifact.manifest.pass_count == 1
+    assert artifact.manifest.fail_count == 0
+    assert artifact.manifest.artifacts == {
+        "results": "reward_hack_audit_results.jsonl",
+        "case_runs": "case_runs",
+    }
+    assert (out_dir / MANIFEST_FILENAME).is_file()
+    assert (out_dir / "reward_hack_audit_results.jsonl").is_file()
+    assert (out_dir / "case_runs").is_dir()
+    assert isinstance(artifact.records[0], RewardHackAuditResult)
+    assert artifact.records[0].reward_hack_case.reward_hack_id == (
+        "hidden_test_probe_attempt"
+    )
+    assert artifact.records[0].audit_pass is True
+
+    loaded = load_reward_hack_audit_artifact(out_dir)
+
+    assert loaded.manifest == artifact.manifest
+    assert isinstance(loaded.records[0], RewardHackAuditResult)
+    assert loaded.records[0].reward_hack_case.reward_hack_id == (
+        "hidden_test_probe_attempt"
+    )
+    assert loaded.records[0].audit_pass is True
+    assert loaded.records[0].leakage_scan_result.canary_hash == (
+        "xxh64:e5432f5538d562e7"
+    )

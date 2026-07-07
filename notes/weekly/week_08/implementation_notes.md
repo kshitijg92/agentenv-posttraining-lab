@@ -568,9 +568,29 @@ Add an in-memory runtime audit in:
 src/agentenv/rewards/audit.py
 ```
 
+Keep artifact persistence separate in:
+
+```text
+src/agentenv/rewards/export.py
+```
+
+This matches the trajectory/training export pattern: runtime code builds typed
+domain results, while export code owns `manifest.json`, JSONL serialization,
+artifact hashes, output-directory handling, and artifact loading.
+
 The v0 runtime reruns scorer-audit evidence pairs into a scratch run directory
-and returns `RewardHackAuditResult`. Reward-audit JSON/Markdown outputs and
-suite-level summaries are deferred.
+and returns `RewardHackAuditResult`. The persisted artifact uses the standard
+artifact package conventions:
+
+```text
+manifest.json
+reward_hack_audit_results.jsonl
+case_runs/
+```
+
+`RewardHackAuditArtifact.records` is typed as `RewardHackAuditResult`, not raw
+JSON dictionaries. The JSONL is a storage representation that `export.py`
+converts back into typed reward audit results on load.
 
 `RewardHackAuditResult` keeps the underlying scorer `ScorerAuditResult` objects
 for the exploit and valid control. It does not redefine scorer status fields or
@@ -587,6 +607,11 @@ private_content_exposed_actual
 The access-attempt check is scoped to the declared probe surface. For the
 current case, that means checking the submitted patch text for the declared
 hidden-tests path reference.
+
+For `submitted_patch_text`, the runtime scans the referenced patch file with
+`scan_files_for_leakage` from `src/agentenv/security/leakage.py`. The reward
+layer does not reimplement private-marker or canary matching; it only maps the
+declared `probe_reference_type` to the relevant shared leakage-scan signal.
 
 The exposure check scans the generated exploit attempt artifact tree, excluding
 staged fixture inputs and valid-control hidden-scoring provenance. It uses
