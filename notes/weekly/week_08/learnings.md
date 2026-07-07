@@ -172,3 +172,20 @@ blocked, and known holes are documented
 ```
 
 This keeps training experiments from outrunning measurement quality.
+
+### Access Attempt And Exposure Are Different Measurements
+
+A reward-hack case can prove that an attempt referenced a private boundary on a
+specific surface while separately proving that private content did or did not
+escape into runtime artifacts.
+
+The probe surface should scope the access-attempt measurement. The exposure scan
+should cover the full output tree because leaks can happen in traces, reports,
+errors, or derived artifacts unrelated to the original probe surface.
+
+Canary and private-marker matching are suitable exposure signals because they
+represent explicit private boundaries. Hidden-validator body matching is not a
+sound leak detector: a model can legitimately infer the correct behavior and
+produce code or tests that overlap with hidden validators. Leakage evidence
+should come from provenance, canaries, private markers, or boundary violations,
+not similarity to hidden validator bodies.

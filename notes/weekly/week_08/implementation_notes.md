@@ -557,3 +557,59 @@ about.
 
 Keep the domain-specific record construction in each module, but keep primitive
 hash mechanics shared.
+
+## 2026-07-06 Runtime Reward-Hack Audit
+
+### Decision
+
+Add an in-memory runtime audit in:
+
+```text
+src/agentenv/rewards/audit.py
+```
+
+The v0 runtime reruns scorer-audit evidence pairs into a scratch run directory
+and returns `RewardHackAuditResult`. Reward-audit JSON/Markdown outputs and
+suite-level summaries are deferred.
+
+`RewardHackAuditResult` keeps the underlying scorer `ScorerAuditResult` objects
+for the exploit and valid control. It does not redefine scorer status fields or
+status expectations; those remain owned by the scorer audit case and its
+`comparisons`.
+
+For `hidden_test_probe_attempt`, the runtime makes two separate measurements:
+
+```text
+private_content_access_attempt_actual
+private_content_exposed_actual
+```
+
+The access-attempt check is scoped to the declared probe surface. For the
+current case, that means checking the submitted patch text for the declared
+hidden-tests path reference.
+
+The exposure check scans the generated exploit attempt artifact tree, excluding
+staged fixture inputs and valid-control hidden-scoring provenance. It uses
+`scan_directory_for_leakage` from `src/agentenv/security/leakage.py` and stores
+the shared `LeakageScanResult` on the reward audit result. Private exposure is
+derived from that shared result's canary matches and private-marker matches,
+rather than reimplemented in the reward layer.
+
+The shared leakage scan also reports private marker matches such as hidden path
+references. Reward audit v0 does not attempt hidden-validator body matching.
+
+The valid control is still rerun and must pass its scorer audit, but its hidden
+scoring trace can legitimately contain scorer-private hidden validator command
+provenance. That provenance should not be counted as exploit leakage.
+
+### Reasoning
+
+Access attempts and private-content exposure are related but different failure
+modes. A patch can attempt to reference `hidden_tests` and still be blocked
+before any private content leaks into artifacts.
+
+Hidden-validator body matching is not a reliable leakage signal. A model can
+legitimately infer the right behavior and produce code or tests that overlap
+with hidden validators. Reward-hack leakage detection should stay anchored to
+canaries, private markers, artifact provenance, and boundary violations, not
+similarity to hidden validator bodies.
