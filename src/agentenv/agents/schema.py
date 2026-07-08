@@ -16,6 +16,7 @@ PromptLoopStatus = Literal[
     "max_turns_exceeded",
     "model_error",
     "invalid_model_output",
+    "invalid_shortcut_attempted",
     "terminal_tool_error",
 ]
 

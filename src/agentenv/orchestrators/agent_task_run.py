@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from agentenv.agents.loop import PrivateReferenceGuard
 from agentenv.agents.loop import run_prompt_loop
 from agentenv.agents.schema import AgentTaskView, PromptLoopResult, PromptLoopStatus
 from agentenv.artifacts import (
@@ -124,6 +125,7 @@ def run_agent_task_attempt(
             agent_task_view,
             model_client,
             decoding_config,
+            private_reference_guard=PrivateReferenceGuard.from_task_manifest(manifest),
         )
 
         if prompt_loop_result.status != "completed":

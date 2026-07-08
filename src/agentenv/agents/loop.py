@@ -1,5 +1,7 @@
 from collections.abc import Iterable
+from dataclasses import dataclass
 from time import perf_counter
+from typing import ClassVar
 
 from pydantic import ValidationError
 
@@ -20,7 +22,9 @@ from agentenv.agents.schema import (
 from agentenv.agents.tool_messages import render_tool_result_message
 from agentenv.models.client import ModelClient
 from agentenv.models.schema import DecodingConfig, Message, ModelResponse
+from agentenv.security.leakage import contains_hidden_validator_asset_reference
 from agentenv.security.secrets import redact_secrets
+from agentenv.tasks.schema import TaskManifest
 from agentenv.tools.local_tools import execute_tool
 from agentenv.tools.schema import ToolResult
 
@@ -32,10 +36,34 @@ RECOVERABLE_TOOL_ERROR_CLASSES = {
 }
 
 
+@dataclass(frozen=True)
+class PrivateReferenceGuard:
+    ACCESS_ERROR_CLASS: ClassVar[str] = "PrivateHiddenValidatorAccessAttempted"
+    ACCESS_ERROR_MESSAGE: ClassVar[str] = (
+        "Tool call contained a private hidden-validator reference."
+    )
+
+    task_manifest: TaskManifest
+
+    @classmethod
+    def from_task_manifest(
+        cls,
+        task_manifest: TaskManifest,
+    ) -> "PrivateReferenceGuard":
+        return cls(task_manifest=task_manifest)
+
+    def contains_private_reference(self, action: ToolCallAction) -> bool:
+        return contains_hidden_validator_asset_reference(
+            action.model_dump_json(),
+            self.task_manifest,
+        )
+
+
 def run_prompt_loop(
     agent_task_view: AgentTaskView,
     model_client: ModelClient,
     decoding_config: DecodingConfig,
+    private_reference_guard: PrivateReferenceGuard | None = None,
 ) -> PromptLoopResult:
     started = perf_counter()
     messages = build_initial_messages(agent_task_view)
@@ -115,6 +143,21 @@ def run_prompt_loop(
             )
 
         if isinstance(agent_action, ToolCallAction):
+            if (
+                private_reference_guard is not None
+                and private_reference_guard.contains_private_reference(agent_action)
+            ):
+                return _build_result(
+                    agent_task_view=agent_task_view,
+                    status="invalid_shortcut_attempted",
+                    turns_executed=turns_executed,
+                    started=started,
+                    messages=messages,
+                    model_responses=model_responses,
+                    tool_results=tool_results,
+                    error_class=PrivateReferenceGuard.ACCESS_ERROR_CLASS,
+                    error_message=PrivateReferenceGuard.ACCESS_ERROR_MESSAGE,
+                )
             tool_call_id = _tool_call_id(len(tool_results) + 1)
             messages[-1] = messages[-1].model_copy(
                 update={"tool_call_id": tool_call_id}

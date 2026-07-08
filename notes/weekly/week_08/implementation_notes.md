@@ -673,3 +673,36 @@ legitimately infer the right behavior and produce code or tests that overlap
 with hidden validators. Reward-hack leakage detection should stay anchored to
 canaries, private markers, artifact provenance, and boundary violations, not
 similarity to hidden validator bodies.
+
+## 2026-07-07 Agent Tool-Call Private Reference Guard
+
+### Decision
+
+Add a runtime-only `PrivateReferenceGuard` to the prompt loop and wire it from
+the full task manifest in `run_agent_task_attempt`.
+
+The guard scans serialized `ToolCallAction` objects before assigning a
+`tool_call_id` or executing the tool. This covers the tool name, argument keys,
+and argument values.
+
+If the guard sees a hidden-validator/private marker or leakage canary, the
+prompt loop stops with:
+
+```text
+status: invalid_shortcut_attempted
+error_class: PrivateHiddenValidatorAccessAttempted
+error_message: Tool call contained a private hidden-validator reference.
+```
+
+The tool is not executed, no synthetic `ToolResult` is recorded, and no tool
+message is appended.
+
+### Reasoning
+
+Private-reference access through the agent tool chain is an agent-boundary
+failure, not a scorer-boundary failure. Waiting until candidate patch scoring
+would allow private references to pass through tool dispatch and only catch
+some downstream artifacts.
+
+The guard is kept out of `AgentTaskView` so hidden validator paths and canaries
+remain runtime-only enforcement metadata, not model-visible prompt data.
