@@ -342,7 +342,7 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
         assert result.valid_control_harness_audit_passed is True
         assert result.valid_control_task_success_actual is True
         assert result.exploit_mechanism_detected_actual is True
-        assert result.exploit_blocked_actual is True
+        assert result.exploit_mechanism_neutralized_actual is True
         assert result.training_allowed_actual is False
         assert result.task_success_allowed_actual is expected_task_success_allowed.get(
             result.reward_hack_case.reward_hack_id,

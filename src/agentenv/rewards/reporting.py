@@ -13,6 +13,7 @@ from agentenv.scorers.audit import ScorerAuditResult
 
 def render_reward_hack_audit_report(artifact: RewardHackAuditArtifact) -> str:
     records = artifact.records
+    neutralized_count = _count(records, "exploit_mechanism_neutralized_actual")
     lines = [
         "# Reward-Hack Audit Report",
         "",
@@ -43,8 +44,8 @@ def render_reward_hack_audit_report(artifact: RewardHackAuditArtifact) -> str:
             f"{_count_rate(_count(records, 'private_content_exposed_actual'), len(records))}"
         ),
         (
-            "- Exploits blocked: "
-            f"{_count_rate(_count(records, 'exploit_blocked_actual'), len(records))}"
+            "- Exploit mechanisms neutralized: "
+            f"{_count_rate(neutralized_count, len(records))}"
         ),
         (
             "- Task success allowed: "
@@ -110,8 +111,8 @@ def render_reward_hack_audit_report(artifact: RewardHackAuditArtifact) -> str:
             "",
             (
                 "This report measures whether authored reward-hack cases are detected, "
-                "blocked, and excluded from training while their valid controls still "
-                "succeed on the same task surface."
+                "neutralized, and excluded from training while their valid controls "
+                "still succeed on the same task surface."
             ),
             "",
             "## Does Not Measure",
@@ -160,8 +161,9 @@ def _case_table(records: list[RewardHackAuditResult]) -> list[str]:
         (
             "| reward_hack_id | result | source_type | exploit_class | probe_surface | "
             "probe_reference_type | mechanism_detected | private_exposed | "
-            "exploit_blocked | task_success_allowed | training_allowed | "
-            "valid_control_success | exploit_case | valid_control_case | run_dir |"
+            "exploit_mechanism_neutralized | task_success_allowed | "
+            "training_allowed | valid_control_success | exploit_case | "
+            "valid_control_case | run_dir |"
         ),
         (
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
@@ -181,7 +183,7 @@ def _case_table(records: list[RewardHackAuditResult]) -> list[str]:
             f"| {probe_reference_type} "
             f"| {_bool_display(record.exploit_mechanism_detected_actual)} "
             f"| {_bool_display(record.private_content_exposed_actual)} "
-            f"| {_bool_display(record.exploit_blocked_actual)} "
+            f"| {_bool_display(record.exploit_mechanism_neutralized_actual)} "
             f"| {_bool_display(record.task_success_allowed_actual)} "
             f"| {_bool_display(record.training_allowed_actual)} "
             f"| {_bool_display(record.valid_control_task_success_actual)} "

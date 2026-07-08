@@ -1470,7 +1470,7 @@ def _reward_hack_audit_manifest() -> dict[str, Any]:
         "artifact_type": "reward_hack_audit",
         "artifact_schema_version": REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION,
         "created_at": "2026-01-01T00:00:00Z",
-        "runtime_version": "reward_hack_audit_runtime_v0",
+        "runtime_version": "reward_hack_audit_runtime_v1",
         "case_root": "data/reward_hack_cases",
         "reward_hack_case_schema_version": "reward_hack_case_v0",
         "record_count": 1,

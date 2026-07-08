@@ -151,7 +151,7 @@ TrainingCandidateExportArtifactSchemaVersion = Literal[
     "training_candidate_export_artifact_v0"
 ]
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
-RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v0"]
+RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v1"]
 TrajectoryExportSourceArtifactType = Literal["eval_run", "eval_suite"]
 TrajectoryReviewSourceArtifactType = Literal["trajectory_export"]
 
@@ -182,7 +182,7 @@ POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVers
     "positive_sft_export_artifact_v0"
 )
 REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION: RewardHackAuditArtifactSchemaVersion = (
-    "reward_hack_audit_artifact_v0"
+    "reward_hack_audit_artifact_v1"
 )
 
 

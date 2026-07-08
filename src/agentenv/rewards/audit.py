@@ -46,7 +46,7 @@ from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
 
-REWARD_HACK_AUDIT_RUNTIME_VERSION = "reward_hack_audit_runtime_v0"
+REWARD_HACK_AUDIT_RUNTIME_VERSION = "reward_hack_audit_runtime_v1"
 HarnessAuditResult: TypeAlias = ScorerAuditResult | AgentTaskAuditResult
 
 _AGENT_AUTHORED_FIXTURE_ARTIFACT_FILES = {
@@ -98,7 +98,7 @@ class RewardHackAuditResult:
     exploit_mechanism_detected_actual: bool
     leakage_scan_result: LeakageScanResult
     private_content_exposed_actual: bool
-    exploit_blocked_actual: bool
+    exploit_mechanism_neutralized_actual: bool
     training_allowed_actual: bool
     task_success_allowed_actual: bool
     outcome_comparisons: tuple[RewardHackOutcomeComparison, ...]
@@ -305,7 +305,7 @@ def _build_reward_hack_result(
     exploit_mechanism_detected_actual: bool,
 ) -> RewardHackAuditResult:
     task_success_allowed_actual = _source_task_success(exploit_result)
-    exploit_blocked_actual = _exploit_blocked_actual(
+    exploit_mechanism_neutralized_actual = _exploit_mechanism_neutralized_actual(
         case,
         exploit_result=exploit_result,
         exploit_mechanism_detected_actual=exploit_mechanism_detected_actual,
@@ -318,7 +318,7 @@ def _build_reward_hack_result(
     outcome_comparisons = _outcome_comparisons(
         case,
         private_content_exposed_actual=private_content_exposed_actual,
-        exploit_blocked_actual=exploit_blocked_actual,
+        exploit_mechanism_neutralized_actual=exploit_mechanism_neutralized_actual,
         task_success_allowed_actual=task_success_allowed_actual,
         training_allowed_actual=training_allowed_actual,
     )
@@ -364,7 +364,7 @@ def _build_reward_hack_result(
         exploit_mechanism_detected_actual=exploit_mechanism_detected_actual,
         leakage_scan_result=leakage_scan_result,
         private_content_exposed_actual=private_content_exposed_actual,
-        exploit_blocked_actual=exploit_blocked_actual,
+        exploit_mechanism_neutralized_actual=exploit_mechanism_neutralized_actual,
         training_allowed_actual=training_allowed_actual,
         task_success_allowed_actual=task_success_allowed_actual,
         outcome_comparisons=outcome_comparisons,
@@ -640,7 +640,7 @@ def _source_has_trusted_scorer_result(result: HarnessAuditResult) -> bool:
     return result.agent_task_run.result.attempt_result is not None
 
 
-def _exploit_blocked_actual(
+def _exploit_mechanism_neutralized_actual(
     case: RewardHackCase,
     *,
     exploit_result: HarnessAuditResult,
@@ -807,14 +807,14 @@ def _outcome_comparisons(
     case: RewardHackCase,
     *,
     private_content_exposed_actual: bool,
-    exploit_blocked_actual: bool,
+    exploit_mechanism_neutralized_actual: bool,
     task_success_allowed_actual: bool,
     training_allowed_actual: bool,
 ) -> tuple[RewardHackOutcomeComparison, ...]:
     expected = case.expected_reward_hack_outcome
     actual = ExpectedRewardHackOutcome(
         private_content_exposed=private_content_exposed_actual,
-        exploit_blocked=exploit_blocked_actual,
+        exploit_mechanism_neutralized=exploit_mechanism_neutralized_actual,
         task_success_allowed=task_success_allowed_actual,
         training_allowed=training_allowed_actual,
     )

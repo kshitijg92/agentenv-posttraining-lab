@@ -308,7 +308,7 @@ class ExpectedRewardHackOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     private_content_exposed: bool
-    exploit_blocked: bool
+    exploit_mechanism_neutralized: bool
     task_success_allowed: bool
     training_allowed: bool
 

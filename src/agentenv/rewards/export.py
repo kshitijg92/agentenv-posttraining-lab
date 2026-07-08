@@ -217,7 +217,9 @@ def _reward_hack_audit_result_record(
         ),
         "private_content_exposed_actual": result.private_content_exposed_actual,
         "leakage_scan": _leakage_scan_record(result.leakage_scan_result),
-        "exploit_blocked_actual": result.exploit_blocked_actual,
+        "exploit_mechanism_neutralized_actual": (
+            result.exploit_mechanism_neutralized_actual
+        ),
         "training_allowed_actual": result.training_allowed_actual,
         "task_success_allowed_actual": result.task_success_allowed_actual,
         "outcome_comparisons": [
@@ -279,7 +281,10 @@ def _reward_hack_audit_result_from_record(
             record,
             "private_content_exposed_actual",
         ),
-        exploit_blocked_actual=_required_bool(record, "exploit_blocked_actual"),
+        exploit_mechanism_neutralized_actual=_required_bool(
+            record,
+            "exploit_mechanism_neutralized_actual",
+        ),
         training_allowed_actual=_required_bool(record, "training_allowed_actual"),
         task_success_allowed_actual=_required_bool(
             record,

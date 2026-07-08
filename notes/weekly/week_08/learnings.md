@@ -51,7 +51,7 @@ Week 8 reward-hack work asks a different question:
 
 ```text
 when an exploit is attempted, is it detected, classified, reported separately
-from task success, and blocked from reward/training misuse?
+from task success, and neutralized before reward/training misuse?
 ```
 
 This distinction matters because passing a harness audit can still leave a
@@ -187,8 +187,9 @@ positive SFT paths.
 
 Detecting an exploit is useful evidence, but it is not a robustness claim.
 
-Week 8 should make obvious reward-hack modes visible and document which ones
-are blocked. It should not claim that the reward is hard to game in general.
+Week 8 should make obvious reward-hack modes visible and document which
+mechanisms are neutralized. It should not claim that the reward is hard to game
+in general.
 The test suite is still small, the exploit cases are hand-authored, and the
 reward components are mostly deterministic signals derived from statuses.
 
@@ -196,7 +197,7 @@ The acceptable claim is narrow:
 
 ```text
 obvious reward-hack cases are measured separately from task success, some are
-blocked, and known holes are documented
+neutralized, and known holes are documented
 ```
 
 This keeps training experiments from outrunning measurement quality.

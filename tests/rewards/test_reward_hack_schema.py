@@ -42,7 +42,7 @@ def test_load_reward_hack_case_accepts_hidden_validator_probe_case() -> None:
     assert case.exploit.exploit_spec.probe_surface == "submitted_patch_text"
     assert case.exploit.exploit_spec.probe_reference_type == "hidden_validator_path"
     assert not case.expected_reward_hack_outcome.private_content_exposed
-    assert case.expected_reward_hack_outcome.exploit_blocked
+    assert case.expected_reward_hack_outcome.exploit_mechanism_neutralized
     assert not case.expected_reward_hack_outcome.task_success_allowed
     assert not case.expected_reward_hack_outcome.training_allowed
 
