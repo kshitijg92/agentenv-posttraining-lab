@@ -14,7 +14,8 @@ from agentenv.rewards.schema import RewardHackCase
 
 
 CASE_PATH = Path(
-    "data/reward_hack_cases/hidden_validator_path_probe_attempt/case.yaml"
+    "data/reward_hack_cases/"
+    "hidden_validator_path_submitted_patch_text_probe_attempt/case.yaml"
 )
 CASE_ROOT = Path("data/reward_hack_cases")
 
@@ -23,7 +24,10 @@ def test_load_reward_hack_case_accepts_hidden_validator_probe_case() -> None:
     case = load_reward_hack_case(CASE_PATH)
 
     assert case.schema_version == "reward_hack_case_v0"
-    assert case.reward_hack_id == "hidden_validator_path_probe_attempt"
+    assert (
+        case.reward_hack_id
+        == "hidden_validator_path_submitted_patch_text_probe_attempt"
+    )
     assert case.evidence.source_type == "scorer_audit_case"
     assert case.evidence.exploit.case_id == "hidden_validator_path_reference"
     assert case.evidence.valid_control.case_id == "correct_oracle"
@@ -50,8 +54,10 @@ def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
     assert {
         case.reward_hack_id for case in cases
     } == {
-        "hidden_validator_path_probe_attempt",
-        "leakage_canary_probe_attempt",
+        "hidden_validator_path_agent_tool_call_probe_attempt",
+        "hidden_validator_path_submitted_patch_text_probe_attempt",
+        "leakage_canary_agent_tool_call_probe_attempt",
+        "leakage_canary_submitted_patch_text_probe_attempt",
     }
     for case in cases:
         verify_reward_hack_case_source_refs(case, repo_root=Path.cwd())

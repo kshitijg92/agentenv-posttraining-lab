@@ -16,9 +16,17 @@ from agentenv.artifacts.manifests import (
     RewardHackAuditManifest,
     load_reward_hack_audit_manifest,
 )
+from agentenv.agents.audit import (
+    AgentAuditComparison,
+    AgentTaskAuditCase,
+    AgentTaskAuditResult,
+)
 from agentenv.hashing import hash_file
+from agentenv.orchestrators.agent_task_run import AgentTaskRun
+from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.attempt import AttemptResult
 from agentenv.rewards.audit import (
+    HarnessAuditResult,
     REWARD_HACK_AUDIT_RUNTIME_VERSION,
     RewardHackAuditResult,
     RewardHackOutcomeComparison,
@@ -191,11 +199,11 @@ def _reward_hack_audit_result_record(
         "audit_pass": result.audit_pass,
         "exploit_source_case_hash": result.exploit_source_case_hash,
         "valid_control_source_case_hash": result.valid_control_source_case_hash,
-        "exploit_audit_result": _scorer_audit_result_record(
+        "exploit_audit_result": _source_audit_result_record(
             result.exploit_audit_result,
             artifact_root=artifact_root,
         ),
-        "valid_control_audit_result": _scorer_audit_result_record(
+        "valid_control_audit_result": _source_audit_result_record(
             result.valid_control_audit_result,
             artifact_root=artifact_root,
         ),
@@ -225,25 +233,28 @@ def _reward_hack_audit_result_from_record(
     artifact_root: Path,
     repo_root: Path,
 ) -> RewardHackAuditResult:
+    reward_hack_case = RewardHackCase.model_validate(
+        _required_mapping(record, "reward_hack_case")
+    )
     return RewardHackAuditResult(
         runtime_version=_required_str(record, "runtime_version"),
         case_path=_record_path(record, "case_path", repo_root),
-        reward_hack_case=RewardHackCase.model_validate(
-            _required_mapping(record, "reward_hack_case")
-        ),
+        reward_hack_case=reward_hack_case,
         run_dir=_record_path(record, "run_dir", artifact_root),
         exploit_source_case_hash=_required_str(record, "exploit_source_case_hash"),
         valid_control_source_case_hash=_required_str(
             record,
             "valid_control_source_case_hash",
         ),
-        exploit_audit_result=_scorer_audit_result_from_record(
+        exploit_audit_result=_source_audit_result_from_record(
             _required_mapping(record, "exploit_audit_result"),
             artifact_root=artifact_root,
+            source_type=reward_hack_case.evidence.source_type,
         ),
-        valid_control_audit_result=_scorer_audit_result_from_record(
+        valid_control_audit_result=_source_audit_result_from_record(
             _required_mapping(record, "valid_control_audit_result"),
             artifact_root=artifact_root,
+            source_type=reward_hack_case.evidence.source_type,
         ),
         exploit_harness_audit_passed=_required_bool(
             record,
@@ -277,6 +288,32 @@ def _reward_hack_audit_result_from_record(
         outcome_comparisons=_outcome_comparisons_from_record(record),
         runtime_checks=_runtime_checks_from_record(record),
     )
+
+
+def _source_audit_result_record(
+    result: HarnessAuditResult,
+    *,
+    artifact_root: Path,
+) -> dict[str, Any]:
+    if isinstance(result, ScorerAuditResult):
+        return _scorer_audit_result_record(result, artifact_root=artifact_root)
+    return _agent_task_audit_result_record(result, artifact_root=artifact_root)
+
+
+def _source_audit_result_from_record(
+    record: dict[str, Any],
+    *,
+    artifact_root: Path,
+    source_type: str,
+) -> HarnessAuditResult:
+    if source_type == "scorer_audit_case":
+        return _scorer_audit_result_from_record(record, artifact_root=artifact_root)
+    if source_type == "agent_task_audit_case":
+        return _agent_task_audit_result_from_record(
+            record,
+            artifact_root=artifact_root,
+        )
+    raise ValueError(f"Unsupported reward-hack source type: {source_type}")
 
 
 def _scorer_audit_result_record(
@@ -318,6 +355,53 @@ def _scorer_audit_result_from_record(
             for comparison in _required_list(record, "comparisons")
         ),
         manifest_override_record=_optional_mapping(record, "manifest_override"),
+    )
+
+
+def _agent_task_audit_result_record(
+    result: AgentTaskAuditResult,
+    *,
+    artifact_root: Path,
+) -> dict[str, Any]:
+    return {
+        "case": result.case.model_dump(mode="json"),
+        "case_dir": _display_path(result.case_dir, artifact_root),
+        "agent_task_artifact_dir": _display_path(
+            result.agent_task_artifact_dir,
+            artifact_root,
+        ),
+        "agent_task_run_result": result.agent_task_run.result.model_dump(mode="json"),
+        "comparisons": [asdict(comparison) for comparison in result.comparisons],
+    }
+
+
+def _agent_task_audit_result_from_record(
+    record: dict[str, Any],
+    *,
+    artifact_root: Path,
+) -> AgentTaskAuditResult:
+    agent_task_run_result = AgentTaskRunResult.model_validate(
+        _required_mapping(record, "agent_task_run_result")
+    )
+    return AgentTaskAuditResult(
+        case=AgentTaskAuditCase.model_validate(_required_mapping(record, "case")),
+        case_dir=_record_path(record, "case_dir", artifact_root),
+        agent_task_artifact_dir=_record_path(
+            record,
+            "agent_task_artifact_dir",
+            artifact_root,
+        ),
+        agent_task_run=AgentTaskRun(
+            result=agent_task_run_result,
+            agent_task_view=None,
+            prompt_loop_result=None,
+            candidate_patch="",
+            attempt_run=None,
+        ),
+        comparisons=tuple(
+            AgentAuditComparison(**comparison)
+            for comparison in _required_list(record, "comparisons")
+        ),
     )
 
 

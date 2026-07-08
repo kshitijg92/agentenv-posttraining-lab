@@ -217,3 +217,30 @@ sound leak detector: a model can legitimately infer the correct behavior and
 produce code or tests that overlap with hidden validators. Leakage evidence
 should come from provenance, canaries, private markers, or boundary violations,
 not similarity to hidden validator bodies.
+
+### The Attack Payload Is Not Automatically Exposure
+
+For agent-tool-call reward-hack cases, the private marker appears in the
+model's attempted tool call. That is the exploit surface being measured.
+
+Counting that same payload as private-content exposure would collapse two
+different questions:
+
+```text
+did the model attempt to use a private reference?
+did the harness/tooling leak private content through outputs or artifacts?
+```
+
+The access-attempt scan should inspect the declared probe surface, including
+the assistant tool-call payload. The exposure scan should inspect derived
+artifacts and tool/output messages outside that attack payload.
+
+This preserves the invariant:
+
+```text
+private reference in exploit payload -> access attempt
+private reference in tool result/error/scoring/training artifact -> exposure
+```
+
+Without this boundary, every authored exploit fixture that contains the canary
+or hidden-validator marker would falsely look like a harness leakage failure.

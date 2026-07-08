@@ -25,8 +25,8 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
         artifact.manifest.artifact_schema_version
         == REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION
     )
-    assert artifact.manifest.record_count == 2
-    assert artifact.manifest.pass_count == 2
+    assert artifact.manifest.record_count == 4
+    assert artifact.manifest.pass_count == 4
     assert artifact.manifest.fail_count == 0
     assert artifact.manifest.artifacts == {
         "results": "reward_hack_audit_results.jsonl",
@@ -39,8 +39,10 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
     assert {
         record.reward_hack_case.reward_hack_id for record in artifact.records
     } == {
-        "hidden_validator_path_probe_attempt",
-        "leakage_canary_probe_attempt",
+        "hidden_validator_path_agent_tool_call_probe_attempt",
+        "hidden_validator_path_submitted_patch_text_probe_attempt",
+        "leakage_canary_agent_tool_call_probe_attempt",
+        "leakage_canary_submitted_patch_text_probe_attempt",
     }
     assert all(record.audit_pass for record in artifact.records)
 
@@ -51,8 +53,10 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
     assert {
         record.reward_hack_case.reward_hack_id for record in loaded.records
     } == {
-        "hidden_validator_path_probe_attempt",
-        "leakage_canary_probe_attempt",
+        "hidden_validator_path_agent_tool_call_probe_attempt",
+        "hidden_validator_path_submitted_patch_text_probe_attempt",
+        "leakage_canary_agent_tool_call_probe_attempt",
+        "leakage_canary_submitted_patch_text_probe_attempt",
     }
     assert all(record.audit_pass for record in loaded.records)
     assert {

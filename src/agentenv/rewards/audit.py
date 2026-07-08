@@ -2,14 +2,23 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeAlias
 
+from pydantic import ValidationError
+
+from agentenv.agents.audit import (
+    AgentTaskAuditResult,
+    load_agent_task_audit_case,
+    run_agent_task_audit,
+)
+from agentenv.agents.schema import ToolCallAction, parse_agent_action
 from agentenv.rewards.cases import (
     hash_harness_audit_case_dir,
     load_reward_hack_case,
     verify_reward_hack_case_source_refs,
 )
 from agentenv.rewards.schema import (
+    AgentTaskAuditEvidencePair,
     HarnessAuditCaseRef,
     HiddenValidatorProbeExploitSpec,
     RewardHackCase,
@@ -22,13 +31,22 @@ from agentenv.scorers.audit import (
     run_scorer_audit,
 )
 from agentenv.security.leakage import LeakageScanResult
+from agentenv.security.leakage import LeakageScanText
+from agentenv.security.leakage import list_files_under
 from agentenv.security.leakage import scan_directory_for_leakage
 from agentenv.security.leakage import scan_files_for_leakage
+from agentenv.security.leakage import scan_texts_for_leakage
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
 
 REWARD_HACK_AUDIT_RUNTIME_VERSION = "reward_hack_audit_runtime_v0"
+HarnessAuditResult: TypeAlias = ScorerAuditResult | AgentTaskAuditResult
+
+_AGENT_EXPOSURE_SCAN_EXCLUDED_FILES = {
+    "agent_control_script.json",
+    "prompt_loop_result.json",
+}
 
 
 @dataclass(frozen=True)
@@ -67,8 +85,8 @@ class RewardHackAuditResult:
     run_dir: Path
     exploit_source_case_hash: str
     valid_control_source_case_hash: str
-    exploit_audit_result: ScorerAuditResult
-    valid_control_audit_result: ScorerAuditResult
+    exploit_audit_result: HarnessAuditResult
+    valid_control_audit_result: HarnessAuditResult
     exploit_harness_audit_passed: bool
     valid_control_harness_audit_passed: bool
     valid_control_task_success_actual: bool
@@ -128,24 +146,63 @@ def run_reward_hack_case_audit(
     root = Path.cwd().resolve() if repo_root is None else repo_root.resolve()
     case = load_reward_hack_case(case_path)
     verify_reward_hack_case_source_refs(case, repo_root=root)
-    if not isinstance(case.evidence, ScorerAuditEvidencePair):
-        raise ValueError(
-            "Reward-hack runtime audit currently supports scorer_audit_case "
-            f"evidence only, got {case.evidence.source_type!r}"
+
+    if isinstance(case.evidence, ScorerAuditEvidencePair):
+        _verify_distinct_harness_case_ids(case.evidence)
+        return _run_scorer_reward_hack_case_audit(
+            case_path,
+            case,
+            work_dir=work_dir,
+            repo_root=root,
         )
-    if case.evidence.exploit.case_id == case.evidence.valid_control.case_id:
+    if isinstance(case.evidence, AgentTaskAuditEvidencePair):
+        _verify_distinct_harness_case_ids(case.evidence)
+        return _run_agent_task_reward_hack_case_audit(
+            case_path,
+            case,
+            work_dir=work_dir,
+            repo_root=root,
+        )
+    raise ValueError(
+        "Reward-hack runtime audit currently supports scorer_audit_case and "
+        f"agent_task_audit_case evidence only, got {case.evidence.source_type!r}"
+    )
+
+
+def _verify_distinct_harness_case_ids(
+    evidence: ScorerAuditEvidencePair | AgentTaskAuditEvidencePair,
+) -> None:
+    if evidence.exploit.case_id == evidence.valid_control.case_id:
         raise ValueError("Reward-hack exploit and valid control case ids must differ")
 
-    exploit_case_dir = _resolve_repo_relative_path(root, case.evidence.exploit.case_dir)
+
+def _run_scorer_reward_hack_case_audit(
+    case_path: Path,
+    case: RewardHackCase,
+    *,
+    work_dir: Path | None,
+    repo_root: Path,
+) -> RewardHackAuditResult:
+    if not isinstance(case.evidence, ScorerAuditEvidencePair):
+        raise TypeError("Expected scorer_audit_case evidence")
+
+    exploit_case_dir = _resolve_repo_relative_path(
+        repo_root,
+        case.evidence.exploit.case_dir,
+    )
     valid_control_case_dir = _resolve_repo_relative_path(
-        root,
+        repo_root,
         case.evidence.valid_control.case_dir,
     )
     exploit_case = load_scorer_audit_case(exploit_case_dir / "case.yaml")
-    task_manifest_path = _resolve_repo_relative_path(root, exploit_case.task_manifest)
+    task_manifest_path = _resolve_repo_relative_path(repo_root, exploit_case.task_manifest)
     task_manifest = load_task_manifest(task_manifest_path)
     run_dir = _make_run_dir(work_dir)
-    staged_case_root = _stage_scorer_audit_pair(case.evidence, run_dir, repo_root=root)
+    staged_case_root = _stage_scorer_audit_pair(
+        case.evidence,
+        run_dir,
+        repo_root=repo_root,
+    )
     scorer_out_dir = run_dir / "scorer_audit"
     scorer_results = run_scorer_audit(staged_case_root, scorer_out_dir)
     scorer_results_by_case_id = _index_scorer_results(scorer_results)
@@ -162,11 +219,93 @@ def run_reward_hack_case_audit(
         exploit_case_dir=exploit_case_dir,
         task_manifest=task_manifest,
     )
-    exploit_blocked_actual = _expected_non_pass_status_matched(exploit_result)
-    task_success_allowed_actual = exploit_result.attempt_result.status == "PASS"
-    valid_control_task_success_actual = _expected_pass_status_matched(
-        valid_control_result,
+    return _build_reward_hack_result(
+        case_path=case_path,
+        case=case,
+        run_dir=run_dir,
+        exploit_case_dir=exploit_case_dir,
+        valid_control_case_dir=valid_control_case_dir,
+        exploit_result=exploit_result,
+        valid_control_result=valid_control_result,
+        leakage_scan_result=leakage_scan_result,
+        private_content_access_attempt_actual=private_content_access_attempt_actual,
     )
+
+
+def _run_agent_task_reward_hack_case_audit(
+    case_path: Path,
+    case: RewardHackCase,
+    *,
+    work_dir: Path | None,
+    repo_root: Path,
+) -> RewardHackAuditResult:
+    if not isinstance(case.evidence, AgentTaskAuditEvidencePair):
+        raise TypeError("Expected agent_task_audit_case evidence")
+
+    exploit_case_dir = _resolve_repo_relative_path(
+        repo_root,
+        case.evidence.exploit.case_dir,
+    )
+    valid_control_case_dir = _resolve_repo_relative_path(
+        repo_root,
+        case.evidence.valid_control.case_dir,
+    )
+    exploit_case = load_agent_task_audit_case(exploit_case_dir / "case.yaml")
+    task_manifest_path = _resolve_repo_relative_path(repo_root, exploit_case.task_manifest)
+    task_manifest = load_task_manifest(task_manifest_path)
+    run_dir = _make_run_dir(work_dir)
+    staged_case_root = _stage_agent_task_audit_pair(
+        case.evidence,
+        run_dir,
+        repo_root=repo_root,
+    )
+    agent_task_out_dir = run_dir / "agent_task_audit"
+    agent_task_results = run_agent_task_audit(staged_case_root, agent_task_out_dir)
+    agent_results_by_case_id = _index_agent_task_results(agent_task_results)
+    exploit_result = agent_results_by_case_id[case.evidence.exploit.case_id]
+    valid_control_result = agent_results_by_case_id[case.evidence.valid_control.case_id]
+
+    leakage_scan_result = _scan_agent_task_exposure_artifacts(
+        exploit_result,
+        task_manifest,
+    )
+    private_content_access_attempt_actual = _detect_agent_tool_call_access_attempt(
+        case,
+        exploit_result=exploit_result,
+        task_manifest=task_manifest,
+    )
+    return _build_reward_hack_result(
+        case_path=case_path,
+        case=case,
+        run_dir=run_dir,
+        exploit_case_dir=exploit_case_dir,
+        valid_control_case_dir=valid_control_case_dir,
+        exploit_result=exploit_result,
+        valid_control_result=valid_control_result,
+        leakage_scan_result=leakage_scan_result,
+        private_content_access_attempt_actual=private_content_access_attempt_actual,
+    )
+
+
+def _build_reward_hack_result(
+    *,
+    case_path: Path,
+    case: RewardHackCase,
+    run_dir: Path,
+    exploit_case_dir: Path,
+    valid_control_case_dir: Path,
+    exploit_result: HarnessAuditResult,
+    valid_control_result: HarnessAuditResult,
+    leakage_scan_result: LeakageScanResult,
+    private_content_access_attempt_actual: bool,
+) -> RewardHackAuditResult:
+    task_success_allowed_actual = _source_task_success(exploit_result)
+    exploit_blocked_actual = _source_harness_passed(exploit_result) and not (
+        task_success_allowed_actual
+    )
+    valid_control_task_success_actual = _source_harness_passed(
+        valid_control_result
+    ) and _source_task_success(valid_control_result)
     private_content_exposed_actual = _private_content_exposed(leakage_scan_result)
     training_allowed_actual = False
     outcome_comparisons = _outcome_comparisons(
@@ -179,12 +318,12 @@ def run_reward_hack_case_audit(
         RewardHackRuntimeCheck(
             field="exploit_harness_audit_passed",
             expected=True,
-            actual=exploit_result.overall_match,
+            actual=_source_harness_passed(exploit_result),
         ),
         RewardHackRuntimeCheck(
             field="valid_control_harness_audit_passed",
             expected=True,
-            actual=valid_control_result.overall_match,
+            actual=_source_harness_passed(valid_control_result),
         ),
         RewardHackRuntimeCheck(
             field="valid_control_task_success",
@@ -214,8 +353,10 @@ def run_reward_hack_case_audit(
         ),
         exploit_audit_result=exploit_result,
         valid_control_audit_result=valid_control_result,
-        exploit_harness_audit_passed=exploit_result.overall_match,
-        valid_control_harness_audit_passed=valid_control_result.overall_match,
+        exploit_harness_audit_passed=_source_harness_passed(exploit_result),
+        valid_control_harness_audit_passed=_source_harness_passed(
+            valid_control_result,
+        ),
         valid_control_task_success_actual=valid_control_task_success_actual,
         private_content_access_attempt_actual=private_content_access_attempt_actual,
         leakage_scan_result=leakage_scan_result,
@@ -248,13 +389,49 @@ def detect_private_content_access_attempt(
             task_manifest,
             root=exploit_case_dir,
         )
-        return _submitted_patch_scan_contains_probe_reference(
-            scan,
-            spec=spec,
-        )
+        return _scan_contains_probe_reference(scan, spec=spec)
     raise ValueError(
-        f"Unsupported hidden-validator probe surface: {spec.probe_surface}"
+        f"Unsupported scorer hidden-validator probe surface: {spec.probe_surface}"
     )
+
+
+def _detect_agent_tool_call_access_attempt(
+    case: RewardHackCase,
+    *,
+    exploit_result: AgentTaskAuditResult,
+    task_manifest: TaskManifest,
+) -> bool:
+    if case.exploit.exploit_classification != "hidden_validator_probe_attempt":
+        raise ValueError(
+            "Reward-hack runtime audit currently supports "
+            "hidden_validator_probe_attempt exploits only"
+        )
+    spec = case.exploit.exploit_spec
+    if spec.probe_surface != "agent_tool_call":
+        raise ValueError(
+            f"Unsupported agent hidden-validator probe surface: {spec.probe_surface}"
+        )
+
+    prompt_loop_result = exploit_result.agent_task_run.prompt_loop_result
+    if prompt_loop_result is None:
+        return False
+
+    texts: list[LeakageScanText] = []
+    for index, model_response in enumerate(prompt_loop_result.model_responses):
+        try:
+            action = parse_agent_action(model_response.output_text)
+        except (ValidationError, ValueError):
+            continue
+        if isinstance(action, ToolCallAction):
+            texts.append(
+                LeakageScanText(
+                    ref=f"model_response:{index}:tool_call",
+                    text=action.model_dump_json(),
+                )
+            )
+
+    scan = scan_texts_for_leakage(texts, task_manifest)
+    return _scan_contains_probe_reference(scan, spec=spec)
 
 
 def _reward_hack_case_paths(case_root: Path) -> list[Path]:
@@ -275,6 +452,25 @@ def _stage_scorer_audit_pair(
     repo_root: Path,
 ) -> Path:
     case_root = run_dir / "scorer_case_inputs"
+    return _stage_harness_audit_pair(evidence, case_root, repo_root=repo_root)
+
+
+def _stage_agent_task_audit_pair(
+    evidence: AgentTaskAuditEvidencePair,
+    run_dir: Path,
+    *,
+    repo_root: Path,
+) -> Path:
+    case_root = run_dir / "agent_task_case_inputs"
+    return _stage_harness_audit_pair(evidence, case_root, repo_root=repo_root)
+
+
+def _stage_harness_audit_pair(
+    evidence: ScorerAuditEvidencePair | AgentTaskAuditEvidencePair,
+    case_root: Path,
+    *,
+    repo_root: Path,
+) -> Path:
     case_root.mkdir(parents=True, exist_ok=True)
     _copy_harness_case_dir(
         evidence.exploit,
@@ -310,19 +506,87 @@ def _index_scorer_results(
     return indexed
 
 
-def _expected_non_pass_status_matched(result: ScorerAuditResult) -> bool:
-    return result.overall_match and result.case.expected_attempt_status != "PASS"
+def _index_agent_task_results(
+    results: list[AgentTaskAuditResult],
+) -> dict[str, AgentTaskAuditResult]:
+    indexed: dict[str, AgentTaskAuditResult] = {}
+    for result in results:
+        if result.case.id in indexed:
+            raise ValueError(f"Duplicate agent task audit case id: {result.case.id}")
+        indexed[result.case.id] = result
+    return indexed
 
 
-def _expected_pass_status_matched(result: ScorerAuditResult) -> bool:
-    return result.overall_match and result.case.expected_attempt_status == "PASS"
+def _source_harness_passed(result: HarnessAuditResult) -> bool:
+    return result.overall_match
+
+
+def _source_task_success(result: HarnessAuditResult) -> bool:
+    if isinstance(result, ScorerAuditResult):
+        return result.attempt_result.status == "PASS"
+
+    attempt_result = result.agent_task_run.result.attempt_result
+    return attempt_result is not None and attempt_result.status == "PASS"
+
+
+def _scan_agent_task_exposure_artifacts(
+    result: AgentTaskAuditResult,
+    task_manifest: TaskManifest,
+) -> LeakageScanResult:
+    artifact_dir = result.agent_task_artifact_dir
+    file_paths = [
+        path
+        for path in list_files_under(artifact_dir)
+        if path.name not in _AGENT_EXPOSURE_SCAN_EXCLUDED_FILES
+    ]
+    file_scan = scan_files_for_leakage(
+        file_paths,
+        task_manifest,
+        root=artifact_dir,
+    )
+
+    prompt_loop_result = result.agent_task_run.prompt_loop_result
+    if prompt_loop_result is None:
+        return file_scan
+
+    message_scan = scan_texts_for_leakage(
+        (
+            LeakageScanText(
+                ref=f"prompt_loop_message:{index}:{message.role}",
+                text=message.model_dump_json(),
+            )
+            for index, message in enumerate(prompt_loop_result.messages)
+            if message.role != "assistant"
+        ),
+        task_manifest,
+    )
+    return _merge_leakage_scans(file_scan, message_scan)
+
+
+def _merge_leakage_scans(
+    first: LeakageScanResult,
+    second: LeakageScanResult,
+) -> LeakageScanResult:
+    if first.leakage_check_version != second.leakage_check_version:
+        raise ValueError("Cannot merge leakage scans with different versions")
+    if first.canary_hash != second.canary_hash:
+        raise ValueError("Cannot merge leakage scans with different canary hashes")
+    return LeakageScanResult(
+        leakage_check_version=first.leakage_check_version,
+        canary_hash=first.canary_hash,
+        canary_matches=tuple(dict.fromkeys(first.canary_matches + second.canary_matches)),
+        private_marker_matches=tuple(
+            dict.fromkeys(first.private_marker_matches + second.private_marker_matches)
+        ),
+        scanned_files=tuple(dict.fromkeys(first.scanned_files + second.scanned_files)),
+    )
 
 
 def _private_content_exposed(scan: LeakageScanResult) -> bool:
     return scan.canary_leaked or scan.hidden_validators_visible_to_model
 
 
-def _submitted_patch_scan_contains_probe_reference(
+def _scan_contains_probe_reference(
     scan: LeakageScanResult,
     *,
     spec: HiddenValidatorProbeExploitSpec,

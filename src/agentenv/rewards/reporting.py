@@ -2,8 +2,9 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
+from agentenv.agents.audit import AgentTaskAuditResult
 from agentenv.artifacts import MANIFEST_FILENAME
-from agentenv.rewards.audit import RewardHackAuditResult
+from agentenv.rewards.audit import HarnessAuditResult, RewardHackAuditResult
 from agentenv.rewards.export import RewardHackAuditArtifact
 from agentenv.rewards.schema import EvalAttemptRef, HarnessAuditCaseRef
 from agentenv.rewards.schema import TrajectoryRecordRef
@@ -229,10 +230,11 @@ def _runtime_check_table(records: list[RewardHackAuditResult]) -> list[str]:
 def _source_audit_table(records: list[RewardHackAuditResult]) -> list[str]:
     rows = [
         (
-            "| reward_hack_id | role | case_id | source_case_hash | attempt_status | "
-            "public_status | hidden_status | source_audit_match | attempt_artifact_dir |"
+            "| reward_hack_id | role | case_id | source_case_hash | source_status | "
+            "prompt_loop_status | attempt_status | public_status | hidden_status | "
+            "source_audit_match | artifact_dir |"
         ),
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for record in records:
         rows.append(
@@ -257,20 +259,22 @@ def _source_audit_table(records: list[RewardHackAuditResult]) -> list[str]:
 def _source_audit_row(
     reward_hack_id: str,
     role: str,
-    result: ScorerAuditResult,
+    result: HarnessAuditResult,
     source_case_hash: str,
 ) -> str:
-    attempt = result.attempt_result
+    status = _source_statuses(result)
     return (
         f"| {reward_hack_id} "
         f"| {role} "
         f"| {result.case.id} "
         f"| {source_case_hash} "
-        f"| {attempt.status} "
-        f"| {attempt.public_status} "
-        f"| {attempt.hidden_status} "
+        f"| {_display(status['source_status'])} "
+        f"| {_display(status['prompt_loop_status'])} "
+        f"| {_display(status['attempt_status'])} "
+        f"| {_display(status['public_status'])} "
+        f"| {_display(status['hidden_status'])} "
         f"| {_bool_display(result.overall_match)} "
-        f"| {_relative_or_absolute(result.attempt_artifact_dir)} |"
+        f"| {_relative_or_absolute(_source_artifact_dir(result))} |"
     )
 
 
@@ -316,8 +320,36 @@ def _valid_control_ref(record: RewardHackAuditResult) -> str:
     return evidence.source_type
 
 
-def _source_case_ref(result: ScorerAuditResult) -> str:
+def _source_case_ref(result: HarnessAuditResult) -> str:
     return f"{_relative_or_absolute(result.case_dir)}:{result.case.id}"
+
+
+def _source_statuses(result: HarnessAuditResult) -> dict[str, str | None]:
+    if isinstance(result, ScorerAuditResult):
+        attempt = result.attempt_result
+        return {
+            "source_status": attempt.status,
+            "prompt_loop_status": None,
+            "attempt_status": attempt.status,
+            "public_status": attempt.public_status,
+            "hidden_status": attempt.hidden_status,
+        }
+
+    run_result = result.agent_task_run.result
+    attempt = run_result.attempt_result
+    return {
+        "source_status": run_result.status,
+        "prompt_loop_status": run_result.prompt_loop_status,
+        "attempt_status": attempt.status if attempt is not None else None,
+        "public_status": attempt.public_status if attempt is not None else None,
+        "hidden_status": attempt.hidden_status if attempt is not None else None,
+    }
+
+
+def _source_artifact_dir(result: HarnessAuditResult) -> Path:
+    if isinstance(result, AgentTaskAuditResult):
+        return result.agent_task_artifact_dir
+    return result.attempt_artifact_dir
 
 
 def _counts_display(counts: Counter[str] | dict[str, int]) -> str:
