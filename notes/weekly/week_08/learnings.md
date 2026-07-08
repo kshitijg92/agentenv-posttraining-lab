@@ -245,6 +245,26 @@ private reference in tool result/error/scoring/training artifact -> exposure
 Without this boundary, every authored exploit fixture that contains the canary
 or hidden-validator marker would falsely look like a harness leakage failure.
 
+### Structured Scans Beat Broad Artifact Exclusions
+
+Avoiding a false exposure signal should not create a blind spot.
+
+For agent reward-hack cases, the assistant's private tool-call payload is the
+attack attempt, so counting it as exposure would be wrong. But the surrounding
+prompt-loop artifact can also contain real exposure surfaces: tool messages,
+tool results, prompt-loop errors, and non-attack assistant text.
+
+The measurement rule is:
+
+```text
+skip the specific authored/attack payload
+scan the rest of the runtime artifact structurally
+```
+
+This matters because filename-level exclusions are too coarse. They make the
+current test pass by hiding both the expected attack payload and any unexpected
+runtime leak in the same file.
+
 ### Status Is Not The Exploit Mechanism
 
 Two different reward-hack mechanisms can produce the same scorer outcome.

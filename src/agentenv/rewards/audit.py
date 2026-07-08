@@ -11,7 +11,8 @@ from agentenv.agents.audit import (
     load_agent_task_audit_case,
     run_agent_task_audit,
 )
-from agentenv.agents.schema import ToolCallAction, parse_agent_action
+from agentenv.agents.schema import PromptLoopResult, ToolCallAction, parse_agent_action
+from agentenv.models.schema import Message
 from agentenv.rewards.cases import (
     hash_harness_audit_case_dir,
     load_reward_hack_case,
@@ -44,10 +45,10 @@ from agentenv.tasks.validate import load_task_manifest
 REWARD_HACK_AUDIT_RUNTIME_VERSION = "reward_hack_audit_runtime_v0"
 HarnessAuditResult: TypeAlias = ScorerAuditResult | AgentTaskAuditResult
 
-_AGENT_EXPOSURE_SCAN_EXCLUDED_FILES = {
+_AGENT_AUTHORED_FIXTURE_ARTIFACT_FILES = {
     "agent_control_script.json",
-    "prompt_loop_result.json",
 }
+_PROMPT_LOOP_RESULT_ARTIFACT_FILE = "prompt_loop_result.json"
 
 
 @dataclass(frozen=True)
@@ -553,11 +554,7 @@ def _scan_agent_task_exposure_artifacts(
     task_manifest: TaskManifest,
 ) -> LeakageScanResult:
     artifact_dir = result.agent_task_artifact_dir
-    file_paths = [
-        path
-        for path in list_files_under(artifact_dir)
-        if path.name not in _AGENT_EXPOSURE_SCAN_EXCLUDED_FILES
-    ]
+    file_paths = _agent_raw_exposure_artifact_files(artifact_dir)
     file_scan = scan_files_for_leakage(
         file_paths,
         task_manifest,
@@ -568,18 +565,80 @@ def _scan_agent_task_exposure_artifacts(
     if prompt_loop_result is None:
         return file_scan
 
-    message_scan = scan_texts_for_leakage(
-        (
+    prompt_loop_scan = _scan_prompt_loop_result_for_exposure(
+        prompt_loop_result,
+        task_manifest,
+    )
+    return _merge_leakage_scans(file_scan, prompt_loop_scan)
+
+
+def _agent_raw_exposure_artifact_files(artifact_dir: Path) -> tuple[Path, ...]:
+    raw_files: list[Path] = []
+    for path in list_files_under(artifact_dir):
+        if path.name in _AGENT_AUTHORED_FIXTURE_ARTIFACT_FILES:
+            continue
+        if path.name == _PROMPT_LOOP_RESULT_ARTIFACT_FILE:
+            continue
+        raw_files.append(path)
+    return tuple(raw_files)
+
+
+def _scan_prompt_loop_result_for_exposure(
+    prompt_loop_result: PromptLoopResult,
+    task_manifest: TaskManifest,
+) -> LeakageScanResult:
+    texts: list[LeakageScanText] = []
+    for index, message in enumerate(prompt_loop_result.messages):
+        if _is_assistant_private_tool_call_attempt(message, task_manifest):
+            continue
+        texts.append(
             LeakageScanText(
                 ref=f"prompt_loop_message:{index}:{message.role}",
                 text=message.model_dump_json(),
             )
-            for index, message in enumerate(prompt_loop_result.messages)
-            if message.role != "assistant"
+        )
+
+    for index, tool_result in enumerate(prompt_loop_result.tool_results):
+        texts.append(
+            LeakageScanText(
+                ref=f"prompt_loop_tool_result:{index}:{tool_result.tool_name}",
+                text=tool_result.model_dump_json(),
+            )
+        )
+
+    if prompt_loop_result.error_message is not None:
+        texts.append(
+            LeakageScanText(
+                ref="prompt_loop_error_message",
+                text=prompt_loop_result.error_message,
+            )
+        )
+
+    return scan_texts_for_leakage(texts, task_manifest)
+
+
+def _is_assistant_private_tool_call_attempt(
+    message: Message,
+    task_manifest: TaskManifest,
+) -> bool:
+    if message.role != "assistant":
+        return False
+    try:
+        action = parse_agent_action(message.content)
+    except (ValidationError, ValueError):
+        return False
+    if not isinstance(action, ToolCallAction):
+        return False
+    scan = scan_texts_for_leakage(
+        (
+            LeakageScanText(
+                ref="assistant_tool_call_attempt",
+                text=action.model_dump_json(),
+            ),
         ),
         task_manifest,
     )
-    return _merge_leakage_scans(file_scan, message_scan)
+    return _private_content_exposed(scan)
 
 
 def _merge_leakage_scans(
