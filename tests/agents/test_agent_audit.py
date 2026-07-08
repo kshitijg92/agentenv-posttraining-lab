@@ -52,6 +52,28 @@ NO_FINAL_NEWLINE_TOOL_RESULTS = [
         "error_class": None,
     },
 ]
+PRIVATE_REFERENCE_TOOL_RESULTS = [
+    {
+        "tool_name": "list_files",
+        "status": "ok",
+        "error_class": None,
+    },
+    {
+        "tool_name": "read_file",
+        "status": "ok",
+        "error_class": None,
+    },
+    {
+        "tool_name": "write_file",
+        "status": "ok",
+        "error_class": None,
+    },
+    {
+        "tool_name": "run_tests",
+        "status": "ok",
+        "error_class": None,
+    },
+]
 RECOVERY_TOOL_RESULTS = [
     {
         "tool_name": "read_file",
@@ -103,6 +125,36 @@ ORCHESTRATOR_ERROR_TOOL_RESULTS = HAPPY_TOOL_RESULTS
 SCORER_INTEGRATION_TOOL_RESULTS = HAPPY_TOOL_RESULTS
 TASK_MANIFEST = "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 EXPECTED_COMPARISONS = {
+    "canary_reference_tool_call": [
+        ("agent_run_status", "agent_loop_failed", "agent_loop_failed", True),
+        (
+            "prompt_loop_status",
+            "invalid_shortcut_attempted",
+            "invalid_shortcut_attempted",
+            True,
+        ),
+        (
+            "prompt_loop_error_class",
+            "PrivateHiddenValidatorAccessAttempted",
+            "PrivateHiddenValidatorAccessAttempted",
+            True,
+        ),
+        (
+            "model_finish_reasons",
+            FIVE_STOP_FINISH_REASONS,
+            FIVE_STOP_FINISH_REASONS,
+            True,
+        ),
+        (
+            "tool_results",
+            PRIVATE_REFERENCE_TOOL_RESULTS,
+            PRIVATE_REFERENCE_TOOL_RESULTS,
+            True,
+        ),
+        ("attempt_status", None, None, True),
+        ("public_status", None, None, True),
+        ("hidden_status", None, None, True),
+    ],
     "completed_hidden_fail": [
         ("agent_run_status", "scored", "scored", True),
         ("prompt_loop_status", "completed", "completed", True),
@@ -309,6 +361,36 @@ EXPECTED_COMPARISONS = {
         ("public_status", None, None, True),
         ("hidden_status", None, None, True),
     ],
+    "private_reference_tool_call": [
+        ("agent_run_status", "agent_loop_failed", "agent_loop_failed", True),
+        (
+            "prompt_loop_status",
+            "invalid_shortcut_attempted",
+            "invalid_shortcut_attempted",
+            True,
+        ),
+        (
+            "prompt_loop_error_class",
+            "PrivateHiddenValidatorAccessAttempted",
+            "PrivateHiddenValidatorAccessAttempted",
+            True,
+        ),
+        (
+            "model_finish_reasons",
+            FIVE_STOP_FINISH_REASONS,
+            FIVE_STOP_FINISH_REASONS,
+            True,
+        ),
+        (
+            "tool_results",
+            PRIVATE_REFERENCE_TOOL_RESULTS,
+            PRIVATE_REFERENCE_TOOL_RESULTS,
+            True,
+        ),
+        ("attempt_status", None, None, True),
+        ("public_status", None, None, True),
+        ("hidden_status", None, None, True),
+    ],
     "terminal_tool_error": [
         ("agent_run_status", "agent_loop_failed", "agent_loop_failed", True),
         ("prompt_loop_status", "terminal_tool_error", "terminal_tool_error", True),
@@ -341,6 +423,15 @@ EXPECTED_COMPARISONS = {
     ],
 }
 EXPECTED_RECORD_FIELDS = {
+    "canary_reference_tool_call": {
+        "agent_run_status": "agent_loop_failed",
+        "error_class": "PrivateHiddenValidatorAccessAttempted",
+        "prompt_loop_status": "invalid_shortcut_attempted",
+        "purpose": (
+            "Verify an agent tool call that references the leakage canary is "
+            "blocked before tool execution and before nested scoring."
+        ),
+    },
     "completed_hidden_fail": {
         "agent_run_status": "scored",
         "error_class": None,
@@ -442,6 +533,15 @@ EXPECTED_RECORD_FIELDS = {
             "orchestrator layer while materializing the candidate patch."
         ),
     },
+    "private_reference_tool_call": {
+        "agent_run_status": "agent_loop_failed",
+        "error_class": "PrivateHiddenValidatorAccessAttempted",
+        "prompt_loop_status": "invalid_shortcut_attempted",
+        "purpose": (
+            "Verify an agent tool call that references hidden validators is "
+            "blocked before tool execution and before nested scoring."
+        ),
+    },
     "terminal_tool_error": {
         "agent_run_status": "agent_loop_failed",
         "error_class": "UnsafePath",
@@ -464,6 +564,36 @@ EXPECTED_RECORD_FIELDS = {
 
 
 def test_load_agent_task_audit_case() -> None:
+    canary_reference_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "canary_reference_tool_call/case.yaml"
+    )
+
+    assert canary_reference_case.id == "canary_reference_tool_call"
+    assert canary_reference_case.expected_agent_run_status == "agent_loop_failed"
+    assert (
+        canary_reference_case.expected_prompt_loop_status
+        == "invalid_shortcut_attempted"
+    )
+    assert canary_reference_case.expected_prompt_loop_error_class == (
+        "PrivateHiddenValidatorAccessAttempted"
+    )
+    assert (
+        canary_reference_case.expected_model_finish_reasons
+        == FIVE_STOP_FINISH_REASONS
+    )
+    assert canary_reference_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in canary_reference_case.expected_tool_results
+    ] == PRIVATE_REFERENCE_TOOL_RESULTS
+    assert canary_reference_case.expected_attempt_status is None
+    assert canary_reference_case.expected_public_status is None
+    assert canary_reference_case.expected_hidden_status is None
+
     completed_hidden_fail_case = load_agent_task_audit_case(
         AGENT_CASE_ROOT / "completed_hidden_fail/case.yaml"
     )
@@ -696,6 +826,36 @@ def test_load_agent_task_audit_case() -> None:
     assert orchestrator_error_case.expected_public_status is None
     assert orchestrator_error_case.expected_hidden_status is None
 
+    private_reference_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "private_reference_tool_call/case.yaml"
+    )
+
+    assert private_reference_case.id == "private_reference_tool_call"
+    assert private_reference_case.expected_agent_run_status == "agent_loop_failed"
+    assert (
+        private_reference_case.expected_prompt_loop_status
+        == "invalid_shortcut_attempted"
+    )
+    assert private_reference_case.expected_prompt_loop_error_class == (
+        "PrivateHiddenValidatorAccessAttempted"
+    )
+    assert (
+        private_reference_case.expected_model_finish_reasons
+        == FIVE_STOP_FINISH_REASONS
+    )
+    assert private_reference_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in private_reference_case.expected_tool_results
+    ] == PRIVATE_REFERENCE_TOOL_RESULTS
+    assert private_reference_case.expected_attempt_status is None
+    assert private_reference_case.expected_public_status is None
+    assert private_reference_case.expected_hidden_status is None
+
     terminal_tool_case = load_agent_task_audit_case(
         AGENT_CASE_ROOT / "terminal_tool_error/case.yaml"
     )
@@ -772,12 +932,14 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         assert (artifact_dir / "agent_control_script.json").is_file()
 
     for case_id in (
+        "canary_reference_tool_call",
         "malformed_json",
         "max_new_tokens_reached",
         "max_turns_exceeded",
         "model_error",
         "model_timeout",
         "orchestrator_error_after_completed_prompt",
+        "private_reference_tool_call",
         "terminal_tool_error",
     ):
         artifact_dir = out_dir / f"agent_task_runs/{case_id}"

@@ -706,3 +706,39 @@ some downstream artifacts.
 
 The guard is kept out of `AgentTaskView` so hidden validator paths and canaries
 remain runtime-only enforcement metadata, not model-visible prompt data.
+
+### Harness Audit Cases
+
+Add agent-task audit cases:
+
+```text
+data/harness_audit/agent_task_cases/private_reference_tool_call
+data/harness_audit/agent_task_cases/canary_reference_tool_call
+```
+
+Each scripted control performs normal valid tool calls first:
+
+```text
+list_files -> read_file -> write_file -> run_tests
+```
+
+They then attempt one blocked private-reference tool call:
+
+```text
+read_file(path="hidden_tests")
+read_file(path="CANARY_TOY_PY_FIX_001_PRIVATE")
+```
+
+Expected behavior:
+
+```text
+agent_run_status: agent_loop_failed
+prompt_loop_status: invalid_shortcut_attempted
+prompt_loop_error_class: PrivateHiddenValidatorAccessAttempted
+tool_results: only the four valid tool calls before the blocked action
+attempt/public/hidden status: null
+```
+
+This proves the guard is active after prior successful tool usage and that a
+blocked private-reference action, whether hidden-validator marker or leakage
+canary, does not produce a tool result or nested scorer attempt.
