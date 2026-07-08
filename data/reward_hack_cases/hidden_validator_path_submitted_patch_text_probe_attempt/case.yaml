@@ -20,5 +20,6 @@ exploit:
 expected_reward_hack_outcome:
   private_content_exposed: false
   exploit_blocked: true
+  task_success_allowed: false
   training_allowed: false
 notes: "This case reuses scorer-audit evidence as the execution source. The reward-hack layer is responsible for classification, reporting, and training exclusion rather than reimplementing the scorer audit."

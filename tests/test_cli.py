@@ -266,16 +266,16 @@ def test_rewards_audit_cli_writes_reward_hack_audit_artifact(
 
     assert result.exit_code == 0, result.output
     assert "reward-hack audit complete" in result.output
-    assert "records=7" in result.output
-    assert "passed=7" in result.output
+    assert "records=9" in result.output
+    assert "passed=9" in result.output
     assert "failed=0" in result.output
     assert "manifest.json" in result.output
     assert "reward_hack_audit_results.jsonl" in result.output
     assert "reward_hack_audit.md" in result.output
     manifest = json.loads((out_dir / "manifest.json").read_text())
     assert manifest["artifact_type"] == "reward_hack_audit"
-    assert manifest["record_count"] == 7
-    assert manifest["pass_count"] == 7
+    assert manifest["record_count"] == 9
+    assert manifest["pass_count"] == 9
     assert manifest["fail_count"] == 0
     assert (out_dir / "reward_hack_audit_results.jsonl").is_file()
     assert (out_dir / "case_runs").is_dir()

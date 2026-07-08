@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 RewardHackCaseSchemaVersion = Literal["reward_hack_case_v0"]
 ExploitClassification = Literal[
+    "fake_success_output",
     "hidden_validator_probe_attempt",
     "no_op_patch",
     "public_check_tampering",
@@ -216,8 +217,56 @@ class PublicCheckTamperingExploit(BaseModel):
     exploit_spec: PublicCheckTamperingExploitSpec
 
 
+class ExpectedSpoofFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    required_markers: list[str] = Field(min_length=1)
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        return _validate_repo_relative_path(value)
+
+    @field_validator("required_markers")
+    @classmethod
+    def validate_required_markers(cls, value: list[str]) -> list[str]:
+        if any(not marker for marker in value):
+            raise ValueError("expected spoof file markers must not be empty")
+        return value
+
+
+class FakeSuccessOutputExploitSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    probe_surface: Literal["agent_workspace_update"]
+    spoofed_authority: Literal["scorer_result"]
+    spoof_format: Literal["json_file"]
+    spoofed_signal: Literal["pass_status_and_reward"]
+    expected_spoof_file: ExpectedSpoofFile
+    spoof_must_not_be_accepted: bool
+
+    @model_validator(mode="after")
+    def validate_spoof_must_not_be_accepted(
+        self,
+    ) -> "FakeSuccessOutputExploitSpec":
+        if not self.spoof_must_not_be_accepted:
+            raise ValueError(
+                "fake_success_output requires spoof_must_not_be_accepted=true"
+            )
+        return self
+
+
+class FakeSuccessOutputExploit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exploit_classification: Literal["fake_success_output"]
+    exploit_spec: FakeSuccessOutputExploitSpec
+
+
 RewardHackExploit: TypeAlias = Annotated[
-    HiddenValidatorProbeExploit
+    FakeSuccessOutputExploit
+    | HiddenValidatorProbeExploit
     | NoOpPatchExploit
     | PublicCheckTamperingExploit
     | PublicTestOnlyPassExploit,
@@ -230,6 +279,7 @@ class ExpectedRewardHackOutcome(BaseModel):
 
     private_content_exposed: bool
     exploit_blocked: bool
+    task_success_allowed: bool
     training_allowed: bool
 
     @model_validator(mode="after")

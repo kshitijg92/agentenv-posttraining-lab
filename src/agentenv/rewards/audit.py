@@ -20,6 +20,8 @@ from agentenv.rewards.cases import (
 )
 from agentenv.rewards.schema import (
     AgentTaskAuditEvidencePair,
+    ExpectedRewardHackOutcome,
+    FakeSuccessOutputExploitSpec,
     HarnessAuditCaseRef,
     HiddenValidatorProbeExploitSpec,
     RewardHackCase,
@@ -53,7 +55,7 @@ _PROMPT_LOOP_RESULT_ARTIFACT_FILE = "prompt_loop_result.json"
 
 @dataclass(frozen=True)
 class RewardHackOutcomeComparison:
-    field: Literal["private_content_exposed", "exploit_blocked", "training_allowed"]
+    field: str
     expected: bool
     actual: bool
 
@@ -69,7 +71,6 @@ class RewardHackRuntimeCheck:
         "valid_control_harness_audit_passed",
         "valid_control_task_success",
         "exploit_mechanism_detected",
-        "task_success_allowed",
     ]
     expected: bool
     actual: bool
@@ -302,8 +303,10 @@ def _build_reward_hack_result(
     exploit_mechanism_detected_actual: bool,
 ) -> RewardHackAuditResult:
     task_success_allowed_actual = _source_task_success(exploit_result)
-    exploit_blocked_actual = _source_harness_passed(exploit_result) and not (
-        task_success_allowed_actual
+    exploit_blocked_actual = _exploit_blocked_actual(
+        case,
+        exploit_result=exploit_result,
+        exploit_mechanism_detected_actual=exploit_mechanism_detected_actual,
     )
     valid_control_task_success_actual = _source_harness_passed(
         valid_control_result
@@ -314,6 +317,7 @@ def _build_reward_hack_result(
         case,
         private_content_exposed_actual=private_content_exposed_actual,
         exploit_blocked_actual=exploit_blocked_actual,
+        task_success_allowed_actual=task_success_allowed_actual,
         training_allowed_actual=training_allowed_actual,
     )
     runtime_checks = (
@@ -336,11 +340,6 @@ def _build_reward_hack_result(
             field="exploit_mechanism_detected",
             expected=True,
             actual=exploit_mechanism_detected_actual,
-        ),
-        RewardHackRuntimeCheck(
-            field="task_success_allowed",
-            expected=False,
-            actual=task_success_allowed_actual,
         ),
     )
 
@@ -430,10 +429,17 @@ def _detect_agent_exploit_mechanism(
     exploit_result: AgentTaskAuditResult,
     task_manifest: TaskManifest,
 ) -> bool:
+    if case.exploit.exploit_classification == "fake_success_output":
+        return _detect_agent_fake_success_output(
+            case.exploit.exploit_spec,
+            exploit_result=exploit_result,
+        )
+
     if case.exploit.exploit_classification != "hidden_validator_probe_attempt":
         raise ValueError(
             "Reward-hack runtime audit currently supports "
-            "hidden_validator_probe_attempt exploits only"
+            "hidden_validator_probe_attempt and fake_success_output "
+            "agent exploits only"
         )
     spec = case.exploit.exploit_spec
     if spec.probe_surface != "agent_tool_call":
@@ -461,6 +467,42 @@ def _detect_agent_exploit_mechanism(
 
     scan = scan_texts_for_leakage(texts, task_manifest)
     return _scan_contains_probe_reference(scan, spec=spec)
+
+
+def _detect_agent_fake_success_output(
+    spec: FakeSuccessOutputExploitSpec,
+    *,
+    exploit_result: AgentTaskAuditResult,
+) -> bool:
+    if spec.probe_surface != "agent_workspace_update":
+        raise ValueError(
+            f"Unsupported fake-success probe surface: {spec.probe_surface}"
+        )
+
+    patch_text = _agent_candidate_patch_text(exploit_result)
+    if not _patch_adds_or_updates_path(patch_text, spec.expected_spoof_file.path):
+        return False
+    return all(
+        marker in patch_text
+        for marker in spec.expected_spoof_file.required_markers
+    )
+
+
+def _agent_candidate_patch_text(result: AgentTaskAuditResult) -> str:
+    if result.agent_task_run.candidate_patch:
+        return result.agent_task_run.candidate_patch
+
+    patch_path = result.agent_task_artifact_dir / "candidate.patch"
+    if not patch_path.is_file():
+        return ""
+    return patch_path.read_text()
+
+
+def _patch_adds_or_updates_path(patch_text: str, path: str) -> bool:
+    return any(
+        line == f"--- a/{path}" or line == f"+++ b/{path}"
+        for line in patch_text.splitlines()
+    )
 
 
 def _reward_hack_case_paths(case_root: Path) -> list[Path]:
@@ -556,6 +598,31 @@ def _source_task_success(result: HarnessAuditResult) -> bool:
 
     attempt_result = result.agent_task_run.result.attempt_result
     return attempt_result is not None and attempt_result.status == "PASS"
+
+
+def _source_has_trusted_scorer_result(result: HarnessAuditResult) -> bool:
+    if isinstance(result, ScorerAuditResult):
+        return True
+    return result.agent_task_run.result.attempt_result is not None
+
+
+def _exploit_blocked_actual(
+    case: RewardHackCase,
+    *,
+    exploit_result: HarnessAuditResult,
+    exploit_mechanism_detected_actual: bool,
+) -> bool:
+    if case.exploit.exploit_classification == "fake_success_output":
+        return (
+            exploit_mechanism_detected_actual
+            and _source_harness_passed(exploit_result)
+            and _source_has_trusted_scorer_result(exploit_result)
+        )
+    return (
+        exploit_mechanism_detected_actual
+        and _source_harness_passed(exploit_result)
+        and not _source_task_success(exploit_result)
+    )
 
 
 def _scan_agent_task_exposure_artifacts(
@@ -690,26 +757,30 @@ def _outcome_comparisons(
     *,
     private_content_exposed_actual: bool,
     exploit_blocked_actual: bool,
+    task_success_allowed_actual: bool,
     training_allowed_actual: bool,
 ) -> tuple[RewardHackOutcomeComparison, ...]:
     expected = case.expected_reward_hack_outcome
-    return (
-        RewardHackOutcomeComparison(
-            field="private_content_exposed",
-            expected=expected.private_content_exposed,
-            actual=private_content_exposed_actual,
-        ),
-        RewardHackOutcomeComparison(
-            field="exploit_blocked",
-            expected=expected.exploit_blocked,
-            actual=exploit_blocked_actual,
-        ),
-        RewardHackOutcomeComparison(
-            field="training_allowed",
-            expected=expected.training_allowed,
-            actual=training_allowed_actual,
-        ),
+    actual = ExpectedRewardHackOutcome(
+        private_content_exposed=private_content_exposed_actual,
+        exploit_blocked=exploit_blocked_actual,
+        task_success_allowed=task_success_allowed_actual,
+        training_allowed=training_allowed_actual,
     )
+    comparisons: list[RewardHackOutcomeComparison] = []
+    for field in ExpectedRewardHackOutcome.model_fields:
+        expected_value = getattr(expected, field)
+        actual_value = getattr(actual, field)
+        if not isinstance(expected_value, bool) or not isinstance(actual_value, bool):
+            raise TypeError(f"Expected reward-hack outcome field to be bool: {field}")
+        comparisons.append(
+            RewardHackOutcomeComparison(
+                field=field,
+                expected=expected_value,
+                actual=actual_value,
+            )
+        )
+    return tuple(comparisons)
 
 
 def _make_run_dir(work_dir: Path | None) -> Path:
