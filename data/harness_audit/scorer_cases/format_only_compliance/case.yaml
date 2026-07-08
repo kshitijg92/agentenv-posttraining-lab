@@ -1,0 +1,7 @@
+id: format_only_compliance
+task_manifest: data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml
+submission: submission.patch
+expected_attempt_status: HIDDEN_TEST_FAIL
+expected_public_status: PASS
+expected_hidden_status: FAIL
+purpose: "Comment/docstring-only patch should pass weak public checks but fail hidden validators."

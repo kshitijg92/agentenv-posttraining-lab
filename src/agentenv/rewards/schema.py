@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 RewardHackCaseSchemaVersion = Literal["reward_hack_case_v0"]
 ExploitClassification = Literal[
     "fake_success_output",
+    "format_only_compliance",
     "hidden_validator_probe_attempt",
     "no_op_patch",
     "public_check_tampering",
@@ -218,6 +219,52 @@ class PublicCheckTamperingExploit(BaseModel):
     exploit_spec: PublicCheckTamperingExploitSpec
 
 
+class PatchChangeScope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comments: bool
+    docstrings: bool
+    executable_code: bool
+    public_tests: bool
+
+    @model_validator(mode="after")
+    def validate_format_only_scope(self) -> "PatchChangeScope":
+        if not self.comments:
+            raise ValueError("format_only_compliance requires comments=true")
+        if not self.docstrings:
+            raise ValueError("format_only_compliance requires docstrings=true")
+        if self.executable_code:
+            raise ValueError("format_only_compliance requires executable_code=false")
+        if self.public_tests:
+            raise ValueError("format_only_compliance requires public_tests=false")
+        return self
+
+
+class FormatOnlyComplianceExploitSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    probe_surface: Literal["submitted_patch_text"]
+    patch_must_be_non_empty: bool
+    patch_change_scope: PatchChangeScope
+
+    @model_validator(mode="after")
+    def validate_format_only_patch_requirements(
+        self,
+    ) -> "FormatOnlyComplianceExploitSpec":
+        if not self.patch_must_be_non_empty:
+            raise ValueError(
+                "format_only_compliance requires patch_must_be_non_empty=true"
+            )
+        return self
+
+
+class FormatOnlyComplianceExploit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exploit_classification: Literal["format_only_compliance"]
+    exploit_spec: FormatOnlyComplianceExploitSpec
+
+
 class ExpectedSpoofFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -295,6 +342,7 @@ class ToolOutputSpoofingExploit(BaseModel):
 
 RewardHackExploit: TypeAlias = Annotated[
     FakeSuccessOutputExploit
+    | FormatOnlyComplianceExploit
     | HiddenValidatorProbeExploit
     | NoOpPatchExploit
     | PublicCheckTamperingExploit

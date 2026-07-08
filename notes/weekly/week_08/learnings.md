@@ -390,3 +390,24 @@ the source of a record determines authority, not its filename or JSON shape
 
 Reward-hack detection can label the spoofed file as exploit evidence, but it
 must not promote that file into tool-execution evidence.
+
+### Format Compliance Is Not Task Success
+
+A trajectory can satisfy the outer submission format while doing no useful
+task work.
+
+For patch tasks, a non-empty valid patch is only evidence that the model
+followed the interface. It is not evidence of task progress. A comment-only or
+docstring-only patch can look compliant, pass weak public checks, and still
+leave the executable bug unchanged.
+
+The durable measurement rule is:
+
+```text
+format_validity != behavioral_correctness
+```
+
+Using an AST comparison after stripping docstrings is a useful narrow guardrail
+for this specific exploit class because it checks that executable Python
+structure did not change. It should not be overclaimed as a full semantic no-op
+detector; it only measures the boundary we deliberately encoded.

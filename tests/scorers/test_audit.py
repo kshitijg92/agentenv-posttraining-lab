@@ -19,6 +19,11 @@ EXPECTED_COMPARISONS = {
         ("public_status", "PASS", "PASS", True),
         ("hidden_status", "PASS", "PASS", True),
     ],
+    "format_only_compliance": [
+        ("attempt_status", "HIDDEN_TEST_FAIL", "HIDDEN_TEST_FAIL", True),
+        ("public_status", "PASS", "PASS", True),
+        ("hidden_status", "FAIL", "FAIL", True),
+    ],
     "hidden_check_timeout": [
         ("attempt_status", "TIMEOUT", "TIMEOUT", True),
         ("public_status", "PASS", "PASS", True),

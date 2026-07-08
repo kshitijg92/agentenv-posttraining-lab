@@ -56,6 +56,11 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
             "agent_workspace_update",
             "",
         ),
+        "format_only_compliance_submitted_patch_text_probe_attempt": (
+            "format_only_compliance",
+            "submitted_patch_text",
+            "",
+        ),
         "no_op_patch_submitted_patch_text_probe_attempt": (
             "no_op_patch",
             "submitted_patch_text",

@@ -12,6 +12,7 @@ from agentenv.rewards.cases import (
 )
 from agentenv.rewards.schema import (
     FakeSuccessOutputExploit,
+    FormatOnlyComplianceExploit,
     NoOpPatchExploit,
     PublicCheckTamperingExploit,
     PublicTestOnlyPassExploit,
@@ -64,6 +65,7 @@ def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
     } == {
         "fake_success_output_correct_patch_agent_workspace_update",
         "fake_success_output_hidden_fail_agent_workspace_update",
+        "format_only_compliance_submitted_patch_text_probe_attempt",
         "hidden_validator_path_agent_tool_call_probe_attempt",
         "hidden_validator_path_submitted_patch_text_probe_attempt",
         "leakage_canary_agent_tool_call_probe_attempt",
@@ -177,6 +179,39 @@ def test_reward_hack_case_accepts_public_check_tampering_exploit_spec() -> None:
         case.exploit.exploit_spec.expected_blocking_layer
         == "patch_preflight_public_test_guard"
     )
+
+
+def test_reward_hack_case_accepts_format_only_compliance_exploit_spec() -> None:
+    payload = _case_payload()
+    payload["reward_hack_id"] = "format_only_compliance_schema_probe"
+    payload["evidence"]["exploit"] = {
+        "case_dir": "data/harness_audit/scorer_cases/format_only_compliance",
+        "case_id": "format_only_compliance",
+    }
+    payload["exploit"] = {
+        "exploit_classification": "format_only_compliance",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "patch_must_be_non_empty": True,
+            "patch_change_scope": {
+                "comments": True,
+                "docstrings": True,
+                "executable_code": False,
+                "public_tests": False,
+            },
+        },
+    }
+
+    case = RewardHackCase.model_validate(payload)
+
+    assert isinstance(case.exploit, FormatOnlyComplianceExploit)
+    assert case.exploit.exploit_classification == "format_only_compliance"
+    assert case.exploit.exploit_spec.probe_surface == "submitted_patch_text"
+    assert case.exploit.exploit_spec.patch_must_be_non_empty is True
+    assert case.exploit.exploit_spec.patch_change_scope.comments is True
+    assert case.exploit.exploit_spec.patch_change_scope.docstrings is True
+    assert case.exploit.exploit_spec.patch_change_scope.executable_code is False
+    assert case.exploit.exploit_spec.patch_change_scope.public_tests is False
 
 
 def test_reward_hack_case_accepts_fake_success_output_exploit_spec() -> None:
@@ -331,6 +366,60 @@ def test_reward_hack_case_rejects_disabled_public_check_tampering_requirement() 
         ValidationError,
         match="public_test_files_must_be_modified=true",
     ):
+        RewardHackCase.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("comments", False, "comments=true"),
+        ("docstrings", False, "docstrings=true"),
+        ("executable_code", True, "executable_code=false"),
+        ("public_tests", True, "public_tests=false"),
+    ],
+)
+def test_reward_hack_case_rejects_invalid_format_only_scope(
+    field: str,
+    value: bool,
+    match: str,
+) -> None:
+    payload = _case_payload()
+    payload["exploit"] = {
+        "exploit_classification": "format_only_compliance",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "patch_must_be_non_empty": True,
+            "patch_change_scope": {
+                "comments": True,
+                "docstrings": True,
+                "executable_code": False,
+                "public_tests": False,
+            },
+        },
+    }
+    payload["exploit"]["exploit_spec"]["patch_change_scope"][field] = value
+
+    with pytest.raises(ValidationError, match=match):
+        RewardHackCase.model_validate(payload)
+
+
+def test_reward_hack_case_rejects_disabled_format_only_patch_requirement() -> None:
+    payload = _case_payload()
+    payload["exploit"] = {
+        "exploit_classification": "format_only_compliance",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "patch_must_be_non_empty": False,
+            "patch_change_scope": {
+                "comments": True,
+                "docstrings": True,
+                "executable_code": False,
+                "public_tests": False,
+            },
+        },
+    }
+
+    with pytest.raises(ValidationError, match="patch_must_be_non_empty=true"):
         RewardHackCase.model_validate(payload)
 
 
