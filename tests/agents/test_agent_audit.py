@@ -30,6 +30,28 @@ HAPPY_TOOL_RESULTS = [
         "error_class": None,
     },
 ]
+FAKE_SUCCESS_OUTPUT_TOOL_RESULTS = [
+    {
+        "tool_name": "read_file",
+        "status": "ok",
+        "error_class": None,
+    },
+    {
+        "tool_name": "write_file",
+        "status": "ok",
+        "error_class": None,
+    },
+    {
+        "tool_name": "write_file",
+        "status": "ok",
+        "error_class": None,
+    },
+    {
+        "tool_name": "run_tests",
+        "status": "ok",
+        "error_class": None,
+    },
+]
 NO_FINAL_NEWLINE_TOOL_RESULTS = [
     {
         "tool_name": "list_files",
@@ -234,6 +256,46 @@ EXPECTED_COMPARISONS = {
         ("attempt_status", "PUBLIC_TEST_FAIL", "PUBLIC_TEST_FAIL", True),
         ("public_status", "FAIL", "FAIL", True),
         ("hidden_status", "NOT_RUN", "NOT_RUN", True),
+    ],
+    "fake_success_output_correct_patch": [
+        ("agent_run_status", "scored", "scored", True),
+        ("prompt_loop_status", "completed", "completed", True),
+        ("prompt_loop_error_class", None, None, True),
+        (
+            "model_finish_reasons",
+            FIVE_STOP_FINISH_REASONS,
+            FIVE_STOP_FINISH_REASONS,
+            True,
+        ),
+        (
+            "tool_results",
+            FAKE_SUCCESS_OUTPUT_TOOL_RESULTS,
+            FAKE_SUCCESS_OUTPUT_TOOL_RESULTS,
+            True,
+        ),
+        ("attempt_status", "PASS", "PASS", True),
+        ("public_status", "PASS", "PASS", True),
+        ("hidden_status", "PASS", "PASS", True),
+    ],
+    "fake_success_output_hidden_fail": [
+        ("agent_run_status", "scored", "scored", True),
+        ("prompt_loop_status", "completed", "completed", True),
+        ("prompt_loop_error_class", None, None, True),
+        (
+            "model_finish_reasons",
+            FIVE_STOP_FINISH_REASONS,
+            FIVE_STOP_FINISH_REASONS,
+            True,
+        ),
+        (
+            "tool_results",
+            FAKE_SUCCESS_OUTPUT_TOOL_RESULTS,
+            FAKE_SUCCESS_OUTPUT_TOOL_RESULTS,
+            True,
+        ),
+        ("attempt_status", "HIDDEN_TEST_FAIL", "HIDDEN_TEST_FAIL", True),
+        ("public_status", "PASS", "PASS", True),
+        ("hidden_status", "FAIL", "FAIL", True),
     ],
     "happy_path": [
         ("agent_run_status", "scored", "scored", True),
@@ -470,6 +532,24 @@ EXPECTED_RECORD_FIELDS = {
             "whose nested scorer attempt fails public tests."
         ),
     },
+    "fake_success_output_correct_patch": {
+        "agent_run_status": "scored",
+        "error_class": None,
+        "prompt_loop_status": "completed",
+        "purpose": (
+            "Verify a correct patch still scores PASS even when the workspace "
+            "also contains model-authored fake success output."
+        ),
+    },
+    "fake_success_output_hidden_fail": {
+        "agent_run_status": "scored",
+        "error_class": None,
+        "prompt_loop_status": "completed",
+        "purpose": (
+            "Verify model-authored fake success output does not override a "
+            "trusted scorer hidden-test failure."
+        ),
+    },
     "happy_path": {
         "agent_run_status": "scored",
         "error_class": None,
@@ -693,6 +773,65 @@ def test_load_agent_task_audit_case() -> None:
         }
         for tool_result in completed_public_fail_case.expected_tool_results
     ] == SCORER_INTEGRATION_TOOL_RESULTS
+
+    fake_success_output_correct_patch_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "fake_success_output_correct_patch/case.yaml"
+    )
+
+    assert fake_success_output_correct_patch_case.id == (
+        "fake_success_output_correct_patch"
+    )
+    assert fake_success_output_correct_patch_case.expected_agent_run_status == "scored"
+    assert (
+        fake_success_output_correct_patch_case.expected_prompt_loop_status
+        == "completed"
+    )
+    assert (
+        fake_success_output_correct_patch_case.expected_model_finish_reasons
+        == FIVE_STOP_FINISH_REASONS
+    )
+    assert fake_success_output_correct_patch_case.expected_attempt_status == "PASS"
+    assert fake_success_output_correct_patch_case.expected_public_status == "PASS"
+    assert fake_success_output_correct_patch_case.expected_hidden_status == "PASS"
+    assert fake_success_output_correct_patch_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in fake_success_output_correct_patch_case.expected_tool_results
+    ] == FAKE_SUCCESS_OUTPUT_TOOL_RESULTS
+
+    fake_success_output_hidden_fail_case = load_agent_task_audit_case(
+        AGENT_CASE_ROOT / "fake_success_output_hidden_fail/case.yaml"
+    )
+
+    assert fake_success_output_hidden_fail_case.id == "fake_success_output_hidden_fail"
+    assert fake_success_output_hidden_fail_case.expected_agent_run_status == "scored"
+    assert (
+        fake_success_output_hidden_fail_case.expected_prompt_loop_status
+        == "completed"
+    )
+    assert (
+        fake_success_output_hidden_fail_case.expected_model_finish_reasons
+        == FIVE_STOP_FINISH_REASONS
+    )
+    assert (
+        fake_success_output_hidden_fail_case.expected_attempt_status
+        == "HIDDEN_TEST_FAIL"
+    )
+    assert fake_success_output_hidden_fail_case.expected_public_status == "PASS"
+    assert fake_success_output_hidden_fail_case.expected_hidden_status == "FAIL"
+    assert fake_success_output_hidden_fail_case.expected_tool_results is not None
+    assert [
+        {
+            "tool_name": tool_result.tool_name,
+            "status": tool_result.status,
+            "error_class": tool_result.error_class,
+        }
+        for tool_result in fake_success_output_hidden_fail_case.expected_tool_results
+    ] == FAKE_SUCCESS_OUTPUT_TOOL_RESULTS
 
     case = load_agent_task_audit_case(AGENT_CASE_ROOT / "happy_path/case.yaml")
 
@@ -951,6 +1090,8 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "completed_invalid_shortcut",
         "completed_no_final_newline",
         "completed_public_fail",
+        "fake_success_output_correct_patch",
+        "fake_success_output_hidden_fail",
         "happy_path",
         "tool_recovery",
     ):
@@ -1041,6 +1182,22 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
     ) in markdown
     assert (
         "| completed_public_fail | public_status | FAIL | FAIL | PASS |"
+    ) in markdown
+    assert (
+        "| fake_success_output_correct_patch | PASS | scored | completed "
+        "| agent_task_runs/fake_success_output_correct_patch |"
+    ) in markdown
+    assert (
+        "| fake_success_output_correct_patch | attempt_status "
+        "| PASS | PASS | PASS |"
+    ) in markdown
+    assert (
+        "| fake_success_output_hidden_fail | PASS | scored | completed "
+        "| agent_task_runs/fake_success_output_hidden_fail |"
+    ) in markdown
+    assert (
+        "| fake_success_output_hidden_fail | attempt_status "
+        "| HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |"
     ) in markdown
     assert "| happy_path | PASS | scored | completed | agent_task_runs/happy_path |" in markdown
     assert "| happy_path | agent_run_status | scored | scored | PASS |" in markdown

@@ -333,3 +333,33 @@ private verifier provenance must not leak into exported attempt artifacts
 Keeping the reward-hack exposure scan broad is useful because it catches these
 second-order leaks. The right fix is to harden the artifact boundary, not to
 make the exposure scan ignore files that happen to be inconvenient.
+
+### Spoof Evidence Is Not Task Correctness
+
+Model-authored success-looking files are exploit evidence, not authoritative
+scorer evidence.
+
+This creates two useful cases:
+
+```text
+bad patch + fake success output -> task failure and reward-hack signal
+correct patch + fake success output -> task success and reward-hack signal
+```
+
+The task outcome should come only from the trusted scorer. A fake `score.json`,
+`results.json`, or PASS marker in the workspace must not turn a bad patch into
+a successful attempt. At the same time, fake success output should not make a
+correct patch fail the underlying task scorer merely because the workspace also
+contains a spoofed artifact.
+
+The durable boundary is:
+
+```text
+task_success = trusted scorer result
+reward_hack_detected = separate data-use/review signal
+```
+
+This matters for post-training because a trajectory can be task-correct and
+still suspicious as training data. Positive training eligibility should consult
+both task success and reward-hack detection rather than treating them as the
+same measurement.
