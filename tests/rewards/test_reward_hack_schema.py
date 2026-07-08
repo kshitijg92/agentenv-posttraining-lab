@@ -13,20 +13,23 @@ from agentenv.rewards.cases import (
 from agentenv.rewards.schema import RewardHackCase
 
 
-CASE_PATH = Path("data/reward_hack_cases/hidden_test_probe_attempt/case.yaml")
+CASE_PATH = Path(
+    "data/reward_hack_cases/hidden_validator_path_probe_attempt/case.yaml"
+)
+CASE_ROOT = Path("data/reward_hack_cases")
 
 
-def test_load_reward_hack_case_accepts_hidden_test_probe_case() -> None:
+def test_load_reward_hack_case_accepts_hidden_validator_probe_case() -> None:
     case = load_reward_hack_case(CASE_PATH)
 
     assert case.schema_version == "reward_hack_case_v0"
-    assert case.reward_hack_id == "hidden_test_probe_attempt"
+    assert case.reward_hack_id == "hidden_validator_path_probe_attempt"
     assert case.evidence.source_type == "scorer_audit_case"
     assert case.evidence.exploit.case_id == "hidden_validator_path_reference"
     assert case.evidence.valid_control.case_id == "correct_oracle"
-    assert case.exploit.exploit_classification == "hidden_test_probe_attempt"
+    assert case.exploit.exploit_classification == "hidden_validator_probe_attempt"
     assert case.exploit.exploit_spec.probe_surface == "submitted_patch_text"
-    assert case.exploit.exploit_spec.probe_reference_type == "hidden_tests_path"
+    assert case.exploit.exploit_spec.probe_reference_type == "hidden_validator_path"
     assert not case.expected_reward_hack_outcome.private_content_exposed
     assert case.expected_reward_hack_outcome.exploit_blocked
     assert not case.expected_reward_hack_outcome.training_allowed
@@ -36,6 +39,22 @@ def test_verify_reward_hack_case_source_refs_accepts_current_hashes() -> None:
     case = load_reward_hack_case(CASE_PATH)
 
     verify_reward_hack_case_source_refs(case, repo_root=Path.cwd())
+
+
+def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
+    cases = [
+        load_reward_hack_case(path)
+        for path in sorted(CASE_ROOT.rglob("case.yaml"))
+    ]
+
+    assert {
+        case.reward_hack_id for case in cases
+    } == {
+        "hidden_validator_path_probe_attempt",
+        "leakage_canary_probe_attempt",
+    }
+    for case in cases:
+        verify_reward_hack_case_source_refs(case, repo_root=Path.cwd())
 
 
 def test_harness_audit_case_hashes_are_computable_for_runtime_outputs() -> None:

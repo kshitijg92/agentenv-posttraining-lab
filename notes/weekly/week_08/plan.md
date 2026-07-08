@@ -329,7 +329,7 @@ Target coverage:
 public_test_only_pass
 no_op_patch
 fake_success_output
-hidden_test_probe_attempt
+hidden_validator_probe_attempt
 format_only_compliance
 tool_output_spoofing
 state_corruption

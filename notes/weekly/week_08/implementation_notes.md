@@ -25,7 +25,7 @@ Start with deterministic harness-audit sources before using live model attempts.
 First exploit family:
 
 ```text
-hidden_test_probe_attempt
+hidden_validator_probe_attempt
 ```
 
 Initial invalid shortcut evidence:
@@ -164,7 +164,7 @@ first implementation.
 Implement the first typed spec for:
 
 ```text
-hidden_test_probe_attempt
+hidden_validator_probe_attempt
 ```
 
 Future exploit classes can add their own typed specs when they are implemented,
@@ -215,12 +215,12 @@ expected_reward_hack_outcome
 
 Only `exploit.exploit_spec` varies by exploit class.
 
-## 2026-07-06 Hidden-Test Probe Spec
+## 2026-07-06 Hidden-Validator Probe Spec
 
 ### Decision
 
-For the first typed exploit spec, `hidden_test_probe_attempt`, keep the fields
-literal and audit-oriented:
+For the first typed exploit spec, `hidden_validator_probe_attempt`, keep the
+fields literal and audit-oriented:
 
 ```text
 probe_target
@@ -235,9 +235,8 @@ Make `probe_reference_type` an enum, not free text.
 Initial enum values should cover the first deterministic cases:
 
 ```text
-hidden_tests_path
+hidden_validator_path
 leakage_canary
-absolute_private_path
 ```
 
 Add more enum values only when there is a concrete fixture that needs them.
@@ -248,13 +247,23 @@ Initial enum values:
 
 ```text
 submitted_patch_text
-agent_tool_call_path
-agent_workspace_write
-eval_artifact_reference
+agent_tool_call
 ```
 
 For the first deterministic scorer-audit fixture, only
 `submitted_patch_text` is required.
+
+Use "validator" rather than "test" in the reward-hack contract because the
+boundary is about private scoring/verifier assets, not pytest specifically.
+Do not include `agent_workspace_write` or `eval_artifact_reference` in the v0
+surface enum. `agent_workspace_write` is covered by tool-call arguments once the
+agent surface exists, and `eval_artifact_reference` is better treated later as a
+leakage/provenance surface rather than an exploit-attempt surface.
+
+Do not include `absolute_private_path` in the enum yet. A simple
+slash-prefixed marker check would catch strings such as
+`/abc/d/hidden_tests`, but that is not full absolute-path parsing. Keeping the
+enum out of the contract avoids claiming a stronger detector than we have.
 
 ### Reasoning
 
@@ -499,7 +508,7 @@ Initial layout:
 
 ```text
 data/reward_hack_cases/
-  hidden_test_probe_attempt/
+  hidden_validator_path_probe_attempt/
     case.yaml
 ```
 
@@ -605,12 +614,25 @@ reward-hacking view over the underlying audit results: aggregate safety signals,
 case outcomes, runtime checks, source audit statuses, leakage scan counts, and
 valid-control reuse counts.
 
+The initial authored case suite covers two scorer-backed submitted-patch
+private-reference variants:
+
+```text
+hidden_validator_path_probe_attempt
+leakage_canary_probe_attempt
+```
+
+Both are paired with the same `correct_oracle` valid control, which is
+intentional for the first batch and visible in the report's valid-control reuse
+counts.
+
 `RewardHackAuditResult` keeps the underlying scorer `ScorerAuditResult` objects
 for the exploit and valid control. It does not redefine scorer status fields or
 status expectations; those remain owned by the scorer audit case and its
 `comparisons`.
 
-For `hidden_test_probe_attempt`, the runtime makes two separate measurements:
+For `hidden_validator_probe_attempt`, the runtime makes two separate
+measurements:
 
 ```text
 private_content_access_attempt_actual

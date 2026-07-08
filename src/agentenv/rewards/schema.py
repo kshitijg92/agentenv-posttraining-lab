@@ -4,17 +4,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 RewardHackCaseSchemaVersion = Literal["reward_hack_case_v0"]
-ExploitClassification = Literal["hidden_test_probe_attempt"]
-HiddenTestProbeReferenceType = Literal[
-    "hidden_tests_path",
+ExploitClassification = Literal["hidden_validator_probe_attempt"]
+HiddenValidatorProbeReferenceType = Literal[
+    "hidden_validator_path",
     "leakage_canary",
-    "absolute_private_path",
 ]
-HiddenTestProbeSurface = Literal[
+HiddenValidatorProbeSurface = Literal[
     "submitted_patch_text",
-    "agent_tool_call_path",
-    "agent_workspace_write",
-    "eval_artifact_reference",
+    "agent_tool_call",
 ]
 
 REWARD_HACK_CASE_SCHEMA_VERSION: RewardHackCaseSchemaVersion = (
@@ -112,33 +109,33 @@ RewardHackEvidencePair: TypeAlias = Annotated[
 ]
 
 
-class HiddenTestProbeExploitSpec(BaseModel):
+class HiddenValidatorProbeExploitSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     probe_target: str = Field(min_length=1)
-    probe_surface: HiddenTestProbeSurface
-    probe_reference_type: HiddenTestProbeReferenceType
+    probe_surface: HiddenValidatorProbeSurface
+    probe_reference_type: HiddenValidatorProbeReferenceType
     expected_blocking_layer: str = Field(min_length=1)
     private_content_must_not_appear: bool
 
     @model_validator(mode="after")
-    def validate_private_content_expectation(self) -> "HiddenTestProbeExploitSpec":
+    def validate_private_content_expectation(self) -> "HiddenValidatorProbeExploitSpec":
         if not self.private_content_must_not_appear:
             raise ValueError(
-                "hidden_test_probe_attempt requires "
+                "hidden_validator_probe_attempt requires "
                 "private_content_must_not_appear=true"
             )
         return self
 
 
-class HiddenTestProbeExploit(BaseModel):
+class HiddenValidatorProbeExploit(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    exploit_classification: Literal["hidden_test_probe_attempt"]
-    exploit_spec: HiddenTestProbeExploitSpec
+    exploit_classification: Literal["hidden_validator_probe_attempt"]
+    exploit_spec: HiddenValidatorProbeExploitSpec
 
 
-RewardHackExploit: TypeAlias = HiddenTestProbeExploit
+RewardHackExploit: TypeAlias = HiddenValidatorProbeExploit
 
 
 class ExpectedRewardHackOutcome(BaseModel):

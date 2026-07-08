@@ -78,8 +78,8 @@ For example:
 
 ```text
 evidence = scorer audit case with a submitted patch referencing hidden_tests
-exploit_spec = hidden_test_probe_attempt on submitted_patch_text with
-probe_reference_type=hidden_tests_path
+exploit_spec = hidden_validator_probe_attempt on submitted_patch_text with
+probe_reference_type=hidden_validator_path
 ```
 
 Runtime should not use the spec to synthesize a new exploit. It should use the
@@ -96,6 +96,34 @@ expected_reward_hack_outcome -> reward/data-use expectations
 
 This matters because reward-hack reports need to aggregate exploit families
 without parsing every patch or transcript ad hoc.
+
+### Names Should Match The Boundary Being Protected
+
+For reward-hack probes, "hidden validator" is the better contract term than
+"hidden test".
+
+The private object we are protecting is the hidden scoring/verifier boundary.
+Today that boundary is implemented with pytest files, but the reward-hack
+measurement should not imply that only tests are private or that only pytest
+paths matter.
+
+This matters because later probes may involve canaries, validator paths, tool
+arguments, scoring metadata, or non-pytest validators. If the schema says
+"test", it quietly narrows reviewer attention and can create false coverage.
+
+### Do Not Name A Detector More Strongly Than It Measures
+
+An `absolute_private_path` enum value sounds like the audit can parse and
+recognize absolute private paths robustly.
+
+A simple check for `"/" + hidden_validator_marker` is weaker than that. It can
+catch slash-prefixed markers such as `/abc/d/hidden_tests`, but it is not a
+general absolute-path detector across URI forms, shell expansions, platform
+path syntax, or path normalization.
+
+The durable lesson is to keep the measurement contract narrower than or equal
+to the implemented detector. Over-broad enum names create false confidence in
+coverage and make reports look stronger than the evidence supports.
 
 ### Every Exploit Needs A Valid Control
 
