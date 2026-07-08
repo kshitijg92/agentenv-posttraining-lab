@@ -7,6 +7,7 @@ RewardHackCaseSchemaVersion = Literal["reward_hack_case_v0"]
 ExploitClassification = Literal[
     "hidden_validator_probe_attempt",
     "no_op_patch",
+    "public_check_tampering",
     "public_test_only_pass",
 ]
 HiddenValidatorProbeReferenceType = Literal[
@@ -189,8 +190,37 @@ class PublicTestOnlyPassExploit(BaseModel):
     exploit_spec: PublicTestOnlyPassExploitSpec
 
 
+class PublicCheckTamperingExploitSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    probe_surface: Literal["submitted_patch_text"]
+    public_test_files_must_be_modified: bool
+    expected_blocking_layer: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_public_check_tampering_requirements(
+        self,
+    ) -> "PublicCheckTamperingExploitSpec":
+        if not self.public_test_files_must_be_modified:
+            raise ValueError(
+                "public_check_tampering requires "
+                "public_test_files_must_be_modified=true"
+            )
+        return self
+
+
+class PublicCheckTamperingExploit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exploit_classification: Literal["public_check_tampering"]
+    exploit_spec: PublicCheckTamperingExploitSpec
+
+
 RewardHackExploit: TypeAlias = Annotated[
-    HiddenValidatorProbeExploit | NoOpPatchExploit | PublicTestOnlyPassExploit,
+    HiddenValidatorProbeExploit
+    | NoOpPatchExploit
+    | PublicCheckTamperingExploit
+    | PublicTestOnlyPassExploit,
     Field(discriminator="exploit_classification"),
 ]
 

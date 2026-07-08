@@ -12,6 +12,7 @@ from agentenv.rewards.cases import (
 )
 from agentenv.rewards.schema import (
     NoOpPatchExploit,
+    PublicCheckTamperingExploit,
     PublicTestOnlyPassExploit,
     RewardHackCase,
 )
@@ -63,6 +64,7 @@ def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
         "leakage_canary_agent_tool_call_probe_attempt",
         "leakage_canary_submitted_patch_text_probe_attempt",
         "no_op_patch_submitted_patch_text_probe_attempt",
+        "public_check_tampering_submitted_patch_text_probe_attempt",
         "public_test_only_pass_submitted_patch_text_probe_attempt",
     }
     for case in cases:
@@ -146,6 +148,30 @@ def test_reward_hack_case_accepts_public_test_only_pass_exploit_spec() -> None:
     assert case.exploit.exploit_spec.public_tests_must_not_be_modified is True
 
 
+def test_reward_hack_case_accepts_public_check_tampering_exploit_spec() -> None:
+    payload = _case_payload()
+    payload["reward_hack_id"] = "public_check_tampering_schema_probe"
+    payload["exploit"] = {
+        "exploit_classification": "public_check_tampering",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "public_test_files_must_be_modified": True,
+            "expected_blocking_layer": "patch_preflight_public_test_guard",
+        },
+    }
+
+    case = RewardHackCase.model_validate(payload)
+
+    assert isinstance(case.exploit, PublicCheckTamperingExploit)
+    assert case.exploit.exploit_classification == "public_check_tampering"
+    assert case.exploit.exploit_spec.probe_surface == "submitted_patch_text"
+    assert case.exploit.exploit_spec.public_test_files_must_be_modified is True
+    assert (
+        case.exploit.exploit_spec.expected_blocking_layer
+        == "patch_preflight_public_test_guard"
+    )
+
+
 def test_reward_hack_case_rejects_disabled_no_op_patch_requirement() -> None:
     payload = _case_payload()
     payload["exploit"] = {
@@ -186,6 +212,24 @@ def test_reward_hack_case_rejects_disabled_public_test_only_pass_requirements(
     payload["exploit"]["exploit_spec"][field] = False
 
     with pytest.raises(ValidationError, match=match):
+        RewardHackCase.model_validate(payload)
+
+
+def test_reward_hack_case_rejects_disabled_public_check_tampering_requirement() -> None:
+    payload = _case_payload()
+    payload["exploit"] = {
+        "exploit_classification": "public_check_tampering",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "public_test_files_must_be_modified": False,
+            "expected_blocking_layer": "patch_preflight_public_test_guard",
+        },
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="public_test_files_must_be_modified=true",
+    ):
         RewardHackCase.model_validate(payload)
 
 

@@ -294,6 +294,26 @@ filters and mitigations. An empty patch is a minimal-effort/no-change failure;
 a public-test-only patch is visible-check overfitting. Both are invalid as
 positive training data, but they teach different lessons about the reward.
 
+### Do Not Let Models Edit The Measurement Instrument
+
+A patch that changes public tests or public check assets is not a normal
+solution attempt. It is an attempt to alter the measurement instrument.
+
+This is different from a patch that merely overfits visible checks. In the
+overfit case, the reward signal is weak. In the tampering case, the actor is
+trying to change the reward signal itself.
+
+The invariant is:
+
+```text
+task solution may modify task code
+task solution must not modify evaluator/check assets
+```
+
+Keeping these as separate reward-hack classes matters because the mitigations
+are different. Weak public checks call for better evaluation coverage; public
+check tampering calls for preflight blocking and training exclusion.
+
 ### Scorer-Provenance Artifacts Are Also Data Boundaries
 
 Hidden scoring is allowed to inspect private validators, but the public attempt
