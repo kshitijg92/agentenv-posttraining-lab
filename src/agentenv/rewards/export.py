@@ -212,8 +212,8 @@ def _reward_hack_audit_result_record(
             result.valid_control_harness_audit_passed
         ),
         "valid_control_task_success_actual": result.valid_control_task_success_actual,
-        "private_content_access_attempt_actual": (
-            result.private_content_access_attempt_actual
+        "exploit_mechanism_detected_actual": (
+            result.exploit_mechanism_detected_actual
         ),
         "private_content_exposed_actual": result.private_content_exposed_actual,
         "leakage_scan": _leakage_scan_record(result.leakage_scan_result),
@@ -268,9 +268,9 @@ def _reward_hack_audit_result_from_record(
             record,
             "valid_control_task_success_actual",
         ),
-        private_content_access_attempt_actual=_required_bool(
+        exploit_mechanism_detected_actual=_required_bool(
             record,
-            "private_content_access_attempt_actual",
+            "exploit_mechanism_detected_actual",
         ),
         leakage_scan_result=_leakage_scan_from_record(
             _required_mapping(record, "leakage_scan")

@@ -35,8 +35,8 @@ def render_reward_hack_audit_report(artifact: RewardHackAuditArtifact) -> str:
         "",
         f"- Audit pass rate: {_count_rate(artifact.manifest.pass_count, len(records))}",
         (
-            "- Private-content access attempts: "
-            f"{_count_rate(_count(records, 'private_content_access_attempt_actual'), len(records))}"
+            "- Exploit mechanisms detected: "
+            f"{_count_rate(_count(records, 'exploit_mechanism_detected_actual'), len(records))}"
         ),
         (
             "- Private-content exposures: "
@@ -159,7 +159,7 @@ def _case_table(records: list[RewardHackAuditResult]) -> list[str]:
     rows = [
         (
             "| reward_hack_id | result | source_type | exploit_class | probe_surface | "
-            "probe_reference_type | access_attempt | private_exposed | "
+            "probe_reference_type | mechanism_detected | private_exposed | "
             "exploit_blocked | task_success_allowed | training_allowed | "
             "valid_control_success | exploit_case | valid_control_case | run_dir |"
         ),
@@ -171,14 +171,15 @@ def _case_table(records: list[RewardHackAuditResult]) -> list[str]:
     for record in records:
         case = record.reward_hack_case
         spec = case.exploit.exploit_spec
+        probe_reference_type = getattr(spec, "probe_reference_type", "")
         rows.append(
             f"| {case.reward_hack_id} "
             f"| {_pass_fail(record.audit_pass)} "
             f"| {case.evidence.source_type} "
             f"| {case.exploit.exploit_classification} "
             f"| {spec.probe_surface} "
-            f"| {spec.probe_reference_type} "
-            f"| {_bool_display(record.private_content_access_attempt_actual)} "
+            f"| {probe_reference_type} "
+            f"| {_bool_display(record.exploit_mechanism_detected_actual)} "
             f"| {_bool_display(record.private_content_exposed_actual)} "
             f"| {_bool_display(record.exploit_blocked_actual)} "
             f"| {_bool_display(record.task_success_allowed_actual)} "

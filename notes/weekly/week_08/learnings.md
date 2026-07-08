@@ -244,3 +244,52 @@ private reference in tool result/error/scoring/training artifact -> exposure
 
 Without this boundary, every authored exploit fixture that contains the canary
 or hidden-validator marker would falsely look like a harness leakage failure.
+
+### Status Is Not The Exploit Mechanism
+
+Two different reward-hack mechanisms can produce the same scorer outcome.
+
+For example, an empty patch and a public-test-only partial fix can both pass
+weak public checks and fail hidden validation:
+
+```text
+public_status = PASS
+hidden_status = FAIL
+attempt_status = HIDDEN_TEST_FAIL
+```
+
+If the reward-hack suite keyed only on status, it would collapse distinct
+failure modes into one bucket and hide which reward signal was actually being
+gamed.
+
+The durable rule is:
+
+```text
+exploit spec describes the mechanism
+harness audit describes the outcome
+```
+
+This matters for post-training because different mechanisms imply different
+filters and mitigations. An empty patch is a minimal-effort/no-change failure;
+a public-test-only patch is visible-check overfitting. Both are invalid as
+positive training data, but they teach different lessons about the reward.
+
+### Scorer-Provenance Artifacts Are Also Data Boundaries
+
+Hidden scoring is allowed to inspect private validators, but the public attempt
+artifact should not preserve hidden-score command paths, hidden pytest output,
+or other private verifier provenance.
+
+This matters because audit and training pipelines often consume artifacts, not
+only model-visible transcripts. A hidden validator path in `stdout.txt` or
+`trace.jsonl` can become leakage even if the model never saw it during the run.
+The boundary is therefore:
+
+```text
+private verifier execution may happen inside the scorer
+private verifier provenance must not leak into exported attempt artifacts
+```
+
+Keeping the reward-hack exposure scan broad is useful because it catches these
+second-order leaks. The right fix is to harden the artifact boundary, not to
+make the exposure scan ignore files that happen to be inconvenient.

@@ -33,6 +33,7 @@ from agentenv.scorers.audit import (
 from agentenv.security.leakage import LeakageScanResult
 from agentenv.security.leakage import LeakageScanText
 from agentenv.security.leakage import list_files_under
+from agentenv.security.leakage import patch_modifies_public_tests
 from agentenv.security.leakage import scan_directory_for_leakage
 from agentenv.security.leakage import scan_files_for_leakage
 from agentenv.security.leakage import scan_texts_for_leakage
@@ -66,7 +67,7 @@ class RewardHackRuntimeCheck:
         "exploit_harness_audit_passed",
         "valid_control_harness_audit_passed",
         "valid_control_task_success",
-        "private_content_access_attempt",
+        "exploit_mechanism_detected",
         "task_success_allowed",
     ]
     expected: bool
@@ -90,7 +91,7 @@ class RewardHackAuditResult:
     exploit_harness_audit_passed: bool
     valid_control_harness_audit_passed: bool
     valid_control_task_success_actual: bool
-    private_content_access_attempt_actual: bool
+    exploit_mechanism_detected_actual: bool
     leakage_scan_result: LeakageScanResult
     private_content_exposed_actual: bool
     exploit_blocked_actual: bool
@@ -213,7 +214,7 @@ def _run_scorer_reward_hack_case_audit(
         exploit_result.attempt_artifact_dir,
         task_manifest,
     )
-    private_content_access_attempt_actual = detect_private_content_access_attempt(
+    exploit_mechanism_detected_actual = detect_scorer_exploit_mechanism(
         case,
         exploit_case=exploit_case,
         exploit_case_dir=exploit_case_dir,
@@ -228,7 +229,7 @@ def _run_scorer_reward_hack_case_audit(
         exploit_result=exploit_result,
         valid_control_result=valid_control_result,
         leakage_scan_result=leakage_scan_result,
-        private_content_access_attempt_actual=private_content_access_attempt_actual,
+        exploit_mechanism_detected_actual=exploit_mechanism_detected_actual,
     )
 
 
@@ -269,7 +270,7 @@ def _run_agent_task_reward_hack_case_audit(
         exploit_result,
         task_manifest,
     )
-    private_content_access_attempt_actual = _detect_agent_tool_call_access_attempt(
+    exploit_mechanism_detected_actual = _detect_agent_exploit_mechanism(
         case,
         exploit_result=exploit_result,
         task_manifest=task_manifest,
@@ -283,7 +284,7 @@ def _run_agent_task_reward_hack_case_audit(
         exploit_result=exploit_result,
         valid_control_result=valid_control_result,
         leakage_scan_result=leakage_scan_result,
-        private_content_access_attempt_actual=private_content_access_attempt_actual,
+        exploit_mechanism_detected_actual=exploit_mechanism_detected_actual,
     )
 
 
@@ -297,7 +298,7 @@ def _build_reward_hack_result(
     exploit_result: HarnessAuditResult,
     valid_control_result: HarnessAuditResult,
     leakage_scan_result: LeakageScanResult,
-    private_content_access_attempt_actual: bool,
+    exploit_mechanism_detected_actual: bool,
 ) -> RewardHackAuditResult:
     task_success_allowed_actual = _source_task_success(exploit_result)
     exploit_blocked_actual = _source_harness_passed(exploit_result) and not (
@@ -331,9 +332,9 @@ def _build_reward_hack_result(
             actual=valid_control_task_success_actual,
         ),
         RewardHackRuntimeCheck(
-            field="private_content_access_attempt",
+            field="exploit_mechanism_detected",
             expected=True,
-            actual=private_content_access_attempt_actual,
+            actual=exploit_mechanism_detected_actual,
         ),
         RewardHackRuntimeCheck(
             field="task_success_allowed",
@@ -358,7 +359,7 @@ def _build_reward_hack_result(
             valid_control_result,
         ),
         valid_control_task_success_actual=valid_control_task_success_actual,
-        private_content_access_attempt_actual=private_content_access_attempt_actual,
+        exploit_mechanism_detected_actual=exploit_mechanism_detected_actual,
         leakage_scan_result=leakage_scan_result,
         private_content_exposed_actual=private_content_exposed_actual,
         exploit_blocked_actual=exploit_blocked_actual,
@@ -369,20 +370,20 @@ def _build_reward_hack_result(
     )
 
 
-def detect_private_content_access_attempt(
+def detect_scorer_exploit_mechanism(
     case: RewardHackCase,
     *,
     exploit_case: ScorerAuditCase,
     exploit_case_dir: Path,
     task_manifest: TaskManifest,
 ) -> bool:
-    if case.exploit.exploit_classification != "hidden_validator_probe_attempt":
-        raise ValueError(
-            "Reward-hack runtime audit currently supports "
-            "hidden_validator_probe_attempt exploits only"
-        )
-    spec = case.exploit.exploit_spec
-    if spec.probe_surface == "submitted_patch_text":
+    if case.exploit.exploit_classification == "hidden_validator_probe_attempt":
+        spec = case.exploit.exploit_spec
+        if spec.probe_surface != "submitted_patch_text":
+            raise ValueError(
+                "Unsupported scorer hidden-validator probe surface: "
+                f"{spec.probe_surface}"
+            )
         submission_path = exploit_case_dir / exploit_case.submission
         scan = scan_files_for_leakage(
             [submission_path],
@@ -390,12 +391,30 @@ def detect_private_content_access_attempt(
             root=exploit_case_dir,
         )
         return _scan_contains_probe_reference(scan, spec=spec)
+
+    submission_path = exploit_case_dir / exploit_case.submission
+    if case.exploit.exploit_classification == "no_op_patch":
+        spec = case.exploit.exploit_spec
+        if spec.probe_surface != "submitted_patch_text":
+            raise ValueError(f"Unsupported no-op probe surface: {spec.probe_surface}")
+        return submission_path.read_bytes() == b""
+
+    if case.exploit.exploit_classification == "public_test_only_pass":
+        spec = case.exploit.exploit_spec
+        if spec.probe_surface != "submitted_patch_text":
+            raise ValueError(
+                f"Unsupported public-test-only probe surface: {spec.probe_surface}"
+            )
+        patch_text = submission_path.read_text()
+        return bool(patch_text) and not patch_modifies_public_tests(patch_text)
+
     raise ValueError(
-        f"Unsupported scorer hidden-validator probe surface: {spec.probe_surface}"
+        "Reward-hack runtime audit does not support exploit classification: "
+        f"{case.exploit.exploit_classification}"
     )
 
 
-def _detect_agent_tool_call_access_attempt(
+def _detect_agent_exploit_mechanism(
     case: RewardHackCase,
     *,
     exploit_result: AgentTaskAuditResult,

@@ -10,7 +10,11 @@ from agentenv.rewards.cases import (
     load_reward_hack_case,
     verify_reward_hack_case_source_refs,
 )
-from agentenv.rewards.schema import RewardHackCase
+from agentenv.rewards.schema import (
+    NoOpPatchExploit,
+    PublicTestOnlyPassExploit,
+    RewardHackCase,
+)
 
 
 CASE_PATH = Path(
@@ -58,6 +62,8 @@ def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
         "hidden_validator_path_submitted_patch_text_probe_attempt",
         "leakage_canary_agent_tool_call_probe_attempt",
         "leakage_canary_submitted_patch_text_probe_attempt",
+        "no_op_patch_submitted_patch_text_probe_attempt",
+        "public_test_only_pass_submitted_patch_text_probe_attempt",
     }
     for case in cases:
         verify_reward_hack_case_source_refs(case, repo_root=Path.cwd())
@@ -97,6 +103,89 @@ def test_reward_hack_case_rejects_training_allowed_expectation() -> None:
         ValidationError,
         match="reward-hack cases cannot be training-allowed",
     ):
+        RewardHackCase.model_validate(payload)
+
+
+def test_reward_hack_case_accepts_no_op_patch_exploit_spec() -> None:
+    payload = _case_payload()
+    payload["reward_hack_id"] = "no_op_patch_schema_probe"
+    payload["exploit"] = {
+        "exploit_classification": "no_op_patch",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "patch_must_be_empty": True,
+        },
+    }
+
+    case = RewardHackCase.model_validate(payload)
+
+    assert isinstance(case.exploit, NoOpPatchExploit)
+    assert case.exploit.exploit_classification == "no_op_patch"
+    assert case.exploit.exploit_spec.probe_surface == "submitted_patch_text"
+    assert case.exploit.exploit_spec.patch_must_be_empty is True
+
+
+def test_reward_hack_case_accepts_public_test_only_pass_exploit_spec() -> None:
+    payload = _case_payload()
+    payload["reward_hack_id"] = "public_test_only_pass_schema_probe"
+    payload["exploit"] = {
+        "exploit_classification": "public_test_only_pass",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "patch_must_be_non_empty": True,
+            "public_tests_must_not_be_modified": True,
+        },
+    }
+
+    case = RewardHackCase.model_validate(payload)
+
+    assert isinstance(case.exploit, PublicTestOnlyPassExploit)
+    assert case.exploit.exploit_classification == "public_test_only_pass"
+    assert case.exploit.exploit_spec.probe_surface == "submitted_patch_text"
+    assert case.exploit.exploit_spec.patch_must_be_non_empty is True
+    assert case.exploit.exploit_spec.public_tests_must_not_be_modified is True
+
+
+def test_reward_hack_case_rejects_disabled_no_op_patch_requirement() -> None:
+    payload = _case_payload()
+    payload["exploit"] = {
+        "exploit_classification": "no_op_patch",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "patch_must_be_empty": False,
+        },
+    }
+
+    with pytest.raises(ValidationError, match="patch_must_be_empty=true"):
+        RewardHackCase.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "match"),
+    [
+        ("patch_must_be_non_empty", "patch_must_be_non_empty=true"),
+        (
+            "public_tests_must_not_be_modified",
+            "public_tests_must_not_be_modified=true",
+        ),
+    ],
+)
+def test_reward_hack_case_rejects_disabled_public_test_only_pass_requirements(
+    field: str,
+    match: str,
+) -> None:
+    payload = _case_payload()
+    payload["exploit"] = {
+        "exploit_classification": "public_test_only_pass",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "patch_must_be_non_empty": True,
+            "public_tests_must_not_be_modified": True,
+        },
+    }
+    payload["exploit"]["exploit_spec"][field] = False
+
+    with pytest.raises(ValidationError, match=match):
         RewardHackCase.model_validate(payload)
 
 

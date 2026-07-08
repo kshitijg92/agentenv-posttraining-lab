@@ -12,12 +12,14 @@ from agentenv.artifacts import (
 from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
 from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_REFS
 from agentenv.artifacts.manifests import ScorerAttemptManifest
-from agentenv.orchestrators.attempt import AttemptResult, AttemptRun
+from agentenv.orchestrators.attempt import AttemptCommand, AttemptResult, AttemptRun
 from agentenv.security.secrets import redact_jsonable, redact_secrets
 from agentenv.tracing.schema import TRACE_SCHEMA_VERSION, TraceEventType
 
 
 TraceEvent = dict[str, object]
+HIDDEN_SCORE_STREAM_REDACTION = "[hidden-score output redacted]\n"
+HIDDEN_SCORE_COMMAND_REDACTION = "[hidden-score command redacted]"
 
 
 @dataclass(frozen=True)
@@ -52,12 +54,18 @@ def write_attempt_artifacts(
 
     stdout_path.write_text(
         redact_secrets(
-            _join_streams(result.stdout for result in attempt_run.command_results)
+            _join_command_streams(
+                (command.phase, command.result.stdout)
+                for command in attempt_run.commands
+            )
         )
     )
     stderr_path.write_text(
         redact_secrets(
-            _join_streams(result.stderr for result in attempt_run.command_results)
+            _join_command_streams(
+                (command.phase, command.result.stderr)
+                for command in attempt_run.commands
+            )
         )
     )
     error_path.write_text(redact_secrets(_error_text(attempt_run)))
@@ -85,8 +93,15 @@ def write_attempt_artifacts(
     )
 
 
-def _join_streams(streams: Iterable[str]) -> str:
-    chunks = [stream for stream in streams if stream]
+def _join_command_streams(
+    streams: Iterable[tuple[str, str]],
+) -> str:
+    chunks: list[str] = []
+    for phase, stream in streams:
+        if phase == "hidden_score" and stream:
+            chunks.append(HIDDEN_SCORE_STREAM_REDACTION.rstrip("\n"))
+        elif stream:
+            chunks.append(stream)
     if not chunks:
         return ""
     return "\n".join(chunks) + "\n"
@@ -130,7 +145,7 @@ def _trace_jsonl(attempt_run: AttemptRun) -> str:
             },
             "command_finished",
             timestamp_utc=attempt_run.result.ended_at,
-            input_payload={"command": command.result.command},
+            input_payload={"command": _trace_command(command)},
             output_payload={
                 "returncode": command.result.returncode,
                 "stdout_bytes": len(command.result.stdout.encode()),
@@ -172,6 +187,12 @@ def _trace_jsonl(attempt_run: AttemptRun) -> str:
         )
         + "\n"
     )
+
+
+def _trace_command(command: AttemptCommand) -> list[str]:
+    if command.phase == "hidden_score":
+        return [HIDDEN_SCORE_COMMAND_REDACTION]
+    return command.result.command
 
 
 def _redacted_model_json(result: AttemptResult) -> str:

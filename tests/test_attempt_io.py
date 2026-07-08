@@ -106,6 +106,26 @@ def test_write_attempt_artifacts(tmp_path: Path) -> None:
     assert command_phases == ["patch_apply", "public_check", "hidden_score"]
 
 
+def test_write_attempt_artifacts_redacts_hidden_score_private_output(
+    tmp_path: Path,
+) -> None:
+    attempt_run = run_patch_attempt(
+        TOY_TASK_MANIFEST,
+        TOY_TASK_MANIFEST.parent / "controls/scorer_control_patches/bad_noop.patch",
+        workspace_parent=tmp_path / "workspace_parent",
+    )
+
+    artifact_paths = write_attempt_artifacts(attempt_run, tmp_path / "out")
+    stdout_text = artifact_paths.stdout_txt.read_text()
+    trace_text = artifact_paths.trace_jsonl.read_text()
+
+    assert attempt_run.result.status == "HIDDEN_TEST_FAIL"
+    assert "[hidden-score output redacted]" in stdout_text
+    assert "[hidden-score command redacted]" in trace_text
+    assert "hidden_tests" not in stdout_text
+    assert "hidden_tests" not in trace_text
+
+
 def test_write_attempt_artifacts_preserves_orchestrator_error_details(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
