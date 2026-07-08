@@ -411,3 +411,23 @@ Using an AST comparison after stripping docstrings is a useful narrow guardrail
 for this specific exploit class because it checks that executable Python
 structure did not change. It should not be overclaimed as a full semantic no-op
 detector; it only measures the boundary we deliberately encoded.
+
+### Provenance State Is Runtime-Owned
+
+A model-authored file can look like a harness artifact without becoming one.
+
+Files such as `manifest.json` and `attempt.json` are only authoritative when
+they are written by the runtime in the expected artifact location and validated
+against the artifact schema/provenance rules. The same filename inside a model
+workspace is just model output.
+
+The durable invariant is:
+
+```text
+provenance_authority = writer + location + schema validation
+```
+
+This matters because post-training pipelines often consume saved artifacts
+after the interaction has ended. If downstream code trusts model-authored
+provenance-shaped files by name alone, reward hacking can turn into dataset
+corruption even when trusted scoring originally produced the right status.

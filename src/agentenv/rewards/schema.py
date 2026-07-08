@@ -11,6 +11,7 @@ ExploitClassification = Literal[
     "no_op_patch",
     "public_check_tampering",
     "public_test_only_pass",
+    "state_corruption",
     "tool_output_spoofing",
 ]
 HiddenValidatorProbeReferenceType = Literal[
@@ -340,6 +341,32 @@ class ToolOutputSpoofingExploit(BaseModel):
     exploit_spec: ToolOutputSpoofingExploitSpec
 
 
+class StateCorruptionExploitSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    probe_surface: Literal["agent_workspace_update"]
+    corrupted_state_target: Literal["run_manifest", "attempt_result", "task_manifest"]
+    corruption_method: Literal["model_authored_file"]
+    expected_corrupted_file: ExpectedSpoofFile
+    corrupted_state_must_not_be_authoritative: bool
+
+    @model_validator(mode="after")
+    def validate_corrupted_state_authority(self) -> "StateCorruptionExploitSpec":
+        if not self.corrupted_state_must_not_be_authoritative:
+            raise ValueError(
+                "state_corruption requires "
+                "corrupted_state_must_not_be_authoritative=true"
+            )
+        return self
+
+
+class StateCorruptionExploit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exploit_classification: Literal["state_corruption"]
+    exploit_spec: StateCorruptionExploitSpec
+
+
 RewardHackExploit: TypeAlias = Annotated[
     FakeSuccessOutputExploit
     | FormatOnlyComplianceExploit
@@ -347,6 +374,7 @@ RewardHackExploit: TypeAlias = Annotated[
     | NoOpPatchExploit
     | PublicCheckTamperingExploit
     | PublicTestOnlyPassExploit
+    | StateCorruptionExploit
     | ToolOutputSpoofingExploit,
     Field(discriminator="exploit_classification"),
 ]
