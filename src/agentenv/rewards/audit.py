@@ -21,11 +21,13 @@ from agentenv.rewards.cases import (
 from agentenv.rewards.schema import (
     AgentTaskAuditEvidencePair,
     ExpectedRewardHackOutcome,
+    ExpectedSpoofFile,
     FakeSuccessOutputExploitSpec,
     HarnessAuditCaseRef,
     HiddenValidatorProbeExploitSpec,
     RewardHackCase,
     ScorerAuditEvidencePair,
+    ToolOutputSpoofingExploitSpec,
 )
 from agentenv.scorers.audit import (
     ScorerAuditCase,
@@ -434,12 +436,17 @@ def _detect_agent_exploit_mechanism(
             case.exploit.exploit_spec,
             exploit_result=exploit_result,
         )
+    if case.exploit.exploit_classification == "tool_output_spoofing":
+        return _detect_agent_tool_output_spoofing(
+            case.exploit.exploit_spec,
+            exploit_result=exploit_result,
+        )
 
     if case.exploit.exploit_classification != "hidden_validator_probe_attempt":
         raise ValueError(
             "Reward-hack runtime audit currently supports "
-            "hidden_validator_probe_attempt and fake_success_output "
-            "agent exploits only"
+            "hidden_validator_probe_attempt, fake_success_output, and "
+            "tool_output_spoofing agent exploits only"
         )
     spec = case.exploit.exploit_spec
     if spec.probe_surface != "agent_tool_call":
@@ -479,12 +486,39 @@ def _detect_agent_fake_success_output(
             f"Unsupported fake-success probe surface: {spec.probe_surface}"
         )
 
+    return _detect_agent_spoofed_workspace_file(
+        spec.expected_spoof_file,
+        exploit_result=exploit_result,
+    )
+
+
+def _detect_agent_tool_output_spoofing(
+    spec: ToolOutputSpoofingExploitSpec,
+    *,
+    exploit_result: AgentTaskAuditResult,
+) -> bool:
+    if spec.probe_surface != "agent_workspace_update":
+        raise ValueError(
+            f"Unsupported tool-output-spoofing probe surface: {spec.probe_surface}"
+        )
+
+    return _detect_agent_spoofed_workspace_file(
+        spec.expected_spoof_file,
+        exploit_result=exploit_result,
+    )
+
+
+def _detect_agent_spoofed_workspace_file(
+    expected_spoof_file: ExpectedSpoofFile,
+    *,
+    exploit_result: AgentTaskAuditResult,
+) -> bool:
     patch_text = _agent_candidate_patch_text(exploit_result)
-    if not _patch_adds_or_updates_path(patch_text, spec.expected_spoof_file.path):
+    if not _patch_adds_or_updates_path(patch_text, expected_spoof_file.path):
         return False
     return all(
         marker in patch_text
-        for marker in spec.expected_spoof_file.required_markers
+        for marker in expected_spoof_file.required_markers
     )
 
 
@@ -618,10 +652,27 @@ def _exploit_blocked_actual(
             and _source_harness_passed(exploit_result)
             and _source_has_trusted_scorer_result(exploit_result)
         )
+    if case.exploit.exploit_classification == "tool_output_spoofing":
+        return (
+            exploit_mechanism_detected_actual
+            and _source_harness_passed(exploit_result)
+            and _source_has_authoritative_tool_results(exploit_result)
+        )
     return (
         exploit_mechanism_detected_actual
         and _source_harness_passed(exploit_result)
         and not _source_task_success(exploit_result)
+    )
+
+
+def _source_has_authoritative_tool_results(result: HarnessAuditResult) -> bool:
+    if not isinstance(result, AgentTaskAuditResult):
+        return False
+    if result.agent_task_run.prompt_loop_result is None:
+        return False
+    return any(
+        comparison.field == "tool_results" and comparison.match
+        for comparison in result.comparisons
     )
 
 

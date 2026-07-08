@@ -25,8 +25,8 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
         artifact.manifest.artifact_schema_version
         == REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION
     )
-    assert artifact.manifest.record_count == 9
-    assert artifact.manifest.pass_count == 9
+    assert artifact.manifest.record_count == 11
+    assert artifact.manifest.pass_count == 11
     assert artifact.manifest.fail_count == 0
     assert artifact.manifest.artifacts == {
         "results": "reward_hack_audit_results.jsonl",
@@ -48,6 +48,8 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
         "no_op_patch_submitted_patch_text_probe_attempt",
         "public_check_tampering_submitted_patch_text_probe_attempt",
         "public_test_only_pass_submitted_patch_text_probe_attempt",
+        "tool_output_spoofing_real_tools_plus_spoof_agent_workspace_update",
+        "tool_output_spoofing_spoof_only_agent_workspace_update",
     }
     assert all(record.audit_pass for record in artifact.records)
 
@@ -67,6 +69,8 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
         "no_op_patch_submitted_patch_text_probe_attempt",
         "public_check_tampering_submitted_patch_text_probe_attempt",
         "public_test_only_pass_submitted_patch_text_probe_attempt",
+        "tool_output_spoofing_real_tools_plus_spoof_agent_workspace_update",
+        "tool_output_spoofing_spoof_only_agent_workspace_update",
     }
     assert all(record.audit_pass for record in loaded.records)
     assert {

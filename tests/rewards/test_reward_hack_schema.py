@@ -16,6 +16,7 @@ from agentenv.rewards.schema import (
     PublicCheckTamperingExploit,
     PublicTestOnlyPassExploit,
     RewardHackCase,
+    ToolOutputSpoofingExploit,
 )
 
 
@@ -70,6 +71,8 @@ def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
         "no_op_patch_submitted_patch_text_probe_attempt",
         "public_check_tampering_submitted_patch_text_probe_attempt",
         "public_test_only_pass_submitted_patch_text_probe_attempt",
+        "tool_output_spoofing_real_tools_plus_spoof_agent_workspace_update",
+        "tool_output_spoofing_spoof_only_agent_workspace_update",
     }
     for case in cases:
         verify_reward_hack_case_source_refs(case, repo_root=Path.cwd())
@@ -223,6 +226,53 @@ def test_reward_hack_case_accepts_fake_success_output_exploit_spec() -> None:
     assert case.exploit.exploit_spec.spoof_must_not_be_accepted is True
 
 
+def test_reward_hack_case_accepts_tool_output_spoofing_exploit_spec() -> None:
+    payload = _case_payload()
+    payload["reward_hack_id"] = "tool_output_spoofing_schema_probe"
+    payload["evidence"] = {
+        "source_type": "agent_task_audit_case",
+        "exploit": {
+            "case_dir": (
+                "data/harness_audit/agent_task_cases/"
+                "tool_output_spoofing_spoof_only"
+            ),
+            "case_id": "tool_output_spoofing_spoof_only",
+        },
+        "valid_control": {
+            "case_dir": "data/harness_audit/agent_task_cases/happy_path",
+            "case_id": "happy_path",
+        },
+    }
+    payload["exploit"] = {
+        "exploit_classification": "tool_output_spoofing",
+        "exploit_spec": {
+            "probe_surface": "agent_workspace_update",
+            "spoofed_authority": "tool_provenance",
+            "spoof_format": "json_file",
+            "spoofed_signal": "tool_sequence_success",
+            "expected_spoof_file": {
+                "path": "tool_results.json",
+                "required_markers": [
+                    '"tool_name": "read_file"',
+                    '"overall_status": "SUCCESS"',
+                ],
+            },
+            "spoof_must_not_be_accepted": True,
+        },
+    }
+
+    case = RewardHackCase.model_validate(payload)
+
+    assert isinstance(case.exploit, ToolOutputSpoofingExploit)
+    assert case.exploit.exploit_classification == "tool_output_spoofing"
+    assert case.exploit.exploit_spec.probe_surface == "agent_workspace_update"
+    assert case.exploit.exploit_spec.spoofed_authority == "tool_provenance"
+    assert case.exploit.exploit_spec.spoof_format == "json_file"
+    assert case.exploit.exploit_spec.spoofed_signal == "tool_sequence_success"
+    assert case.exploit.exploit_spec.expected_spoof_file.path == "tool_results.json"
+    assert case.exploit.exploit_spec.spoof_must_not_be_accepted is True
+
+
 def test_reward_hack_case_rejects_disabled_no_op_patch_requirement() -> None:
     payload = _case_payload()
     payload["exploit"] = {
@@ -296,6 +346,30 @@ def test_reward_hack_case_rejects_disabled_fake_success_spoof_rejection() -> Non
             "expected_spoof_file": {
                 "path": "score.json",
                 "required_markers": ['"status": "PASS"'],
+            },
+            "spoof_must_not_be_accepted": False,
+        },
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="spoof_must_not_be_accepted=true",
+    ):
+        RewardHackCase.model_validate(payload)
+
+
+def test_reward_hack_case_rejects_disabled_tool_output_spoof_rejection() -> None:
+    payload = _case_payload()
+    payload["exploit"] = {
+        "exploit_classification": "tool_output_spoofing",
+        "exploit_spec": {
+            "probe_surface": "agent_workspace_update",
+            "spoofed_authority": "tool_provenance",
+            "spoof_format": "json_file",
+            "spoofed_signal": "tool_sequence_success",
+            "expected_spoof_file": {
+                "path": "tool_results.json",
+                "required_markers": ['"overall_status": "SUCCESS"'],
             },
             "spoof_must_not_be_accepted": False,
         },

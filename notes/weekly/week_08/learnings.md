@@ -363,3 +363,29 @@ This matters for post-training because a trajectory can be task-correct and
 still suspicious as training data. Positive training eligibility should consult
 both task success and reward-hack detection rather than treating them as the
 same measurement.
+
+### Workspace Files Are Not Tool Provenance
+
+A model can write files with authoritative-looking names such as
+`tool_results.json`, but a filename does not establish provenance.
+
+Tool provenance comes from the prompt-loop runtime and tool executor:
+
+```text
+authoritative tool results = prompt_loop_result.tool_results
+model-authored workspace files = task artifacts
+```
+
+This matters because later report, reward, review, or training-data code may
+consume artifacts after the run. If that downstream code trusts a workspace
+file because it looks like a transcript, it can silently replace runtime
+evidence with model-authored claims.
+
+The invariant is:
+
+```text
+the source of a record determines authority, not its filename or JSON shape
+```
+
+Reward-hack detection can label the spoofed file as exploit evidence, but it
+must not promote that file into tool-execution evidence.

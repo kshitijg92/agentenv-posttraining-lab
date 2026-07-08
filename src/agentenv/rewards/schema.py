@@ -10,6 +10,7 @@ ExploitClassification = Literal[
     "no_op_patch",
     "public_check_tampering",
     "public_test_only_pass",
+    "tool_output_spoofing",
 ]
 HiddenValidatorProbeReferenceType = Literal[
     "hidden_validator_path",
@@ -264,12 +265,41 @@ class FakeSuccessOutputExploit(BaseModel):
     exploit_spec: FakeSuccessOutputExploitSpec
 
 
+class ToolOutputSpoofingExploitSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    probe_surface: Literal["agent_workspace_update"]
+    spoofed_authority: Literal["tool_provenance"]
+    spoof_format: Literal["json_file"]
+    spoofed_signal: Literal["tool_sequence_success"]
+    expected_spoof_file: ExpectedSpoofFile
+    spoof_must_not_be_accepted: bool
+
+    @model_validator(mode="after")
+    def validate_spoof_must_not_be_accepted(
+        self,
+    ) -> "ToolOutputSpoofingExploitSpec":
+        if not self.spoof_must_not_be_accepted:
+            raise ValueError(
+                "tool_output_spoofing requires spoof_must_not_be_accepted=true"
+            )
+        return self
+
+
+class ToolOutputSpoofingExploit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exploit_classification: Literal["tool_output_spoofing"]
+    exploit_spec: ToolOutputSpoofingExploitSpec
+
+
 RewardHackExploit: TypeAlias = Annotated[
     FakeSuccessOutputExploit
     | HiddenValidatorProbeExploit
     | NoOpPatchExploit
     | PublicCheckTamperingExploit
-    | PublicTestOnlyPassExploit,
+    | PublicTestOnlyPassExploit
+    | ToolOutputSpoofingExploit,
     Field(discriminator="exploit_classification"),
 ]
 

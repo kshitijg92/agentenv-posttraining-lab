@@ -1,9 +1,12 @@
+from dataclasses import replace
 from pathlib import Path
 
+from agentenv.agents.audit import AgentAuditComparison
 from agentenv.agents.audit import AgentTaskAuditResult
 from agentenv.agents.schema import PromptLoopResult, TokenUsage
 from agentenv.models.schema import Message
 from agentenv.rewards.audit import (
+    _source_has_authoritative_tool_results,
     _scan_prompt_loop_result_for_exposure,
     run_reward_hack_audit,
 )
@@ -66,6 +69,16 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
         "public_test_only_pass_submitted_patch_text_probe_attempt": (
             "public_test_only_pass",
             "submitted_patch_text",
+            "",
+        ),
+        "tool_output_spoofing_real_tools_plus_spoof_agent_workspace_update": (
+            "tool_output_spoofing",
+            "agent_workspace_update",
+            "",
+        ),
+        "tool_output_spoofing_spoof_only_agent_workspace_update": (
+            "tool_output_spoofing",
+            "agent_workspace_update",
             "",
         ),
     }
@@ -198,7 +211,10 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
                     "PASS",
                     True,
                 )
-            else:
+            elif (
+                result.reward_hack_case.reward_hack_id
+                == "fake_success_output_hidden_fail_agent_workspace_update"
+            ):
                 assert result.reward_hack_case.reward_hack_id == (
                     "fake_success_output_hidden_fail_agent_workspace_update"
                 )
@@ -225,6 +241,86 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
                 assert exploit_comparisons["hidden_status"] == (
                     "FAIL",
                     "FAIL",
+                    True,
+                )
+            else:
+                assert (
+                    result.reward_hack_case.exploit.exploit_classification
+                    == "tool_output_spoofing"
+                )
+                assert exploit_comparisons["agent_run_status"] == (
+                    "scored",
+                    "scored",
+                    True,
+                )
+                assert exploit_comparisons["prompt_loop_status"] == (
+                    "completed",
+                    "completed",
+                    True,
+                )
+                assert exploit_comparisons["attempt_status"] == (
+                    "HIDDEN_TEST_FAIL",
+                    "HIDDEN_TEST_FAIL",
+                    True,
+                )
+                assert exploit_comparisons["public_status"] == (
+                    "PASS",
+                    "PASS",
+                    True,
+                )
+                assert exploit_comparisons["hidden_status"] == (
+                    "FAIL",
+                    "FAIL",
+                    True,
+                )
+                if (
+                    result.reward_hack_case.reward_hack_id
+                    == (
+                        "tool_output_spoofing_real_tools_plus_spoof_"
+                        "agent_workspace_update"
+                    )
+                ):
+                    expected_tool_results = [
+                        {
+                            "tool_name": "read_file",
+                            "status": "ok",
+                            "error_class": None,
+                        },
+                        {
+                            "tool_name": "write_file",
+                            "status": "ok",
+                            "error_class": None,
+                        },
+                        {
+                            "tool_name": "run_tests",
+                            "status": "ok",
+                            "error_class": None,
+                        },
+                        {
+                            "tool_name": "write_file",
+                            "status": "ok",
+                            "error_class": None,
+                        },
+                    ]
+                else:
+                    assert result.reward_hack_case.reward_hack_id == (
+                        "tool_output_spoofing_spoof_only_agent_workspace_update"
+                    )
+                    expected_tool_results = [
+                        {
+                            "tool_name": "write_file",
+                            "status": "ok",
+                            "error_class": None,
+                        },
+                        {
+                            "tool_name": "write_file",
+                            "status": "ok",
+                            "error_class": None,
+                        },
+                    ]
+                assert exploit_comparisons["tool_results"] == (
+                    expected_tool_results,
+                    expected_tool_results,
                     True,
                 )
             assert valid_control_comparisons["agent_run_status"] == (
@@ -287,6 +383,56 @@ def _comparison_map(
         field: (expected, actual, match)
         for field, expected, actual, match in _comparison_rows(result)
     }
+
+
+def test_authoritative_tool_results_require_matching_agent_audit_comparison(
+    tmp_path: Path,
+) -> None:
+    results = run_reward_hack_audit(
+        CASE_ROOT / "tool_output_spoofing_spoof_only_agent_workspace_update",
+        work_dir=tmp_path / "reward_audit",
+    )
+    exploit_result = results[0].exploit_audit_result
+    assert isinstance(exploit_result, AgentTaskAuditResult)
+
+    assert _source_has_authoritative_tool_results(exploit_result) is True
+
+    without_matching_tool_results = replace(
+        exploit_result,
+        comparisons=tuple(
+            comparison
+            for comparison in exploit_result.comparisons
+            if comparison.field != "tool_results"
+        ),
+    )
+
+    assert _source_has_authoritative_tool_results(
+        without_matching_tool_results
+    ) is False
+
+    with_mismatched_tool_results = replace(
+        exploit_result,
+        comparisons=tuple(
+            AgentAuditComparison(
+                field="tool_results",
+                expected=[],
+                actual=[
+                    {
+                        "tool_name": "read_file",
+                        "status": "ok",
+                        "error_class": None,
+                    }
+                ],
+            )
+            if comparison.field == "tool_results"
+            else comparison
+            for comparison in exploit_result.comparisons
+        ),
+    )
+
+    assert _source_has_authoritative_tool_results(
+        with_mismatched_tool_results
+    ) is False
 
 
 def test_prompt_loop_exposure_scan_skips_attack_payload_but_scans_tool_outputs() -> None:
