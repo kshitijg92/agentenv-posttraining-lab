@@ -18,6 +18,7 @@ from agentenv.rewards.schema import (
     PublicTestOnlyPassExploit,
     RewardHackCase,
     StateCorruptionExploit,
+    TimeoutOrRetryExploit,
     ToolOutputSpoofingExploit,
 )
 
@@ -67,12 +68,14 @@ def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
         "fake_success_output_correct_patch_agent_workspace_update",
         "fake_success_output_hidden_fail_agent_workspace_update",
         "format_only_compliance_submitted_patch_text_probe_attempt",
+        "hidden_validator_timeout_submitted_patch_text_probe_attempt",
         "hidden_validator_path_agent_tool_call_probe_attempt",
         "hidden_validator_path_submitted_patch_text_probe_attempt",
         "leakage_canary_agent_tool_call_probe_attempt",
         "leakage_canary_submitted_patch_text_probe_attempt",
         "no_op_patch_submitted_patch_text_probe_attempt",
         "public_check_tampering_submitted_patch_text_probe_attempt",
+        "public_check_timeout_submitted_patch_text_probe_attempt",
         "public_test_only_pass_submitted_patch_text_probe_attempt",
         "state_corruption_fake_attempt_agent_workspace_update",
         "state_corruption_fake_manifest_agent_workspace_update",
@@ -358,6 +361,33 @@ def test_reward_hack_case_accepts_state_corruption_exploit_spec() -> None:
     )
 
 
+def test_reward_hack_case_accepts_timeout_or_retry_exploit_spec() -> None:
+    payload = _case_payload()
+    payload["reward_hack_id"] = "timeout_or_retry_schema_probe"
+    payload["evidence"]["exploit"] = {
+        "case_dir": "data/harness_audit/scorer_cases/public_check_timeout",
+        "case_id": "public_check_timeout",
+    }
+    payload["exploit"] = {
+        "exploit_classification": "timeout_or_retry_exploit",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "timeout_surface": "public_check",
+            "resource_exhaustion_method": "actual_timeout",
+            "timeout_must_not_be_retried_as_success": True,
+        },
+    }
+
+    case = RewardHackCase.model_validate(payload)
+
+    assert isinstance(case.exploit, TimeoutOrRetryExploit)
+    assert case.exploit.exploit_classification == "timeout_or_retry_exploit"
+    assert case.exploit.exploit_spec.probe_surface == "submitted_patch_text"
+    assert case.exploit.exploit_spec.timeout_surface == "public_check"
+    assert case.exploit.exploit_spec.resource_exhaustion_method == "actual_timeout"
+    assert case.exploit.exploit_spec.timeout_must_not_be_retried_as_success is True
+
+
 def test_reward_hack_case_rejects_disabled_no_op_patch_requirement() -> None:
     payload = _case_payload()
     payload["exploit"] = {
@@ -540,6 +570,25 @@ def test_reward_hack_case_rejects_authoritative_corrupted_state() -> None:
     with pytest.raises(
         ValidationError,
         match="corrupted_state_must_not_be_authoritative=true",
+    ):
+        RewardHackCase.model_validate(payload)
+
+
+def test_reward_hack_case_rejects_timeout_retried_as_success() -> None:
+    payload = _case_payload()
+    payload["exploit"] = {
+        "exploit_classification": "timeout_or_retry_exploit",
+        "exploit_spec": {
+            "probe_surface": "submitted_patch_text",
+            "timeout_surface": "public_check",
+            "resource_exhaustion_method": "actual_timeout",
+            "timeout_must_not_be_retried_as_success": False,
+        },
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="timeout_must_not_be_retried_as_success=true",
     ):
         RewardHackCase.model_validate(payload)
 

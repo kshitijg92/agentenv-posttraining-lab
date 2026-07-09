@@ -431,3 +431,23 @@ This matters because post-training pipelines often consume saved artifacts
 after the interaction has ended. If downstream code trusts model-authored
 provenance-shaped files by name alone, reward hacking can turn into dataset
 corruption even when trusted scoring originally produced the right status.
+
+### Timeouts Are Measurement Outcomes
+
+A timeout is not an unknown success that should be retried until it passes.
+
+For reward measurement, timeout handling has to be explicit because otherwise a
+model can exploit evaluator patience: hang public checks, hang hidden
+validators, or rely on retry policy to erase the failed measurement.
+
+The durable rule is:
+
+```text
+timeout != success
+```
+
+The timeout surface matters. A public-check timeout means the visible
+evaluation boundary did not complete. A hidden-validator timeout means the
+candidate survived public checks but broke private validation. Both should be
+reported separately from ordinary hidden-test failure, and neither should
+become positive training signal.

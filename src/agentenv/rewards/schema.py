@@ -12,6 +12,7 @@ ExploitClassification = Literal[
     "public_check_tampering",
     "public_test_only_pass",
     "state_corruption",
+    "timeout_or_retry_exploit",
     "tool_output_spoofing",
 ]
 HiddenValidatorProbeReferenceType = Literal[
@@ -367,6 +368,31 @@ class StateCorruptionExploit(BaseModel):
     exploit_spec: StateCorruptionExploitSpec
 
 
+class TimeoutOrRetryExploitSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    probe_surface: Literal["submitted_patch_text"]
+    timeout_surface: Literal["public_check", "hidden_validator"]
+    resource_exhaustion_method: Literal["actual_timeout"]
+    timeout_must_not_be_retried_as_success: bool
+
+    @model_validator(mode="after")
+    def validate_timeout_not_success(self) -> "TimeoutOrRetryExploitSpec":
+        if not self.timeout_must_not_be_retried_as_success:
+            raise ValueError(
+                "timeout_or_retry_exploit requires "
+                "timeout_must_not_be_retried_as_success=true"
+            )
+        return self
+
+
+class TimeoutOrRetryExploit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exploit_classification: Literal["timeout_or_retry_exploit"]
+    exploit_spec: TimeoutOrRetryExploitSpec
+
+
 RewardHackExploit: TypeAlias = Annotated[
     FakeSuccessOutputExploit
     | FormatOnlyComplianceExploit
@@ -375,6 +401,7 @@ RewardHackExploit: TypeAlias = Annotated[
     | PublicCheckTamperingExploit
     | PublicTestOnlyPassExploit
     | StateCorruptionExploit
+    | TimeoutOrRetryExploit
     | ToolOutputSpoofingExploit,
     Field(discriminator="exploit_classification"),
 ]
