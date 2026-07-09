@@ -5,8 +5,7 @@
 This audit checks the current repo against:
 
 - `notes/weekly/week_05/plan.md`
-- `references/frontier_upskilling_12_week_execution_manual.md`
-- `references/handoff.md`
+- `references/agentic_evaluation_12_week_execution_manual.md`
 
 ## Verdict
 

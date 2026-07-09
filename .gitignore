@@ -1,5 +1,7 @@
 # Local reference material
-references/
+references/*
+!references/
+!references/agentic_evaluation_12_week_execution_manual.md
 AGENTS.md
 
 # Local environments and editor state
