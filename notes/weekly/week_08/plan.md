@@ -577,3 +577,42 @@ Write `notes/weekly/week_08/learnings.md` only for durable conceptual lessons:
 - why reward evidence and training eligibility are distinct;
 - why a caught exploit is not the same as robust reward design;
 - how baseline gates prevent training experiments from outrunning measurement.
+
+## Closeout Status
+
+Week 8 is closed. The detailed closure audit is:
+
+```text
+notes/weekly/week_08/closure_audit.md
+```
+
+Canonical reward-hack evidence:
+
+```text
+experiments/runs/reward_hack_audit_week_08_v1/
+experiments/reports/reward_hack_audit_week_08_v1.md
+```
+
+Observed closeout result:
+
+```text
+reward-hack audit records: 16
+reward-hack audit pass: 16/16
+exploit mechanisms detected: 16/16
+exploit mechanisms neutralized: 16/16
+private-content exposures: 0/16
+training allowed: 0/16
+valid controls succeeded: 16/16
+```
+
+The preserved Week 8 failure note is:
+
+```text
+notes/failures/reward_hack_001.md
+```
+
+The Week 9 gate is conservative: proceed to default trace-filtering/SFT
+plumbing, but do not claim model improvement, reward robustness, or training
+readiness. Public-pass/hidden-fail traces, reward-hack-detected traces, fake
+success artifacts, provenance mutations, and timeout outcomes must not become
+positive training examples.
