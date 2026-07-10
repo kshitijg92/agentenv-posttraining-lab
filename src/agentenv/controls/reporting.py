@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+from agentenv.artifacts.payloads import ControlFlakeDetection
 from agentenv.evals.schema import AGENT_CONTROL_LAYER, SCORER_CONTROL_LAYER
 from agentenv.evals.schema import ControlLayer
 
@@ -56,7 +57,7 @@ class ControlRunView(Protocol):
     def records(self) -> Sequence[ControlRecordView]: ...
 
     @property
-    def flake_detection(self) -> JsonObject | None: ...
+    def flake_detection(self) -> ControlFlakeDetection: ...
 
     @property
     def overall_match(self) -> bool: ...
@@ -145,10 +146,7 @@ def _records_for_layer(
     ]
 
 
-def _flake_detection_table(flake_detection: JsonObject | None) -> list[str]:
-    if flake_detection is None:
-        return ["No flake detection recorded."]
-
+def _flake_detection_table(flake_detection: ControlFlakeDetection) -> list[str]:
     rows = [
         "| scope | stability | groups checked | drifted groups |",
         "| --- | --- | ---: | ---: |",
@@ -156,9 +154,9 @@ def _flake_detection_table(flake_detection: JsonObject | None) -> list[str]:
     rows.append(
         _flake_detection_row(
             "overall",
-            flake_detection["status"],
-            flake_detection["groups_checked"],
-            flake_detection["drifted_groups"],
+            flake_detection.status,
+            flake_detection.groups_checked,
+            flake_detection.drifted_groups,
         )
     )
     for layer in (SCORER_CONTROL_LAYER, AGENT_CONTROL_LAYER):
@@ -184,11 +182,14 @@ def _flake_detection_table(flake_detection: JsonObject | None) -> list[str]:
 
 
 def _flake_detection_layer_counts(
-    flake_detection: JsonObject,
+    flake_detection: ControlFlakeDetection,
     layer: ControlLayer,
 ) -> tuple[FlakeDetectionStatus, int, int]:
-    layer_groups = flake_detection["groups"][layer]
-    drifted_groups = sum(group["status"] == "drifted" for group in layer_groups)
+    if layer == SCORER_CONTROL_LAYER:
+        layer_groups = flake_detection.groups.scorer
+    else:
+        layer_groups = flake_detection.groups.agent
+    drifted_groups = sum(group.status == "drifted" for group in layer_groups)
     status: FlakeDetectionStatus = "drifted" if drifted_groups else "stable"
     return status, len(layer_groups), drifted_groups
 

@@ -747,3 +747,34 @@ real controls integration after sharing the execution path: 1 passed
 Ruff over src and tests: passed
 Pyright: passed
 ```
+
+### Typed Control-Flake Authority
+
+#### Implementation
+
+`ControlRun.flake_detection` now requires the validated
+`ControlFlakeDetection` model. The control runner no longer serializes that
+model to an untyped dictionary immediately after constructing it, and the
+reporter consumes typed fields and nested groups directly. JSON conversion now
+occurs only when the artifact manifest is written.
+
+Removed the duplicate `ControlRun.public_check_idempotency` data field.
+`ControlFlakeDetection.public_check_idempotency` is the single owner, while
+`ControlRun.public_check_idempotency` is a derived read-only tuple convenience
+property for callers that need to iterate the calibrations.
+
+The persisted `ControlCalibrationManifest.flake_detection` field is now
+required and non-nullable. Its `overall_match` invariant therefore always
+requires a stable typed flake record in addition to matching control records;
+missing flake evidence can no longer behave like an implicitly successful
+calibration. This persisted contract change advances the control-calibration
+artifact schema from v1 to v2 rather than changing the meaning of v1 in place.
+
+#### Verification
+
+```text
+focused control-reporting and artifact-schema tests: 110 passed
+real controls construction/report/manifest integration: 1 passed
+focused Ruff: passed
+Pyright: passed
+```

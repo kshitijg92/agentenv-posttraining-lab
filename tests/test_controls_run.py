@@ -181,7 +181,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert loaded_manifest.control_run_id == control_run.control_run_id
     assert loaded_manifest.record_count == expected_record_count
     assert manifest["artifact_type"] == "control_calibration"
-    assert manifest["artifact_schema_version"] == "control_calibration_artifact_v1"
+    assert manifest["artifact_schema_version"] == "control_calibration_artifact_v2"
     assert manifest["repeats"] == 2
     assert manifest["record_count"] == expected_record_count
     assert len(manifest["records"]) == expected_record_count
@@ -410,22 +410,22 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         records=control_run.records,
         public_check_idempotency=control_run.public_check_idempotency,
     )
-    assert agent_drifted_flake_detection["status"] == "drifted"
-    assert agent_drifted_flake_detection["drifted_groups"] == 1
+    assert agent_drifted_flake_detection.status == "drifted"
+    assert agent_drifted_flake_detection.drifted_groups == 1
     agent_drifted_group = next(
         group
-        for group in agent_drifted_flake_detection["groups"]["agent"]
-        if group["task_id"] == "toy_python_fix_001"
-        and group["control_name"] == "malformed"
+        for group in agent_drifted_flake_detection.groups.agent
+        if group.task_id == "toy_python_fix_001" and group.control_name == "malformed"
     )
-    assert agent_drifted_group["status"] == "drifted"
-    assert agent_drifted_group["drifted_repeats"] == [1]
-    agent_file_drifts = agent_drifted_group["individual_drift_details"]["1"]["files"]
+    assert agent_drifted_group.status == "drifted"
+    assert agent_drifted_group.drifted_repeats == [1]
+    agent_file_drifts = agent_drifted_group.individual_drift_details["1"].files
     assert len(agent_file_drifts) == 1
     agent_file_drift = agent_file_drifts[0]
-    assert agent_file_drift["path"] == "error.txt"
-    assert agent_file_drift["status"] == "changed"
-    assert agent_file_drift["actual_hash"].startswith("xxh64:")
+    assert agent_file_drift.path == "error.txt"
+    assert agent_file_drift.status == "changed"
+    assert agent_file_drift.actual_hash is not None
+    assert agent_file_drift.actual_hash.startswith("xxh64:")
     assert (
         replace(
             control_run, flake_detection=agent_drifted_flake_detection
@@ -447,28 +447,28 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         records=control_run.records,
         public_check_idempotency=control_run.public_check_idempotency,
     )
-    assert drifted_flake_detection["status"] == "drifted"
-    assert drifted_flake_detection["drifted_groups"] == 1
+    assert drifted_flake_detection.status == "drifted"
+    assert drifted_flake_detection.drifted_groups == 1
     drifted_group = next(
         group
-        for group in drifted_flake_detection["groups"]["scorer"]
-        if group["task_id"] == "toy_python_fix_001"
-        and group["control_name"] == "oracle"
+        for group in drifted_flake_detection.groups.scorer
+        if group.task_id == "toy_python_fix_001" and group.control_name == "oracle"
     )
-    assert drifted_group["status"] == "drifted"
-    assert drifted_group["drifted_repeats"] == [1]
-    file_drifts = drifted_group["individual_drift_details"]["1"]["files"]
+    assert drifted_group.status == "drifted"
+    assert drifted_group.drifted_repeats == [1]
+    file_drifts = drifted_group.individual_drift_details["1"].files
     assert len(file_drifts) == 1
     file_drift = file_drifts[0]
-    assert file_drift["path"] == "stdout.txt"
-    assert file_drift["status"] == "changed"
-    assert file_drift["reference_hash"] == next(
-        file_record["normalized_hash"]
-        for file_record in drifted_group["items_compared"]["files"]
-        if file_record["path"] == "stdout.txt"
+    assert file_drift.path == "stdout.txt"
+    assert file_drift.status == "changed"
+    assert file_drift.reference_hash == next(
+        file_record.normalized_hash
+        for file_record in drifted_group.items_compared.files
+        if file_record.path == "stdout.txt"
     )
-    assert file_drift["actual_hash"].startswith("xxh64:")
-    assert file_drift["actual_hash"] != file_drift["reference_hash"]
+    assert file_drift.actual_hash is not None
+    assert file_drift.actual_hash.startswith("xxh64:")
+    assert file_drift.actual_hash != file_drift.reference_hash
     assert (
         replace(control_run, flake_detection=drifted_flake_detection).overall_match
         is False

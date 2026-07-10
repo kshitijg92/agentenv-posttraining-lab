@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -107,14 +108,18 @@ class ControlRun:
     public_check_idempotency_repeats: int
     created_at: str
     records: list[ControlRecord]
-    public_check_idempotency: list[PublicCheckIdempotencyCalibration]
-    flake_detection: JsonObject | None = None
+    flake_detection: ControlFlakeDetection
+
+    @property
+    def public_check_idempotency(
+        self,
+    ) -> tuple[PublicCheckIdempotencyCalibration, ...]:
+        return tuple(self.flake_detection.public_check_idempotency)
 
     @property
     def overall_match(self) -> bool:
         return all(record.match for record in self.records) and (
-            self.flake_detection is None
-            or self.flake_detection.get("status") == "stable"
+            self.flake_detection.status == "stable"
         )
 
 
@@ -122,16 +127,12 @@ def run_controls(
     task_pack: Path,
     repeats: int,
     out_dir: Path,
-    public_check_idempotency_repeats: int = (
-        DEFAULT_PUBLIC_CHECK_IDEMPOTENCY_REPEATS
-    ),
+    public_check_idempotency_repeats: int = (DEFAULT_PUBLIC_CHECK_IDEMPOTENCY_REPEATS),
 ) -> ControlRun:
     if repeats <= 0:
         raise ValueError("repeats must be greater than 0")
     if public_check_idempotency_repeats < 2:
-        raise ValueError(
-            "public_check_idempotency_repeats must be at least 2"
-        )
+        raise ValueError("public_check_idempotency_repeats must be at least 2")
 
     task_pack_path = task_pack.resolve()
     out_dir = out_dir.resolve()
@@ -203,7 +204,6 @@ def run_controls(
         public_check_idempotency_repeats=public_check_idempotency_repeats,
         created_at=created_at,
         records=records,
-        public_check_idempotency=public_check_idempotency,
         flake_detection=flake_detection,
     )
 
@@ -490,8 +490,8 @@ def _build_flake_detection(
     task_pack_path: Path,
     repeats: int,
     records: list[ControlRecord],
-    public_check_idempotency: list[PublicCheckIdempotencyCalibration],
-) -> JsonObject:
+    public_check_idempotency: Sequence[PublicCheckIdempotencyCalibration],
+) -> ControlFlakeDetection:
     scorer_records = [
         record for record in records if record.control_layer == SCORER_CONTROL_LAYER
     ]
@@ -537,7 +537,7 @@ def _build_flake_detection(
             },
             "public_check_idempotency": public_check_idempotency,
         }
-    ).model_dump(mode="json")
+    )
 
 
 def _scorer_flake_detection_group(

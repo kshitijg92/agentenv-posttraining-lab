@@ -144,7 +144,7 @@ ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
 AgentAttemptArtifactSchemaVersion = Literal["agent_attempt_artifact_v0"]
 EvalRunArtifactSchemaVersion = Literal["eval_run_artifact_v0"]
 EvalSuiteArtifactSchemaVersion = Literal["eval_suite_artifact_v0"]
-ControlCalibrationArtifactSchemaVersion = Literal["control_calibration_artifact_v1"]
+ControlCalibrationArtifactSchemaVersion = Literal["control_calibration_artifact_v2"]
 ReplayRunArtifactSchemaVersion = Literal["replay_run_artifact_v0"]
 TrajectoryExportArtifactSchemaVersion = Literal["trajectory_export_artifact_v0"]
 TrajectoryReviewArtifactSchemaVersion = Literal["trajectory_review_artifact_v0"]
@@ -167,7 +167,7 @@ EVAL_SUITE_ARTIFACT_SCHEMA_VERSION: EvalSuiteArtifactSchemaVersion = (
     "eval_suite_artifact_v0"
 )
 CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION: ControlCalibrationArtifactSchemaVersion = (
-    "control_calibration_artifact_v1"
+    "control_calibration_artifact_v2"
 )
 REPLAY_RUN_ARTIFACT_SCHEMA_VERSION: ReplayRunArtifactSchemaVersion = (
     "replay_run_artifact_v0"
@@ -689,7 +689,7 @@ class ControlCalibrationManifest(ArtifactManifest):
     repeats: PositiveInt
     record_count: NonNegativeInt
     overall_match: bool
-    flake_detection: ControlFlakeDetection | None
+    flake_detection: ControlFlakeDetection
     artifacts: dict[str, str]
     records: list[ControlCalibrationManifestRecord]
 
@@ -710,10 +710,7 @@ class ControlCalibrationManifest(ArtifactManifest):
             raise ValueError("record_count must equal number of records")
         if not self.records:
             raise ValueError("control calibration manifests require records")
-        if (
-            self.flake_detection is not None
-            and self.flake_detection.repeats != self.repeats
-        ):
+        if self.flake_detection.repeats != self.repeats:
             raise ValueError("flake_detection repeats must match control repeats")
         for record in self.records:
             if record.control_run_id != self.control_run_id:
@@ -723,7 +720,7 @@ class ControlCalibrationManifest(ArtifactManifest):
                     "control record repeat_index must be less than repeats"
                 )
         expected_overall_match = all(record.match for record in self.records) and (
-            self.flake_detection is None or self.flake_detection.status == "stable"
+            self.flake_detection.status == "stable"
         )
         if self.overall_match != expected_overall_match:
             raise ValueError("overall_match must reflect records and flake detection")

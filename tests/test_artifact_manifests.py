@@ -1169,6 +1169,22 @@ def test_control_manifest_rejects_flake_detection_repeat_mismatch(
         load_control_calibration_manifest(path)
 
 
+@pytest.mark.parametrize("flake_detection", [None, "missing"])
+def test_control_manifest_requires_flake_detection(
+    tmp_path: Path,
+    flake_detection: object,
+) -> None:
+    manifest = _control_manifest()
+    if flake_detection == "missing":
+        del manifest["flake_detection"]
+    else:
+        manifest["flake_detection"] = flake_detection
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    with pytest.raises(ValidationError, match="flake_detection"):
+        load_control_calibration_manifest(path)
+
+
 def test_control_manifest_rejects_bad_flake_detection_schema(
     tmp_path: Path,
 ) -> None:
