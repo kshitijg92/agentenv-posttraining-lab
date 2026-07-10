@@ -20,6 +20,13 @@ from agentenv.controls.agent_control_scripts import (
     ExpectedAgentControlResult,
     load_agent_control_script_case,
 )
+from agentenv.controls.public_check_idempotency_runner import (
+    DEFAULT_PUBLIC_CHECK_IDEMPOTENCY_REPEATS,
+    run_declared_public_check_idempotency_calibrations,
+)
+from agentenv.controls.public_check_idempotency_schema import (
+    PublicCheckIdempotencyCalibration,
+)
 from agentenv.controls.reporting import render_control_report
 from agentenv.evals.resolve import scorer_control_patch_path
 from agentenv.evals.schema import AGENT_CONTROL_LAYER, SCORER_CONTROL_LAYER
@@ -97,8 +104,10 @@ class ControlRun:
     task_pack_path: Path
     out_dir: Path
     repeats: int
+    public_check_idempotency_repeats: int
     created_at: str
     records: list[ControlRecord]
+    public_check_idempotency: list[PublicCheckIdempotencyCalibration]
     flake_detection: JsonObject | None = None
 
     @property
@@ -109,9 +118,20 @@ class ControlRun:
         )
 
 
-def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
+def run_controls(
+    task_pack: Path,
+    repeats: int,
+    out_dir: Path,
+    public_check_idempotency_repeats: int = (
+        DEFAULT_PUBLIC_CHECK_IDEMPOTENCY_REPEATS
+    ),
+) -> ControlRun:
     if repeats <= 0:
         raise ValueError("repeats must be greater than 0")
+    if public_check_idempotency_repeats < 2:
+        raise ValueError(
+            "public_check_idempotency_repeats must be at least 2"
+        )
 
     task_pack_path = task_pack.resolve()
     out_dir = out_dir.resolve()
@@ -124,13 +144,26 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
     )
     scorer_control_dir.mkdir(parents=True, exist_ok=True)
     agent_control_dir.mkdir(parents=True, exist_ok=True)
+    public_check_idempotency_dir = (
+        out_dir / CONTROL_CALIBRATION_ARTIFACT_REFS["public_check_idempotency"]
+    )
+    public_check_idempotency_dir.mkdir(parents=True, exist_ok=True)
 
     tasks = _discover_control_tasks(task_pack_path)
     control_run_id = f"controls_{uuid4().hex}"
     created_at = _utc_now()
     records: list[ControlRecord] = []
+    public_check_idempotency: list[PublicCheckIdempotencyCalibration] = []
 
     for task in tasks:
+        public_check_idempotency.extend(
+            run_declared_public_check_idempotency_calibrations(
+                task_manifest_path=task.manifest_path,
+                artifact_root=out_dir,
+                output_dir=public_check_idempotency_dir,
+                repeat_count=public_check_idempotency_repeats,
+            )
+        )
         for control, submission_path in _scorer_control_paths(task):
             for repeat_index in range(repeats):
                 records.append(
@@ -160,14 +193,17 @@ def run_controls(task_pack: Path, repeats: int, out_dir: Path) -> ControlRun:
         task_pack_path=task_pack_path,
         repeats=repeats,
         records=records,
+        public_check_idempotency=public_check_idempotency,
     )
     control_run = ControlRun(
         control_run_id=control_run_id,
         task_pack_path=task_pack_path,
         out_dir=out_dir,
         repeats=repeats,
+        public_check_idempotency_repeats=public_check_idempotency_repeats,
         created_at=created_at,
         records=records,
+        public_check_idempotency=public_check_idempotency,
         flake_detection=flake_detection,
     )
 
@@ -454,6 +490,7 @@ def _build_flake_detection(
     task_pack_path: Path,
     repeats: int,
     records: list[ControlRecord],
+    public_check_idempotency: list[PublicCheckIdempotencyCalibration],
 ) -> JsonObject:
     scorer_records = [
         record for record in records if record.control_layer == SCORER_CONTROL_LAYER
@@ -478,7 +515,15 @@ def _build_flake_detection(
     drifted_groups = sum(
         group["status"] == "drifted" for group in [*scorer_groups, *agent_groups]
     )
-    status: FlakeDetectionStatus = "drifted" if drifted_groups else "stable"
+    public_check_statuses = {
+        calibration.status for calibration in public_check_idempotency
+    }
+    if drifted_groups or "NON_IDEMPOTENT" in public_check_statuses:
+        status = "drifted"
+    elif "INCONCLUSIVE" in public_check_statuses:
+        status = "inconclusive"
+    else:
+        status = "stable"
     return ControlFlakeDetection.model_validate(
         {
             "schema_version": CONTROL_FLAKE_DETECTION_SCHEMA_VERSION,
@@ -490,6 +535,7 @@ def _build_flake_detection(
                 SCORER_CONTROL_LAYER: scorer_groups,
                 AGENT_CONTROL_LAYER: agent_groups,
             },
+            "public_check_idempotency": public_check_idempotency,
         }
     ).model_dump(mode="json")
 

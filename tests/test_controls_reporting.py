@@ -11,6 +11,7 @@ def test_render_control_report_from_control_run_dataclasses(tmp_path: Path) -> N
         task_pack_path=Path("/repo/task_pack"),
         out_dir=out_dir,
         repeats=2,
+        public_check_idempotency_repeats=2,
         created_at="2026-07-01T00:00:00Z",
         records=[
             ControlRecord(
@@ -55,8 +56,9 @@ def test_render_control_report_from_control_run_dataclasses(tmp_path: Path) -> N
                 match=True,
             ),
         ],
+        public_check_idempotency=[],
         flake_detection={
-            "schema_version": "control_flake_detection_v0",
+            "schema_version": "control_flake_detection_v1",
             "status": "drifted",
             "repeats": 2,
             "groups_checked": 2,
@@ -77,6 +79,7 @@ def test_render_control_report_from_control_run_dataclasses(tmp_path: Path) -> N
                     }
                 ],
             },
+            "public_check_idempotency": [],
         },
     )
 

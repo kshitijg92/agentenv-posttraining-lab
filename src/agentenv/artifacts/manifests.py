@@ -99,6 +99,7 @@ CONTROL_CALIBRATION_ARTIFACT_REFS = {
     "scorer_control_patches": "scorer_control_patches",
     "report": "control_report.md",
     "results": "control_results.jsonl",
+    "public_check_idempotency": "public_check_idempotency",
 }
 REPLAY_RUN_ARTIFACT_REFS = {
     "replay_result": "replay_result.json",
@@ -143,7 +144,7 @@ ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
 AgentAttemptArtifactSchemaVersion = Literal["agent_attempt_artifact_v0"]
 EvalRunArtifactSchemaVersion = Literal["eval_run_artifact_v0"]
 EvalSuiteArtifactSchemaVersion = Literal["eval_suite_artifact_v0"]
-ControlCalibrationArtifactSchemaVersion = Literal["control_calibration_artifact_v0"]
+ControlCalibrationArtifactSchemaVersion = Literal["control_calibration_artifact_v1"]
 ReplayRunArtifactSchemaVersion = Literal["replay_run_artifact_v0"]
 TrajectoryExportArtifactSchemaVersion = Literal["trajectory_export_artifact_v0"]
 TrajectoryReviewArtifactSchemaVersion = Literal["trajectory_review_artifact_v0"]
@@ -166,7 +167,7 @@ EVAL_SUITE_ARTIFACT_SCHEMA_VERSION: EvalSuiteArtifactSchemaVersion = (
     "eval_suite_artifact_v0"
 )
 CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION: ControlCalibrationArtifactSchemaVersion = (
-    "control_calibration_artifact_v0"
+    "control_calibration_artifact_v1"
 )
 REPLAY_RUN_ARTIFACT_SCHEMA_VERSION: ReplayRunArtifactSchemaVersion = (
     "replay_run_artifact_v0"

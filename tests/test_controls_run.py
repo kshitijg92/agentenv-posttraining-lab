@@ -75,6 +75,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     control_run = run_controls(TASK_PACK, repeats=2, out_dir=out_dir)
 
     assert control_run.repeats == 2
+    assert control_run.public_check_idempotency_repeats == 2
     expected_scorer_count = len(TASK_IDS) * len(CONTROL_NAMES) * 2
     expected_agent_count = len(TASK_IDS) * len(AGENT_CONTROL_NAMES) * 2
     expected_record_count = expected_scorer_count + expected_agent_count
@@ -180,20 +181,33 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert loaded_manifest.control_run_id == control_run.control_run_id
     assert loaded_manifest.record_count == expected_record_count
     assert manifest["artifact_type"] == "control_calibration"
-    assert manifest["artifact_schema_version"] == "control_calibration_artifact_v0"
+    assert manifest["artifact_schema_version"] == "control_calibration_artifact_v1"
     assert manifest["repeats"] == 2
     assert manifest["record_count"] == expected_record_count
     assert len(manifest["records"]) == expected_record_count
     assert manifest["records"] == records
     assert manifest["overall_match"] is True
     flake_detection = manifest["flake_detection"]
-    assert flake_detection["schema_version"] == "control_flake_detection_v0"
+    assert flake_detection["schema_version"] == "control_flake_detection_v1"
     assert flake_detection["status"] == "stable"
     assert flake_detection["repeats"] == 2
     assert flake_detection["groups_checked"] == (
         len(TASK_IDS) * len(CONTROL_NAMES) + len(TASK_IDS) * len(AGENT_CONTROL_NAMES)
     )
     assert flake_detection["drifted_groups"] == 0
+    assert len(flake_detection["public_check_idempotency"]) == len(TASK_IDS)
+    assert {
+        calibration["task_id"]
+        for calibration in flake_detection["public_check_idempotency"]
+    } == TASK_IDS
+    assert all(
+        calibration["status"] == "IDEMPOTENT"
+        for calibration in flake_detection["public_check_idempotency"]
+    )
+    assert all(
+        calibration["repeat_count"] == 2
+        for calibration in flake_detection["public_check_idempotency"]
+    )
     assert set(flake_detection["groups"]) == {"scorer", "agent"}
     scorer_flake_groups = flake_detection["groups"]["scorer"]
     agent_flake_groups = flake_detection["groups"]["agent"]
@@ -298,6 +312,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         "agent_control_scripts": "agent_control_scripts",
         "report": "control_report.md",
         "results": "control_results.jsonl",
+        "public_check_idempotency": "public_check_idempotency",
         "scorer_control_patches": "scorer_control_patches",
     }
 
@@ -371,6 +386,16 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
             assert not (artifact_dir / "agent_interaction_workspace").exists()
             assert not (artifact_dir / "scoring_workspace").exists()
 
+    for calibration in control_run.public_check_idempotency:
+        assert calibration.status == "IDEMPOTENT"
+        assert not Path(calibration.normalization_context.workspace_root).exists()
+        assert not Path(calibration.normalization_context.runner_temp_root).exists()
+        for run in calibration.runs:
+            assert run.stdout is not None
+            assert run.stderr is not None
+            assert (out_dir / run.stdout.path).is_file()
+            assert (out_dir / run.stderr.path).is_file()
+
     drifted_agent_error = (
         out_dir
         / "agent_control_scripts"
@@ -383,6 +408,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         task_pack_path=control_run.task_pack_path,
         repeats=control_run.repeats,
         records=control_run.records,
+        public_check_idempotency=control_run.public_check_idempotency,
     )
     assert agent_drifted_flake_detection["status"] == "drifted"
     assert agent_drifted_flake_detection["drifted_groups"] == 1
@@ -419,6 +445,7 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
         task_pack_path=control_run.task_pack_path,
         repeats=control_run.repeats,
         records=control_run.records,
+        public_check_idempotency=control_run.public_check_idempotency,
     )
     assert drifted_flake_detection["status"] == "drifted"
     assert drifted_flake_detection["drifted_groups"] == 1

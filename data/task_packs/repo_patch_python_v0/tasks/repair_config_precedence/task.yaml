@@ -5,7 +5,7 @@ instruction: "Fix the config loader so Settings are resolved from defaults, an o
 seed_workspace: seed_workspace
 allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
 public_checks:
-  - command: "uv run pytest tests/test_public.py"
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
     are_tests_idempotent: true
 hidden_validators:
   - id: config_precedence_pytest

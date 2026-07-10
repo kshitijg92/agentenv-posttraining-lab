@@ -1,3 +1,4 @@
+from pathlib import PurePosixPath
 from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -36,6 +37,38 @@ class HashPinnedArtifactRef(BaseModel):
     @classmethod
     def validate_path(cls, value: str) -> str:
         return validate_relative_artifact_ref(value)
+
+
+class PublicCheckOutputNormalizationContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_root: str = Field(min_length=1)
+    runner_temp_root: str = Field(min_length=1)
+
+    @field_validator("workspace_root", "runner_temp_root")
+    @classmethod
+    def validate_absolute_canonical_path(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if not path.is_absolute():
+            raise ValueError("normalization context paths must be absolute")
+        if value == "/" or ".." in path.parts or str(path) != value:
+            raise ValueError(
+                "normalization context paths must be canonical and cannot be root"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_non_overlapping_roots(self) -> "PublicCheckOutputNormalizationContext":
+        workspace_root = PurePosixPath(self.workspace_root)
+        runner_temp_root = PurePosixPath(self.runner_temp_root)
+        roots_overlap = workspace_root.is_relative_to(
+            runner_temp_root
+        ) or runner_temp_root.is_relative_to(workspace_root)
+        if roots_overlap:
+            raise ValueError(
+                "workspace_root and runner_temp_root must not overlap"
+            )
+        return self
 
 
 class _PublicCheckRunEvidence(BaseModel):
@@ -79,6 +112,7 @@ class PublicCheckIdempotencyCalibration(BaseModel):
     command: str = Field(min_length=1)
     normalizer_version: str = Field(min_length=1)
     normalizer_code_hash: str = Field(min_length=1)
+    normalization_context: PublicCheckOutputNormalizationContext
     repeat_count: AtLeastTwoInt
     status: PublicCheckIdempotencyStatus
     non_idempotency_reasons: list[NonIdempotencyReason]

@@ -32,7 +32,7 @@ from agentenv.tools.schema import ToolResult
 TOY_TASK_MANIFEST = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
 )
-PUBLIC_CHECK_COMMAND = "uv run pytest tests/test_public.py"
+PUBLIC_CHECK_COMMAND = "uv run --quiet --frozen pytest tests/test_public.py"
 CANARY = "agentenv-canary-secret-000000000000"
 FIXED_MATHLIB = (
     "def normalize_ratio(numerator: int | float, denominator: int | float) -> float:\n"

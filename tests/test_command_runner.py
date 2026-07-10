@@ -42,3 +42,28 @@ def test_run_shell_redacts_sensitive_command_and_output(
     assert result.command == [f"{sys.executable} -c 'print(\"{REDACTED_SECRET}\")'"]
     assert result.stdout == f"{REDACTED_SECRET}\n"
     assert CANARY not in result.stdout
+
+
+def test_run_process_applies_non_sensitive_env_overrides_and_scrubs_sensitive_ones(
+    tmp_path: Path,
+) -> None:
+    runner_temp = tmp_path / "runner-temp"
+    result = run_process(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os; "
+                'print(os.getenv("TMPDIR", "missing")); '
+                'print(os.getenv("HF_TOKEN", "missing"))'
+            ),
+        ],
+        tmp_path,
+        timeout_seconds=5,
+        env_overrides={
+            "TMPDIR": str(runner_temp),
+            "HF_TOKEN": CANARY,
+        },
+    )
+
+    assert result.stdout == f"{runner_temp}\nmissing\n"

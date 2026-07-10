@@ -13,6 +13,9 @@ from agentenv.artifacts.base import (
     validate_relative_artifact_ref,
 )
 from agentenv.controls.agent_control_scripts import AgentControlScriptCase
+from agentenv.controls.public_check_idempotency_schema import (
+    PublicCheckIdempotencyCalibration,
+)
 from agentenv.evals.schema import SCORER_CONTROL_LAYER, ControlLayer
 from agentenv.models.config_schema import ModelConfig
 from agentenv.models.schema import DecodingConfig
@@ -32,7 +35,7 @@ PayloadModel = TypeVar("PayloadModel", bound=BaseModel)
 
 EvalTaskHashesSchemaVersion = Literal["eval_task_hashes_v0"]
 TaskHashReportSchemaVersion = Literal["task_hash_report_v0"]
-ControlFlakeDetectionSchemaVersion = Literal["control_flake_detection_v0"]
+ControlFlakeDetectionSchemaVersion = Literal["control_flake_detection_v1"]
 ReplayResultSchemaVersion = Literal["replay_result_v0"]
 ModelConfigProvenanceSchemaVersion = Literal["model_config_provenance_v0"]
 DecodingConfigProvenanceSchemaVersion = Literal["decoding_config_provenance_v0"]
@@ -40,7 +43,7 @@ DecodingConfigProvenanceSchemaVersion = Literal["decoding_config_provenance_v0"]
 EVAL_TASK_HASHES_SCHEMA_VERSION: EvalTaskHashesSchemaVersion = "eval_task_hashes_v0"
 TASK_HASH_REPORT_SCHEMA_VERSION: TaskHashReportSchemaVersion = "task_hash_report_v0"
 CONTROL_FLAKE_DETECTION_SCHEMA_VERSION: ControlFlakeDetectionSchemaVersion = (
-    "control_flake_detection_v0"
+    "control_flake_detection_v1"
 )
 REPLAY_RESULT_SCHEMA_VERSION: ReplayResultSchemaVersion = "replay_result_v0"
 MODEL_CONFIG_PROVENANCE_SCHEMA_VERSION: ModelConfigProvenanceSchemaVersion = (
@@ -52,6 +55,7 @@ DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION: DecodingConfigProvenanceSchemaVersion
 
 HashableKind = Literal["file", "directory"]
 FlakeDetectionStatus = Literal["stable", "drifted"]
+ControlFlakeDetectionStatus = Literal["stable", "drifted", "inconclusive"]
 RequiredTaskFileDriftStatus = Literal["added", "removed", "changed"]
 ReplayStatus = Literal["PASS", "MISMATCH", "REPLAY_ERROR"]
 ReplayComparisonType = Literal["scorer_attempt", "agent_task_run"]
@@ -439,11 +443,12 @@ class ControlFlakeDetection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: ControlFlakeDetectionSchemaVersion
-    status: FlakeDetectionStatus
+    status: ControlFlakeDetectionStatus
     repeats: PositiveInt
     groups_checked: NonNegativeInt
     drifted_groups: NonNegativeInt
     groups: ControlFlakeDetectionGroups
+    public_check_idempotency: list[PublicCheckIdempotencyCalibration]
 
     @model_validator(mode="after")
     def validate_group_counts(self) -> "ControlFlakeDetection":
@@ -453,11 +458,26 @@ class ControlFlakeDetection(BaseModel):
         drifted_groups = sum(1 for group in groups if group.status == "drifted")
         if self.drifted_groups != drifted_groups:
             raise ValueError("drifted_groups must equal drifted group count")
-        expected_status: FlakeDetectionStatus = (
-            "drifted" if drifted_groups else "stable"
-        )
+        public_check_statuses = {
+            calibration.status for calibration in self.public_check_idempotency
+        }
+        if drifted_groups or "NON_IDEMPOTENT" in public_check_statuses:
+            expected_status: ControlFlakeDetectionStatus = "drifted"
+        elif "INCONCLUSIVE" in public_check_statuses:
+            expected_status = "inconclusive"
+        else:
+            expected_status = "stable"
         if self.status != expected_status:
-            raise ValueError("status must reflect drifted_groups")
+            raise ValueError(
+                "status must reflect control drift and public-check idempotency"
+            )
+
+        calibration_identities = [
+            (calibration.task_manifest_hash, calibration.public_check_index)
+            for calibration in self.public_check_idempotency
+        ]
+        if len(calibration_identities) != len(set(calibration_identities)):
+            raise ValueError("public-check idempotency identities must be unique")
         for group in groups:
             if group.reference_repeat_index >= self.repeats:
                 raise ValueError("reference_repeat_index must be less than repeats")

@@ -273,6 +273,44 @@ def test_execute_tool_runs_allowed_public_check(tmp_path: Path) -> None:
     )
 
 
+def test_execute_tool_run_tests_uses_fresh_external_runner_temp_root(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    command = (
+        f"{sys.executable} -c 'import os, tempfile; "
+        'root = os.environ["TMPDIR"]; '
+        'assert root == os.environ["TMP"] == os.environ["TEMP"]; '
+        "path = tempfile.NamedTemporaryFile(delete=False).name; "
+        "print(root); print(path)'"
+    )
+
+    results = [
+        execute_tool(
+            ToolCallAction(
+                action="tool_call",
+                tool_name="run_tests",
+                arguments={"command": command},
+            ),
+            _agent_task_view(workspace, public_checks=[command]),
+        )
+        for _ in range(2)
+    ]
+
+    observed_roots: list[Path] = []
+    for result in results:
+        assert result.status == "ok"
+        runner_temp_root_text, temporary_file_text = result.stdout.splitlines()
+        runner_temp_root = Path(runner_temp_root_text)
+        temporary_file = Path(temporary_file_text)
+        assert temporary_file.is_relative_to(runner_temp_root)
+        assert not runner_temp_root.is_relative_to(workspace)
+        assert not runner_temp_root.exists()
+        observed_roots.append(runner_temp_root)
+    assert len(set(observed_roots)) == 2
+
+
 def test_execute_tool_run_tests_scrubs_and_redacts_secret_env(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

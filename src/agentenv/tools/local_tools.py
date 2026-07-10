@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from agentenv.agents.schema import AgentTaskView, ToolCallAction
 from agentenv.hashing import hash_directory
-from agentenv.runners.command_runner import run_shell
+from agentenv.runners.public_check_runner import run_public_check
 from agentenv.security.secrets import redact_secrets
 from agentenv.tools.schema import (
     TOOL_REGISTRY,
@@ -337,9 +337,9 @@ def _execute_run_tests(
         )
 
     try:
-        completed = run_shell(
+        completed = run_public_check(
             tool_input.command,
-            cwd=agent_task_view.workspace_path,
+            workspace=agent_task_view.workspace_path,
             timeout_seconds=agent_task_view.timeout_seconds,
         )
     except TimeoutExpired as exc:

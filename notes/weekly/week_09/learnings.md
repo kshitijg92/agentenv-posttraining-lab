@@ -258,3 +258,27 @@ actual private-content exposure -> not training data
 ```
 
 Leakage checks therefore protect both eval validity and downstream data use.
+
+### Calibration Must Share The Measured Execution Contract
+
+A calibration can look stable because the harness gives it cleaner conditions
+than the model-facing or scoring path. For example, directing temporary files
+to a fresh controlled directory only during calibration could remove
+cross-run state that remains present during real `run_tests` calls.
+
+The required invariant is:
+
+```text
+calibration execution contract == measured execution contract
+```
+
+The concrete filesystem paths may differ, but the state semantics, environment
+rules, timeout policy, and command behavior must match. Otherwise calibration
+proves a property of a special laboratory path rather than the system whose
+trajectories will be labeled.
+
+This also clarifies which state is meaningful. Task workspace state persists
+and is measured; command-owned temporary state is disposable and reset. If a
+public check needs state to survive across invocations, that state must live in
+the measured workspace rather than in an incidental operating-system temp
+directory.

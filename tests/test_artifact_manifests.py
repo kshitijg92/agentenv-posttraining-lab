@@ -1388,12 +1388,14 @@ def _control_manifest() -> dict[str, Any]:
                 "scorer": [],
                 "agent": [],
             },
+            "public_check_idempotency": [],
         },
         "artifacts": {
             "agent_control_scripts": "agent_control_scripts",
             "scorer_control_patches": "scorer_control_patches",
             "report": "control_report.md",
             "results": "control_results.jsonl",
+            "public_check_idempotency": "public_check_idempotency",
         },
         "records": [_agent_control_record(match=True)],
     }

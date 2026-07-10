@@ -9,7 +9,7 @@
         "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"tests/test_public.py\",\"content\":\"def test_public_check_bypassed() -> None:\\n    assert True\\n\"}}"
       },
       {
-        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run pytest tests/test_public.py\"}}"
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
       },
       {
         "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"

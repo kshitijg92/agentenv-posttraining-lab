@@ -82,9 +82,9 @@ The required `PublicCheck.are_tests_idempotent` field is implemented. All four
 current task manifests explicitly declare `true`, and a focused regression test
 proves that omission fails manifest validation.
 
-Runtime tool-result workspace evidence is implemented as described below.
-Repeatability calibration, control-flake integration, and redundant-block
-detection are not implemented yet.
+Runtime tool-result workspace evidence, repeatability calibration execution,
+and control-flake integration are implemented as described below.
+Redundant-block detection is not implemented yet.
 
 Adding the required field intentionally changes every task-manifest hash.
 Existing Qwen and trajectory artifacts remain historical evidence for the old
@@ -373,9 +373,8 @@ artifact.
 #### Status
 
 Runtime `ToolResult` evidence and the prompt-loop failure boundary are
-implemented as described below. The standalone public-check calibration record
-schema is also implemented. It is not yet attached to control flake detection,
-and calibration execution is not yet implemented.
+implemented as described below. The public-check calibration schema, runner,
+and control-flake integration are also implemented in later checkpoints.
 
 ### Canonical Workspace Hash Helper
 
@@ -559,8 +558,8 @@ content-hash pinned. Trailing spaces and final-newline differences remain
 meaningful in v0. Unknown volatility is retained, so it produces observed drift
 rather than being broadly stripped.
 
-The normalizer implementation and normalized-result hashing are not part of
-this schema-only checkpoint.
+The normalizer implementation and normalized-result hashing were not part of
+the schema-only checkpoint; they are implemented in the following checkpoint.
 
 #### Verification
 
@@ -570,4 +569,181 @@ Ruff: passed
 Pyright: passed
 git diff --check: passed
 full suite with 4 workers: 765 passed
+```
+
+### Public-Check Output Normalization Foundation
+
+#### Implementation
+
+Added the repo-wide `public_check_output_normalizer_v0` implementation and a
+code-hash function that pins the normalizer module. The calibration schema now
+requires a persisted `normalization_context` containing exactly the two
+runner-controlled roots replaced during normalization:
+
+```text
+workspace_root  -> <WORKSPACE>
+runner_temp_root -> <RUNNER_TEMP>
+```
+
+Both roots must be absolute, canonical POSIX paths, cannot be `/`, and cannot
+overlap. Keeping the runner's temporary root outside the prepared workspace is
+necessary so command-owned temporary files do not silently become part of the
+canonical task state.
+
+Path replacement is literal and token-boundary-aware. It replaces the supplied
+root and its descendants but does not replace an unrelated sibling path that
+merely shares the same string prefix. Arbitrary `/tmp` paths are not matched.
+Unknown paths therefore remain visible and can cause result drift.
+
+The v0 transformation order is:
+
+```text
+CRLF and bare CR -> LF
+exact runner-supplied roots -> stable placeholders
+recognized "in <number>s" or "in <number>ms" fragments -> in <DURATION>
+```
+
+It deliberately preserves trailing spaces, final-newline presence, arbitrary
+numbers, and unknown paths.
+
+The normalized result hash uses an unambiguous structured encoding of:
+
+```text
+exit_code
+normalized stdout
+normalized stderr
+```
+
+This preserves the stdout/stderr boundary and makes exit-code differences
+meaningful. Tests show that two invocations with different known roots,
+durations, and line-ending styles produce the same normalized result hash,
+while meaningful text, exit codes, trailing spaces, and final-newline changes
+produce different hashes.
+
+The actual calibration runner must create and persist these roots, direct the
+public check's temporary files to `runner_temp_root`, write raw output
+artifacts, and populate the schema. Those execution steps are not implemented
+in this checkpoint.
+
+#### Verification
+
+```text
+focused calibration-schema and normalizer tests: 51 passed
+Ruff: passed
+Pyright: passed
+git diff --check: passed
+full suite with 4 workers: 779 passed
+```
+
+### Public-Check Idempotency Runner And Control Integration
+
+#### Implementation
+
+Added the public-check idempotency runner to the real `controls run` lifecycle.
+For every public check whose manifest declaration is
+`are_tests_idempotent: true`, the runner now:
+
+```text
+creates a fresh copy of seed_workspace for that check
+runs the exact manifest command consecutively in that one workspace
+defaults to two runs and rejects repeat counts below two
+clears runner-controlled temporary state before each invocation
+records canonical workspace hashes before and after every invocation
+persists raw stdout and stderr as content-hash-pinned artifacts
+computes the version-pinned normalized completed-result hash
+emits one PublicCheckIdempotencyCalibration record
+```
+
+Checks declaring `false` are not calibrated. Distinct public checks never
+share a prepared workspace. The effective repeat count is a programmatic
+`run_controls` option for now; a distinct CLI option remains a later interface
+checkpoint.
+
+The control-flake payload now requires the emitted calibration list and derives
+its overall status with this precedence:
+
+```text
+any control-record or public-check drift -> drifted
+otherwise, any inconclusive public-check calibration -> inconclusive
+otherwise -> stable
+```
+
+Only a stable flake payload can produce an overall control match. The control
+calibration artifact schema was bumped to v1, and its artifact references now
+include the directory containing raw public-check idempotency outputs.
+
+The command runner accepts scoped environment overrides while retaining the
+existing sensitive-environment scrubbing boundary.
+
+#### Shared Public-Check Temporary Environment
+
+Temporary-root control now belongs to the shared public-check execution path,
+not only to calibration. Calibration, model `run_tests` calls, and orchestrator
+public checks all execute with `TMPDIR`, `TMP`, and `TEMP` directed to an
+external runner-controlled directory.
+
+The lifecycle differs only where the evidence contract requires it:
+
+```text
+calibration:
+  use one stable path recorded in normalization_context
+  delete and recreate its contents before every repeated invocation
+
+model run_tests and orchestrator public checks:
+  allocate a fresh external root for each invocation
+  remove it after the command returns or fails
+```
+
+The shared runner rejects a supplied temporary root that contains the workspace
+or is contained by it. This both prevents accidental deletion of task state and
+avoids creating an in-workspace hash exclusion where task-relevant mutation
+could hide.
+
+The prepared workspace and runner temporary root intentionally have different
+state semantics. The workspace is preserved across calibration repeats so any
+task-state mutation remains measurable. The temporary root is reset because it
+contains disposable command scratch state that must not leak from one
+invocation into the next.
+
+#### Harness Defect Found By The Calibration
+
+The first real control-run integration correctly classified all four declared
+checks as non-idempotent. The first `uv run pytest ...` invocation created an
+untracked `uv.lock` in the prepared workspace and performed first-run virtual-
+environment setup; the repeated invocation did neither. This caused both
+canonical workspace drift and normalized output drift. It was a real harness
+repeatability defect, not noise to strip in the normalizer.
+
+The task-level repair makes the public checks hermetic under the declared
+contract:
+
+```text
+commit a generated uv.lock in each of the four seed workspaces
+run: uv run --quiet --frozen pytest tests/test_public.py
+```
+
+`--frozen` prevents lockfile mutation, and the committed lockfile pins the
+environment resolution used by both calibration and actual model executions.
+`--quiet` suppresses `uv` setup progress without hiding pytest's meaningful
+stdout or stderr. All task-pack and harness-audit control scripts that invoke
+the public check now use the exact manifest command.
+
+This repair belongs at the task boundary rather than in calibration-only setup.
+Otherwise the harness would prove repeatability under conditions different
+from those experienced by a model calling `run_tests`.
+
+#### Verification
+
+Following the agreed checkpoint cadence, this integration used focused tests;
+the full suite is deferred until several checkpoints have accumulated.
+
+```text
+focused runner/schema/normalizer/command/artifact/report/task tests: 195 passed
+real task-pack control-run integration: 1 passed
+real agent-audit integration: 1 passed
+reward-hack audit hidden-validator probe integration: 1 passed
+shared public-check temp-path tests: 45 passed
+real controls integration after sharing the execution path: 1 passed
+Ruff over src and tests: passed
+Pyright: passed
 ```

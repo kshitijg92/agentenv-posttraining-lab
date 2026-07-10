@@ -839,7 +839,7 @@ def _control_calibration_record() -> dict[str, Any]:
 
 def _control_flake_detection() -> dict[str, Any]:
     return {
-        "schema_version": "control_flake_detection_v0",
+        "schema_version": "control_flake_detection_v1",
         "status": "stable",
         "repeats": 2,
         "groups_checked": 1,
@@ -866,6 +866,7 @@ def _control_flake_detection() -> dict[str, Any]:
                 }
             ],
         },
+        "public_check_idempotency": [],
     }
 
 

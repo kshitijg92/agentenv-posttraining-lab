@@ -75,6 +75,10 @@ def _calibration_payload(
         "command": "uv run pytest tests/test_public.py",
         "normalizer_version": "public_check_output_normalizer_v0",
         "normalizer_code_hash": "xxh64:normalizer-code",
+        "normalization_context": {
+            "workspace_root": "/tmp/calibration/workspace",
+            "runner_temp_root": "/tmp/calibration-command-temp",
+        },
         "repeat_count": (
             len(effective_runs) if repeat_count is None else repeat_count
         ),
@@ -433,6 +437,45 @@ def test_calibration_requires_non_empty_task_id(task_id: object) -> None:
         del payload["task_id"]
     else:
         payload["task_id"] = task_id
+
+    with pytest.raises(ValidationError):
+        PublicCheckIdempotencyCalibration.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "normalization_context",
+    [
+        {
+            "workspace_root": "relative/workspace",
+            "runner_temp_root": "/tmp/calibration-command-temp",
+        },
+        {
+            "workspace_root": "/tmp/calibration/../workspace",
+            "runner_temp_root": "/tmp/calibration-command-temp",
+        },
+        {
+            "workspace_root": "/",
+            "runner_temp_root": "/tmp/calibration-command-temp",
+        },
+        {
+            "workspace_root": "/tmp/calibration",
+            "runner_temp_root": "/tmp/calibration/command-temp",
+        },
+        {
+            "workspace_root": "/tmp/calibration/workspace",
+            "runner_temp_root": "/tmp/calibration",
+        },
+        {
+            "workspace_root": "/tmp/calibration",
+            "runner_temp_root": "/tmp/calibration",
+        },
+    ],
+)
+def test_calibration_requires_absolute_canonical_non_overlapping_context_roots(
+    normalization_context: dict[str, str],
+) -> None:
+    payload = _calibration_payload()
+    payload["normalization_context"] = normalization_context
 
     with pytest.raises(ValidationError):
         PublicCheckIdempotencyCalibration.model_validate(payload)
