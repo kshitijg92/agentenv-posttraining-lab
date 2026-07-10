@@ -373,8 +373,9 @@ artifact.
 #### Status
 
 Runtime `ToolResult` evidence and the prompt-loop failure boundary are
-implemented as described below. Calibration schemas and calibration execution
-are not yet implemented.
+implemented as described below. The standalone public-check calibration record
+schema is also implemented. It is not yet attached to control flake detection,
+and calibration execution is not yet implemented.
 
 ### Canonical Workspace Hash Helper
 
@@ -467,3 +468,106 @@ under contention (`725 passed, 3 failed`). All three passed in an isolated
 sequential rerun, and the complete four-worker run passed cleanly. This is the
 same resource-sensitive nested-audit behavior recorded in the preceding hash
 checkpoint, not a ToolResult contract regression.
+
+### Public-Check Idempotency Calibration Schema
+
+#### Implementation
+
+Added a standalone, strict `PublicCheckIdempotencyCalibration` contract under
+`agentenv.controls`. It is intentionally not yet attached to the existing
+`ControlFlakeDetection` payload, because doing that would require the control
+runner to populate a new required field in the same checkpoint.
+
+The record pins one public check with:
+
+```text
+task_id
+task_manifest_hash
+public_check_index
+exact command
+normalizer_version
+normalizer_code_hash
+```
+
+`task_id` is required for human-readable reporting. It does not replace the
+manifest hash as the authoritative task-version pin. The future runner must
+verify both the task ID and computed manifest hash against the loaded manifest.
+
+It requires an effective repeat count of at least two and an ordered, gap-free
+run list covering indexes `0` through `repeat_count - 1`.
+
+Each run is a discriminated union:
+
+```text
+CompletedPublicCheckRun:
+    status: COMPLETED
+    before/after canonical workspace hashes
+    exit code
+    required hash-pinned stdout/stderr refs
+    normalized result hash
+
+FailedPublicCheckRun:
+    status: FAILURE
+    failure_mode: TIMEOUT | RUNNER_FAILURE
+    before/after canonical workspace hashes
+    optional hash-pinned partial stdout/stderr refs
+    required error_class and error_message
+```
+
+Completed runs cannot carry failure-only fields, and failed runs cannot carry
+an exit code or normalized completed-result hash. Artifact references require a
+canonical relative path and non-empty content hash.
+
+The top-level status is validated from the run evidence with the agreed
+precedence:
+
+```text
+any observed workspace or normalized-result drift -> NON_IDEMPOTENT
+otherwise, any failed run                          -> INCONCLUSIVE
+otherwise                                         -> IDEMPOTENT
+```
+
+`non_idempotency_reasons` is a required, canonically ordered list derived from
+the same evidence:
+
+```text
+differing workspace hashes        -> WORKSPACE_STATE_DRIFT
+differing completed-result hashes -> NORMALIZED_RESULT_DRIFT
+```
+
+Both reasons are retained when both forms of drift occur. `NON_IDEMPOTENT`
+requires the exact non-empty derived list; `IDEMPOTENT` and `INCONCLUSIVE`
+require an empty list. Calling this workspace-state drift rather than public-
+check-caused mutation avoids claiming causality that the hashes alone do not
+prove.
+
+`idempotent` is exposed only as a derived property mapping these states to
+`true`, `false`, or `none`; it is not serialized and is rejected if supplied as
+an input field.
+
+#### Repo-Wide Output Normalization Decision
+
+Use one repo-wide, versioned public-check output normalizer rather than
+task-specific normalization rules. Calibration records pin both its declared
+version and code hash. This keeps equivalence semantics consistent across tasks
+and prevents per-check rules from hiding meaningful drift.
+
+The v0 policy will normalize `CRLF` and bare `CR` line endings to `LF`, known
+harness-controlled workspace or temporary paths, and narrowly recognized
+duration fragments. Raw stdout and stderr artifacts remain byte-faithful and
+content-hash pinned. Trailing spaces and final-newline differences remain
+meaningful in v0. Unknown volatility is retained, so it produces observed drift
+rather than being broadly stripped.
+
+The normalizer implementation and normalized-result hashing are not part of
+this schema-only checkpoint.
+
+#### Verification
+
+```text
+focused calibration-schema tests: 37 passed
+Ruff: passed
+Pyright: passed
+git diff --check: passed
+full suite with 4 workers: 765 passed
+```
