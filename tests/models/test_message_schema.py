@@ -74,7 +74,7 @@ def test_tool_message_accepts_name_and_tool_call_id() -> None:
         tool_call_id="tool_call_001",
         metadata={
             "tool_name": "read_file",
-            "input_hash": "xxh64:abc123",
+            "arguments_hash": "xxh64:abc123",
         },
     )
 

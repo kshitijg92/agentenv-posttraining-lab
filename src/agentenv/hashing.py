@@ -69,8 +69,10 @@ def iter_hashable_files(root: Path) -> list[Path]:
     for path in sorted(root.rglob("*")):
         if is_noisy_hash_path(path):
             continue
+        if path.is_symlink():
+            continue
         if path.is_file():
-            files.append(path.resolve())
+            files.append(path)
     return files
 
 

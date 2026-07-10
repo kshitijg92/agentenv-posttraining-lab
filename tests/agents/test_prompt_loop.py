@@ -4,12 +4,15 @@ from pathlib import Path
 
 import pytest
 
+import agentenv.agents.loop as prompt_loop_module
 from agentenv.agents.loop import PrivateReferenceGuard
 from agentenv.agents.loop import run_prompt_loop
-from agentenv.agents.schema import AgentTaskView
+from agentenv.agents.schema import AgentTaskView, ToolCallAction
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig, Message, ModelResponse
 from agentenv.tasks.validate import load_task_manifest
+from agentenv.tools.local_tools import WorkspaceStateHashError
+from agentenv.tools.schema import ToolResult
 
 
 TOY_TASK_MANIFEST = Path(
@@ -202,6 +205,58 @@ def test_prompt_loop_continues_after_recoverable_tool_error(
     ]
     assert result.messages[2].tool_call_id == "tool_call_0001"
     assert result.messages[3].tool_call_id == "tool_call_0001"
+
+
+def test_prompt_loop_preserves_partial_transcript_when_workspace_hashing_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "src.py").write_text("value = 1\n")
+    real_execute_tool = prompt_loop_module.execute_tool
+    execution_count = 0
+
+    def fail_second_tool_call(
+        action: ToolCallAction,
+        task_view: AgentTaskView,
+    ) -> ToolResult:
+        nonlocal execution_count
+        execution_count += 1
+        if execution_count == 2:
+            raise WorkspaceStateHashError(
+                "Failed to hash canonical workspace before tool execution."
+            )
+        return real_execute_tool(action, task_view)
+
+    monkeypatch.setattr(prompt_loop_module, "execute_tool", fail_second_tool_call)
+
+    read_action = FakeModelScriptStep(
+        output_text=_action({
+            "action": "tool_call",
+            "tool_name": "read_file",
+            "arguments": {"path": "src.py"},
+        }),
+    )
+    result = run_prompt_loop(
+        _agent_task_view(workspace),
+        _fake_model(read_action, read_action),
+        _decoding_config(),
+    )
+
+    assert result.status == "orchestrator_error"
+    assert result.error_class == "WorkspaceStateHashError"
+    assert result.turns_executed == 2
+    assert len(result.model_responses) == 2
+    assert len(result.tool_results) == 1
+    assert [message.role for message in result.messages] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+    ]
+    assert result.messages[-1].tool_call_id == "tool_call_0002"
 
 
 def test_prompt_loop_stops_after_terminal_tool_error(tmp_path: Path) -> None:

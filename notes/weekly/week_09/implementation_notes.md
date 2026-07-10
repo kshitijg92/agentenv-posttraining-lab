@@ -74,8 +74,6 @@ outside the canonical-state guarantee.
 
 #### Open Design Questions
 
-- Decide whether actual model `run_tests` calls also persist before/after
-  canonical workspace hashes.
 - Define the normalized result hash used for repeat comparison.
 
 #### Status
@@ -84,8 +82,9 @@ The required `PublicCheck.are_tests_idempotent` field is implemented. All four
 current task manifests explicitly declare `true`, and a focused regression test
 proves that omission fails manifest validation.
 
-Repeatability calibration, control-flake integration, tool-result changes, and
-redundant-block detection are not implemented yet.
+Runtime tool-result workspace evidence is implemented as described below.
+Repeatability calibration, control-flake integration, and redundant-block
+detection are not implemented yet.
 
 Adding the required field intentionally changes every task-manifest hash.
 Existing Qwen and trajectory artifacts remain historical evidence for the old
@@ -373,8 +372,9 @@ artifact.
 
 #### Status
 
-Design decision only. Calibration schemas and runtime behavior are not yet
-implemented.
+Runtime `ToolResult` evidence and the prompt-loop failure boundary are
+implemented as described below. Calibration schemas and calibration execution
+are not yet implemented.
 
 ### Canonical Workspace Hash Helper
 
@@ -398,13 +398,14 @@ file-content mutation
 file rename, addition, and deletion
 empty-file addition and removal
 noisy-path exclusion
+symlink exclusion without following workspace escapes
 missing and non-directory root rejection
 ```
 
 #### Verification
 
 ```text
-focused hashing and task-hashing tests: 17 passed
+focused hashing and task-hashing tests: 18 passed
 focused Ruff: passed
 focused Pyright: passed
 full parallel suite: 715 passed, 2 nested audit/report failures
@@ -414,3 +415,55 @@ isolated sequential rerun of both failures: 2 passed
 The two parallel failures are the same resource-sensitive nested audit tests
 previously observed under 16-worker execution; both pass outside that
 contention. This run is not recorded as a clean full-suite pass.
+
+### Runtime Tool-Result Workspace Evidence
+
+#### Implementation
+
+`ToolResult` now requires all three evidence fields for successful, rejected,
+timed-out, and otherwise failed tool executions:
+
+```text
+arguments_hash
+canonical_workspace_hash_before
+canonical_workspace_hash_after
+```
+
+The old `input_hash` name was removed without an alias. Valid tool calls hash
+their validated arguments, so omitted defaults and explicit defaults have one
+semantic hash. Invalid attempted calls retain a hash of their raw arguments.
+
+Tool execution now computes canonical workspace state on both sides of every
+call and constructs the public `ToolResult` only after both hashes exist. The
+workspace hashes remain evaluator-only evidence: tool messages expose neither
+hash in model-visible content nor metadata. Tool-message metadata retains only
+`arguments_hash`.
+
+Canonical directory hashing now ignores symlinks as well as declared noisy
+paths. This keeps symlink metadata outside the v0 state contract and prevents a
+workspace escape link from causing the evaluator to read or hash an external
+file.
+
+If either workspace hash fails, execution raises `WorkspaceStateHashError` and
+does not emit a partial `ToolResult`. The prompt loop catches that typed
+instrumentation failure, preserves all prior messages, model responses, and
+valid tool results, and terminates with `PromptLoopStatus=orchestrator_error`.
+The failed assistant tool call remains in the partial transcript with its tool
+call ID, but it has no fabricated tool observation. The enclosing agent-task
+run maps the same event to `AgentTaskRunStatus=orchestrator_error`.
+
+#### Verification
+
+```text
+focused schema/tool/prompt-loop/orchestrator/reward tests: 123 passed
+Ruff: passed
+Pyright: passed
+git diff --check: passed
+full suite with 4 workers: 728 passed
+```
+
+The 16-worker run produced three late nested reward-audit timeout failures
+under contention (`725 passed, 3 failed`). All three passed in an isolated
+sequential rerun, and the complete four-worker run passed cleanly. This is the
+same resource-sensitive nested-audit behavior recorded in the preceding hash
+checkpoint, not a ToolResult contract regression.

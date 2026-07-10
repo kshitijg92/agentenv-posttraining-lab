@@ -8,7 +8,9 @@ from agentenv.tools.schema import ReadFileOutput, ToolResult
 def test_render_tool_result_message_for_success() -> None:
     tool_result = ToolResult(
         tool_name="read_file",
-        input_hash="xxh64:abc123",
+        arguments_hash="xxh64:abc123",
+        canonical_workspace_hash_before="xxh64:workspace-before",
+        canonical_workspace_hash_after="xxh64:workspace-after",
         status="ok",
         output=ReadFileOutput(
             content="file contents",
@@ -26,7 +28,7 @@ def test_render_tool_result_message_for_success() -> None:
         tool_call_id="tool_call_0001",
         content=message.content,
         metadata={
-            "input_hash": "xxh64:abc123",
+            "arguments_hash": "xxh64:abc123",
         },
     )
     content = json.loads(message.content)
@@ -41,12 +43,18 @@ def test_render_tool_result_message_for_success() -> None:
     }
     assert "duration_ms" not in content
     assert "error_class" not in content
+    assert "canonical_workspace_hash_before" not in content
+    assert "canonical_workspace_hash_after" not in content
+    assert "canonical_workspace_hash_before" not in message.metadata
+    assert "canonical_workspace_hash_after" not in message.metadata
 
 
 def test_render_tool_result_message_for_error() -> None:
     tool_result = ToolResult(
         tool_name="read_file",
-        input_hash="xxh64:abc123",
+        arguments_hash="xxh64:abc123",
+        canonical_workspace_hash_before="xxh64:workspace-before",
+        canonical_workspace_hash_after="xxh64:workspace-after",
         status="error",
         output=None,
         stdout="",
@@ -63,7 +71,7 @@ def test_render_tool_result_message_for_error() -> None:
     assert message.name == "read_file"
     assert message.tool_call_id == "tool_call_0002"
     assert message.metadata == {
-        "input_hash": "xxh64:abc123",
+        "arguments_hash": "xxh64:abc123",
     }
     content = json.loads(message.content)
     assert content == {
@@ -77,4 +85,6 @@ def test_render_tool_result_message_for_error() -> None:
     }
     assert "output" not in content
     assert "duration_ms" not in content
-    assert "input_hash" not in content
+    assert "arguments_hash" not in content
+    assert "canonical_workspace_hash_before" not in content
+    assert "canonical_workspace_hash_after" not in content

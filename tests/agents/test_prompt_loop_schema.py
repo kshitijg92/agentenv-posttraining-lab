@@ -45,7 +45,9 @@ def _tool_results() -> list[ToolResult]:
     return [
         ToolResult(
             tool_name="read_file",
-            input_hash="xxh64:abc123",
+            arguments_hash="xxh64:abc123",
+            canonical_workspace_hash_before="xxh64:workspace-before",
+            canonical_workspace_hash_after="xxh64:workspace-after",
             status="ok",
             output=ReadFileOutput(
                 content="file contents",

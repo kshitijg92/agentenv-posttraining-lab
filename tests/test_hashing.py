@@ -76,6 +76,20 @@ def test_hash_directory_ignores_declared_noisy_paths(tmp_path: Path) -> None:
     assert hash_directory(workspace) == before
 
 
+def test_hash_directory_ignores_symlinks_and_does_not_follow_workspace_escapes(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside.txt"
+    _write(workspace / "src/module.py", "value = 1\n")
+    outside.write_text("private\n")
+    before = hash_directory(workspace)
+
+    (workspace / "outside-link.txt").symlink_to(outside)
+
+    assert hash_directory(workspace) == before
+
+
 def test_hash_directory_rejects_non_directory_root(tmp_path: Path) -> None:
     file_path = tmp_path / "file.txt"
     file_path.write_text("content\n")

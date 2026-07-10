@@ -1,3 +1,5 @@
+from typing import TypedDict
+
 import pytest
 from pydantic import ValidationError
 
@@ -8,6 +10,17 @@ from agentenv.tools.schema import TOOL_REGISTRY
 from agentenv.tools.schema import ToolResult
 from agentenv.tools.schema import WriteFileInput, WriteFileOutput
 from agentenv.tools.schema import validate_tool_input
+
+
+class _WorkspaceHashes(TypedDict):
+    canonical_workspace_hash_before: str
+    canonical_workspace_hash_after: str
+
+
+_WORKSPACE_HASHES: _WorkspaceHashes = {
+    "canonical_workspace_hash_before": "xxh64:workspace-before",
+    "canonical_workspace_hash_after": "xxh64:workspace-after",
+}
 
 
 def test_validate_tool_input_accepts_list_files() -> None:
@@ -177,7 +190,8 @@ def test_tool_output_schemas_reject_invalid_outputs(
 def test_tool_result_accepts_successful_read_file_result() -> None:
     result = ToolResult(
         tool_name="read_file",
-        input_hash="xxh64:abc123",
+        arguments_hash="xxh64:abc123",
+        **_WORKSPACE_HASHES,
         status="ok",
         output=ReadFileOutput(
             content="file contents",
@@ -202,7 +216,8 @@ def test_tool_result_accepts_successful_read_file_result() -> None:
 def test_tool_result_accepts_successful_list_files_result() -> None:
     result = ToolResult(
         tool_name="list_files",
-        input_hash="xxh64:list123",
+        arguments_hash="xxh64:list123",
+        **_WORKSPACE_HASHES,
         status="ok",
         output=ListFilesOutput(files=["src/mathlib.py"], truncated=False),
         duration_ms=2,
@@ -218,7 +233,8 @@ def test_tool_result_accepts_successful_list_files_result() -> None:
 def test_tool_result_accepts_successful_run_tests_result() -> None:
     result = ToolResult(
         tool_name="run_tests",
-        input_hash="xxh64:def456",
+        arguments_hash="xxh64:def456",
+        **_WORKSPACE_HASHES,
         status="ok",
         output=RunTestsOutput(passed=False),
         stdout="1 failed\n",
@@ -235,7 +251,8 @@ def test_tool_result_accepts_successful_run_tests_result() -> None:
 def test_tool_result_accepts_error_result_without_output() -> None:
     result = ToolResult(
         tool_name="read_file",
-        input_hash="xxh64:abc123",
+        arguments_hash="xxh64:abc123",
+        **_WORKSPACE_HASHES,
         status="error",
         output=None,
         stderr="Permission denied\n",
@@ -252,7 +269,8 @@ def test_tool_result_accepts_error_result_without_output() -> None:
 def test_tool_result_allows_unknown_tool_name_for_error_results() -> None:
     result = ToolResult(
         tool_name="delete_file",
-        input_hash="xxh64:abc123",
+        arguments_hash="xxh64:abc123",
+        **_WORKSPACE_HASHES,
         status="error",
         output=None,
         duration_ms=2,
@@ -268,7 +286,8 @@ def test_tool_result_rejects_ok_without_output() -> None:
     with pytest.raises(ValidationError, match="ok tool results require output"):
         ToolResult(
             tool_name="read_file",
-            input_hash="xxh64:abc123",
+            arguments_hash="xxh64:abc123",
+            **_WORKSPACE_HASHES,
             status="ok",
             output=None,
             duration_ms=2,
@@ -282,7 +301,8 @@ def test_tool_result_rejects_ok_with_error_fields() -> None:
     ):
         ToolResult(
             tool_name="read_file",
-            input_hash="xxh64:abc123",
+            arguments_hash="xxh64:abc123",
+            **_WORKSPACE_HASHES,
             status="ok",
             output=ReadFileOutput(
                 content="file contents",
@@ -298,7 +318,8 @@ def test_tool_result_rejects_error_with_output() -> None:
     with pytest.raises(ValidationError, match="error tool results cannot include output"):
         ToolResult(
             tool_name="read_file",
-            input_hash="xxh64:abc123",
+            arguments_hash="xxh64:abc123",
+            **_WORKSPACE_HASHES,
             status="error",
             output=ReadFileOutput(
                 content="file contents",
@@ -314,7 +335,8 @@ def test_tool_result_rejects_error_without_error_class() -> None:
     with pytest.raises(ValidationError, match="error tool results require error_class"):
         ToolResult(
             tool_name="read_file",
-            input_hash="xxh64:abc123",
+            arguments_hash="xxh64:abc123",
+            **_WORKSPACE_HASHES,
             status="error",
             output=None,
             duration_ms=2,
@@ -328,7 +350,8 @@ def test_tool_result_rejects_mismatched_success_output_type() -> None:
     ):
         ToolResult(
             tool_name="read_file",
-            input_hash="xxh64:abc123",
+            arguments_hash="xxh64:abc123",
+            **_WORKSPACE_HASHES,
             status="ok",
             output=RunTestsOutput(passed=True),
             duration_ms=2,
@@ -338,7 +361,9 @@ def test_tool_result_rejects_mismatched_success_output_type() -> None:
 @pytest.mark.parametrize(
     ("field_name", "value"),
     [
-        ("input_hash", ""),
+        ("arguments_hash", ""),
+        ("canonical_workspace_hash_before", ""),
+        ("canonical_workspace_hash_after", ""),
         ("duration_ms", -1),
         ("error_class", ""),
         ("error_message", ""),
@@ -350,13 +375,38 @@ def test_tool_result_rejects_invalid_common_fields(
 ) -> None:
     payload: dict[str, object] = {
         "tool_name": "read_file",
-        "input_hash": "xxh64:abc123",
+        "arguments_hash": "xxh64:abc123",
+        **_WORKSPACE_HASHES,
         "status": "error",
         "output": None,
         "duration_ms": 2,
         "error_class": "PermissionDenied",
     }
     payload[field_name] = value
+
+    with pytest.raises(ValidationError):
+        ToolResult.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "arguments_hash",
+        "canonical_workspace_hash_before",
+        "canonical_workspace_hash_after",
+    ],
+)
+def test_tool_result_requires_hash_evidence(field_name: str) -> None:
+    payload: dict[str, object] = {
+        "tool_name": "read_file",
+        "arguments_hash": "xxh64:abc123",
+        **_WORKSPACE_HASHES,
+        "status": "error",
+        "output": None,
+        "duration_ms": 2,
+        "error_class": "PermissionDenied",
+    }
+    del payload[field_name]
 
     with pytest.raises(ValidationError):
         ToolResult.model_validate(payload)

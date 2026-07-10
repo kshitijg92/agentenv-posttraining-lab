@@ -5,7 +5,7 @@ import pytest
 
 from agentenv.agents.schema import AgentActionValue, AgentTaskView, ToolCallAction
 from agentenv.security.secrets import REDACTED_SECRET
-from agentenv.tools.local_tools import execute_tool
+from agentenv.tools.local_tools import WorkspaceStateHashError, execute_tool
 from agentenv.tools.schema import (
     ListFilesOutput,
     ReadFileOutput,
@@ -62,6 +62,10 @@ def test_execute_tool_lists_files_inside_workspace(tmp_path: Path) -> None:
         "tests/test_public.py",
     ]
     assert result.output.truncated is False
+    assert (
+        result.canonical_workspace_hash_before
+        == result.canonical_workspace_hash_after
+    )
 
 
 def test_execute_tool_lists_files_relative_to_workspace_for_subdir(
@@ -189,6 +193,10 @@ def test_execute_tool_reads_file_inside_workspace(tmp_path: Path) -> None:
     assert result.output.content == "print('hello')\n"
     assert result.output.bytes_read == len("print('hello')\n".encode())
     assert result.error_class is None
+    assert (
+        result.canonical_workspace_hash_before
+        == result.canonical_workspace_hash_after
+    )
 
 
 def test_execute_tool_writes_file_inside_existing_directory(tmp_path: Path) -> None:
@@ -211,6 +219,10 @@ def test_execute_tool_writes_file_inside_existing_directory(tmp_path: Path) -> N
     assert isinstance(result.output, WriteFileOutput)
     assert result.output.bytes_written == len("print('fixed')\n".encode())
     assert (workspace / "src.py").read_text() == "print('fixed')\n"
+    assert (
+        result.canonical_workspace_hash_before
+        != result.canonical_workspace_hash_after
+    )
 
 
 def test_execute_tool_rejects_write_to_missing_parent_directory(
@@ -255,6 +267,10 @@ def test_execute_tool_runs_allowed_public_check(tmp_path: Path) -> None:
     assert result.output.passed is True
     assert result.exit_code == 0
     assert result.stdout == "ok\n"
+    assert (
+        result.canonical_workspace_hash_before
+        == result.canonical_workspace_hash_after
+    )
 
 
 def test_execute_tool_run_tests_scrubs_and_redacts_secret_env(
@@ -357,6 +373,97 @@ def test_execute_tool_reports_invalid_tool_input(tmp_path: Path) -> None:
 
     assert result.status == "error"
     assert result.error_class == "InvalidToolInput"
+    assert (
+        result.canonical_workspace_hash_before
+        == result.canonical_workspace_hash_after
+    )
+
+
+def test_execute_tool_hashes_validated_arguments_with_defaults(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    task_view = _agent_task_view(workspace)
+
+    omitted_defaults = execute_tool(
+        ToolCallAction(
+            action="tool_call",
+            tool_name="list_files",
+            arguments={},
+        ),
+        task_view,
+    )
+    explicit_defaults = execute_tool(
+        ToolCallAction(
+            action="tool_call",
+            tool_name="list_files",
+            arguments={"path": ".", "max_depth": 4, "max_files": 200},
+        ),
+        task_view,
+    )
+
+    assert omitted_defaults.arguments_hash == explicit_defaults.arguments_hash
+
+
+def test_execute_tool_fails_without_result_when_before_hash_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def fail_hash(_: Path) -> str:
+        raise OSError("hash unavailable")
+
+    monkeypatch.setattr("agentenv.tools.local_tools.hash_directory", fail_hash)
+
+    with pytest.raises(
+        WorkspaceStateHashError,
+        match="before tool execution: hash unavailable",
+    ):
+        execute_tool(
+            ToolCallAction(
+                action="tool_call",
+                tool_name="write_file",
+                arguments={"path": "src.py", "content": "changed\n"},
+            ),
+            _agent_task_view(workspace),
+        )
+
+    assert not (workspace / "src.py").exists()
+
+
+def test_execute_tool_fails_without_partial_result_when_after_hash_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    hash_calls = 0
+
+    def fail_second_hash(_: Path) -> str:
+        nonlocal hash_calls
+        hash_calls += 1
+        if hash_calls == 2:
+            raise OSError("hash unavailable")
+        return "xxh64:workspace-before"
+
+    monkeypatch.setattr("agentenv.tools.local_tools.hash_directory", fail_second_hash)
+
+    with pytest.raises(
+        WorkspaceStateHashError,
+        match="after tool execution: hash unavailable",
+    ):
+        execute_tool(
+            ToolCallAction(
+                action="tool_call",
+                tool_name="write_file",
+                arguments={"path": "src.py", "content": "changed\n"},
+            ),
+            _agent_task_view(workspace),
+        )
+
+    assert hash_calls == 2
+    assert (workspace / "src.py").read_text() == "changed\n"
 
 
 @pytest.mark.parametrize("tool_name", ["list_files", "read_file", "write_file"])

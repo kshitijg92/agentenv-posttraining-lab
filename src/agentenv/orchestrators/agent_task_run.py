@@ -129,12 +129,17 @@ def run_agent_task_attempt(
         )
 
         if prompt_loop_result.status != "completed":
+            run_status: AgentTaskRunStatus = (
+                "orchestrator_error"
+                if prompt_loop_result.status == "orchestrator_error"
+                else "agent_loop_failed"
+            )
             return AgentTaskRun(
                 result=_result(
                     agent_attempt_id=agent_attempt_id,
                     task_id=manifest.id,
                     task_manifest_path=task_manifest_path,
-                    status="agent_loop_failed",
+                    status=run_status,
                     prompt_loop_status=prompt_loop_result.status,
                     candidate_patch_path=None,
                     candidate_patch_hash=None,

@@ -564,7 +564,9 @@ def test_prompt_loop_exposure_scan_skips_attack_payload_but_scans_tool_outputs()
         tool_results=[
             ToolResult(
                 tool_name="read_file",
-                input_hash="xxh64:tool-input",
+                arguments_hash="xxh64:tool-input",
+                canonical_workspace_hash_before="xxh64:workspace-before",
+                canonical_workspace_hash_after="xxh64:workspace-after",
                 status="ok",
                 output=ReadFileOutput(
                     content="hidden_tests leaked through a tool result",

@@ -18,6 +18,7 @@ PromptLoopStatus = Literal[
     "invalid_model_output",
     "invalid_shortcut_attempted",
     "terminal_tool_error",
+    "orchestrator_error",
 ]
 
 

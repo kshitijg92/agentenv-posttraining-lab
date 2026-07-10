@@ -271,6 +271,48 @@ def test_run_agent_task_attempt_does_not_score_failed_prompt_loop(
     assert prompt_loop_result["status"] == "invalid_model_output"
 
 
+def test_run_agent_task_attempt_maps_prompt_loop_hash_failure_to_orchestrator_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fail_hash(_: Path) -> str:
+        raise OSError("hash unavailable")
+
+    monkeypatch.setattr("agentenv.tools.local_tools.hash_directory", fail_hash)
+    model_client = ScriptedFakeModelClient(
+        model_id="fake-scripted-v0",
+        script=[
+            FakeModelScriptStep(
+                output_text=_action({
+                    "action": "tool_call",
+                    "tool_name": "read_file",
+                    "arguments": {"path": "src/mathlib.py"},
+                }),
+            )
+        ],
+    )
+
+    agent_task_run = run_agent_task_attempt(
+        TOY_TASK_MANIFEST,
+        model_client,
+        _decoding_config(),
+        workspace_parent=tmp_path / "work",
+    )
+
+    assert agent_task_run.result.status == "orchestrator_error"
+    assert agent_task_run.result.prompt_loop_status == "orchestrator_error"
+    assert agent_task_run.result.error_class == "WorkspaceStateHashError"
+    assert agent_task_run.result.attempt_result is None
+    assert agent_task_run.prompt_loop_result is not None
+    assert agent_task_run.prompt_loop_result.status == "orchestrator_error"
+    assert len(agent_task_run.prompt_loop_result.model_responses) == 1
+    assert agent_task_run.prompt_loop_result.tool_results == []
+    assert agent_task_run.prompt_loop_result.messages[-1].role == "assistant"
+    assert agent_task_run.prompt_loop_result.messages[-1].tool_call_id == (
+        "tool_call_0001"
+    )
+
+
 def test_write_agent_task_run_artifacts_redacts_secret_canary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -334,7 +376,9 @@ def test_write_agent_task_run_artifacts_redacts_secret_canary(
             tool_results=[
                 ToolResult(
                     tool_name="run_tests",
-                    input_hash="xxh64:abc123",
+                    arguments_hash="xxh64:abc123",
+                    canonical_workspace_hash_before="xxh64:workspace-before",
+                    canonical_workspace_hash_after="xxh64:workspace-after",
                     status="error",
                     stdout=f"stdout {CANARY}",
                     stderr=f"stderr {CANARY}",

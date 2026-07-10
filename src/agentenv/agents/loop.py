@@ -25,7 +25,7 @@ from agentenv.models.schema import DecodingConfig, Message, ModelResponse
 from agentenv.security.leakage import contains_hidden_validator_asset_reference
 from agentenv.security.secrets import redact_secrets
 from agentenv.tasks.schema import TaskManifest
-from agentenv.tools.local_tools import execute_tool
+from agentenv.tools.local_tools import WorkspaceStateHashError, execute_tool
 from agentenv.tools.schema import ToolResult
 
 
@@ -162,7 +162,20 @@ def run_prompt_loop(
             messages[-1] = messages[-1].model_copy(
                 update={"tool_call_id": tool_call_id}
             )
-            tool_result = execute_tool(agent_action, agent_task_view)
+            try:
+                tool_result = execute_tool(agent_action, agent_task_view)
+            except WorkspaceStateHashError as exc:
+                return _build_result(
+                    agent_task_view=agent_task_view,
+                    status="orchestrator_error",
+                    turns_executed=turns_executed,
+                    started=started,
+                    messages=messages,
+                    model_responses=model_responses,
+                    tool_results=tool_results,
+                    error_class=exc.__class__.__name__,
+                    error_message=redact_secrets(str(exc)),
+                )
             tool_results.append(tool_result)
             messages.append(render_tool_result_message(tool_result, tool_call_id))
 

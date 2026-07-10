@@ -36,6 +36,6 @@ def render_tool_result_message(
         tool_call_id=tool_call_id,
         content=json.dumps(redact_jsonable(content), sort_keys=True),
         metadata={
-            "input_hash": tool_result.input_hash,
+            "arguments_hash": tool_result.arguments_hash,
         },
     )

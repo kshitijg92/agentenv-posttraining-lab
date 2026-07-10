@@ -70,7 +70,9 @@ class ToolResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tool_name: str = Field(min_length=1)
-    input_hash: str = Field(min_length=1)
+    arguments_hash: str = Field(min_length=1)
+    canonical_workspace_hash_before: str = Field(min_length=1)
+    canonical_workspace_hash_after: str = Field(min_length=1)
     status: ToolResultStatus
     output: ToolOutput | None = None
     stdout: str = ""
