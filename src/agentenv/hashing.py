@@ -44,6 +44,21 @@ def hash_bytes(payload: bytes) -> str:
     return f"xxh64:{xxhash.xxh64_hexdigest(payload)}"
 
 
+def hash_directory(root: Path) -> str:
+    root = root.resolve()
+    if not root.is_dir():
+        raise ValueError(f"Expected directory for hashing: {root}")
+
+    entries = [
+        {
+            "path": relative_path(file_path, root),
+            "hash": hash_file(file_path),
+        }
+        for file_path in iter_hashable_files(root)
+    ]
+    return hash_json(entries)
+
+
 def iter_hashable_files(root: Path) -> list[Path]:
     if not root.exists():
         return []

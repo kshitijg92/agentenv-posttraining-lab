@@ -9,6 +9,7 @@ from agentenv.artifacts.payloads import EvalTaskHashes
 from agentenv.artifacts.payloads import EVAL_TASK_HASHES_SCHEMA_VERSION
 from agentenv.artifacts.payloads import TASK_HASH_REPORT_SCHEMA_VERSION
 from agentenv.artifacts.payloads import TaskHashReport as TaskHashReportPayload
+from agentenv.hashing import hash_directory as _hash_directory
 from agentenv.hashing import hash_file as _hash_file
 from agentenv.hashing import hash_json as _hash_json
 from agentenv.hashing import hash_normalized_text as _hash_normalized_text
@@ -232,17 +233,6 @@ def _extra_task_files(task_dir: Path, required_task_files: list[str]) -> list[st
         if file_path not in required_file_paths
     ]
     return sorted(extras)
-
-
-def _hash_directory(path: Path) -> str:
-    entries = [
-        {
-            "path": _relative_path(file_path, path),
-            "hash": _hash_file(file_path),
-        }
-        for file_path in _iter_hashable_files(path)
-    ]
-    return _hash_json(entries)
 
 
 def _hash_normalized_directory_text(path: Path) -> str | None:
