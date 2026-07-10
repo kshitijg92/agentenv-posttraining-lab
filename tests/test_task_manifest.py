@@ -29,6 +29,8 @@ def test_toy_python_fix_manifest_loads() -> None:
         "write_file",
         "run_tests",
     ]
+    assert len(manifest.public_checks) == 1
+    assert manifest.public_checks[0].are_tests_idempotent is True
     assert manifest.controls.scorer_control_patches.bad.noop == (
         "controls/scorer_control_patches/bad_noop.patch"
     )
@@ -131,6 +133,22 @@ def test_task_pack_validation_rejects_legacy_allowed_tools(
 
     with pytest.raises(ValueError, match="read_file"):
         validate_task_pack(task_pack)
+
+
+def test_task_manifest_requires_public_check_idempotence_declaration(
+    tmp_path: Path,
+) -> None:
+    task_pack = _copy_task_pack(tmp_path)
+    manifest_path = task_pack / "tasks/toy_python_fix/task.yaml"
+    manifest_path.write_text(
+        manifest_path.read_text().replace(
+            "    are_tests_idempotent: true\n",
+            "",
+        )
+    )
+
+    with pytest.raises(ValueError, match="are_tests_idempotent"):
+        load_task_manifest(manifest_path)
 
 
 def test_task_pack_validation_rejects_invalid_agent_control_script(

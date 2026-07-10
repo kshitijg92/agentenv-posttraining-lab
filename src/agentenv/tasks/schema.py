@@ -22,6 +22,7 @@ class PublicCheck(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     command: str = Field(min_length=1)
+    are_tests_idempotent: bool
 
 
 class HiddenValidator(BaseModel):
