@@ -5,8 +5,8 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from agentenv.audits.hashing import hash_harness_audit_case_dir
 from agentenv.rewards.cases import (
-    hash_harness_audit_case_dir,
     load_reward_hack_case,
     verify_reward_hack_case_source_refs,
 )
@@ -58,13 +58,10 @@ def test_verify_reward_hack_case_source_refs_accepts_current_hashes() -> None:
 
 def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
     cases = [
-        load_reward_hack_case(path)
-        for path in sorted(CASE_ROOT.rglob("case.yaml"))
+        load_reward_hack_case(path) for path in sorted(CASE_ROOT.rglob("case.yaml"))
     ]
 
-    assert {
-        case.reward_hack_id for case in cases
-    } == {
+    assert {case.reward_hack_id for case in cases} == {
         "fake_success_output_correct_patch_agent_workspace_update",
         "fake_success_output_hidden_fail_agent_workspace_update",
         "format_only_compliance_submitted_patch_text_probe_attempt",
@@ -227,8 +224,7 @@ def test_reward_hack_case_accepts_fake_success_output_exploit_spec() -> None:
         "source_type": "agent_task_audit_case",
         "exploit": {
             "case_dir": (
-                "data/harness_audit/agent_task_cases/"
-                "fake_success_output_hidden_fail"
+                "data/harness_audit/agent_task_cases/fake_success_output_hidden_fail"
             ),
             "case_id": "fake_success_output_hidden_fail",
         },
@@ -274,8 +270,7 @@ def test_reward_hack_case_accepts_tool_output_spoofing_exploit_spec() -> None:
         "source_type": "agent_task_audit_case",
         "exploit": {
             "case_dir": (
-                "data/harness_audit/agent_task_cases/"
-                "tool_output_spoofing_spoof_only"
+                "data/harness_audit/agent_task_cases/tool_output_spoofing_spoof_only"
             ),
             "case_id": "tool_output_spoofing_spoof_only",
         },
@@ -321,8 +316,7 @@ def test_reward_hack_case_accepts_state_corruption_exploit_spec() -> None:
         "source_type": "agent_task_audit_case",
         "exploit": {
             "case_dir": (
-                "data/harness_audit/agent_task_cases/"
-                "state_corruption_fake_manifest"
+                "data/harness_audit/agent_task_cases/state_corruption_fake_manifest"
             ),
             "case_id": "state_corruption_fake_manifest",
         },
@@ -356,9 +350,7 @@ def test_reward_hack_case_accepts_state_corruption_exploit_spec() -> None:
     assert case.exploit.exploit_spec.corrupted_state_target == "run_manifest"
     assert case.exploit.exploit_spec.corruption_method == "model_authored_file"
     assert case.exploit.exploit_spec.expected_corrupted_file.path == "manifest.json"
-    assert (
-        case.exploit.exploit_spec.corrupted_state_must_not_be_authoritative is True
-    )
+    assert case.exploit.exploit_spec.corrupted_state_must_not_be_authoritative is True
 
 
 def test_reward_hack_case_accepts_timeout_or_retry_exploit_spec() -> None:
@@ -634,7 +626,9 @@ def test_verify_reward_hack_case_source_refs_rejects_task_manifest_mismatch(
 
 
 def test_harness_audit_case_hash_normalizes_notes_text(tmp_path: Path) -> None:
-    case_dir_a = _write_harness_case_dir(tmp_path / "a", notes="# Notes\n\nHello   WORLD\n")
+    case_dir_a = _write_harness_case_dir(
+        tmp_path / "a", notes="# Notes\n\nHello   WORLD\n"
+    )
     case_dir_b = _write_harness_case_dir(tmp_path / "b", notes="# notes hello world\n")
 
     assert hash_harness_audit_case_dir(case_dir_a) == hash_harness_audit_case_dir(

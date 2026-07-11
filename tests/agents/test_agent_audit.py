@@ -1,10 +1,22 @@
-import json
+import shutil
 from pathlib import Path
+from typing import Any
 
+import pytest
+
+import agentenv.audits.agent_task as agent_audit_module
 from agentenv.audits.agent_task import (
+    load_agent_task_audit_layer,
     load_agent_task_audit_case,
-    run_agent_task_audit,
+    run_agent_task_audit_layer,
 )
+from agentenv.artifacts.manifests import load_agent_task_audit_manifest
+from agentenv.audits.schema import (
+    AgentTaskAuditErrorRecord,
+    CompletedAgentTaskAuditRecord,
+    load_agent_task_audit_records,
+)
+from agentenv.hashing import hash_directory, hash_file
 
 
 AGENT_CASE_ROOT = Path("data/harness_audit/agent_task_cases")
@@ -1239,38 +1251,74 @@ def test_load_agent_task_audit_case() -> None:
     ] == RECOVERY_TOOL_RESULTS
 
 
-def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
+def test_run_agent_task_audit_layer_persists_standalone_manifest(
     tmp_path: Path,
 ) -> None:
-    out_dir = tmp_path / "agent_task_audit"
+    out_dir = tmp_path / "agent"
 
-    results = run_agent_task_audit(AGENT_CASE_ROOT, out_dir)
+    layer_run = run_agent_task_audit_layer(AGENT_CASE_ROOT, out_dir)
 
-    assert {result.case.id for result in results} == set(EXPECTED_COMPARISONS)
-    results_by_case = {result.case.id: result for result in results}
-    assert all(result.overall_match for result in results)
+    assert layer_run.out_dir == out_dir.resolve()
+    assert layer_run.summary.status == "PASS"
+    assert layer_run.summary.discovered_case_count == len(EXPECTED_COMPARISONS)
+    assert layer_run.summary.completed_count == len(EXPECTED_COMPARISONS)
+    assert layer_run.summary.matched_count == len(EXPECTED_COMPARISONS)
+    assert layer_run.summary.mismatched_count == 0
+    assert layer_run.summary.audit_error_count == 0
+    completed_records = tuple(
+        record
+        for record in layer_run.records
+        if isinstance(record, CompletedAgentTaskAuditRecord)
+    )
+    assert len(completed_records) == len(layer_run.records)
+    assert {record.provenance.case_id for record in completed_records} == set(
+        EXPECTED_COMPARISONS
+    )
+    records_by_case = {
+        record.provenance.case_id: record for record in completed_records
+    }
     comparisons_by_case = {
-        result.case.id: [
-            (comparison.field, comparison.expected, comparison.actual, comparison.match)
-            for comparison in result.comparisons
+        case_id: [
+            (
+                comparison.model_dump(mode="json")["field"],
+                comparison.model_dump(mode="json")["expected"],
+                comparison.model_dump(mode="json")["actual"],
+                comparison.model_dump(mode="json")["match"],
+            )
+            for comparison in record.comparisons
         ]
-        for result in results
+        for case_id, record in records_by_case.items()
     }
     assert comparisons_by_case == EXPECTED_COMPARISONS
+    for case_id, expected_fields in EXPECTED_RECORD_FIELDS.items():
+        record = records_by_case[case_id]
+        assert record.provenance.task_manifest_path == TASK_MANIFEST
+        assert record.agent_control_script == "agent_control_script.json"
+        for field, expected_value in expected_fields.items():
+            assert getattr(record, field) == expected_value
 
-    jsonl_path = out_dir / "agent_task_audit_results.jsonl"
-    markdown_path = out_dir / "agent_task_audit.md"
-
-    assert jsonl_path.is_file()
-    assert markdown_path.is_file()
-    for case_id in EXPECTED_COMPARISONS:
-        artifact_dir = out_dir / f"agent_task_runs/{case_id}"
-        assert (artifact_dir / "manifest.json").is_file()
-        assert (artifact_dir / "agent_task_run.json").is_file()
-        assert (artifact_dir / "agent_task_view.json").is_file()
-        assert (artifact_dir / "prompt_loop_result.json").is_file()
-        assert (artifact_dir / "decoding_config.json").is_file()
-        assert (artifact_dir / "agent_control_script.json").is_file()
+    manifest_path = out_dir / "manifest.json"
+    results_path = out_dir / "results.jsonl"
+    assert load_agent_task_audit_manifest(manifest_path) == layer_run.manifest
+    assert load_agent_task_audit_records(results_path) == layer_run.records
+    assert load_agent_task_audit_layer(out_dir) == layer_run
+    assert layer_run.manifest.summary == layer_run.summary
+    assert layer_run.manifest.artifact_type == "agent_task_audit"
+    assert layer_run.manifest.runtime_provenance.harness_runtime_hash.startswith(
+        "xxh64:"
+    )
+    assert layer_run.summary.results_jsonl_hash == hash_file(results_path)
+    assert layer_run.summary.case_artifacts_hash == hash_directory(out_dir / "cases")
+    for record in layer_run.records:
+        assert isinstance(record, CompletedAgentTaskAuditRecord)
+        case_artifact_dir = out_dir / record.case_artifact.path
+        assert record.case_artifact.content_hash == hash_directory(case_artifact_dir)
+        assert (case_artifact_dir / "manifest.json").is_file()
+        assert (case_artifact_dir / "agent_task_run.json").is_file()
+        assert (case_artifact_dir / "agent_task_view.json").is_file()
+        assert (case_artifact_dir / "prompt_loop_result.json").is_file()
+        assert (case_artifact_dir / "decoding_config.json").is_file()
+        assert (case_artifact_dir / "agent_control_script.json").is_file()
 
     for case_id in (
         "canary_reference_tool_call",
@@ -1283,7 +1331,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "private_reference_tool_call",
         "terminal_tool_error",
     ):
-        artifact_dir = out_dir / f"agent_task_runs/{case_id}"
+        artifact_dir = out_dir / records_by_case[case_id].case_artifact.path
         assert not (artifact_dir / "candidate.patch").exists()
         assert not (artifact_dir / "attempt").exists()
 
@@ -1301,7 +1349,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "tool_output_spoofing_spoof_only",
         "tool_recovery",
     ):
-        artifact_dir = out_dir / f"agent_task_runs/{case_id}"
+        artifact_dir = out_dir / records_by_case[case_id].case_artifact.path
         assert (artifact_dir / "candidate.patch").is_file()
         assert (artifact_dir / "attempt/attempt.json").is_file()
         assert (artifact_dir / "attempt/trace.jsonl").is_file()
@@ -1311,222 +1359,87 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "tool_output_spoofing_real_tools_plus_spoof",
         "tool_output_spoofing_spoof_only",
     ):
-        candidate_patch = (
-            out_dir / f"agent_task_runs/{case_id}/candidate.patch"
-        ).read_text()
+        artifact_dir = out_dir / records_by_case[case_id].case_artifact.path
+        candidate_patch = (artifact_dir / "candidate.patch").read_text()
         assert "tool_results.json" in candidate_patch
         assert "SUCCESS" in candidate_patch
 
-    records = [
-        json.loads(line) for line in jsonl_path.read_text().splitlines() if line.strip()
-    ]
-    assert {record["case_id"] for record in records} == set(EXPECTED_COMPARISONS)
-    records_by_case = {record["case_id"]: record for record in records}
-    for case_id, expected_comparisons in EXPECTED_COMPARISONS.items():
-        record = records_by_case[case_id]
-        assert record["agent_control_script"] == "agent_control_script.json"
-        assert record["agent_task_artifact_dir"] == f"agent_task_runs/{case_id}"
-        assert record["comparisons"] == [
-            {
-                "field": field,
-                "expected": expected,
-                "actual": actual,
-                "match": match,
-            }
-            for field, expected, actual, match in expected_comparisons
-        ]
-        assert record["overall_match"] is True
-        assert record["task_manifest"] == TASK_MANIFEST
-        assert record["agent_attempt_id"] == (
-            results_by_case[case_id].agent_task_run.result.agent_attempt_id
-        )
-        for field, expected_value in EXPECTED_RECORD_FIELDS[case_id].items():
-            assert record[field] == expected_value
+    first_record = layer_run.records[0]
+    assert isinstance(first_record, CompletedAgentTaskAuditRecord)
+    drift_path = out_dir / first_record.case_artifact.path / "error.txt"
+    drift_path.write_text(drift_path.read_text() + "drift\n")
+    with pytest.raises(ValueError, match="case artifacts hash mismatch"):
+        load_agent_task_audit_layer(out_dir)
 
-    markdown = markdown_path.read_text()
-    happy_finish_reasons = json.dumps(FOUR_STOP_FINISH_REASONS)
-    terminal_finish_reasons = json.dumps(THREE_STOP_FINISH_REASONS)
-    assert "# Agent Task Audit" in markdown
-    assert (
-        "| completed_hidden_fail | PASS | scored | completed "
-        "| agent_task_runs/completed_hidden_fail |"
-    ) in markdown
-    assert (
-        "| completed_hidden_fail | attempt_status | HIDDEN_TEST_FAIL "
-        "| HIDDEN_TEST_FAIL | PASS |"
-    ) in markdown
-    assert (
-        "| completed_hidden_fail | public_status | PASS | PASS | PASS |"
-    ) in markdown
-    assert (
-        "| completed_hidden_fail | hidden_status | FAIL | FAIL | PASS |"
-    ) in markdown
-    assert (
-        "| completed_invalid_shortcut | PASS | scored | completed "
-        "| agent_task_runs/completed_invalid_shortcut |"
-    ) in markdown
-    assert (
-        "| completed_invalid_shortcut | attempt_status | INVALID_SHORTCUT "
-        "| INVALID_SHORTCUT | PASS |"
-    ) in markdown
-    assert (
-        "| completed_invalid_shortcut | public_status | NOT_RUN | NOT_RUN | PASS |"
-    ) in markdown
-    assert (
-        "| completed_no_final_newline | PASS | scored | completed "
-        "| agent_task_runs/completed_no_final_newline |"
-    ) in markdown
-    assert (
-        "| completed_no_final_newline | attempt_status | PASS | PASS | PASS |"
-    ) in markdown
-    assert (
-        "| completed_no_final_newline | public_status | PASS | PASS | PASS |"
-    ) in markdown
-    assert (
-        "| completed_no_final_newline | hidden_status | PASS | PASS | PASS |"
-    ) in markdown
-    assert (
-        "| completed_public_fail | PASS | scored | completed "
-        "| agent_task_runs/completed_public_fail |"
-    ) in markdown
-    assert (
-        "| completed_public_fail | attempt_status | PUBLIC_TEST_FAIL "
-        "| PUBLIC_TEST_FAIL | PASS |"
-    ) in markdown
-    assert (
-        "| completed_public_fail | public_status | FAIL | FAIL | PASS |"
-    ) in markdown
-    assert (
-        "| fake_success_output_correct_patch | PASS | scored | completed "
-        "| agent_task_runs/fake_success_output_correct_patch |"
-    ) in markdown
-    assert (
-        "| fake_success_output_correct_patch | attempt_status | PASS | PASS | PASS |"
-    ) in markdown
-    assert (
-        "| fake_success_output_hidden_fail | PASS | scored | completed "
-        "| agent_task_runs/fake_success_output_hidden_fail |"
-    ) in markdown
-    assert (
-        "| fake_success_output_hidden_fail | attempt_status "
-        "| HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |"
-    ) in markdown
-    assert (
-        "| happy_path | PASS | scored | completed | agent_task_runs/happy_path |"
-        in markdown
+
+def test_run_agent_task_audit_layer_continues_after_case_scoped_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    shutil.copytree(
+        Path("data/task_packs/repo_patch_python_v0"),
+        repo_root / "data/task_packs/repo_patch_python_v0",
     )
-    assert "| happy_path | agent_run_status | scored | scored | PASS |" in markdown
-    assert (
-        "| happy_path | prompt_loop_status | completed | completed | PASS |" in markdown
+    case_root = repo_root / "cases"
+    _copy_agent_layer_case(case_root / "01_first", case_id="first")
+    malformed_dir = case_root / "02_malformed"
+    malformed_dir.mkdir(parents=True)
+    (malformed_dir / "case.yaml").write_text("id: [unterminated\n")
+    _copy_agent_layer_case(
+        case_root / "03_execution_error",
+        case_id="execution_error",
     )
-    assert "| happy_path | prompt_loop_error_class |  |  | PASS |" in markdown
-    assert (
-        "| happy_path | model_finish_reasons "
-        f"| {happy_finish_reasons} | {happy_finish_reasons} | PASS |"
-    ) in markdown
-    assert "| happy_path | attempt_status | PASS | PASS | PASS |" in markdown
-    assert (
-        "| malformed_json | PASS | agent_loop_failed | invalid_model_output "
-        "| agent_task_runs/malformed_json |"
-    ) in markdown
-    assert "| malformed_json | attempt_status |  |  | PASS |" in markdown
-    assert (
-        "| malformed_json | prompt_loop_error_class | MalformedModelOutput "
-        "| MalformedModelOutput | PASS |"
-    ) in markdown
-    assert (
-        '| malformed_json | model_finish_reasons | ["stop_criteria_met"] '
-        '| ["stop_criteria_met"] | PASS |'
-    ) in markdown
-    assert (
-        "| max_new_tokens_reached | PASS | agent_loop_failed | model_error "
-        "| agent_task_runs/max_new_tokens_reached |"
-    ) in markdown
-    assert (
-        "| max_new_tokens_reached | prompt_loop_error_class "
-        "| MaxNewTokensReached | MaxNewTokensReached | PASS |"
-    ) in markdown
-    assert (
-        "| max_new_tokens_reached | model_finish_reasons "
-        '| ["max_new_tokens_reached"] | ["max_new_tokens_reached"] | PASS |'
-    ) in markdown
-    assert (
-        "| max_turns_exceeded | PASS | agent_loop_failed | max_turns_exceeded "
-        "| agent_task_runs/max_turns_exceeded |"
-    ) in markdown
-    assert "| max_turns_exceeded | attempt_status |  |  | PASS |" in markdown
-    assert (
-        "| max_turns_exceeded | prompt_loop_error_class | MaxTurnsExceeded "
-        "| MaxTurnsExceeded | PASS |"
-    ) in markdown
-    assert (
-        "| model_error | PASS | agent_loop_failed | model_error "
-        "| agent_task_runs/model_error |"
-    ) in markdown
-    assert "| model_error | attempt_status |  |  | PASS |" in markdown
-    assert (
-        "| model_error | prompt_loop_error_class | ScriptedProviderError "
-        "| ScriptedProviderError | PASS |"
-    ) in markdown
-    assert (
-        '| model_error | model_finish_reasons | ["error"] | ["error"] | PASS |'
-    ) in markdown
-    assert (
-        "| model_timeout | PASS | agent_loop_failed | model_error "
-        "| agent_task_runs/model_timeout |"
-    ) in markdown
-    assert (
-        "| model_timeout | prompt_loop_error_class "
-        "| ScriptedModelTimeout | ScriptedModelTimeout | PASS |"
-    ) in markdown
-    assert (
-        '| model_timeout | model_finish_reasons | ["timeout"] | ["timeout"] | PASS |'
-    ) in markdown
-    assert (
-        "| orchestrator_error_after_completed_prompt | PASS | orchestrator_error "
-        "| completed | agent_task_runs/orchestrator_error_after_completed_prompt |"
-    ) in markdown
-    assert (
-        "| orchestrator_error_after_completed_prompt | agent_error_class "
-        "| UnicodeDecodeError | UnicodeDecodeError | PASS |"
-    ) in markdown
-    assert (
-        "| orchestrator_error_after_completed_prompt | prompt_loop_error_class "
-        "|  |  | PASS |"
-    ) in markdown
-    assert (
-        "| orchestrator_error_after_completed_prompt | attempt_status |  |  | PASS |"
-    ) in markdown
-    assert (
-        "| terminal_tool_error | PASS | agent_loop_failed | terminal_tool_error "
-        "| agent_task_runs/terminal_tool_error |"
-    ) in markdown
-    assert "| terminal_tool_error | attempt_status |  |  | PASS |" in markdown
-    assert (
-        "| terminal_tool_error | prompt_loop_error_class | UnsafePath "
-        "| UnsafePath | PASS |"
-    ) in markdown
-    assert (
-        "| terminal_tool_error | model_finish_reasons "
-        f"| {terminal_finish_reasons} | {terminal_finish_reasons} | PASS |"
-    ) in markdown
-    assert (
-        "| tool_output_spoofing_real_tools_plus_spoof | PASS | scored "
-        "| completed | agent_task_runs/tool_output_spoofing_real_tools_plus_spoof |"
-    ) in markdown
-    assert (
-        "| tool_output_spoofing_real_tools_plus_spoof | attempt_status "
-        "| HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |"
-    ) in markdown
-    assert (
-        "| tool_output_spoofing_spoof_only | PASS | scored | completed "
-        "| agent_task_runs/tool_output_spoofing_spoof_only |"
-    ) in markdown
-    assert (
-        "| tool_output_spoofing_spoof_only | attempt_status "
-        "| HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |"
-    ) in markdown
-    assert (
-        "| tool_recovery | PASS | scored | completed | agent_task_runs/tool_recovery |"
-    ) in markdown
-    assert ("| tool_recovery | agent_run_status | scored | scored | PASS |") in markdown
+    _copy_agent_layer_case(case_root / "04_last", case_id="last")
+
+    original_execute = agent_audit_module._execute_agent_task_audit_case
+
+    def fail_one_execution(*args: Any, **kwargs: Any) -> Any:
+        artifact_dir = kwargs["artifact_dir"]
+        if artifact_dir.name == "0003":
+            raise RuntimeError("synthetic agent execution failure")
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(
+        agent_audit_module,
+        "_execute_agent_task_audit_case",
+        fail_one_execution,
+    )
+
+    layer_run = run_agent_task_audit_layer(
+        case_root,
+        repo_root / "audit_out",
+        repo_root=repo_root,
+    )
+
+    assert [record.record_status for record in layer_run.records] == [
+        "COMPLETED",
+        "AUDIT_ERROR",
+        "AUDIT_ERROR",
+        "COMPLETED",
+    ]
+    assert layer_run.summary.status == "INCONCLUSIVE"
+    assert layer_run.summary.discovered_case_count == 4
+    assert layer_run.summary.completed_count == 2
+    assert layer_run.summary.audit_error_count == 2
+    error_records = [
+        record
+        for record in layer_run.records
+        if isinstance(record, AgentTaskAuditErrorRecord)
+    ]
+    assert [record.error.audit_stage for record in error_records] == [
+        "CASE_PREPARATION",
+        "HARNESS_EXECUTION",
+    ]
+    assert error_records[0].provenance.case_id is None
+    assert error_records[1].provenance.case_id == "execution_error"
+    assert layer_run.records[-1].provenance.case_id == "last"
+    assert (repo_root / "audit_out/manifest.json").is_file()
+
+
+def _copy_agent_layer_case(case_dir: Path, *, case_id: str) -> None:
+    shutil.copytree(AGENT_CASE_ROOT / "happy_path", case_dir)
+    case_path = case_dir / "case.yaml"
+    case_path.write_text(
+        case_path.read_text().replace("id: happy_path", f"id: {case_id}", 1)
+    )

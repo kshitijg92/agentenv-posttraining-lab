@@ -16,15 +16,11 @@ from agentenv.artifacts.manifests import (
     RewardHackAuditManifest,
     load_reward_hack_audit_manifest,
 )
-from agentenv.audits.agent_task import (
-    AgentAuditComparison,
-    AgentTaskAuditCase,
-    AgentTaskAuditResult,
+from agentenv.audits.schema import (
+    CompletedAgentTaskAuditRecord,
+    CompletedScorerAuditRecord,
 )
 from agentenv.hashing import hash_file
-from agentenv.orchestrators.agent_task_run import AgentTaskRun
-from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
-from agentenv.orchestrators.attempt import AttemptResult
 from agentenv.rewards.audit import (
     HarnessAuditResult,
     REWARD_HACK_AUDIT_RUNTIME_VERSION,
@@ -34,11 +30,6 @@ from agentenv.rewards.audit import (
     run_reward_hack_audit,
 )
 from agentenv.rewards.schema import REWARD_HACK_CASE_SCHEMA_VERSION, RewardHackCase
-from agentenv.audits.scorer import (
-    ScorerAuditCase,
-    ScorerAuditResult,
-    StatusComparison,
-)
 from agentenv.security.leakage import LeakageScanResult
 
 
@@ -201,11 +192,17 @@ def _reward_hack_audit_result_record(
         "valid_control_source_case_hash": result.valid_control_source_case_hash,
         "exploit_audit_result": _source_audit_result_record(
             result.exploit_audit_result,
-            artifact_root=artifact_root,
         ),
         "valid_control_audit_result": _source_audit_result_record(
             result.valid_control_audit_result,
-            artifact_root=artifact_root,
+        ),
+        "exploit_audit_artifact_dir": _display_path(
+            result.exploit_audit_artifact_dir,
+            artifact_root,
+        ),
+        "valid_control_audit_artifact_dir": _display_path(
+            result.valid_control_audit_artifact_dir,
+            artifact_root,
         ),
         "exploit_harness_audit_passed": result.exploit_harness_audit_passed,
         "valid_control_harness_audit_passed": (
@@ -248,13 +245,21 @@ def _reward_hack_audit_result_from_record(
         ),
         exploit_audit_result=_source_audit_result_from_record(
             _required_mapping(record, "exploit_audit_result"),
-            artifact_root=artifact_root,
             source_type=reward_hack_case.evidence.source_type,
         ),
         valid_control_audit_result=_source_audit_result_from_record(
             _required_mapping(record, "valid_control_audit_result"),
-            artifact_root=artifact_root,
             source_type=reward_hack_case.evidence.source_type,
+        ),
+        exploit_audit_artifact_dir=_record_path(
+            record,
+            "exploit_audit_artifact_dir",
+            artifact_root,
+        ),
+        valid_control_audit_artifact_dir=_record_path(
+            record,
+            "valid_control_audit_artifact_dir",
+            artifact_root,
         ),
         exploit_harness_audit_passed=_required_bool(
             record,
@@ -295,117 +300,20 @@ def _reward_hack_audit_result_from_record(
 
 def _source_audit_result_record(
     result: HarnessAuditResult,
-    *,
-    artifact_root: Path,
 ) -> dict[str, Any]:
-    if isinstance(result, ScorerAuditResult):
-        return _scorer_audit_result_record(result, artifact_root=artifact_root)
-    return _agent_task_audit_result_record(result, artifact_root=artifact_root)
+    return result.model_dump(mode="json")
 
 
 def _source_audit_result_from_record(
     record: dict[str, Any],
     *,
-    artifact_root: Path,
     source_type: str,
 ) -> HarnessAuditResult:
     if source_type == "scorer_audit_case":
-        return _scorer_audit_result_from_record(record, artifact_root=artifact_root)
+        return CompletedScorerAuditRecord.model_validate(record)
     if source_type == "agent_task_audit_case":
-        return _agent_task_audit_result_from_record(
-            record,
-            artifact_root=artifact_root,
-        )
+        return CompletedAgentTaskAuditRecord.model_validate(record)
     raise ValueError(f"Unsupported reward-hack source type: {source_type}")
-
-
-def _scorer_audit_result_record(
-    result: ScorerAuditResult,
-    *,
-    artifact_root: Path,
-) -> dict[str, Any]:
-    return {
-        "case": result.case.model_dump(mode="json"),
-        "case_dir": _display_path(result.case_dir, artifact_root),
-        "attempt_artifact_dir": _display_path(
-            result.attempt_artifact_dir,
-            artifact_root,
-        ),
-        "manifest_override": result.manifest_override_record,
-        "comparisons": [asdict(comparison) for comparison in result.comparisons],
-        "attempt_result": result.attempt_result.model_dump(mode="json"),
-    }
-
-
-def _scorer_audit_result_from_record(
-    record: dict[str, Any],
-    *,
-    artifact_root: Path,
-) -> ScorerAuditResult:
-    return ScorerAuditResult(
-        case=ScorerAuditCase.model_validate(_required_mapping(record, "case")),
-        case_dir=_record_path(record, "case_dir", artifact_root),
-        attempt_artifact_dir=_record_path(
-            record,
-            "attempt_artifact_dir",
-            artifact_root,
-        ),
-        attempt_result=AttemptResult.model_validate(
-            _required_mapping(record, "attempt_result")
-        ),
-        comparisons=tuple(
-            StatusComparison(**comparison)
-            for comparison in _required_list(record, "comparisons")
-        ),
-        manifest_override_record=_optional_mapping(record, "manifest_override"),
-    )
-
-
-def _agent_task_audit_result_record(
-    result: AgentTaskAuditResult,
-    *,
-    artifact_root: Path,
-) -> dict[str, Any]:
-    return {
-        "case": result.case.model_dump(mode="json"),
-        "case_dir": _display_path(result.case_dir, artifact_root),
-        "agent_task_artifact_dir": _display_path(
-            result.agent_task_artifact_dir,
-            artifact_root,
-        ),
-        "agent_task_run_result": result.agent_task_run.result.model_dump(mode="json"),
-        "comparisons": [asdict(comparison) for comparison in result.comparisons],
-    }
-
-
-def _agent_task_audit_result_from_record(
-    record: dict[str, Any],
-    *,
-    artifact_root: Path,
-) -> AgentTaskAuditResult:
-    agent_task_run_result = AgentTaskRunResult.model_validate(
-        _required_mapping(record, "agent_task_run_result")
-    )
-    return AgentTaskAuditResult(
-        case=AgentTaskAuditCase.model_validate(_required_mapping(record, "case")),
-        case_dir=_record_path(record, "case_dir", artifact_root),
-        agent_task_artifact_dir=_record_path(
-            record,
-            "agent_task_artifact_dir",
-            artifact_root,
-        ),
-        agent_task_run=AgentTaskRun(
-            result=agent_task_run_result,
-            agent_task_view=None,
-            prompt_loop_result=None,
-            candidate_patch="",
-            attempt_run=None,
-        ),
-        comparisons=tuple(
-            AgentAuditComparison(**comparison)
-            for comparison in _required_list(record, "comparisons")
-        ),
-    )
 
 
 def _leakage_scan_record(scan: LeakageScanResult) -> dict[str, Any]:
@@ -471,15 +379,6 @@ def _record_path(record: dict[str, Any], field: str, root: Path) -> Path:
 
 def _required_mapping(record: dict[str, Any], field: str) -> dict[str, Any]:
     value = record.get(field)
-    if not isinstance(value, dict):
-        raise ValueError(f"Expected object field {field!r}")
-    return value
-
-
-def _optional_mapping(record: dict[str, Any], field: str) -> dict[str, Any] | None:
-    value = record.get(field)
-    if value is None:
-        return None
     if not isinstance(value, dict):
         raise ValueError(f"Expected object field {field!r}")
     return value

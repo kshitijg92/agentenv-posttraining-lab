@@ -1,15 +1,24 @@
-import json
+import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
+import agentenv.audits.scorer as scorer_audit_module
+from agentenv.audits.schema import (
+    CompletedScorerAuditRecord,
+    ScorerAuditErrorRecord,
+    load_scorer_audit_records,
+)
 from agentenv.audits.scorer import (
     _apply_nested_overrides,
     _nested_override_diff,
+    load_scorer_audit_layer,
     load_scorer_audit_case,
-    run_scorer_audit,
+    run_scorer_audit_layer,
 )
+from agentenv.hashing import hash_directory, hash_file
 
 
 SCORER_CASE_ROOT = Path("data/harness_audit/scorer_cases")
@@ -205,46 +214,51 @@ def test_manifest_override_helpers_reject_wrong_manifest_shape() -> None:
         )
 
 
-def test_run_scorer_audit_writes_jsonl_markdown_and_attempt_artifacts(
+def test_run_scorer_audit_layer_persists_hash_pinned_typed_records(
     tmp_path: Path,
 ) -> None:
-    out_dir = tmp_path / "scorer_audit"
+    out_dir = tmp_path / "scorer"
 
-    results = run_scorer_audit(SCORER_CASE_ROOT, out_dir)
+    layer_run = run_scorer_audit_layer(SCORER_CASE_ROOT, out_dir)
 
-    expected_case_ids = set(EXPECTED_COMPARISONS)
-    assert {result.case.id for result in results} == expected_case_ids
-    assert all(result.overall_match for result in results)
+    assert layer_run.out_dir == out_dir.resolve()
+    assert layer_run.summary.status == "PASS"
+    assert layer_run.summary.discovered_case_count == len(EXPECTED_COMPARISONS)
+    assert layer_run.summary.record_count == len(EXPECTED_COMPARISONS)
+    assert layer_run.summary.completed_count == len(EXPECTED_COMPARISONS)
+    assert layer_run.summary.matched_count == len(EXPECTED_COMPARISONS)
+    assert layer_run.summary.mismatched_count == 0
+    assert layer_run.summary.audit_error_count == 0
+    assert {record.provenance.case_id for record in layer_run.records} == set(
+        EXPECTED_COMPARISONS
+    )
+    assert all(record.record_status == "COMPLETED" for record in layer_run.records)
     comparisons_by_case = {
-        result.case.id: [
-            (comparison.field, comparison.expected, comparison.actual, comparison.match)
-            for comparison in result.comparisons
+        record.provenance.case_id: [
+            (
+                comparison.field,
+                comparison.expected,
+                comparison.actual,
+                comparison.match,
+            )
+            for comparison in record.comparisons
         ]
-        for result in results
+        for record in layer_run.records
+        if isinstance(record, CompletedScorerAuditRecord)
     }
     assert comparisons_by_case == EXPECTED_COMPARISONS
 
-    jsonl_path = out_dir / "scorer_audit_results.jsonl"
-    markdown_path = out_dir / "scorer_audit.md"
-
-    assert jsonl_path.is_file()
-    assert markdown_path.is_file()
-    for case_id in expected_case_ids:
-        attempt_dir = out_dir / "attempts" / case_id
-        assert (attempt_dir / "attempt.json").is_file()
-        assert (attempt_dir / "trace.jsonl").is_file()
-        assert (attempt_dir / "final.diff").is_file()
-    assert (out_dir / "attempts/hidden_check_timeout/manifest_override.json").is_file()
-    assert (out_dir / "attempts/public_check_timeout/manifest_override.json").is_file()
-
-    records = [
-        json.loads(line) for line in jsonl_path.read_text().splitlines() if line.strip()
-    ]
-    assert {record["case_id"] for record in records} == expected_case_ids
-    assert all(record["overall_match"] is True for record in records)
-    records_by_case = {record["case_id"]: record for record in records}
-    assert {record["attempt_artifact_dir"] for record in records_by_case.values()} == {
-        f"attempts/{case_id}" for case_id in expected_case_ids
+    results_path = out_dir / "results.jsonl"
+    assert load_scorer_audit_records(results_path) == layer_run.records
+    assert load_scorer_audit_layer(out_dir) == layer_run
+    assert layer_run.summary.results_jsonl_hash == hash_file(results_path)
+    assert layer_run.summary.case_artifacts_hash == hash_directory(out_dir / "cases")
+    assert layer_run.manifest.summary == layer_run.summary
+    assert (out_dir / "manifest.json").is_file()
+    records_by_case = {
+        record.provenance.case_id: record
+        for record in layer_run.records
+        if isinstance(record, CompletedScorerAuditRecord)
     }
     expected_manifest_override = {
         "limitation": (
@@ -252,34 +266,136 @@ def test_run_scorer_audit_writes_jsonl_markdown_and_attempt_artifacts(
             "directory for execution. This file records the supported override "
             "only; it is not a replay manifest."
         ),
-        "overrides": {
-            "limits": {
-                "timeout_seconds": {
-                    "from": 120,
-                    "to": 1,
-                }
-            }
-        },
+        "overrides": {"limits": {"timeout_seconds": {"from": 120, "to": 1}}},
         "source_task_manifest": (
             "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
         ),
     }
-    assert records_by_case["hidden_check_timeout"]["manifest_override"] == (
+    assert records_by_case["hidden_check_timeout"].manifest_override == (
         expected_manifest_override
     )
-    assert records_by_case["public_check_timeout"]["manifest_override"] == (
+    assert records_by_case["public_check_timeout"].manifest_override == (
         expected_manifest_override
+    )
+    for record in layer_run.records:
+        assert isinstance(record, CompletedScorerAuditRecord)
+        case_artifact_dir = out_dir / record.case_artifact.path
+        assert record.case_artifact.content_hash == hash_directory(case_artifact_dir)
+        assert (case_artifact_dir / "attempt.json").is_file()
+
+
+def test_run_scorer_audit_layer_continues_after_case_scoped_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    task_pack = repo_root / "task_pack"
+    shutil.copytree(Path("data/task_packs/repo_patch_python_v0"), task_pack)
+    case_root = repo_root / "cases"
+    _write_layer_case(case_root / "01_first", case_id="first")
+    malformed_dir = case_root / "02_malformed"
+    malformed_dir.mkdir(parents=True)
+    (malformed_dir / "case.yaml").write_text("id: [unterminated\n")
+    _write_layer_case(case_root / "03_execution_error", case_id="execution_error")
+    _write_layer_case(case_root / "04_last", case_id="last")
+
+    original_execute = scorer_audit_module._execute_scorer_audit_case
+
+    def fail_one_execution(*args: Any, **kwargs: Any) -> Any:
+        case = args[0]
+        if case.id == "execution_error":
+            raise RuntimeError("synthetic execution failure")
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(
+        scorer_audit_module,
+        "_execute_scorer_audit_case",
+        fail_one_execution,
     )
 
-    markdown = markdown_path.read_text()
-    assert "|  |  |  |  |  |" in markdown
-    for case_id, expected_comparisons in EXPECTED_COMPARISONS.items():
-        assert f"| {case_id} | PASS | attempts/{case_id} |" in markdown
-        for field, expected, actual, match in expected_comparisons:
-            match_text = "PASS" if match else "FAIL"
-            assert (
-                f"| {case_id} | {field} | {expected} | {actual} | {match_text} |"
-            ) in markdown
+    layer_run = run_scorer_audit_layer(
+        case_root,
+        repo_root / "audit_out",
+        repo_root=repo_root,
+    )
+
+    assert [record.record_status for record in layer_run.records] == [
+        "COMPLETED",
+        "AUDIT_ERROR",
+        "AUDIT_ERROR",
+        "COMPLETED",
+    ]
+    assert layer_run.summary.status == "INCONCLUSIVE"
+    assert layer_run.summary.discovered_case_count == 4
+    assert layer_run.summary.record_count == 4
+    assert layer_run.summary.completed_count == 2
+    assert layer_run.summary.matched_count == 2
+    assert layer_run.summary.mismatched_count == 0
+    assert layer_run.summary.audit_error_count == 2
+    error_records = [
+        record
+        for record in layer_run.records
+        if isinstance(record, ScorerAuditErrorRecord)
+    ]
+    assert [record.error.audit_stage for record in error_records] == [
+        "CASE_PREPARATION",
+        "HARNESS_EXECUTION",
+    ]
+    assert error_records[0].provenance.case_id is None
+    assert error_records[1].provenance.case_id == "execution_error"
+    assert layer_run.records[-1].provenance.case_id == "last"
+    assert len(load_scorer_audit_records(repo_root / "audit_out/results.jsonl")) == 4
+
+
+def test_run_scorer_audit_layer_rejects_empty_case_root_without_artifact(
+    tmp_path: Path,
+) -> None:
+    case_root = tmp_path / "cases"
+    case_root.mkdir()
+    out_dir = tmp_path / "out"
+
+    with pytest.raises(ValueError, match="No scorer audit case directories"):
+        run_scorer_audit_layer(case_root, out_dir, repo_root=tmp_path)
+
+    assert not out_dir.exists()
+
+
+def test_load_scorer_audit_layer_rejects_payload_drift(tmp_path: Path) -> None:
+    out_dir = tmp_path / "scorer"
+    run_scorer_audit_layer(SCORER_CASE_ROOT, out_dir)
+    results_path = out_dir / "results.jsonl"
+    results_path.write_text(results_path.read_text() + "\n")
+
+    with pytest.raises(ValueError, match="scorer audit results hash mismatch"):
+        load_scorer_audit_layer(out_dir)
+
+
+def test_run_scorer_audit_layer_removes_artifact_when_jsonl_readback_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    shutil.copytree(
+        Path("data/task_packs/repo_patch_python_v0"),
+        repo_root / "task_pack",
+    )
+    case_root = repo_root / "cases"
+    _write_layer_case(case_root / "only_case", case_id="only_case")
+    out_dir = repo_root / "audit_out"
+
+    def fail_readback(path: Path) -> tuple[()]:
+        raise ValueError(f"synthetic readback failure: {path}")
+
+    monkeypatch.setattr(
+        scorer_audit_module,
+        "load_scorer_audit_records",
+        fail_readback,
+    )
+
+    with pytest.raises(ValueError, match="synthetic readback failure"):
+        run_scorer_audit_layer(case_root, out_dir, repo_root=repo_root)
+
+    assert not out_dir.exists()
 
 
 def _write_case_yaml(tmp_path: Path, manifest_overrides: str) -> Path:
@@ -295,3 +411,21 @@ purpose: Unit test manifest override validation.
 {manifest_overrides.lstrip()}"""
     )
     return case_path
+
+
+def _write_layer_case(case_dir: Path, *, case_id: str) -> None:
+    case_dir.mkdir(parents=True)
+    shutil.copyfile(
+        SCORER_CASE_ROOT / "correct_oracle/submission.patch",
+        case_dir / "submission.patch",
+    )
+    (case_dir / "case.yaml").write_text(
+        f"""id: {case_id}
+task_manifest: task_pack/tasks/toy_python_fix/task.yaml
+submission: submission.patch
+expected_attempt_status: PASS
+expected_public_status: PASS
+expected_hidden_status: PASS
+purpose: Verify case-scoped scorer audit failure handling.
+"""
+    )

@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
+import agentenv.cli as cli_module
 from agentenv.cli import app
 
 
@@ -281,6 +283,135 @@ def test_rewards_audit_cli_writes_reward_hack_audit_artifact(
     assert (out_dir / "case_runs").is_dir()
     assert report_path.is_file()
     assert "# Reward-Hack Audit Report" in report_path.read_text()
+
+
+def test_standalone_audit_clis_use_typed_layer_runners(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: dict[str, tuple[Path, Path, bool]] = {}
+
+    def fake_scorer_runner(
+        cases: Path,
+        out: Path,
+        *,
+        overwrite: bool,
+    ) -> SimpleNamespace:
+        calls["scorer"] = (cases, out, overwrite)
+        return SimpleNamespace(
+            summary=SimpleNamespace(
+                status="PASS",
+                record_count=12,
+                mismatched_count=0,
+                audit_error_count=0,
+            )
+        )
+
+    def fake_agent_runner(
+        cases: Path,
+        out: Path,
+        *,
+        overwrite: bool,
+    ) -> SimpleNamespace:
+        calls["agent"] = (cases, out, overwrite)
+        return SimpleNamespace(
+            summary=SimpleNamespace(
+                status="PASS",
+                record_count=21,
+                mismatched_count=0,
+                audit_error_count=0,
+            )
+        )
+
+    monkeypatch.setattr(cli_module, "run_scorer_audit_layer", fake_scorer_runner)
+    monkeypatch.setattr(cli_module, "run_agent_task_audit_layer", fake_agent_runner)
+    runner = CliRunner()
+    scorer_cases = tmp_path / "scorer_cases"
+    scorer_out = tmp_path / "scorer_out"
+    agent_cases = tmp_path / "agent_cases"
+    agent_out = tmp_path / "agent_out"
+
+    scorer_result = runner.invoke(
+        app,
+        [
+            "scorers",
+            "audit",
+            "--cases",
+            str(scorer_cases),
+            "--out",
+            str(scorer_out),
+            "--overwrite",
+        ],
+    )
+    agent_result = runner.invoke(
+        app,
+        [
+            "agents",
+            "audit",
+            "--cases",
+            str(agent_cases),
+            "--out",
+            str(agent_out),
+            "--overwrite",
+        ],
+    )
+
+    assert scorer_result.exit_code == 0, scorer_result.output
+    assert "scorer audit PASS records=12 mismatched=0 errors=0" in (
+        scorer_result.output
+    )
+    assert agent_result.exit_code == 0, agent_result.output
+    assert "agent-task audit PASS records=21 mismatched=0 errors=0" in (
+        agent_result.output
+    )
+    assert calls == {
+        "scorer": (scorer_cases, scorer_out, True),
+        "agent": (agent_cases, agent_out, True),
+    }
+
+
+def test_harness_audit_cli_uses_atomic_composer(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    call: dict[str, object] = {}
+
+    def fake_harness_runner(**kwargs: object) -> SimpleNamespace:
+        call.update(kwargs)
+        return SimpleNamespace(
+            manifest=SimpleNamespace(status="PASS"),
+            agent_audit=SimpleNamespace(summary=SimpleNamespace(status="PASS")),
+            scorer_audit=SimpleNamespace(summary=SimpleNamespace(status="PASS")),
+        )
+
+    monkeypatch.setattr(cli_module, "run_harness_audit", fake_harness_runner)
+    agent_cases = tmp_path / "agent_cases"
+    scorer_cases = tmp_path / "scorer_cases"
+    out_dir = tmp_path / "harness_out"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "harness",
+            "audit",
+            "--agent-cases",
+            str(agent_cases),
+            "--scorer-cases",
+            str(scorer_cases),
+            "--out",
+            str(out_dir),
+            "--overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "harness audit PASS agent=PASS scorer=PASS" in result.output
+    assert call == {
+        "agent_case_root": agent_cases,
+        "scorer_case_root": scorer_cases,
+        "out_dir": out_dir,
+        "overwrite": True,
+    }
 
 
 def test_trajectories_export_cli_writes_eval_suite_export(tmp_path: Path) -> None:

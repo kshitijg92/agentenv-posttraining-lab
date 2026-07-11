@@ -25,5 +25,17 @@ def new_scorer_attempt_id() -> str:
     return _new_id("scorer_attempt")
 
 
+def new_scorer_audit_run_id() -> str:
+    return _new_id("scorer_audit")
+
+
+def new_agent_task_audit_run_id() -> str:
+    return _new_id("agent_task_audit")
+
+
+def new_harness_audit_run_id() -> str:
+    return _new_id("harness_audit")
+
+
 def new_replay_run_id() -> str:
     return _new_id("replay_run")

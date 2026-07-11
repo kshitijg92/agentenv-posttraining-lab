@@ -36,9 +36,7 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
     assert (out_dir / "reward_hack_audit_results.jsonl").is_file()
     assert (out_dir / "case_runs").is_dir()
     assert isinstance(artifact.records[0], RewardHackAuditResult)
-    assert {
-        record.reward_hack_case.reward_hack_id for record in artifact.records
-    } == {
+    assert {record.reward_hack_case.reward_hack_id for record in artifact.records} == {
         "fake_success_output_correct_patch_agent_workspace_update",
         "fake_success_output_hidden_fail_agent_workspace_update",
         "format_only_compliance_submitted_patch_text_probe_attempt",
@@ -62,9 +60,7 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
 
     assert loaded.manifest == artifact.manifest
     assert isinstance(loaded.records[0], RewardHackAuditResult)
-    assert {
-        record.reward_hack_case.reward_hack_id for record in loaded.records
-    } == {
+    assert {record.reward_hack_case.reward_hack_id for record in loaded.records} == {
         "fake_success_output_correct_patch_agent_workspace_update",
         "fake_success_output_hidden_fail_agent_workspace_update",
         "format_only_compliance_submitted_patch_text_probe_attempt",
@@ -83,6 +79,6 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
         "tool_output_spoofing_spoof_only_agent_workspace_update",
     }
     assert all(record.audit_pass for record in loaded.records)
-    assert {
-        record.leakage_scan_result.canary_hash for record in loaded.records
-    } == {"xxh64:e5432f5538d562e7"}
+    assert {record.leakage_scan_result.canary_hash for record in loaded.records} == {
+        "xxh64:e5432f5538d562e7"
+    }

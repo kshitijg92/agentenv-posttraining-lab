@@ -867,17 +867,20 @@ features, system-package inventory, and container identity are explicitly
 outside the v0 runtime fingerprint.
 
 The root artifact points to separate `agent/` and `scorer/` directories. Each
-layer summary pins its source case-root hash, output directory hash, results
-JSONL hash, case-artifact directory hash, discovered/record/completed/error
-counts, and derived status. The root manifest pins current case, record,
-attempt-artifact, runtime, task-hash, and artifact schema versions.
+standalone layer manifest owns its schema versions and summary, including the
+source case-root hash, results JSONL hash, case-artifact directory hash,
+discovered/record/completed/error counts, and derived status. The root does not
+redeclare those fields. It hash-pins each complete child manifest, records the
+child artifact identity and run ID, and requires both children to have the
+root's exact complete runtime provenance.
 
 #### Status
 
-Schema and loaders only. The existing scorer and agent audit runners still
-write their historical JSONL/Markdown outputs and do not yet build this atomic
-artifact. CLI integration, readback hash verification, and training-candidate
-export gating remain future checkpoints.
+The typed scorer and agent-task layer runners and their standalone manifests
+were implemented in this checkpoint. Atomic root assembly, CLI integration,
+typed reward-audit migration, and removal of the historical entrypoints were
+completed in the later checkpoint recorded below. Training-candidate export
+gating remains future work.
 
 #### Verification
 
@@ -900,15 +903,16 @@ agentenv.scorers.audit -> agentenv.audits.scorer
 ```
 
 The underlying prompt-loop, agent-task, and scorer execution code remains in
-`agentenv.agents`, `agentenv.orchestrators`, and `agentenv.scorers`. Audit case
-schemas, comparisons, historical JSONL/Markdown renderers, and layer runners
-now live with the shared audit types and new atomic-artifact schema.
+`agentenv.agents`, `agentenv.orchestrators`, and `agentenv.scorers`. At this
+checkpoint, audit case schemas, comparisons, historical JSONL/Markdown
+renderers, and layer runners moved with the shared audit types. The historical
+renderers and runners were subsequently deleted after their consumers migrated
+to the typed artifacts.
 
 Updated the CLI, reward-hack audit, reward-hack export/reporting, source-case
 validation, and tests to import the new modules. The old modules were removed
-without compatibility shims. This checkpoint changes module ownership only;
-the existing layer runner behavior and historical output formats remain
-unchanged.
+without compatibility shims. At this checkpoint only module ownership changed;
+the later typed-consumer checkpoint removed the historical formats.
 
 #### Verification
 
@@ -919,3 +923,216 @@ CLI import/help smoke: passed
 focused Ruff: passed
 Pyright: passed
 ```
+
+### Typed Scorer-Audit Layer Runner
+
+#### Implementation
+
+Added `run_scorer_audit_layer`, which treats every immediate child directory
+of the scorer case root as a discovered case. Missing or malformed `case.yaml`
+files are therefore persisted as `AUDIT_ERROR` records rather than silently
+excluded by discovery.
+
+Each case advances through separately guarded preparation, harness-execution,
+expectation-comparison, and result-persistence phases. A case-scoped exception
+produces one typed error record with the most complete provenance available,
+then execution continues with the next discovered directory. Artifact paths use
+stable numeric directory names such as `cases/0001`; a parsed case ID is never
+inferred from or replaced by its source directory name.
+
+Preparation now pins:
+
+```text
+canonical case-directory hash
+parsed case ID
+exact repository-relative task-manifest path and file hash
+parsed task ID
+existing composite task_record_hash from the owning task pack
+```
+
+The task-record helper verifies that the referenced task manifest is the unique
+manifest for that task ID in the owning pack before reusing the existing eval
+task-hash contract. The canonical harness-case hash helper moved from reward
+code to `agentenv.audits.hashing`; reward-hack consumers now import the same
+neutral implementation.
+
+After all cases finish, the runner writes `results.jsonl`, reloads it through
+the discriminated-union loader, and requires exact typed equality. It then
+derives the layer status and counts and writes a standalone `manifest.json`
+pinning the case root, results JSONL, case-artifact directory, schemas, and
+harness runtime. An empty or unreadable case root fails before output creation.
+A layer-wide write, readback, validation, or hashing failure removes the partial
+output directory instead of leaving an apparently usable artifact.
+
+At this checkpoint the historical scorer runner shared the extracted per-case
+execution path. It was deleted after the CLI and reward-hack consumers migrated
+to the standalone typed layer artifact.
+
+#### Verification
+
+```text
+historical plus typed scorer runner tests: 13 passed
+focused canonical case-hash tests: 4 passed
+real typed scorer layer: 12 completed, 12 matched, PASS
+fault injection: malformed case and execution error recorded; later case ran
+root JSONL readback failure: partial layer artifact removed
+focused Ruff: passed
+Pyright over src and tests: passed
+```
+
+### Standalone Audit-Layer Artifacts
+
+#### Manifest Contract
+
+Added first-class artifact types and strict manifests for both independently
+persistable layers:
+
+```text
+scorer_audit      -> ScorerAuditManifest
+agent_task_audit  -> AgentTaskAuditManifest
+```
+
+Each manifest records its layer run ID, creation time, diagnostic Git SHA,
+harness runtime version and complete runtime provenance, current case and
+record schema versions, task-hash schema version, layer-specific attempt
+artifact schema version, typed layer summary, and exact `results.jsonl` and
+`cases/` artifact refs.
+
+Replaced `artifact_dir_hash` with `artifact_payload_hash`. The latter is
+derived from the declared results-file and case-directory refs and hashes. It
+deliberately excludes `manifest.json`, avoiding a circular contract in which a
+manifest would need to contain the hash of a directory that contains itself.
+The eventual root harness manifest can instead hash-pin each completed child
+manifest.
+
+The standalone loaders verify more than manifest syntax. They recompute the
+results and case-directory hashes, reload the discriminated JSONL records,
+rederive counts and three-valued status, require every completed case artifact
+to remain under `cases/`, and verify every per-case directory hash.
+
+Harness runtime provenance is captured from the repository containing the
+executing `agentenv` source and dependency lock. This is intentionally separate
+from the repository root used to resolve task and case inputs; an external task
+pack must not redefine which harness implementation actually executed it.
+
+#### Agent-Task Layer Runner
+
+Added `run_agent_task_audit_layer` with the same execution semantics as the
+typed scorer layer:
+
+```text
+every immediate child directory remains in the denominator
+case preparation/execution/comparison/persistence errors become AUDIT_ERROR
+later cases continue after a case-scoped error
+root persistence or integrity errors remove the partial artifact
+```
+
+Completed agent records include complete task and case provenance, a
+hash-pinned agent-attempt directory, agent and prompt-loop terminal state, the
+unconditional nested scorer summary when scoring occurred, typed expectation
+comparisons, and comparison-derived `overall_match`.
+
+At this checkpoint the historical runner shared the extracted per-case
+execution function. Root harness composition and removal of both historical
+layer runners were completed in the next checkpoint below.
+
+#### Verification
+
+```text
+standalone manifest and shared schema tests: 24 passed
+scorer runner/manifest/integrity tests: 13 passed
+agent runner/manifest/continuation/integrity tests: 4 passed
+legacy reward-audit regression tests: 3 passed
+real scorer layer: 12 completed, 12 matched, PASS
+real agent-task layer: 21 completed, 21 matched, PASS
+focused Ruff: passed
+focused Pyright: passed
+git diff --check: passed
+```
+
+### Atomic Harness-Audit Artifact And Typed Consumer Migration
+
+#### Root Composition
+
+Implemented `run_harness_audit` as the only aggregate runner. It creates the
+root output directory, runs the standalone agent-task and scorer layers into
+`agent/` and `scorer/`, requires their complete `HarnessRuntimeProvenance`
+records to be exactly equal, writes `harness_audit.md`, and then writes the root
+manifest.
+
+The root manifest contains hash-pinned child-manifest references rather than
+duplicating child summaries or schema versions. Each reference includes:
+
+```text
+child artifact type and artifact schema version
+child layer run ID
+root-relative child manifest path
+exact child manifest content hash
+child harness-runtime hash
+child three-valued status
+```
+
+It also pins the aggregate report hash. Its status is the validated
+three-valued AND of the two child statuses. The aggregate loader first verifies
+both child-manifest hashes, then invokes each standalone layer's full integrity
+loader, checks the child identities and statuses against the root refs,
+requires complete runtime-provenance equality with the root, and verifies the
+report hash.
+
+A global failure at any point removes the entire partial root, including any
+child layer that already finished. Case-scoped failures remain typed records
+inside a completed child artifact and do not abort later cases or prevent the
+other layer from running. A regression test injects a scorer-layer failure
+after an agent child was staged and proves that no partial root remains.
+
+#### CLI And Reward-Audit Consumers
+
+The standalone CLI commands now call only `run_scorer_audit_layer` and
+`run_agent_task_audit_layer`; both write `manifest.json`, `results.jsonl`, and
+`cases/`. Added `agentenv harness audit` for atomic composition. CLI wiring
+tests verify that paths and overwrite authority reach the typed runners.
+
+Reward-hack runtime audits now consume `CompletedScorerAuditRecord` and
+`CompletedAgentTaskAuditRecord` from standalone layer artifacts. Each
+exploit/control pair is staged as a small repository containing the two exact
+case directories plus their owning task pack, allowing the typed runners to
+recompute repository-relative case, task-manifest, and composite task-record
+provenance. Any `AUDIT_ERROR` fails closed instead of being interpreted as an
+exploit outcome.
+
+Agent reward checks load prompt-loop and candidate-patch evidence from the
+hash-pinned case artifact instead of retaining an ephemeral in-memory
+orchestrator object. Scorer reward checks read typed comparison observations;
+agent success checks use the unconditional nested scorer summary. Reward-hack
+JSONL serialization persists the complete typed records and explicit case
+artifact paths. This contract change advances both reward-hack runtime and
+artifact schema versions to v2.
+
+#### Legacy Removal
+
+Deleted the old `ScorerAuditResult`, `AgentTaskAuditResult`, comparison
+dataclasses, list-returning layer runners, historical JSONL names, historical
+Markdown renderers, and their tests. No adapter or compatibility alias remains.
+The substantive comparison, terminal-state, and case-artifact assertions now
+exercise the typed standalone runners. The README documents the current
+standalone and aggregate artifact layouts.
+
+#### Verification
+
+```text
+real scorer layer and fault/integrity tests: 12 passed
+real agent-task layer and fault/integrity tests: 3 passed
+root runner, schema, manifest, integrity, and atomic-cleanup tests: 25 passed
+typed CLI wiring tests: 2 passed
+reward-hack audit, export, and schema tests: 35 passed
+repo-wide Ruff: passed
+focused Pyright over all changed source and tests: passed
+full suite with 2 workers: 825 passed
+```
+
+The first full run used four workers and produced one late nested reward-report
+failure (`824 passed, 1 failed`). The exact failing test passed immediately in
+an isolated rerun, and the complete two-worker rerun passed cleanly. The typed
+reward path now performs standalone layer persistence, task/case provenance
+hashing, and integrity readback for every exploit/control pair, so two workers
+is the recorded stable full-suite concurrency for this checkpoint.

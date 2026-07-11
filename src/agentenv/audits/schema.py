@@ -443,7 +443,7 @@ class HarnessAuditLayerSummary(BaseModel):
     matched_count: NonNegativeInt
     mismatched_count: NonNegativeInt
     audit_error_count: NonNegativeInt
-    artifact_dir_hash: ContentHash
+    artifact_payload_hash: ContentHash
     results_jsonl: str = Field(min_length=1)
     results_jsonl_hash: ContentHash
     case_artifacts: str = Field(min_length=1)
@@ -472,7 +472,38 @@ class HarnessAuditLayerSummary(BaseModel):
         )
         if self.status != expected_status:
             raise ValueError("status must reflect mismatches and audit errors")
+        expected_payload_hash = derive_harness_audit_layer_payload_hash(
+            results_jsonl=self.results_jsonl,
+            results_jsonl_hash=self.results_jsonl_hash,
+            case_artifacts=self.case_artifacts,
+            case_artifacts_hash=self.case_artifacts_hash,
+        )
+        if self.artifact_payload_hash != expected_payload_hash:
+            raise ValueError(
+                "artifact_payload_hash must reflect declared layer payloads"
+            )
         return self
+
+
+def derive_harness_audit_layer_payload_hash(
+    *,
+    results_jsonl: str,
+    results_jsonl_hash: str,
+    case_artifacts: str,
+    case_artifacts_hash: str,
+) -> str:
+    return hash_json(
+        {
+            "results_jsonl": {
+                "path": results_jsonl,
+                "content_hash": results_jsonl_hash,
+            },
+            "case_artifacts": {
+                "path": case_artifacts,
+                "content_hash": case_artifacts_hash,
+            },
+        }
+    )
 
 
 def derive_harness_audit_layer_status(

@@ -2,8 +2,7 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
-from agentenv.audits.agent_task import AgentTaskAuditResult
-from agentenv.audits.scorer import ScorerAuditResult
+from agentenv.audits.schema import CompletedScorerAuditRecord
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.rewards.audit import HarnessAuditResult, RewardHackAuditResult
 from agentenv.rewards.export import RewardHackAuditArtifact
@@ -246,6 +245,7 @@ def _source_audit_table(records: list[RewardHackAuditResult]) -> list[str]:
                 "exploit",
                 record.exploit_audit_result,
                 record.exploit_source_case_hash,
+                record.exploit_audit_artifact_dir,
             )
         )
         rows.append(
@@ -254,6 +254,7 @@ def _source_audit_table(records: list[RewardHackAuditResult]) -> list[str]:
                 "valid_control",
                 record.valid_control_audit_result,
                 record.valid_control_source_case_hash,
+                record.valid_control_audit_artifact_dir,
             )
         )
     return rows
@@ -264,12 +265,13 @@ def _source_audit_row(
     role: str,
     result: HarnessAuditResult,
     source_case_hash: str,
+    artifact_dir: Path,
 ) -> str:
     status = _source_statuses(result)
     return (
         f"| {reward_hack_id} "
         f"| {role} "
-        f"| {result.case.id} "
+        f"| {result.provenance.case_id} "
         f"| {source_case_hash} "
         f"| {_display(status['source_status'])} "
         f"| {_display(status['prompt_loop_status'])} "
@@ -277,7 +279,7 @@ def _source_audit_row(
         f"| {_display(status['public_status'])} "
         f"| {_display(status['hidden_status'])} "
         f"| {_bool_display(result.overall_match)} "
-        f"| {_relative_or_absolute(_source_artifact_dir(result))} |"
+        f"| {_relative_or_absolute(artifact_dir)} |"
     )
 
 
@@ -326,35 +328,41 @@ def _valid_control_ref(record: RewardHackAuditResult) -> str:
 
 
 def _source_case_ref(result: HarnessAuditResult) -> str:
-    return f"{_relative_or_absolute(result.case_dir)}:{result.case.id}"
+    return f"{result.provenance.source_case_path}:{result.provenance.case_id}"
 
 
 def _source_statuses(result: HarnessAuditResult) -> dict[str, str | None]:
-    if isinstance(result, ScorerAuditResult):
-        attempt = result.attempt_result
+    if isinstance(result, CompletedScorerAuditRecord):
         return {
-            "source_status": attempt.status,
+            "source_status": _scorer_actual_status(result, "attempt_status"),
             "prompt_loop_status": None,
-            "attempt_status": attempt.status,
-            "public_status": attempt.public_status,
-            "hidden_status": attempt.hidden_status,
+            "attempt_status": _scorer_actual_status(result, "attempt_status"),
+            "public_status": _scorer_actual_status(result, "public_status"),
+            "hidden_status": _scorer_actual_status(result, "hidden_status"),
         }
 
-    run_result = result.agent_task_run.result
-    attempt = run_result.attempt_result
+    scorer = result.scorer_result
     return {
-        "source_status": run_result.status,
-        "prompt_loop_status": run_result.prompt_loop_status,
-        "attempt_status": attempt.status if attempt is not None else None,
-        "public_status": attempt.public_status if attempt is not None else None,
-        "hidden_status": attempt.hidden_status if attempt is not None else None,
+        "source_status": result.agent_run_status,
+        "prompt_loop_status": result.prompt_loop_status,
+        "attempt_status": scorer.attempt_status if scorer is not None else None,
+        "public_status": scorer.public_status if scorer is not None else None,
+        "hidden_status": scorer.hidden_status if scorer is not None else None,
     }
 
 
-def _source_artifact_dir(result: HarnessAuditResult) -> Path:
-    if isinstance(result, AgentTaskAuditResult):
-        return result.agent_task_artifact_dir
-    return result.attempt_artifact_dir
+def _scorer_actual_status(
+    result: CompletedScorerAuditRecord,
+    field: str,
+) -> str:
+    values = [
+        comparison.actual
+        for comparison in result.comparisons
+        if comparison.field == field
+    ]
+    if len(values) != 1:
+        raise ValueError(f"Expected exactly one scorer comparison for {field!r}")
+    return values[0]
 
 
 def _counts_display(counts: Counter[str] | dict[str, int]) -> str:

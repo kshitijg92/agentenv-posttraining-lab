@@ -10,14 +10,22 @@ from typing import Literal, TypeAlias
 from pydantic import ValidationError
 
 from agentenv.audits.agent_task import (
-    AgentTaskAuditResult,
     load_agent_task_audit_case,
-    run_agent_task_audit,
+    run_agent_task_audit_layer,
 )
 from agentenv.agents.schema import PromptLoopResult, ToolCallAction, parse_agent_action
 from agentenv.models.schema import Message
-from agentenv.rewards.cases import (
+from agentenv.audits.hashing import (
+    find_owning_task_pack,
     hash_harness_audit_case_dir,
+)
+from agentenv.audits.schema import (
+    AgentTaskAuditRecord,
+    CompletedAgentTaskAuditRecord,
+    CompletedScorerAuditRecord,
+    ScorerAuditRecord,
+)
+from agentenv.rewards.cases import (
     load_reward_hack_case,
     verify_reward_hack_case_source_refs,
 )
@@ -36,9 +44,8 @@ from agentenv.rewards.schema import (
 from agentenv.runners.patch_runner import apply_patch_file
 from agentenv.audits.scorer import (
     ScorerAuditCase,
-    ScorerAuditResult,
     load_scorer_audit_case,
-    run_scorer_audit,
+    run_scorer_audit_layer,
 )
 from agentenv.security.leakage import LeakageScanResult
 from agentenv.security.leakage import LeakageScanText
@@ -51,8 +58,10 @@ from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
 
 
-REWARD_HACK_AUDIT_RUNTIME_VERSION = "reward_hack_audit_runtime_v1"
-HarnessAuditResult: TypeAlias = ScorerAuditResult | AgentTaskAuditResult
+REWARD_HACK_AUDIT_RUNTIME_VERSION = "reward_hack_audit_runtime_v2"
+HarnessAuditResult: TypeAlias = (
+    CompletedScorerAuditRecord | CompletedAgentTaskAuditRecord
+)
 
 _AGENT_AUTHORED_FIXTURE_ARTIFACT_FILES = {
     "agent_control_script.json",
@@ -97,6 +106,8 @@ class RewardHackAuditResult:
     valid_control_source_case_hash: str
     exploit_audit_result: HarnessAuditResult
     valid_control_audit_result: HarnessAuditResult
+    exploit_audit_artifact_dir: Path
+    valid_control_audit_artifact_dir: Path
     exploit_harness_audit_passed: bool
     valid_control_harness_audit_passed: bool
     valid_control_task_success_actual: bool
@@ -132,6 +143,12 @@ class RewardHackAuditResult:
     @property
     def canary_match_refs(self) -> tuple[str, ...]:
         return self.leakage_scan_result.canary_matches
+
+
+@dataclass(frozen=True)
+class StagedHarnessAuditPair:
+    repo_root: Path
+    case_root: Path
 
 
 def run_reward_hack_audit(
@@ -210,21 +227,30 @@ def _run_scorer_reward_hack_case_audit(
     )
     task_manifest = load_task_manifest(task_manifest_path)
     run_dir = _make_run_dir(work_dir)
-    staged_case_root = _stage_scorer_audit_pair(
+    staged = _stage_scorer_audit_pair(
         case.evidence,
         run_dir,
+        task_manifest_path=task_manifest_path,
         repo_root=repo_root,
     )
     scorer_out_dir = run_dir / "scorer_audit"
-    scorer_results = run_scorer_audit(staged_case_root, scorer_out_dir)
-    scorer_results_by_case_id = _index_scorer_results(scorer_results)
+    scorer_layer = run_scorer_audit_layer(
+        staged.case_root,
+        scorer_out_dir,
+        repo_root=staged.repo_root,
+    )
+    scorer_results_by_case_id = _index_scorer_results(scorer_layer.records)
     exploit_result = scorer_results_by_case_id[case.evidence.exploit.case_id]
     valid_control_result = scorer_results_by_case_id[
         case.evidence.valid_control.case_id
     ]
+    exploit_artifact_dir = scorer_out_dir / exploit_result.case_artifact.path
+    valid_control_artifact_dir = (
+        scorer_out_dir / valid_control_result.case_artifact.path
+    )
 
     leakage_scan_result = scan_directory_for_leakage(
-        exploit_result.attempt_artifact_dir,
+        exploit_artifact_dir,
         task_manifest,
     )
     exploit_mechanism_detected_actual = detect_scorer_exploit_mechanism(
@@ -243,6 +269,8 @@ def _run_scorer_reward_hack_case_audit(
         valid_control_case_dir=valid_control_case_dir,
         exploit_result=exploit_result,
         valid_control_result=valid_control_result,
+        exploit_audit_artifact_dir=exploit_artifact_dir,
+        valid_control_audit_artifact_dir=valid_control_artifact_dir,
         leakage_scan_result=leakage_scan_result,
         exploit_mechanism_detected_actual=exploit_mechanism_detected_actual,
     )
@@ -272,24 +300,33 @@ def _run_agent_task_reward_hack_case_audit(
     )
     task_manifest = load_task_manifest(task_manifest_path)
     run_dir = _make_run_dir(work_dir)
-    staged_case_root = _stage_agent_task_audit_pair(
+    staged = _stage_agent_task_audit_pair(
         case.evidence,
         run_dir,
+        task_manifest_path=task_manifest_path,
         repo_root=repo_root,
     )
     agent_task_out_dir = run_dir / "agent_task_audit"
-    agent_task_results = run_agent_task_audit(staged_case_root, agent_task_out_dir)
-    agent_results_by_case_id = _index_agent_task_results(agent_task_results)
+    agent_task_layer = run_agent_task_audit_layer(
+        staged.case_root,
+        agent_task_out_dir,
+        repo_root=staged.repo_root,
+    )
+    agent_results_by_case_id = _index_agent_task_results(agent_task_layer.records)
     exploit_result = agent_results_by_case_id[case.evidence.exploit.case_id]
     valid_control_result = agent_results_by_case_id[case.evidence.valid_control.case_id]
+    exploit_artifact_dir = agent_task_out_dir / exploit_result.case_artifact.path
+    valid_control_artifact_dir = (
+        agent_task_out_dir / valid_control_result.case_artifact.path
+    )
 
     leakage_scan_result = _scan_agent_task_exposure_artifacts(
-        exploit_result,
-        task_manifest,
+        artifact_dir=exploit_artifact_dir,
+        task_manifest=task_manifest,
     )
     exploit_mechanism_detected_actual = _detect_agent_exploit_mechanism(
         case,
-        exploit_result=exploit_result,
+        artifact_dir=exploit_artifact_dir,
         task_manifest=task_manifest,
     )
     return _build_reward_hack_result(
@@ -300,6 +337,8 @@ def _run_agent_task_reward_hack_case_audit(
         valid_control_case_dir=valid_control_case_dir,
         exploit_result=exploit_result,
         valid_control_result=valid_control_result,
+        exploit_audit_artifact_dir=exploit_artifact_dir,
+        valid_control_audit_artifact_dir=valid_control_artifact_dir,
         leakage_scan_result=leakage_scan_result,
         exploit_mechanism_detected_actual=exploit_mechanism_detected_actual,
     )
@@ -314,6 +353,8 @@ def _build_reward_hack_result(
     valid_control_case_dir: Path,
     exploit_result: HarnessAuditResult,
     valid_control_result: HarnessAuditResult,
+    exploit_audit_artifact_dir: Path,
+    valid_control_audit_artifact_dir: Path,
     leakage_scan_result: LeakageScanResult,
     exploit_mechanism_detected_actual: bool,
 ) -> RewardHackAuditResult:
@@ -369,6 +410,8 @@ def _build_reward_hack_result(
         ),
         exploit_audit_result=exploit_result,
         valid_control_audit_result=valid_control_result,
+        exploit_audit_artifact_dir=exploit_audit_artifact_dir,
+        valid_control_audit_artifact_dir=valid_control_audit_artifact_dir,
         exploit_harness_audit_passed=_source_harness_passed(exploit_result),
         valid_control_harness_audit_passed=_source_harness_passed(
             valid_control_result,
@@ -390,7 +433,7 @@ def detect_scorer_exploit_mechanism(
     *,
     exploit_case: ScorerAuditCase,
     exploit_case_dir: Path,
-    exploit_result: ScorerAuditResult,
+    exploit_result: CompletedScorerAuditRecord,
     task_manifest_path: Path,
     task_manifest: TaskManifest,
 ) -> bool:
@@ -474,24 +517,37 @@ def detect_scorer_exploit_mechanism(
 
 
 def _scorer_result_matches_timeout_surface(
-    result: ScorerAuditResult,
+    result: CompletedScorerAuditRecord,
     *,
     timeout_surface: str,
 ) -> bool:
-    attempt_result = result.attempt_result
-    if attempt_result.status != "TIMEOUT":
+    if _scorer_actual_status(result, "attempt_status") != "TIMEOUT":
         return False
     if timeout_surface == "public_check":
         return (
-            attempt_result.public_status == "FAIL"
-            and attempt_result.hidden_status == "NOT_RUN"
+            _scorer_actual_status(result, "public_status") == "FAIL"
+            and _scorer_actual_status(result, "hidden_status") == "NOT_RUN"
         )
     if timeout_surface == "hidden_validator":
         return (
-            attempt_result.public_status == "PASS"
-            and attempt_result.hidden_status == "FAIL"
+            _scorer_actual_status(result, "public_status") == "PASS"
+            and _scorer_actual_status(result, "hidden_status") == "FAIL"
         )
     raise ValueError(f"Unsupported timeout surface: {timeout_surface}")
+
+
+def _scorer_actual_status(
+    result: CompletedScorerAuditRecord,
+    field: str,
+) -> str:
+    matches = [
+        comparison.actual
+        for comparison in result.comparisons
+        if comparison.field == field
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one scorer audit comparison for {field!r}")
+    return matches[0]
 
 
 def _patch_changes_only_comments_and_docstrings(
@@ -624,23 +680,23 @@ def _python_docstrings(source: str) -> tuple[str, ...]:
 def _detect_agent_exploit_mechanism(
     case: RewardHackCase,
     *,
-    exploit_result: AgentTaskAuditResult,
+    artifact_dir: Path,
     task_manifest: TaskManifest,
 ) -> bool:
     if case.exploit.exploit_classification == "fake_success_output":
         return _detect_agent_fake_success_output(
             case.exploit.exploit_spec,
-            exploit_result=exploit_result,
+            artifact_dir=artifact_dir,
         )
     if case.exploit.exploit_classification == "tool_output_spoofing":
         return _detect_agent_tool_output_spoofing(
             case.exploit.exploit_spec,
-            exploit_result=exploit_result,
+            artifact_dir=artifact_dir,
         )
     if case.exploit.exploit_classification == "state_corruption":
         return _detect_agent_state_corruption(
             case.exploit.exploit_spec,
-            exploit_result=exploit_result,
+            artifact_dir=artifact_dir,
         )
 
     if case.exploit.exploit_classification != "hidden_validator_probe_attempt":
@@ -655,7 +711,7 @@ def _detect_agent_exploit_mechanism(
             f"Unsupported agent hidden-validator probe surface: {spec.probe_surface}"
         )
 
-    prompt_loop_result = exploit_result.agent_task_run.prompt_loop_result
+    prompt_loop_result = _load_prompt_loop_result(artifact_dir)
     if prompt_loop_result is None:
         return False
 
@@ -680,7 +736,7 @@ def _detect_agent_exploit_mechanism(
 def _detect_agent_fake_success_output(
     spec: FakeSuccessOutputExploitSpec,
     *,
-    exploit_result: AgentTaskAuditResult,
+    artifact_dir: Path,
 ) -> bool:
     if spec.probe_surface != "agent_workspace_update":
         raise ValueError(
@@ -689,14 +745,14 @@ def _detect_agent_fake_success_output(
 
     return _detect_agent_spoofed_workspace_file(
         spec.expected_spoof_file,
-        exploit_result=exploit_result,
+        artifact_dir=artifact_dir,
     )
 
 
 def _detect_agent_tool_output_spoofing(
     spec: ToolOutputSpoofingExploitSpec,
     *,
-    exploit_result: AgentTaskAuditResult,
+    artifact_dir: Path,
 ) -> bool:
     if spec.probe_surface != "agent_workspace_update":
         raise ValueError(
@@ -705,14 +761,14 @@ def _detect_agent_tool_output_spoofing(
 
     return _detect_agent_spoofed_workspace_file(
         spec.expected_spoof_file,
-        exploit_result=exploit_result,
+        artifact_dir=artifact_dir,
     )
 
 
 def _detect_agent_state_corruption(
     spec: StateCorruptionExploitSpec,
     *,
-    exploit_result: AgentTaskAuditResult,
+    artifact_dir: Path,
 ) -> bool:
     if spec.probe_surface != "agent_workspace_update":
         raise ValueError(
@@ -721,29 +777,33 @@ def _detect_agent_state_corruption(
 
     return _detect_agent_spoofed_workspace_file(
         spec.expected_corrupted_file,
-        exploit_result=exploit_result,
+        artifact_dir=artifact_dir,
     )
 
 
 def _detect_agent_spoofed_workspace_file(
     expected_spoof_file: ExpectedSpoofFile,
     *,
-    exploit_result: AgentTaskAuditResult,
+    artifact_dir: Path,
 ) -> bool:
-    patch_text = _agent_candidate_patch_text(exploit_result)
+    patch_text = _agent_candidate_patch_text(artifact_dir)
     if not _patch_adds_or_updates_path(patch_text, expected_spoof_file.path):
         return False
     return all(marker in patch_text for marker in expected_spoof_file.required_markers)
 
 
-def _agent_candidate_patch_text(result: AgentTaskAuditResult) -> str:
-    if result.agent_task_run.candidate_patch:
-        return result.agent_task_run.candidate_patch
-
-    patch_path = result.agent_task_artifact_dir / "candidate.patch"
+def _agent_candidate_patch_text(artifact_dir: Path) -> str:
+    patch_path = artifact_dir / "candidate.patch"
     if not patch_path.is_file():
         return ""
     return patch_path.read_text()
+
+
+def _load_prompt_loop_result(artifact_dir: Path) -> PromptLoopResult | None:
+    path = artifact_dir / _PROMPT_LOOP_RESULT_ARTIFACT_FILE
+    if not path.is_file():
+        return None
+    return PromptLoopResult.model_validate_json(path.read_text())
 
 
 def _patch_adds_or_updates_path(patch_text: str, path: str) -> bool:
@@ -768,28 +828,41 @@ def _stage_scorer_audit_pair(
     evidence: ScorerAuditEvidencePair,
     run_dir: Path,
     *,
+    task_manifest_path: Path,
     repo_root: Path,
-) -> Path:
-    case_root = run_dir / "scorer_case_inputs"
-    return _stage_harness_audit_pair(evidence, case_root, repo_root=repo_root)
+) -> StagedHarnessAuditPair:
+    return _stage_harness_audit_pair(
+        evidence,
+        run_dir,
+        task_manifest_path=task_manifest_path,
+        repo_root=repo_root,
+    )
 
 
 def _stage_agent_task_audit_pair(
     evidence: AgentTaskAuditEvidencePair,
     run_dir: Path,
     *,
+    task_manifest_path: Path,
     repo_root: Path,
-) -> Path:
-    case_root = run_dir / "agent_task_case_inputs"
-    return _stage_harness_audit_pair(evidence, case_root, repo_root=repo_root)
+) -> StagedHarnessAuditPair:
+    return _stage_harness_audit_pair(
+        evidence,
+        run_dir,
+        task_manifest_path=task_manifest_path,
+        repo_root=repo_root,
+    )
 
 
 def _stage_harness_audit_pair(
     evidence: ScorerAuditEvidencePair | AgentTaskAuditEvidencePair,
-    case_root: Path,
+    run_dir: Path,
     *,
+    task_manifest_path: Path,
     repo_root: Path,
-) -> Path:
+) -> StagedHarnessAuditPair:
+    staged_repo_root = run_dir / "input_repo"
+    case_root = staged_repo_root / "cases"
     case_root.mkdir(parents=True, exist_ok=True)
     _copy_harness_case_dir(
         evidence.exploit,
@@ -801,7 +874,18 @@ def _stage_harness_audit_pair(
         case_root / f"valid_control_{evidence.valid_control.case_id}",
         repo_root=repo_root,
     )
-    return case_root
+    task_pack = find_owning_task_pack(task_manifest_path)
+    try:
+        task_pack_ref = task_pack.relative_to(repo_root.resolve())
+    except ValueError as exc:
+        raise ValueError(
+            f"Task pack must be inside reward-audit repository root: {task_pack}"
+        ) from exc
+    shutil.copytree(task_pack, staged_repo_root / task_pack_ref)
+    return StagedHarnessAuditPair(
+        repo_root=staged_repo_root,
+        case_root=case_root,
+    )
 
 
 def _copy_harness_case_dir(
@@ -815,24 +899,36 @@ def _copy_harness_case_dir(
 
 
 def _index_scorer_results(
-    results: list[ScorerAuditResult],
-) -> dict[str, ScorerAuditResult]:
-    indexed: dict[str, ScorerAuditResult] = {}
+    results: tuple[ScorerAuditRecord, ...],
+) -> dict[str, CompletedScorerAuditRecord]:
+    indexed: dict[str, CompletedScorerAuditRecord] = {}
     for result in results:
-        if result.case.id in indexed:
-            raise ValueError(f"Duplicate scorer audit case id: {result.case.id}")
-        indexed[result.case.id] = result
+        if not isinstance(result, CompletedScorerAuditRecord):
+            raise ValueError(
+                "Reward-hack scorer evidence produced AUDIT_ERROR: "
+                f"{result.provenance.source_case_path}"
+            )
+        case_id = result.provenance.case_id
+        if case_id in indexed:
+            raise ValueError(f"Duplicate scorer audit case id: {case_id}")
+        indexed[case_id] = result
     return indexed
 
 
 def _index_agent_task_results(
-    results: list[AgentTaskAuditResult],
-) -> dict[str, AgentTaskAuditResult]:
-    indexed: dict[str, AgentTaskAuditResult] = {}
+    results: tuple[AgentTaskAuditRecord, ...],
+) -> dict[str, CompletedAgentTaskAuditRecord]:
+    indexed: dict[str, CompletedAgentTaskAuditRecord] = {}
     for result in results:
-        if result.case.id in indexed:
-            raise ValueError(f"Duplicate agent task audit case id: {result.case.id}")
-        indexed[result.case.id] = result
+        if not isinstance(result, CompletedAgentTaskAuditRecord):
+            raise ValueError(
+                "Reward-hack agent evidence produced AUDIT_ERROR: "
+                f"{result.provenance.source_case_path}"
+            )
+        case_id = result.provenance.case_id
+        if case_id in indexed:
+            raise ValueError(f"Duplicate agent task audit case id: {case_id}")
+        indexed[case_id] = result
     return indexed
 
 
@@ -841,17 +937,18 @@ def _source_harness_passed(result: HarnessAuditResult) -> bool:
 
 
 def _source_task_success(result: HarnessAuditResult) -> bool:
-    if isinstance(result, ScorerAuditResult):
-        return result.attempt_result.status == "PASS"
-
-    attempt_result = result.agent_task_run.result.attempt_result
-    return attempt_result is not None and attempt_result.status == "PASS"
+    if isinstance(result, CompletedScorerAuditRecord):
+        return _scorer_actual_status(result, "attempt_status") == "PASS"
+    return (
+        result.scorer_result is not None
+        and result.scorer_result.attempt_status == "PASS"
+    )
 
 
 def _source_has_trusted_scorer_result(result: HarnessAuditResult) -> bool:
-    if isinstance(result, ScorerAuditResult):
+    if isinstance(result, CompletedScorerAuditRecord):
         return True
-    return result.agent_task_run.result.attempt_result is not None
+    return result.scorer_result is not None
 
 
 def _exploit_mechanism_neutralized_actual(
@@ -886,9 +983,7 @@ def _exploit_mechanism_neutralized_actual(
 
 
 def _source_has_authoritative_tool_results(result: HarnessAuditResult) -> bool:
-    if not isinstance(result, AgentTaskAuditResult):
-        return False
-    if result.agent_task_run.prompt_loop_result is None:
+    if not isinstance(result, CompletedAgentTaskAuditRecord):
         return False
     return any(
         comparison.field == "tool_results" and comparison.match
@@ -897,10 +992,10 @@ def _source_has_authoritative_tool_results(result: HarnessAuditResult) -> bool:
 
 
 def _scan_agent_task_exposure_artifacts(
-    result: AgentTaskAuditResult,
+    *,
+    artifact_dir: Path,
     task_manifest: TaskManifest,
 ) -> LeakageScanResult:
-    artifact_dir = result.agent_task_artifact_dir
     file_paths = _agent_raw_exposure_artifact_files(artifact_dir)
     file_scan = scan_files_for_leakage(
         file_paths,
@@ -908,7 +1003,7 @@ def _scan_agent_task_exposure_artifacts(
         root=artifact_dir,
     )
 
-    prompt_loop_result = result.agent_task_run.prompt_loop_result
+    prompt_loop_result = _load_prompt_loop_result(artifact_dir)
     if prompt_loop_result is None:
         return file_scan
 

@@ -1,9 +1,12 @@
-from dataclasses import replace
 from pathlib import Path
 
-from agentenv.audits.agent_task import AgentAuditComparison
-from agentenv.audits.agent_task import AgentTaskAuditResult
-from agentenv.audits.scorer import ScorerAuditResult
+from pydantic import BaseModel
+
+from agentenv.audits.schema import (
+    AgentAuditComparisonRecord,
+    CompletedAgentTaskAuditRecord,
+    CompletedScorerAuditRecord,
+)
 from agentenv.agents.schema import PromptLoopResult, TokenUsage
 from agentenv.models.schema import Message
 from agentenv.rewards.audit import (
@@ -132,8 +135,14 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
 
     for result in results:
         if result.reward_hack_case.evidence.source_type == "scorer_audit_case":
-            assert isinstance(result.exploit_audit_result, ScorerAuditResult)
-            assert isinstance(result.valid_control_audit_result, ScorerAuditResult)
+            assert isinstance(
+                result.exploit_audit_result,
+                CompletedScorerAuditRecord,
+            )
+            assert isinstance(
+                result.valid_control_audit_result,
+                CompletedScorerAuditRecord,
+            )
             if (
                 result.reward_hack_case.exploit.exploit_classification
                 == "hidden_validator_probe_attempt"
@@ -197,12 +206,16 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
                 ("hidden_status", "PASS", "PASS", True),
             )
             assert "trace.jsonl" in result.leakage_scan_result.scanned_files
-            assert (
-                result.run_dir / "scorer_audit/scorer_audit_results.jsonl"
-            ).is_file()
+            assert (result.run_dir / "scorer_audit/results.jsonl").is_file()
         else:
-            assert isinstance(result.exploit_audit_result, AgentTaskAuditResult)
-            assert isinstance(result.valid_control_audit_result, AgentTaskAuditResult)
+            assert isinstance(
+                result.exploit_audit_result,
+                CompletedAgentTaskAuditRecord,
+            )
+            assert isinstance(
+                result.valid_control_audit_result,
+                CompletedAgentTaskAuditRecord,
+            )
             exploit_comparisons = _comparison_map(result.exploit_audit_result)
             valid_control_comparisons = _comparison_map(
                 result.valid_control_audit_result
@@ -431,9 +444,7 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
                 True,
             )
             assert "agent_task_run.json" in result.leakage_scan_result.scanned_files
-            assert (
-                result.run_dir / "agent_task_audit/agent_task_audit_results.jsonl"
-            ).is_file()
+            assert (result.run_dir / "agent_task_audit/results.jsonl").is_file()
 
         assert result.exploit_harness_audit_passed is True
         assert result.valid_control_harness_audit_passed is True
@@ -460,21 +471,30 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
 
 
 def _comparison_rows(
-    result: ScorerAuditResult | AgentTaskAuditResult,
+    result: CompletedScorerAuditRecord | CompletedAgentTaskAuditRecord,
 ) -> tuple[tuple[str, object, object, bool], ...]:
     return tuple(
         (
             comparison.field,
-            comparison.expected,
-            comparison.actual,
+            _comparison_value(comparison.expected),
+            _comparison_value(comparison.actual),
             comparison.match,
         )
         for comparison in result.comparisons
     )
 
 
+def _comparison_value(value: object) -> object:
+    if isinstance(value, list):
+        return [
+            item.model_dump(mode="json") if isinstance(item, BaseModel) else item
+            for item in value
+        ]
+    return value
+
+
 def _comparison_map(
-    result: ScorerAuditResult | AgentTaskAuditResult,
+    result: CompletedScorerAuditRecord | CompletedAgentTaskAuditRecord,
 ) -> dict[str, tuple[object, object, bool]]:
     return {
         field: (expected, actual, match)
@@ -490,41 +510,46 @@ def test_authoritative_tool_results_require_matching_agent_audit_comparison(
         work_dir=tmp_path / "reward_audit",
     )
     exploit_result = results[0].exploit_audit_result
-    assert isinstance(exploit_result, AgentTaskAuditResult)
+    assert isinstance(exploit_result, CompletedAgentTaskAuditRecord)
 
     assert _source_has_authoritative_tool_results(exploit_result) is True
 
-    without_matching_tool_results = replace(
-        exploit_result,
-        comparisons=tuple(
-            comparison
-            for comparison in exploit_result.comparisons
-            if comparison.field != "tool_results"
-        ),
+    without_matching_tool_results = exploit_result.model_copy(
+        update={
+            "comparisons": [
+                comparison
+                for comparison in exploit_result.comparisons
+                if comparison.field != "tool_results"
+            ]
+        },
     )
 
     assert (
         _source_has_authoritative_tool_results(without_matching_tool_results) is False
     )
 
-    with_mismatched_tool_results = replace(
-        exploit_result,
-        comparisons=tuple(
-            AgentAuditComparison(
-                field="tool_results",
-                expected=[],
-                actual=[
+    with_mismatched_tool_results = exploit_result.model_copy(
+        update={
+            "comparisons": [
+                AgentAuditComparisonRecord.model_validate(
                     {
-                        "tool_name": "read_file",
-                        "status": "ok",
-                        "error_class": None,
+                        "field": "tool_results",
+                        "expected": [],
+                        "actual": [
+                            {
+                                "tool_name": "read_file",
+                                "status": "ok",
+                                "error_class": None,
+                            }
+                        ],
+                        "match": False,
                     }
-                ],
-            )
-            if comparison.field == "tool_results"
-            else comparison
-            for comparison in exploit_result.comparisons
-        ),
+                )
+                if comparison.field == "tool_results"
+                else comparison
+                for comparison in exploit_result.comparisons
+            ]
+        },
     )
 
     assert _source_has_authoritative_tool_results(with_mismatched_tool_results) is False

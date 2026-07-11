@@ -6,11 +6,6 @@ import yaml
 
 from agentenv.audits.agent_task import load_agent_task_audit_case
 from agentenv.audits.scorer import load_scorer_audit_case
-from agentenv.hashing import hash_bytes
-from agentenv.hashing import hash_json
-from agentenv.hashing import hash_normalized_text
-from agentenv.hashing import iter_hashable_files
-from agentenv.hashing import relative_path
 from agentenv.rewards.schema import (
     AgentTaskAuditEvidencePair,
     HarnessAuditCaseRef,
@@ -34,21 +29,6 @@ def verify_reward_hack_case_source_refs(
 ) -> None:
     root = Path.cwd().resolve() if repo_root is None else repo_root.resolve()
     _verify_evidence_pair(case.evidence, repo_root=root)
-
-
-def hash_harness_audit_case_dir(case_dir: Path) -> str:
-    case_dir = case_dir.resolve()
-    if not case_dir.is_dir():
-        raise ValueError(f"Expected harness audit case directory: {case_dir}")
-
-    entries = [
-        {
-            "path": relative_path(file_path, case_dir),
-            "hash": _hash_case_file(file_path),
-        }
-        for file_path in iter_hashable_files(case_dir)
-    ]
-    return hash_json(entries)
 
 
 def _verify_evidence_pair(evidence: RewardHackEvidencePair, *, repo_root: Path) -> None:
@@ -121,9 +101,3 @@ def _resolve_repo_relative_path(repo_root: Path, raw_path: str) -> Path:
     if not resolved.is_relative_to(repo_root):
         raise ValueError(f"Reward-hack source path escapes repo root: {raw_path}")
     return resolved
-
-
-def _hash_case_file(path: Path) -> str:
-    if path.name == "notes.md":
-        return hash_normalized_text(path.read_text())
-    return hash_bytes(path.read_bytes())

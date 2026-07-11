@@ -4,8 +4,9 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from agentenv.audits.agent_task import run_agent_task_audit
-from agentenv.audits.scorer import run_scorer_audit
+from agentenv.audits.agent_task import run_agent_task_audit_layer
+from agentenv.audits.runner import run_harness_audit
+from agentenv.audits.scorer import run_scorer_audit_layer
 from agentenv.artifacts import MANIFEST_FILENAME, ArtifactDirectoryError
 from agentenv.controls.controls_run import run_controls
 from agentenv.evals.task_hash_compare import (
@@ -67,6 +68,7 @@ training_candidates_app = typer.Typer(no_args_is_help=True)
 training_sft_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
+harness_app = typer.Typer(no_args_is_help=True)
 rewards_app = typer.Typer(no_args_is_help=True)
 local_model_app = typer.Typer(no_args_is_help=True)
 ollama_app = typer.Typer(no_args_is_help=True)
@@ -79,6 +81,7 @@ app.add_typer(trajectories_app, name="trajectories")
 app.add_typer(training_app, name="training")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
+app.add_typer(harness_app, name="harness")
 app.add_typer(rewards_app, name="rewards")
 app.add_typer(local_model_app, name="local-model")
 training_app.add_typer(training_candidates_app, name="candidates")
@@ -152,29 +155,65 @@ def run_attempt(
 def audit_scorers(
     cases: Path = typer.Option(..., "--cases", help="Directory of scorer cases."),
     out: Path = typer.Option(..., "--out", help="Directory for audit artifacts."),
+    overwrite: bool = typer.Option(False, "--overwrite"),
 ) -> None:
-    results = run_scorer_audit(cases, out)
-    failed = sum(not result.overall_match for result in results)
-    style = "green" if failed == 0 else "red"
+    layer = run_scorer_audit_layer(cases, out, overwrite=overwrite)
+    style = _audit_status_style(layer.summary.status)
     console.print(
-        f"[{style}]scorer audit complete[/{style}] cases={len(results)} failed={failed}"
+        f"[{style}]scorer audit {layer.summary.status}[/{style}] "
+        f"records={layer.summary.record_count} "
+        f"mismatched={layer.summary.mismatched_count} "
+        f"errors={layer.summary.audit_error_count}"
     )
-    console.print(f"wrote {out / 'scorer_audit.md'}")
+    console.print(f"wrote {out / MANIFEST_FILENAME}")
 
 
 @agents_app.command("audit")
 def audit_agent_tasks(
     cases: Path = typer.Option(..., "--cases", help="Directory of agent task cases."),
     out: Path = typer.Option(..., "--out", help="Directory for audit artifacts."),
+    overwrite: bool = typer.Option(False, "--overwrite"),
 ) -> None:
-    results = run_agent_task_audit(cases, out)
-    failed = sum(not result.overall_match for result in results)
-    style = "green" if failed == 0 else "red"
+    layer = run_agent_task_audit_layer(cases, out, overwrite=overwrite)
+    style = _audit_status_style(layer.summary.status)
     console.print(
-        f"[{style}]agent task audit complete[/{style}] "
-        f"cases={len(results)} failed={failed}"
+        f"[{style}]agent-task audit {layer.summary.status}[/{style}] "
+        f"records={layer.summary.record_count} "
+        f"mismatched={layer.summary.mismatched_count} "
+        f"errors={layer.summary.audit_error_count}"
     )
-    console.print(f"wrote {out / 'agent_task_audit.md'}")
+    console.print(f"wrote {out / MANIFEST_FILENAME}")
+
+
+@harness_app.command("audit")
+def audit_harness(
+    agent_cases: Path = typer.Option(
+        ...,
+        "--agent-cases",
+        help="Directory of agent-task audit cases.",
+    ),
+    scorer_cases: Path = typer.Option(
+        ...,
+        "--scorer-cases",
+        help="Directory of scorer audit cases.",
+    ),
+    out: Path = typer.Option(..., "--out", help="Root harness audit directory."),
+    overwrite: bool = typer.Option(False, "--overwrite"),
+) -> None:
+    artifact = run_harness_audit(
+        agent_case_root=agent_cases,
+        scorer_case_root=scorer_cases,
+        out_dir=out,
+        overwrite=overwrite,
+    )
+    style = _audit_status_style(artifact.manifest.status)
+    console.print(
+        f"[{style}]harness audit {artifact.manifest.status}[/{style}] "
+        f"agent={artifact.agent_audit.summary.status} "
+        f"scorer={artifact.scorer_audit.summary.status}"
+    )
+    console.print(f"wrote {out / MANIFEST_FILENAME}")
+    console.print(f"wrote {out / 'harness_audit.md'}")
 
 
 @rewards_app.command("audit")
@@ -821,3 +860,11 @@ def _format_layer_counts(layer_counts: dict[str, dict[str, int]]) -> str:
         for layer_name, status_counts in sorted(layer_counts.items())
         for status, count in sorted(status_counts.items())
     )
+
+
+def _audit_status_style(status: str) -> str:
+    if status == "PASS":
+        return "green"
+    if status == "INCONCLUSIVE":
+        return "yellow"
+    return "red"

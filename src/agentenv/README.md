@@ -370,9 +370,9 @@ uv run agentenv scorers audit \
 Main outputs:
 
 ```text
-experiments/harness_audit/scorer_audit/scorer_audit.md
-experiments/harness_audit/scorer_audit/scorer_audit_results.jsonl
-experiments/harness_audit/scorer_audit/attempts/
+experiments/harness_audit/scorer_audit/manifest.json
+experiments/harness_audit/scorer_audit/results.jsonl
+experiments/harness_audit/scorer_audit/cases/
 ```
 
 ## Run The Agent Task Audit
@@ -386,9 +386,27 @@ uv run agentenv agents audit \
 Main outputs:
 
 ```text
-experiments/harness_audit/agent_task_audit/agent_task_audit.md
-experiments/harness_audit/agent_task_audit/agent_task_audit_results.jsonl
-experiments/harness_audit/agent_task_audit/agent_task_runs/
+experiments/harness_audit/agent_task_audit/manifest.json
+experiments/harness_audit/agent_task_audit/results.jsonl
+experiments/harness_audit/agent_task_audit/cases/
+```
+
+## Run The Atomic Harness Audit
+
+```bash
+uv run agentenv harness audit \
+  --agent-cases data/harness_audit/agent_task_cases \
+  --scorer-cases data/harness_audit/scorer_cases \
+  --out experiments/harness_audit/full
+```
+
+Main outputs:
+
+```text
+experiments/harness_audit/full/manifest.json
+experiments/harness_audit/full/harness_audit.md
+experiments/harness_audit/full/agent/
+experiments/harness_audit/full/scorer/
 ```
 
 ## Run The Reward-Hack Audit

@@ -6,20 +6,15 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from agentenv.artifacts.manifests import (
-    AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
     HARNESS_AUDIT_ARTIFACT_REFS,
     HARNESS_AUDIT_ARTIFACT_SCHEMA_VERSION,
-    SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
     HarnessAuditManifest,
     load_harness_audit_manifest,
 )
-from agentenv.artifacts.payloads import TASK_HASH_REPORT_SCHEMA_VERSION
 from agentenv.audits.schema import (
-    AGENT_TASK_AUDIT_CASE_SCHEMA_VERSION,
     AGENT_TASK_AUDIT_RECORD_SCHEMA_VERSION,
     HARNESS_AUDIT_RUNTIME_VERSION,
     HARNESS_RUNTIME_PROVENANCE_SCHEMA_VERSION,
-    SCORER_AUDIT_CASE_SCHEMA_VERSION,
     SCORER_AUDIT_RECORD_SCHEMA_VERSION,
     AgentTaskAuditErrorRecord,
     AgentTaskAuditRecord,
@@ -29,6 +24,7 @@ from agentenv.audits.schema import (
     HarnessRuntimeProvenance,
     ScorerAuditRecord,
     derive_harness_audit_layer_status,
+    derive_harness_audit_layer_payload_hash,
     derive_harness_audit_status,
     derive_harness_runtime_hash,
     load_agent_task_audit_records,
@@ -206,7 +202,7 @@ def _layer_summary(
         status = "INCONCLUSIVE"
     else:
         status = "PASS"
-    return {
+    summary = {
         "audit_layer": layer,
         "status": status,
         "case_root": f"data/harness_audit/{layer}_cases",
@@ -217,15 +213,23 @@ def _layer_summary(
         "matched_count": matched_count,
         "mismatched_count": mismatched_count,
         "audit_error_count": audit_error_count,
-        "artifact_dir_hash": HASH_B,
         "results_jsonl": "results.jsonl",
         "results_jsonl_hash": HASH_C,
         "case_artifacts": "cases",
         "case_artifacts_hash": HASH_D,
     }
+    summary["artifact_payload_hash"] = derive_harness_audit_layer_payload_hash(
+        results_jsonl="results.jsonl",
+        results_jsonl_hash=HASH_C,
+        case_artifacts="cases",
+        case_artifacts_hash=HASH_D,
+    )
+    return summary
 
 
 def _manifest() -> dict[str, object]:
+    runtime = _runtime_provenance()
+    runtime_hash = runtime["harness_runtime_hash"]
     return {
         "artifact_type": "harness_audit",
         "artifact_schema_version": HARNESS_AUDIT_ARTIFACT_SCHEMA_VERSION,
@@ -233,23 +237,27 @@ def _manifest() -> dict[str, object]:
         "created_at": "2026-07-10T00:00:00Z",
         "git_sha_or_unknown": "deadbeef",
         "runtime_version": HARNESS_AUDIT_RUNTIME_VERSION,
-        "runtime_provenance": _runtime_provenance(),
-        "agent_task_audit_case_schema_version": (AGENT_TASK_AUDIT_CASE_SCHEMA_VERSION),
-        "scorer_audit_case_schema_version": SCORER_AUDIT_CASE_SCHEMA_VERSION,
-        "agent_task_audit_record_schema_version": (
-            AGENT_TASK_AUDIT_RECORD_SCHEMA_VERSION
-        ),
-        "scorer_audit_record_schema_version": SCORER_AUDIT_RECORD_SCHEMA_VERSION,
-        "task_hash_report_schema_version": TASK_HASH_REPORT_SCHEMA_VERSION,
-        "agent_attempt_artifact_schema_version": (
-            AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION
-        ),
-        "scorer_attempt_artifact_schema_version": (
-            SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
-        ),
+        "runtime_provenance": runtime,
         "status": "PASS",
-        "agent_audit": _layer_summary("agent"),
-        "scorer_audit": _layer_summary("scorer"),
+        "agent_audit": {
+            "artifact_type": "agent_task_audit",
+            "artifact_schema_version": "agent_task_audit_artifact_v0",
+            "agent_task_audit_run_id": "agent_task_audit_001",
+            "manifest_path": "agent/manifest.json",
+            "manifest_hash": HASH_A,
+            "harness_runtime_hash": runtime_hash,
+            "status": "PASS",
+        },
+        "scorer_audit": {
+            "artifact_type": "scorer_audit",
+            "artifact_schema_version": "scorer_audit_artifact_v0",
+            "scorer_audit_run_id": "scorer_audit_001",
+            "manifest_path": "scorer/manifest.json",
+            "manifest_hash": HASH_B,
+            "harness_runtime_hash": runtime_hash,
+            "status": "PASS",
+        },
+        "report_hash": HASH_C,
         "artifacts": dict(HARNESS_AUDIT_ARTIFACT_REFS),
     }
 
@@ -397,20 +405,36 @@ def test_layer_summary_validates_counts_and_status() -> None:
     with pytest.raises(ValidationError, match="status must reflect"):
         HarnessAuditLayerSummary.model_validate(payload)
 
+    payload = _layer_summary("agent")
+    payload["artifact_payload_hash"] = HASH_A
+    with pytest.raises(ValidationError, match="artifact_payload_hash must reflect"):
+        HarnessAuditLayerSummary.model_validate(payload)
 
-def test_harness_audit_manifest_derives_overall_status_and_layer_ownership() -> None:
+
+def test_harness_audit_manifest_derives_overall_status_and_child_identity() -> None:
     manifest = HarnessAuditManifest.model_validate(_manifest())
     assert manifest.status == "PASS"
 
     payload = _manifest()
-    payload["agent_audit"] = _layer_summary("agent", audit_error_count=1)
+    agent_audit = payload["agent_audit"]
+    assert isinstance(agent_audit, dict)
+    agent_audit["status"] = "INCONCLUSIVE"
     payload["status"] = "PASS"
     with pytest.raises(ValidationError, match="status must reflect"):
         HarnessAuditManifest.model_validate(payload)
 
     payload = _manifest()
-    payload["agent_audit"] = _layer_summary("scorer")
-    with pytest.raises(ValidationError, match="agent_audit must summarize"):
+    agent_audit = payload["agent_audit"]
+    assert isinstance(agent_audit, dict)
+    agent_audit["artifact_type"] = "scorer_audit"
+    with pytest.raises(ValidationError):
+        HarnessAuditManifest.model_validate(payload)
+
+    payload = _manifest()
+    agent_audit = payload["agent_audit"]
+    assert isinstance(agent_audit, dict)
+    agent_audit["harness_runtime_hash"] = HASH_D
+    with pytest.raises(ValidationError, match="root harness runtime"):
         HarnessAuditManifest.model_validate(payload)
 
 

@@ -24,9 +24,7 @@ HiddenValidatorProbeSurface = Literal[
     "agent_tool_call",
 ]
 
-REWARD_HACK_CASE_SCHEMA_VERSION: RewardHackCaseSchemaVersion = (
-    "reward_hack_case_v0"
-)
+REWARD_HACK_CASE_SCHEMA_VERSION: RewardHackCaseSchemaVersion = "reward_hack_case_v0"
 
 
 def _validate_repo_relative_path(value: str) -> str:
@@ -182,8 +180,7 @@ class PublicTestOnlyPassExploitSpec(BaseModel):
             )
         if not self.public_tests_must_not_be_modified:
             raise ValueError(
-                "public_test_only_pass requires "
-                "public_tests_must_not_be_modified=true"
+                "public_test_only_pass requires public_tests_must_not_be_modified=true"
             )
         return self
 
