@@ -27,6 +27,10 @@ from agentenv.artifacts.manifests import (
 from agentenv.training.builder import (
     build_training_candidate_records_from_review_validation,
 )
+from agentenv.training.gates import (
+    TrainingExportGateValidation,
+    validate_training_export_gates,
+)
 from agentenv.training.schema import (
     POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
     TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
@@ -82,13 +86,23 @@ def export_training_candidate_records(
     review_dir: Path,
     out_dir: Path,
     *,
+    harness_audit_dir: Path,
+    control_calibration_dir: Path,
     overwrite: bool = False,
 ) -> TrainingCandidateExport:
     validation = validate_trajectory_review_artifact(
         trajectory_export_dir,
         review_dir,
     )
-    records = build_training_candidate_records_from_review_validation(validation)
+    gate_validation = validate_training_export_gates(
+        validation,
+        harness_audit_dir=harness_audit_dir,
+        control_calibration_dir=control_calibration_dir,
+    )
+    records = build_training_candidate_records_from_review_validation(
+        validation,
+        gate_validation=gate_validation,
+    )
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
     candidates_path = (
@@ -100,6 +114,7 @@ def export_training_candidate_records(
         out_dir=out_dir,
         trajectory_export_dir=validation.source_export.out_dir,
         review_dir=validation.review_artifact.out_dir,
+        gate_validation=gate_validation,
         candidates_path=candidates_path,
         records=records,
     )
@@ -147,6 +162,21 @@ def load_training_candidate_export_artifact(
 ) -> TrainingCandidateExport:
     export_dir = export_dir.resolve()
     manifest = load_training_candidate_export_manifest(export_dir / MANIFEST_FILENAME)
+    source_validation = validate_trajectory_review_artifact(
+        Path(manifest.source_trajectory_export_dir),
+        Path(manifest.source_review_dir),
+    )
+    observed_gates = validate_training_export_gates(
+        source_validation,
+        harness_audit_dir=Path(manifest.harness_audit_gate.artifact_dir),
+        control_calibration_dir=Path(manifest.control_calibration_gate.artifact_dir),
+    )
+    if observed_gates.harness_audit_gate != manifest.harness_audit_gate:
+        raise ValueError("Training candidate harness-audit gate provenance drifted")
+    if observed_gates.control_calibration_gate != manifest.control_calibration_gate:
+        raise ValueError(
+            "Training candidate control-calibration gate provenance drifted"
+        )
     candidates_path = resolve_relative_artifact_ref(
         export_dir,
         manifest.artifacts["training_candidates"],
@@ -258,6 +288,7 @@ def build_training_candidate_export_manifest(
     out_dir: Path,
     trajectory_export_dir: Path,
     review_dir: Path,
+    gate_validation: TrainingExportGateValidation,
     candidates_path: Path,
     records: tuple[TrainingCandidateRecord, ...],
 ) -> TrainingCandidateExportManifest:
@@ -294,6 +325,8 @@ def build_training_candidate_export_manifest(
             "source_review_dir": str(review_dir),
             "source_review_manifest_hash": hash_file(review_manifest_path),
             "source_reviews_jsonl_hash": hash_file(reviews_path),
+            "harness_audit_gate": gate_validation.harness_audit_gate,
+            "control_calibration_gate": (gate_validation.control_calibration_gate),
             "trajectory_record_schema_version": TRAJECTORY_RECORD_SCHEMA_VERSION,
             "trajectory_review_schema_version": TRAJECTORY_REVIEW_SCHEMA_VERSION,
             "training_candidate_record_schema_version": (

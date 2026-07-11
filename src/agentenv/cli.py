@@ -9,6 +9,9 @@ from agentenv.audits.runner import run_harness_audit
 from agentenv.audits.scorer import run_scorer_audit_layer
 from agentenv.artifacts import MANIFEST_FILENAME, ArtifactDirectoryError
 from agentenv.controls.controls_run import run_controls
+from agentenv.controls.public_check_idempotency_runner import (
+    DEFAULT_PUBLIC_CHECK_IDEMPOTENCY_REPEATS,
+)
 from agentenv.evals.task_hash_compare import (
     compare_eval_task_hashes,
     render_eval_task_hash_comparison_summary,
@@ -265,16 +268,30 @@ def audit_reward_hacks(
 def run_control_calibration(
     task_pack: Path = typer.Option(..., "--task-pack", help="Path to task pack."),
     repeats: int = typer.Option(3, "--repeats", help="Attempts per control."),
+    public_check_idempotency_repeats: int = typer.Option(
+        DEFAULT_PUBLIC_CHECK_IDEMPOTENCY_REPEATS,
+        "--public-check-idempotency-repeats",
+        help="Consecutive seed-workspace runs per declared idempotent public check.",
+    ),
     out: Path = typer.Option(..., "--out", help="Directory for control artifacts."),
 ) -> None:
-    control_run = run_controls(task_pack, repeats, out)
+    control_run = run_controls(
+        task_pack,
+        repeats,
+        out,
+        public_check_idempotency_repeats=public_check_idempotency_repeats,
+    )
     failed = sum(not record.match for record in control_run.records)
-    style = "green" if failed == 0 else "red"
+    status = "PASS" if control_run.overall_match else "FAIL"
+    style = "green" if control_run.overall_match else "red"
     console.print(
-        f"[{style}]controls complete[/{style}] "
-        f"records={len(control_run.records)} failed={failed}"
+        f"[{style}]controls {status}[/{style}] "
+        f"records={len(control_run.records)} failed={failed} "
+        f"flake={control_run.flake_detection.status}"
     )
     console.print(f"wrote {control_run.out_dir / 'control_report.md'}")
+    if not control_run.overall_match:
+        raise typer.Exit(1)
 
 
 @sandbox_app.command("smoke")
@@ -738,6 +755,16 @@ def export_training_candidates(
         "--reviews",
         help="Trajectory review artifact directory.",
     ),
+    harness_audit: Path = typer.Option(
+        ...,
+        "--harness-audit",
+        help="PASS aggregate harness-audit artifact directory.",
+    ),
+    control_calibration: Path = typer.Option(
+        ...,
+        "--control-calibration",
+        help="Successful matching control-calibration artifact directory.",
+    ),
     out: Path = typer.Option(
         ...,
         "--out",
@@ -754,13 +781,18 @@ def export_training_candidates(
             trajectories,
             reviews,
             out,
+            harness_audit_dir=harness_audit,
+            control_calibration_dir=control_calibration,
             overwrite=overwrite,
         )
     except ArtifactDirectoryError as exc:
         raise typer.BadParameter(str(exc), param_hint="--out") from exc
     except ValueError as exc:
         raise typer.BadParameter(
-            str(exc), param_hint="--trajectories/--reviews"
+            str(exc),
+            param_hint=(
+                "--trajectories/--reviews/--harness-audit/--control-calibration"
+            ),
         ) from exc
 
     manifest = export.manifest
@@ -772,7 +804,9 @@ def export_training_candidates(
         f"not_trainable={manifest.not_trainable_count} "
         f"positive_sft={manifest.positive_sft_allowed_count} "
         f"negative_examples={manifest.negative_example_allowed_count} "
-        f"preference_data={manifest.preference_data_allowed_count}"
+        f"preference_data={manifest.preference_data_allowed_count} "
+        f"harness_audit={manifest.harness_audit_gate.harness_audit_run_id} "
+        f"controls={manifest.control_calibration_gate.control_run_id}"
     )
     console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
     console.print(

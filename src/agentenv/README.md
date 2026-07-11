@@ -265,6 +265,8 @@ review artifact:
 uv run agentenv training candidates export \
   --trajectories experiments/runs/dev_baseline_trajectory_export \
   --reviews experiments/runs/dev_baseline_trajectory_review \
+  --harness-audit experiments/harness_audit/current \
+  --control-calibration experiments/runs/control_calibration \
   --out experiments/runs/dev_baseline_training_candidates
 ```
 
@@ -275,9 +277,13 @@ experiments/runs/dev_baseline_training_candidates/manifest.json
 experiments/runs/dev_baseline_training_candidates/training_candidates.jsonl
 ```
 
-This export validates the trajectory/review join, builds candidate records in
-memory, and persists the resulting eligibility surface. It is not an SFT dataset
-or a preference dataset.
+This export validates the trajectory/review join and then fails closed unless
+the aggregate harness audit is `PASS`, the control calibration has matching
+outcomes and stable flake evidence, both artifacts bind the current harness
+runtime, every declared idempotent public check has an `IDEMPOTENT`
+calibration, and the calibrated composite task hashes cover the trajectory
+tasks. Only after those gates pass does it build and persist candidate records.
+It is not an SFT dataset or a preference dataset.
 
 ## Export Positive SFT Examples
 
@@ -439,6 +445,7 @@ rerun into an existing non-empty output directory.
 uv run agentenv controls run \
   --task-pack data/task_packs/repo_patch_python_v0 \
   --repeats 3 \
+  --public-check-idempotency-repeats 2 \
   --out experiments/runs/control_calibration
 ```
 
@@ -450,9 +457,11 @@ experiments/runs/control_calibration/control_results.jsonl
 experiments/runs/control_calibration/manifest.json
 ```
 
-`manifest.json` includes `flake_detection` for scorer-control
-repeat artifact drift. `overall_match` is true only when expected control
-outcomes match and checked repeat artifacts are stable.
+`manifest.json` includes exact harness-runtime provenance, composite hashes for
+the calibrated task set, and typed flake/idempotency evidence. `overall_match`
+is true only when expected scorer and agent control outcomes match, repeat
+artifacts are stable, and declared idempotent public checks calibrate
+successfully.
 
 ## Run Docker Smoke
 

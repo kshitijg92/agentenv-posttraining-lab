@@ -180,12 +180,12 @@ ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
 AgentAttemptArtifactSchemaVersion = Literal["agent_attempt_artifact_v0"]
 EvalRunArtifactSchemaVersion = Literal["eval_run_artifact_v0"]
 EvalSuiteArtifactSchemaVersion = Literal["eval_suite_artifact_v0"]
-ControlCalibrationArtifactSchemaVersion = Literal["control_calibration_artifact_v2"]
+ControlCalibrationArtifactSchemaVersion = Literal["control_calibration_artifact_v3"]
 ReplayRunArtifactSchemaVersion = Literal["replay_run_artifact_v0"]
 TrajectoryExportArtifactSchemaVersion = Literal["trajectory_export_artifact_v0"]
 TrajectoryReviewArtifactSchemaVersion = Literal["trajectory_review_artifact_v0"]
 TrainingCandidateExportArtifactSchemaVersion = Literal[
-    "training_candidate_export_artifact_v0"
+    "training_candidate_export_artifact_v1"
 ]
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v2"]
@@ -206,7 +206,7 @@ EVAL_SUITE_ARTIFACT_SCHEMA_VERSION: EvalSuiteArtifactSchemaVersion = (
     "eval_suite_artifact_v0"
 )
 CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION: ControlCalibrationArtifactSchemaVersion = (
-    "control_calibration_artifact_v2"
+    "control_calibration_artifact_v3"
 )
 REPLAY_RUN_ARTIFACT_SCHEMA_VERSION: ReplayRunArtifactSchemaVersion = (
     "replay_run_artifact_v0"
@@ -217,7 +217,7 @@ TRAJECTORY_EXPORT_ARTIFACT_SCHEMA_VERSION: TrajectoryExportArtifactSchemaVersion
 TRAJECTORY_REVIEW_ARTIFACT_SCHEMA_VERSION: TrajectoryReviewArtifactSchemaVersion = (
     "trajectory_review_artifact_v0"
 )
-TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateExportArtifactSchemaVersion = "training_candidate_export_artifact_v0"
+TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateExportArtifactSchemaVersion = "training_candidate_export_artifact_v1"
 POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVersion = (
     "positive_sft_export_artifact_v0"
 )
@@ -734,6 +734,8 @@ class ControlCalibrationManifest(ArtifactManifest):
     control_run_id: str = Field(min_length=1)
     created_at: str = Field(min_length=1)
     task_pack_path: str = Field(min_length=1)
+    runtime_provenance: HarnessRuntimeProvenance
+    task_hashes: EvalTaskHashes
     repeats: PositiveInt
     record_count: NonNegativeInt
     overall_match: bool
@@ -760,6 +762,75 @@ class ControlCalibrationManifest(ArtifactManifest):
             raise ValueError("control calibration manifests require records")
         if self.flake_detection.repeats != self.repeats:
             raise ValueError("flake_detection repeats must match control repeats")
+        selected_task_hashes = {
+            task.task_id: task for task in self.task_hashes.selected_tasks
+        }
+        selected_task_ids = set(selected_task_hashes)
+        record_task_ids = {record.task_id for record in self.records}
+        if record_task_ids != selected_task_ids:
+            raise ValueError(
+                "control record task ids must match the calibrated task hash set"
+            )
+        record_identities = [
+            (
+                record.control_layer,
+                record.task_id,
+                record.control_name,
+                record.repeat_index,
+            )
+            for record in self.records
+        ]
+        if len(record_identities) != len(set(record_identities)):
+            raise ValueError("control calibration record identities must be unique")
+        expected_repeat_indexes = set(range(self.repeats))
+        for layer_name, groups in (
+            ("scorer", self.flake_detection.groups.scorer),
+            ("agent", self.flake_detection.groups.agent),
+        ):
+            group_task_ids = {group.task_id for group in groups}
+            if group_task_ids != selected_task_ids:
+                raise ValueError(
+                    f"{layer_name} flake-group task ids must match the calibrated "
+                    "task hash set"
+                )
+            record_group_identities = {
+                (record.task_id, record.control_name)
+                for record in self.records
+                if record.control_layer == layer_name
+            }
+            flake_group_identities = {
+                (group.task_id, group.control_name) for group in groups
+            }
+            if flake_group_identities != record_group_identities:
+                raise ValueError(
+                    f"{layer_name} flake groups must exactly match control record "
+                    "groups"
+                )
+            for task_id, control_name in sorted(record_group_identities):
+                repeat_indexes = {
+                    record.repeat_index
+                    for record in self.records
+                    if record.control_layer == layer_name
+                    and record.task_id == task_id
+                    and record.control_name == control_name
+                }
+                if repeat_indexes != expected_repeat_indexes:
+                    raise ValueError(
+                        "control record groups must cover every declared repeat "
+                        f"index: {(layer_name, task_id, control_name)!r}"
+                    )
+        for calibration in self.flake_detection.public_check_idempotency:
+            task_hash = selected_task_hashes.get(calibration.task_id)
+            if task_hash is None:
+                raise ValueError(
+                    "public-check idempotency task ids must be in the calibrated "
+                    "task hash set"
+                )
+            if calibration.task_manifest_hash != task_hash.task_yaml_hash:
+                raise ValueError(
+                    "public-check idempotency task manifest hash must match the "
+                    "calibrated task hash"
+                )
         for record in self.records:
             if record.control_run_id != self.control_run_id:
                 raise ValueError("control records must match control_run_id")
@@ -981,6 +1052,33 @@ class TrajectoryReviewManifest(ArtifactManifest):
         return self
 
 
+class TrainingCandidateHarnessAuditManifestRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_type: Literal["harness_audit"]
+    artifact_schema_version: HarnessAuditArtifactSchemaVersion
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    harness_audit_run_id: str = Field(min_length=1)
+    harness_runtime_hash: ContentHash
+    status: Literal["PASS"]
+
+
+class TrainingCandidateControlCalibrationManifestRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_type: Literal["control_calibration"]
+    artifact_schema_version: ControlCalibrationArtifactSchemaVersion
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    control_run_id: str = Field(min_length=1)
+    harness_runtime_hash: ContentHash
+    task_pack_id: str = Field(min_length=1)
+    selected_task_hash_set: ContentHash
+    overall_match: Literal[True]
+    flake_detection_status: Literal["stable"]
+
+
 class TrainingCandidateExportManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.TRAINING_CANDIDATE_EXPORT.value
     expected_artifact_schema_version = TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION
@@ -992,6 +1090,8 @@ class TrainingCandidateExportManifest(ArtifactManifest):
     source_review_dir: str = Field(min_length=1)
     source_review_manifest_hash: str = Field(min_length=1)
     source_reviews_jsonl_hash: str = Field(min_length=1)
+    harness_audit_gate: TrainingCandidateHarnessAuditManifestRef
+    control_calibration_gate: TrainingCandidateControlCalibrationManifestRef
     trajectory_record_schema_version: TrajectoryRecordSchemaVersion
     trajectory_review_schema_version: TrajectoryReviewSchemaVersion
     training_candidate_record_schema_version: TrainingCandidateRecordSchemaVersion
@@ -1038,6 +1138,14 @@ class TrainingCandidateExportManifest(ArtifactManifest):
             raise ValueError(
                 "training_candidate_record_schema_version must be "
                 f"{TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION!r}"
+            )
+        if (
+            self.harness_audit_gate.harness_runtime_hash
+            != self.control_calibration_gate.harness_runtime_hash
+        ):
+            raise ValueError(
+                "harness audit and control calibration gates must use the same "
+                "harness runtime"
             )
 
         bounded_counts = (

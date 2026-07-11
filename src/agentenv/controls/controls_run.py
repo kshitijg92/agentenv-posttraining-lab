@@ -16,6 +16,12 @@ from agentenv.artifacts.manifests import ControlCalibrationManifest
 from agentenv.artifacts.payloads import CONTROL_FLAKE_DETECTION_SCHEMA_VERSION
 from agentenv.artifacts.payloads import ControlFlakeDetection
 from agentenv.artifacts.payloads import ControlCalibrationResultRecord
+from agentenv.artifacts.payloads import EvalTaskHashes
+from agentenv.audits.runtime import (
+    capture_harness_runtime_provenance,
+    harness_repo_root,
+)
+from agentenv.audits.schema import HarnessRuntimeProvenance
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     ExpectedAgentControlResult,
@@ -40,6 +46,7 @@ from agentenv.orchestrators.agent_task_run import (
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.tasks.schema import TaskManifest
+from agentenv.tasks.hashing import build_eval_task_hashes
 from agentenv.tasks.validate import load_task_manifest, validate_task_manifest_paths
 
 
@@ -107,6 +114,8 @@ class ControlRun:
     repeats: int
     public_check_idempotency_repeats: int
     created_at: str
+    runtime_provenance: HarnessRuntimeProvenance
+    task_hashes: EvalTaskHashes
     records: list[ControlRecord]
     flake_detection: ControlFlakeDetection
 
@@ -150,7 +159,11 @@ def run_controls(
     )
     public_check_idempotency_dir.mkdir(parents=True, exist_ok=True)
 
+    runtime_root = harness_repo_root()
+    runtime_provenance = capture_harness_runtime_provenance(runtime_root)
     tasks = _discover_control_tasks(task_pack_path)
+    task_ids = [task.task_id for task in tasks]
+    task_hashes = build_eval_task_hashes(task_pack_path, task_ids)
     control_run_id = f"controls_{uuid4().hex}"
     created_at = _utc_now()
     records: list[ControlRecord] = []
@@ -196,6 +209,10 @@ def run_controls(
         records=records,
         public_check_idempotency=public_check_idempotency,
     )
+    if capture_harness_runtime_provenance(runtime_root) != runtime_provenance:
+        raise ValueError("Harness runtime changed during control calibration")
+    if build_eval_task_hashes(task_pack_path, task_ids) != task_hashes:
+        raise ValueError("Task inputs changed during control calibration")
     control_run = ControlRun(
         control_run_id=control_run_id,
         task_pack_path=task_pack_path,
@@ -203,6 +220,8 @@ def run_controls(
         repeats=repeats,
         public_check_idempotency_repeats=public_check_idempotency_repeats,
         created_at=created_at,
+        runtime_provenance=runtime_provenance,
+        task_hashes=task_hashes,
         records=records,
         flake_detection=flake_detection,
     )
@@ -437,6 +456,8 @@ def _build_control_calibration_manifest(
             "control_run_id": control_run.control_run_id,
             "created_at": control_run.created_at,
             "task_pack_path": str(control_run.task_pack_path),
+            "runtime_provenance": control_run.runtime_provenance,
+            "task_hashes": control_run.task_hashes,
             "repeats": control_run.repeats,
             "record_count": len(control_run.records),
             "overall_match": control_run.overall_match,

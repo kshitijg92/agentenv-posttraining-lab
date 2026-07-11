@@ -37,6 +37,10 @@ from agentenv.artifacts.manifests import (
 )
 from agentenv.artifacts.payloads import CONTROL_FLAKE_DETECTION_SCHEMA_VERSION
 from agentenv.artifacts.payloads import EVAL_TASK_HASHES_SCHEMA_VERSION
+from agentenv.audits.schema import (
+    HARNESS_RUNTIME_PROVENANCE_SCHEMA_VERSION,
+    derive_harness_runtime_hash,
+)
 
 
 def test_root_manifest_loaders_accept_current_shapes(tmp_path: Path) -> None:
@@ -1121,31 +1125,20 @@ def test_replay_manifest_rejects_missing_root_artifact_refs(tmp_path: Path) -> N
 
 def test_control_manifest_rejects_false_overall_match(tmp_path: Path) -> None:
     manifest = _control_manifest()
-    manifest["record_count"] = 1
-    manifest["records"] = [
-        {
-            "control_run_id": "controls_001",
-            "task_id": "task_001",
-            "control_layer": "agent",
-            "control_name": "happy",
-            "repeat_index": 0,
-            "artifact_dir": "agent_control_scripts/task_001__happy__repeat_001",
-            "expected": {
-                "prompt_loop_status": "completed",
-            },
-            "actual": {
-                "agent_attempt_id": "agent_attempt_001",
-                "agent_run_status": "agent_loop_failed",
-                "prompt_loop_status": "max_turns_exceeded",
-                "tool_results": [],
-                "attempt_status": None,
-                "public_status": None,
-                "hidden_status": None,
-                "error_class": "MaxTurnsExceeded",
-            },
-            "match": False,
-        }
-    ]
+    agent_record = next(
+        record for record in manifest["records"] if record["control_layer"] == "agent"
+    )
+    agent_record["actual"] = {
+        "agent_attempt_id": "agent_attempt_001",
+        "agent_run_status": "agent_loop_failed",
+        "prompt_loop_status": "max_turns_exceeded",
+        "tool_results": [],
+        "attempt_status": None,
+        "public_status": None,
+        "hidden_status": None,
+        "error_class": "MaxTurnsExceeded",
+    }
+    agent_record["match"] = False
     path = _write_json(tmp_path / "manifest.json", manifest)
 
     with pytest.raises(
@@ -1165,6 +1158,21 @@ def test_control_manifest_rejects_flake_detection_repeat_mismatch(
     with pytest.raises(
         ValidationError,
         match="flake_detection repeats must match control repeats",
+    ):
+        load_control_calibration_manifest(path)
+
+
+def test_control_manifest_requires_every_record_repeat_index(
+    tmp_path: Path,
+) -> None:
+    manifest = _control_manifest()
+    manifest["repeats"] = 2
+    manifest["flake_detection"]["repeats"] = 2
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    with pytest.raises(
+        ValidationError,
+        match="control record groups must cover every declared repeat index",
     ):
         load_control_calibration_manifest(path)
 
@@ -1391,18 +1399,20 @@ def _control_manifest() -> dict[str, Any]:
         "control_run_id": "controls_001",
         "created_at": "2026-01-01T00:00:00Z",
         "task_pack_path": "data/task_packs/repo_patch_python_v0",
+        "runtime_provenance": _runtime_provenance(),
+        "task_hashes": _eval_task_hashes(),
         "repeats": 1,
-        "record_count": 1,
+        "record_count": 2,
         "overall_match": True,
         "flake_detection": {
             "schema_version": CONTROL_FLAKE_DETECTION_SCHEMA_VERSION,
             "status": "stable",
             "repeats": 1,
-            "groups_checked": 0,
+            "groups_checked": 2,
             "drifted_groups": 0,
             "groups": {
-                "scorer": [],
-                "agent": [],
+                "scorer": [_control_flake_group("oracle")],
+                "agent": [_control_flake_group("happy")],
             },
             "public_check_idempotency": [],
         },
@@ -1413,7 +1423,59 @@ def _control_manifest() -> dict[str, Any]:
             "results": "control_results.jsonl",
             "public_check_idempotency": "public_check_idempotency",
         },
-        "records": [_agent_control_record(match=True)],
+        "records": [
+            _scorer_control_record(),
+            _agent_control_record(match=True),
+        ],
+    }
+
+
+def _runtime_provenance() -> dict[str, object]:
+    harness_source_hash = "xxh64:aaaaaaaaaaaaaaaa"
+    pyproject_hash = "xxh64:bbbbbbbbbbbbbbbb"
+    uv_lock_hash = "xxh64:cccccccccccccccc"
+    runtime_hash = derive_harness_runtime_hash(
+        harness_source_hash=harness_source_hash,
+        root_pyproject_hash=pyproject_hash,
+        root_uv_lock_hash=uv_lock_hash,
+        python_implementation="cpython",
+        python_version="3.11.14",
+        sys_platform="linux",
+        platform_machine="x86_64",
+    )
+    return {
+        "schema_version": HARNESS_RUNTIME_PROVENANCE_SCHEMA_VERSION,
+        "harness_source_root": "src/agentenv",
+        "harness_source_hash": harness_source_hash,
+        "root_pyproject_path": "pyproject.toml",
+        "root_pyproject_hash": pyproject_hash,
+        "root_uv_lock_path": "uv.lock",
+        "root_uv_lock_hash": uv_lock_hash,
+        "python_implementation": "cpython",
+        "python_version": "3.11.14",
+        "sys_platform": "linux",
+        "platform_machine": "x86_64",
+        "harness_runtime_hash": runtime_hash,
+    }
+
+
+def _control_flake_group(control_name: str) -> dict[str, object]:
+    return {
+        "task_id": "task_001",
+        "control_name": control_name,
+        "status": "stable",
+        "reference_repeat_index": 0,
+        "drifted_repeats": [],
+        "items_compared": {
+            "normalization": "unit_normalization_v0",
+            "files": [
+                {
+                    "path": "result.json",
+                    "normalized_hash": "xxh64:dddddddddddddddd",
+                }
+            ],
+        },
+        "individual_drift_details": {},
     }
 
 
@@ -1439,6 +1501,31 @@ def _agent_control_record(*, match: bool) -> dict[str, Any]:
             "error_class": None if match else "MaxTurnsExceeded",
         },
         "match": match,
+    }
+
+
+def _scorer_control_record() -> dict[str, Any]:
+    return {
+        "control_run_id": "controls_001",
+        "task_id": "task_001",
+        "control_layer": "scorer",
+        "control_name": "oracle",
+        "repeat_index": 0,
+        "artifact_dir": "scorer_control_patches/task_001__oracle__repeat_001",
+        "expected": {
+            "attempt_status": "PASS",
+            "public_status": "PASS",
+            "hidden_status": "PASS",
+        },
+        "actual": {
+            "scorer_attempt_id": "scorer_attempt_001",
+            "attempt_status": "PASS",
+            "public_status": "PASS",
+            "hidden_status": "PASS",
+            "error_class": None,
+            "final_diff_hash": "xxh64:diff",
+        },
+        "match": True,
     }
 
 

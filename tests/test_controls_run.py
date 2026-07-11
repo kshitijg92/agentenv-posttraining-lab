@@ -181,7 +181,14 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert loaded_manifest.control_run_id == control_run.control_run_id
     assert loaded_manifest.record_count == expected_record_count
     assert manifest["artifact_type"] == "control_calibration"
-    assert manifest["artifact_schema_version"] == "control_calibration_artifact_v2"
+    assert manifest["artifact_schema_version"] == "control_calibration_artifact_v3"
+    assert manifest["runtime_provenance"] == control_run.runtime_provenance.model_dump(
+        mode="json"
+    )
+    assert manifest["task_hashes"] == control_run.task_hashes.model_dump(mode="json")
+    assert {task["task_id"] for task in manifest["task_hashes"]["selected_tasks"]} == (
+        TASK_IDS
+    )
     assert manifest["repeats"] == 2
     assert manifest["record_count"] == expected_record_count
     assert len(manifest["records"]) == expected_record_count

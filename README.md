@@ -215,8 +215,15 @@ Export training candidates after review:
 uv run agentenv training candidates export \
   --trajectories experiments/runs/dev_baseline_trajectory_export \
   --reviews experiments/runs/dev_baseline_trajectory_review \
+  --harness-audit experiments/harness_audit/current \
+  --control-calibration experiments/runs/control_calibration \
   --out experiments/runs/dev_baseline_training_candidates
 ```
+
+Candidate export fails before writing records unless the aggregate harness
+audit is `PASS`, control outcomes and flake detection are successful, both
+artifacts match the current harness runtime, and control task hashes cover the
+exact trajectory task versions.
 
 Export positive SFT examples:
 

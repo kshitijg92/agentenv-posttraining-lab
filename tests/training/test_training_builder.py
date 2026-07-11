@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
 from agentenv.orchestrators.eval_run import run_eval_config
 from agentenv.training.builder import (
@@ -21,6 +23,13 @@ from agentenv.trajectories.schema import (
 
 
 AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
+HARNESS_AUDIT_DIR = Path("/unit/harness-audit")
+CONTROL_CALIBRATION_DIR = Path("/unit/control-calibration")
+
+
+@pytest.fixture(autouse=True)
+def _use_stub_training_export_gates(stub_training_export_gates) -> None:
+    assert stub_training_export_gates.harness_audit_gate.status == "PASS"
 
 
 def test_build_training_candidate_records_blocks_pending_review(
@@ -31,7 +40,12 @@ def test_build_training_candidate_records_blocks_pending_review(
         policy="agent-happy",
     )
 
-    candidates = build_training_candidate_records(trajectory_export_dir, review_dir)
+    candidates = build_training_candidate_records(
+        trajectory_export_dir,
+        review_dir,
+        harness_audit_dir=HARNESS_AUDIT_DIR,
+        control_calibration_dir=CONTROL_CALIBRATION_DIR,
+    )
 
     assert len(candidates) == 1
     candidate = candidates[0]
@@ -56,7 +70,12 @@ def test_build_training_candidate_records_blocks_accepted_agent_control_training
     )
     write_single_review_decision(review_artifact, "accepted")
 
-    candidates = build_training_candidate_records(trajectory_export_dir, review_dir)
+    candidates = build_training_candidate_records(
+        trajectory_export_dir,
+        review_dir,
+        harness_audit_dir=HARNESS_AUDIT_DIR,
+        control_calibration_dir=CONTROL_CALIBRATION_DIR,
+    )
 
     candidate = candidates[0]
     assert candidate.review_status == "reviewed"
@@ -81,7 +100,12 @@ def test_build_training_candidate_records_blocks_accepted_agent_control_negative
     )
     write_single_review_decision(review_artifact, "accepted")
 
-    candidates = build_training_candidate_records(trajectory_export_dir, review_dir)
+    candidates = build_training_candidate_records(
+        trajectory_export_dir,
+        review_dir,
+        harness_audit_dir=HARNESS_AUDIT_DIR,
+        control_calibration_dir=CONTROL_CALIBRATION_DIR,
+    )
 
     candidate = candidates[0]
     assert candidate.review_decision == "accepted"
@@ -130,7 +154,12 @@ def test_build_training_candidate_records_rejected_review_blocks_training_paths(
     )
     write_single_review_decision(review_artifact, "rejected")
 
-    candidates = build_training_candidate_records(trajectory_export_dir, review_dir)
+    candidates = build_training_candidate_records(
+        trajectory_export_dir,
+        review_dir,
+        harness_audit_dir=HARNESS_AUDIT_DIR,
+        control_calibration_dir=CONTROL_CALIBRATION_DIR,
+    )
 
     candidate = candidates[0]
     assert candidate.review_decision == "rejected"

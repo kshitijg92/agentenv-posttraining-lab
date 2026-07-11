@@ -370,6 +370,64 @@ def test_standalone_audit_clis_use_typed_layer_runners(
     }
 
 
+def test_control_calibration_cli_forwards_public_check_repeats(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    call: dict[str, object] = {}
+    out_dir = tmp_path / "controls"
+
+    def fake_controls_runner(
+        task_pack: Path,
+        repeats: int,
+        out: Path,
+        *,
+        public_check_idempotency_repeats: int,
+    ) -> SimpleNamespace:
+        call.update(
+            {
+                "task_pack": task_pack,
+                "repeats": repeats,
+                "out": out,
+                "public_check_idempotency_repeats": (public_check_idempotency_repeats),
+            }
+        )
+        return SimpleNamespace(
+            records=[],
+            overall_match=True,
+            flake_detection=SimpleNamespace(status="stable"),
+            out_dir=out_dir,
+        )
+
+    monkeypatch.setattr(cli_module, "run_controls", fake_controls_runner)
+    task_pack = tmp_path / "task-pack"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "controls",
+            "run",
+            "--task-pack",
+            str(task_pack),
+            "--repeats",
+            "3",
+            "--public-check-idempotency-repeats",
+            "4",
+            "--out",
+            str(out_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "controls PASS records=0 failed=0 flake=stable" in result.output
+    assert call == {
+        "task_pack": task_pack,
+        "repeats": 3,
+        "out": out_dir,
+        "public_check_idempotency_repeats": 4,
+    }
+
+
 def test_harness_audit_cli_uses_atomic_composer(
     tmp_path: Path,
     monkeypatch,
@@ -456,7 +514,10 @@ def test_trajectories_export_cli_writes_eval_suite_export(tmp_path: Path) -> Non
     assert (trajectory_out / "trajectories.jsonl").is_file()
 
 
-def test_trajectories_review_init_cli_writes_review_artifact(tmp_path: Path) -> None:
+def test_trajectories_review_init_cli_writes_review_artifact(
+    tmp_path: Path,
+    stub_training_export_gates,
+) -> None:
     eval_out = tmp_path / "eval_run"
     trajectory_out = tmp_path / "trajectory_export"
     review_out = tmp_path / "trajectory_review"
@@ -548,6 +609,10 @@ def test_trajectories_review_init_cli_writes_review_artifact(tmp_path: Path) -> 
             str(trajectory_out),
             "--reviews",
             str(review_out),
+            "--harness-audit",
+            "/unit/harness-audit",
+            "--control-calibration",
+            "/unit/control-calibration",
             "--out",
             str(training_out),
         ],
@@ -562,6 +627,8 @@ def test_trajectories_review_init_cli_writes_review_artifact(tmp_path: Path) -> 
     assert "positive_sft=0" in training_result.output
     assert "negative_examples=0" in training_result.output
     assert "preference_data=0" in training_result.output
+    assert "harness_audit=harness_audit_unit" in training_result.output
+    assert "controls=controls_unit" in training_result.output
     assert "manifest.json" in training_result.output
     assert "training_candidates.jsonl" in training_result.output
     training_manifest = json.loads((training_out / "manifest.json").read_text())
@@ -569,6 +636,12 @@ def test_trajectories_review_init_cli_writes_review_artifact(tmp_path: Path) -> 
     assert training_manifest["record_count"] == 1
     assert training_manifest["trainable_count"] == 0
     assert training_manifest["analysis_only_count"] == 1
+    assert training_manifest["harness_audit_gate"] == (
+        stub_training_export_gates.harness_audit_gate.model_dump(mode="json")
+    )
+    assert training_manifest["control_calibration_gate"] == (
+        stub_training_export_gates.control_calibration_gate.model_dump(mode="json")
+    )
     assert (training_out / "training_candidates.jsonl").is_file()
 
     sft_out = tmp_path / "positive_sft"

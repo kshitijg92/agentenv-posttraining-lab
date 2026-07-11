@@ -128,8 +128,9 @@ cannot be believed.
 
 #### Status
 
-Design decision only. The current training-candidate export does not yet accept
-or validate control-calibration evidence.
+Implemented by the fail-closed training-candidate trust-gate checkpoint recorded
+below. Both the programmatic builder and CLI/export path now require validated
+harness-audit and control-calibration artifacts before constructing records.
 
 ### Mechanical-Redundancy Assessment Placement
 
@@ -1136,3 +1137,154 @@ an isolated rerun, and the complete two-worker rerun passed cleanly. The typed
 reward path now performs standalone layer persistence, task/case provenance
 hashing, and integrity readback for every exploit/control pair, so two workers
 is the recorded stable full-suite concurrency for this checkpoint.
+
+### Real Harness-Audit CLI Artifact
+
+Ran the aggregate CLI against the complete authored agent-task and scorer audit
+case roots:
+
+```text
+uv run agentenv harness audit \
+  --agent-cases data/harness_audit/agent_task_cases \
+  --scorer-cases data/harness_audit/scorer_cases \
+  --out experiments/harness_audit/week_09_harness_audit_v0
+```
+
+The persisted artifact is approximately 1.5 MiB and has:
+
+```text
+root status: PASS
+agent-task layer: 21 completed, 21 matched, 0 audit errors
+scorer layer: 12 completed, 12 matched, 0 audit errors
+harness runtime hash: xxh64:0cc432bd402d8aae
+task record hash: xxh64:30a95f75648e5aad
+```
+
+Reloading the artifact through `load_harness_audit_artifact` succeeded. This
+verified both child-manifest content hashes, both complete child payloads and
+per-case directory hashes, exact child/root runtime-provenance equality, the
+root report hash, record counts, and derived statuses. An additional inspection
+confirmed unique case IDs, source paths, and case-artifact refs in both layers.
+
+### Fail-Closed Training-Candidate Trust Gates
+
+#### Control-Calibration Provenance
+
+Advanced the control-calibration artifact schema from v2 to v3. Its manifest
+now binds the calibration to:
+
+```text
+complete HarnessRuntimeProvenance
+the exact composite EvalTaskHashes set for every calibrated task
+every typed scorer and agent control record
+every typed flake group and public-check idempotency calibration
+```
+
+The runner captures the harness runtime and task hash set before executing
+controls and recomputes both after execution. A mid-run source or task-input
+change aborts before manifest persistence.
+
+The manifest now requires unique control identities, exact task-ID agreement
+between records and task hashes, exact record/flake-group agreement in both
+layers, and complete repeat indexes `0..repeats-1` for every control group.
+Public-check calibration task IDs and task-manifest hashes must agree with the
+same composite task-hash set.
+
+The controls CLI exposes the independently configurable
+`--public-check-idempotency-repeats` option. Its terminal status now includes
+flake evidence through `ControlRun.overall_match`; an unstable calibration is
+reported as `FAIL` and exits nonzero even if every individual expectation
+matched.
+
+#### Candidate-Export Gate
+
+Advanced the training-candidate export artifact schema from v0 to v1 and added
+two required manifest-level gate records:
+
+```text
+harness_audit_gate
+control_calibration_gate
+```
+
+Each gate records the source artifact type/schema, absolute artifact directory,
+exact manifest hash, run ID, common harness-runtime hash, and required success
+state. The control gate additionally pins the task-pack ID and calibrated task
+hash set. Suite-level evidence is stored once in the export manifest rather
+than duplicated into every candidate row.
+
+Both `build_training_candidate_records` and
+`export_training_candidate_records` require explicit harness-audit and
+control-calibration directories. Before constructing candidate records, the
+gate validator requires:
+
+```text
+aggregate harness audit status PASS
+control overall_match true and flake status stable
+both artifacts use the exact current harness runtime
+the current authored harness-audit case-root hashes still match
+the trajectory export still binds its exact source eval manifest
+control composite task hashes cover and exactly match every trajectory task
+current task-pack bytes still reproduce the calibrated task hashes
+every currently declared idempotent public check has one matching IDEMPOTENT
+calibration with the exact task-manifest hash, list index, and command
+control_results.jsonl exactly matches the manifest's typed records
+all referenced public-check stdout/stderr files retain their content hashes
+```
+
+Gate validation occurs before output-directory creation, so missing, failed,
+incomplete, stale, or mismatched evidence produces no candidate artifact—not
+even analysis-only rows. Loading an existing candidate artifact reruns the same
+validation and requires the observed gate records, including both manifest
+hashes, to exactly equal the pinned records. Positive-SFT construction inherits
+this revalidation through the candidate-artifact loader.
+
+The CLI now requires `--harness-audit` and `--control-calibration` for training
+candidate export and reports both accepted run IDs.
+
+#### Real CLI Check
+
+Regenerated both trust artifacts after the source change:
+
+```text
+harness artifact: experiments/harness_audit/week_09_harness_audit_v1
+harness status: PASS (21/21 agent, 12/12 scorer)
+
+control artifact: experiments/runs/week_09_control_calibration_v0
+control status: PASS (48/48 records, stable flake evidence)
+
+common runtime hash: xxh64:6568c19237a239b7
+control task hash set: xxh64:034a1fb9a5c3435c
+```
+
+A fresh agent-control eval, trajectory export, and review produced a gated
+candidate artifact at:
+
+```text
+experiments/runs/week_09_training_gate_smoke_candidates
+```
+
+Independent loader validation succeeded and confirmed that its v1 manifest
+pins harness run `harness_audit_5a25058b5be24861ad67767f2eddd8ba`
+and control run `controls_6aea7b942b054ee8b345f74950603177`.
+The one control-policy trajectory remains analysis-only, and the downstream
+positive-SFT smoke artifact correctly contains zero examples.
+
+As a negative check, the historical Qwen trajectory/review artifacts were
+submitted to the new gate with the current controls. Export failed on a
+composite task-hash mismatch for `preserve_cli_error_codes` and left no output
+directory. This is expected: those trajectories predate the required public-
+check idempotency field and therefore describe older task bytes.
+
+#### Verification
+
+```text
+focused real trust-gate success/failure/tamper tests: 8 passed
+consolidated affected training/control/manifest/CLI/sandbox tests: 149 passed
+repo-wide Ruff: passed
+repo-wide Pyright: passed
+git diff --check: passed
+```
+
+The full repository suite was not rerun for this checkpoint. The previous
+checkpoint's clean full result remains historical evidence for the pre-gate
+source; the affected-surface run above is the current verification result.

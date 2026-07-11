@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from agentenv.artifacts.payloads import ControlFlakeDetection
+from agentenv.artifacts.payloads import ControlFlakeDetection, EvalTaskHashes
+from agentenv.audits.runtime import (
+    capture_harness_runtime_provenance,
+    harness_repo_root,
+)
 from agentenv.controls.controls_run import ControlRecord, ControlRun
 from agentenv.controls.reporting import render_control_report
 
@@ -14,6 +18,25 @@ def test_render_control_report_from_control_run_dataclasses(tmp_path: Path) -> N
         repeats=2,
         public_check_idempotency_repeats=2,
         created_at="2026-07-01T00:00:00Z",
+        runtime_provenance=capture_harness_runtime_provenance(harness_repo_root()),
+        task_hashes=EvalTaskHashes.model_validate(
+            {
+                "schema_version": "eval_task_hashes_v0",
+                "task_pack_id": "unit_task_pack",
+                "selected_task_hash_set": "xxh64:task-set",
+                "selected_tasks": [
+                    {
+                        "task_id": "task_a",
+                        "split": "practice",
+                        "task_record_hash": "xxh64:task-record",
+                        "task_yaml_hash": "xxh64:task-yaml",
+                        "required_task_files_hash": "xxh64:required",
+                        "full_task_dir_hash": "xxh64:full",
+                        "required_task_files": [],
+                    }
+                ],
+            }
+        ),
         records=[
             ControlRecord(
                 task_id="task_a",

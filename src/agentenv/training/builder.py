@@ -5,6 +5,10 @@ from agentenv.training.schema import (
     FinalTrainingEligibility,
     TrainingCandidateRecord,
 )
+from agentenv.training.gates import (
+    TrainingExportGateValidation,
+    validate_training_export_gates,
+)
 from agentenv.trajectories.review import (
     TrajectoryReviewValidation,
     validate_trajectory_review_artifact,
@@ -15,17 +19,35 @@ from agentenv.trajectories.schema import TrajectoryRecord, TrajectoryReviewRecor
 def build_training_candidate_records(
     trajectory_export_dir: Path,
     review_dir: Path,
+    *,
+    harness_audit_dir: Path,
+    control_calibration_dir: Path,
 ) -> tuple[TrainingCandidateRecord, ...]:
     validation = validate_trajectory_review_artifact(
         trajectory_export_dir,
         review_dir,
     )
-    return build_training_candidate_records_from_review_validation(validation)
+    gate_validation = validate_training_export_gates(
+        validation,
+        harness_audit_dir=harness_audit_dir,
+        control_calibration_dir=control_calibration_dir,
+    )
+    return build_training_candidate_records_from_review_validation(
+        validation,
+        gate_validation=gate_validation,
+    )
 
 
 def build_training_candidate_records_from_review_validation(
     validation: TrajectoryReviewValidation,
+    *,
+    gate_validation: TrainingExportGateValidation,
 ) -> tuple[TrainingCandidateRecord, ...]:
+    if gate_validation.harness_audit_gate.status != "PASS" or (
+        not gate_validation.control_calibration_gate.overall_match
+        or gate_validation.control_calibration_gate.flake_detection_status != "stable"
+    ):
+        raise ValueError("Training candidate construction requires validated gates")
     review_by_trajectory_id = {
         review.trajectory_id: review for review in validation.review_artifact.reviews
     }

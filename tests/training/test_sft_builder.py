@@ -37,6 +37,13 @@ from agentenv.trajectories.schema import (
 
 
 AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
+HARNESS_AUDIT_DIR = Path("/unit/harness-audit")
+CONTROL_CALIBRATION_DIR = Path("/unit/control-calibration")
+
+
+@pytest.fixture(autouse=True)
+def _use_stub_training_export_gates(stub_training_export_gates) -> None:
+    assert stub_training_export_gates.harness_audit_gate.status == "PASS"
 
 
 def test_build_positive_sft_examples_from_training_candidate_export(
@@ -84,7 +91,7 @@ def test_build_positive_sft_examples_rejects_source_trajectory_jsonl_drift(
     trajectories_path = trajectory_export_dir / "trajectories.jsonl"
     trajectories_path.write_text(trajectories_path.read_text() + "\n")
 
-    with pytest.raises(ValueError, match="Source trajectory JSONL hash mismatch"):
+    with pytest.raises(ValueError, match="Trajectory JSONL hash mismatch"):
         build_positive_sft_examples(candidate_export_dir)
 
 
@@ -237,6 +244,8 @@ def build_positive_sft_candidate_export(
         trajectory_export_dir,
         review_artifact.out_dir,
         tmp_path / "training-candidates",
+        harness_audit_dir=HARNESS_AUDIT_DIR,
+        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     return candidate_export.out_dir
 
@@ -260,6 +269,8 @@ def build_control_training_candidate_export(tmp_path: Path) -> Path:
         trajectory_export.out_dir,
         review_artifact.out_dir,
         tmp_path / "training-candidates",
+        harness_audit_dir=HARNESS_AUDIT_DIR,
+        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     return candidate_export.out_dir
 

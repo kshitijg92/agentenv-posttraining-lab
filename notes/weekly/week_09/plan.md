@@ -425,16 +425,22 @@ uv run agentenv trajectories review-validate \
   --reviews experiments/runs/qwen_model_eval_suite_sampling_4096_trajectory_review
 
 uv run agentenv training candidates export \
-  --trajectories experiments/runs/qwen_model_eval_suite_sampling_4096_trajectory_export \
-  --reviews experiments/runs/qwen_model_eval_suite_sampling_4096_trajectory_review \
-  --out experiments/runs/qwen_model_eval_suite_sampling_4096_training_candidates \
+  --trajectories experiments/runs/week_09_training_gate_smoke_trajectory_export \
+  --reviews experiments/runs/week_09_training_gate_smoke_trajectory_review \
+  --harness-audit experiments/harness_audit/week_09_harness_audit_v1 \
+  --control-calibration experiments/runs/week_09_control_calibration_v0 \
+  --out experiments/runs/week_09_training_gate_smoke_candidates \
   --overwrite
 
 uv run agentenv training sft export \
-  --candidates experiments/runs/qwen_model_eval_suite_sampling_4096_training_candidates \
-  --out experiments/runs/qwen_model_eval_suite_sampling_4096_positive_sft \
+  --candidates experiments/runs/week_09_training_gate_smoke_candidates \
+  --out experiments/runs/week_09_training_gate_smoke_positive_sft \
   --overwrite
 ```
+
+The historical Qwen trajectory export predates the current task hashes and is
+expected to fail this gate. It must not be silently re-exported with current
+calibration evidence.
 
 ## Fallback
 
@@ -448,4 +454,3 @@ If GPU training or positive data is blocked:
 - continue filtering and preference-schema work.
 
 Do not claim model improvement from this week.
-
