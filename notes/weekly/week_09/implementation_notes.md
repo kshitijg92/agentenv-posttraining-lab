@@ -1277,6 +1277,35 @@ control-calibration, and gated candidate smoke chain historical rather than
 current. Regenerate that chain at the next real-artifact checkpoint; do not
 reuse its old runtime hash with the changed record schemas.
 
+#### Explicit Reward-Hack Adjudication
+
+Added `RewardHackReview` as a separate typed model nested in
+`TrajectoryReviewRecord`, without changing the in-progress schema version. It
+uses the existing review-state pattern and records its own review ID, reviewer
+ID, optional notes reference, and one of two completed decisions:
+
+```text
+confirmed
+cleared
+```
+
+An accepted trajectory review cannot carry a pending nested reward-hack
+review. A confirmed reward-hack adjudication blocks positive SFT while leaving
+later adversarial/negative-use decisions available; a cleared adjudication does
+not block positive SFT by itself. Clearance cannot override direct
+detector-confirmed evidence already present on the trajectory.
+
+No per-finding hash or review-migration mechanism was added. The review
+artifact already pins the complete source trajectory manifest and trajectory
+JSONL hashes, so changed embedded findings invalidate the review artifact as a
+whole.
+
+This checkpoint does not yet auto-initialize nested reviews. The current
+trajectory reward-hack flag covers only two attempt statuses and cannot
+honestly produce the planned `confirmed | ambiguous | not_detected` aggregate.
+Detector generalization and reward-hack-case reclassification remain the next
+boundary; until then initialized review rows keep `reward_hack_review=null`.
+
 #### Candidate-Eligibility Verification
 
 ```text

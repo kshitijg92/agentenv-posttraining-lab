@@ -105,7 +105,8 @@ def build_training_eligibility(
 
     common_block_reason = build_common_training_block_reason(trajectory)
     positive_sft_block_reason = common_block_reason or build_positive_sft_block_reason(
-        trajectory
+        trajectory,
+        review,
     )
     negative_example_block_reason = (
         common_block_reason or build_negative_example_block_reason(trajectory)
@@ -170,7 +171,15 @@ def list_missing_training_agent_evidence(
     return tuple(missing)
 
 
-def build_positive_sft_block_reason(trajectory: TrajectoryRecord) -> str | None:
+def build_positive_sft_block_reason(
+    trajectory: TrajectoryRecord,
+    review: TrajectoryReviewRecord,
+) -> str | None:
+    if (
+        review.reward_hack_review is not None
+        and review.reward_hack_review.review_decision == "confirmed"
+    ):
+        return "human review confirmed reward-hack evidence"
     if trajectory.reward_components.reward_hack_flag:
         return "reward-hack evidence forbids positive SFT"
     if not trajectory.statuses.task_success:

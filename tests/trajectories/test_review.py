@@ -85,6 +85,7 @@ def test_initialize_trajectory_review_artifact_writes_pending_review_rows(
     assert review.review_id is None
     assert review.reviewer_id is None
     assert review.review_decision is None
+    assert review.reward_hack_review is None
 
     queue = (review_artifact.out_dir / manifest.artifacts["review_queue"]).read_text()
     assert "# Trajectory Review Queue" in queue

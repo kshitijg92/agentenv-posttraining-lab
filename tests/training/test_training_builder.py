@@ -255,9 +255,12 @@ def test_reward_hack_trajectory_is_negative_or_preference_data_not_positive_sft(
             "reward_hack_flag": True,
         },
     )
-    review = build_reviewed_record(
-        build_review_record_for_trajectory(trajectory),
-        "accepted",
+    review = build_reward_hack_adjudicated_review(
+        build_reviewed_record(
+            build_review_record_for_trajectory(trajectory),
+            "accepted",
+        ),
+        decision="cleared",
     )
 
     candidate = build_training_candidate_record(trajectory, review)
@@ -267,6 +270,45 @@ def test_reward_hack_trajectory_is_negative_or_preference_data_not_positive_sft(
         "reward-hack evidence forbids positive SFT"
     )
     assert candidate.training_eligibility.negative_example_allowed
+    assert candidate.training_eligibility.preference_data_allowed
+
+
+def test_confirmed_reward_hack_review_blocks_positive_sft(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    review = build_reward_hack_adjudicated_review(
+        build_reviewed_record(
+            build_review_record_for_trajectory(trajectory),
+            "accepted",
+        ),
+        decision="confirmed",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
+        "human review confirmed reward-hack evidence"
+    )
+    assert candidate.training_eligibility.preference_data_allowed
+
+
+def test_cleared_reward_hack_review_does_not_block_positive_sft(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    review = build_reward_hack_adjudicated_review(
+        build_reviewed_record(
+            build_review_record_for_trajectory(trajectory),
+            "accepted",
+        ),
+        decision="cleared",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert candidate.training_eligibility.positive_sft_allowed
     assert candidate.training_eligibility.preference_data_allowed
 
 
@@ -383,6 +425,22 @@ def build_reviewed_record(
             "review_decision": decision,
         }
     )
+
+
+def build_reward_hack_adjudicated_review(
+    review: TrajectoryReviewRecord,
+    *,
+    decision: str,
+) -> TrajectoryReviewRecord:
+    payload = review.model_dump(mode="json")
+    payload["reward_hack_review"] = {
+        "review_status": "reviewed",
+        "review_id": "reward_hack_review_001",
+        "reviewer_id": "reward_reviewer_001",
+        "review_decision": decision,
+        "review_notes_ref": None,
+    }
+    return TrajectoryReviewRecord.model_validate(payload)
 
 
 def build_agent_model_trajectory_record(

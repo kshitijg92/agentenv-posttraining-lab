@@ -525,6 +525,7 @@ def _base_review_payload() -> dict[str, Any]:
         "reviewer_id": None,
         "review_decision": None,
         "review_notes_ref": None,
+        "reward_hack_review": None,
     }
 
 
@@ -579,6 +580,70 @@ def test_reviewed_records_accept_review_decision_enum() -> None:
     record = TrajectoryReviewRecord.model_validate(payload)
 
     assert record.review_decision == "accepted"
+
+
+def test_reward_hack_review_rejects_details_while_not_reviewed() -> None:
+    payload = _review_payload(
+        reward_hack_review={
+            "review_status": "not_reviewed",
+            "review_id": "reward_hack_review_001",
+            "reviewer_id": None,
+            "review_decision": None,
+            "review_notes_ref": None,
+        }
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="not_reviewed reward-hack reviews cannot include review details",
+    ):
+        TrajectoryReviewRecord.model_validate(payload)
+
+
+def test_accepted_trajectory_review_requires_completed_reward_hack_review() -> None:
+    payload = _review_payload(
+        review_status="reviewed",
+        review_id="review_001",
+        reviewer_id="kshitij",
+        review_decision="accepted",
+        reward_hack_review={
+            "review_status": "not_reviewed",
+            "review_id": None,
+            "reviewer_id": None,
+            "review_decision": None,
+            "review_notes_ref": None,
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="accepted trajectory reviews require completed reward-hack review",
+    ):
+        TrajectoryReviewRecord.model_validate(payload)
+
+
+@pytest.mark.parametrize("reward_hack_decision", ["confirmed", "cleared"])
+def test_accepted_trajectory_review_allows_adjudicated_reward_hack_review(
+    reward_hack_decision: str,
+) -> None:
+    payload = _review_payload(
+        review_status="reviewed",
+        review_id="review_001",
+        reviewer_id="kshitij",
+        review_decision="accepted",
+        reward_hack_review={
+            "review_status": "reviewed",
+            "review_id": "reward_hack_review_001",
+            "reviewer_id": "reviewer_002",
+            "review_decision": reward_hack_decision,
+            "review_notes_ref": _artifact("reward_hack_review_notes.jsonl"),
+        },
+    )
+
+    record = TrajectoryReviewRecord.model_validate(payload)
+
+    assert record.reward_hack_review is not None
+    assert record.reward_hack_review.review_decision == reward_hack_decision
 
 
 def test_reviewed_records_reject_freeform_review_decision() -> None:

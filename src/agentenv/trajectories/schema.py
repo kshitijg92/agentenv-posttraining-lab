@@ -18,6 +18,7 @@ RewardComponentsVersion = Literal["reward_components_v0"]
 GradeState = Literal["scored_pass", "scored_fail", "cannot_grade"]
 ReviewStatus = Literal["not_reviewed", "reviewed"]
 ReviewDecision = Literal["accepted", "rejected", "needs_followup"]
+RewardHackReviewDecision = Literal["confirmed", "cleared"]
 
 TRAJECTORY_RECORD_SCHEMA_VERSION: TrajectoryRecordSchemaVersion = "trajectory_record_v0"
 TRAJECTORY_REVIEW_SCHEMA_VERSION: TrajectoryReviewSchemaVersion = "trajectory_review_v0"
@@ -216,6 +217,41 @@ class LeakageEvidence(BaseModel):
     leakage_check_version: str = Field(min_length=1)
 
 
+class RewardHackReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    review_status: ReviewStatus
+    review_id: str | None = Field(default=None, min_length=1)
+    reviewer_id: str | None = Field(default=None, min_length=1)
+    review_decision: RewardHackReviewDecision | None = None
+    review_notes_ref: ArtifactRef | None = None
+
+    @model_validator(mode="after")
+    def validate_review_state(self) -> "RewardHackReview":
+        if self.review_status == "not_reviewed":
+            if any(
+                value is not None
+                for value in (
+                    self.review_id,
+                    self.reviewer_id,
+                    self.review_decision,
+                    self.review_notes_ref,
+                )
+            ):
+                raise ValueError(
+                    "not_reviewed reward-hack reviews cannot include review details"
+                )
+            return self
+
+        if self.review_id is None:
+            raise ValueError("reviewed reward-hack reviews require review_id")
+        if self.reviewer_id is None:
+            raise ValueError("reviewed reward-hack reviews require reviewer_id")
+        if self.review_decision is None:
+            raise ValueError("reviewed reward-hack reviews require review_decision")
+        return self
+
+
 class TrajectoryReviewRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -229,6 +265,7 @@ class TrajectoryReviewRecord(BaseModel):
     reviewer_id: str | None = Field(default=None, min_length=1)
     review_decision: ReviewDecision | None = None
     review_notes_ref: ArtifactRef | None = None
+    reward_hack_review: RewardHackReview | None = None
 
     @model_validator(mode="after")
     def validate_review_state(self) -> "TrajectoryReviewRecord":
@@ -251,6 +288,14 @@ class TrajectoryReviewRecord(BaseModel):
             raise ValueError("reviewed records require reviewer_id")
         if self.review_decision is None:
             raise ValueError("reviewed records require review_decision")
+        if (
+            self.review_decision == "accepted"
+            and self.reward_hack_review is not None
+            and self.reward_hack_review.review_status != "reviewed"
+        ):
+            raise ValueError(
+                "accepted trajectory reviews require completed reward-hack review"
+            )
         return self
 
 
