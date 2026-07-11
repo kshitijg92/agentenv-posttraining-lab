@@ -51,6 +51,8 @@ def test_build_training_candidate_records_blocks_pending_review(
     candidate = candidates[0]
     assert candidate.review_status == "not_reviewed"
     assert candidate.review_decision is None
+    assert candidate.mechanical_redundancy_assessment.evaluation_status == "complete"
+    assert candidate.mechanical_redundancy_assessment.blocks == []
     assert candidate.training_eligibility.analysis_allowed
     assert candidate.training_eligibility.is_analysis_only
     assert not candidate.training_eligibility.positive_sft_allowed
@@ -139,6 +141,8 @@ def test_build_training_candidate_record_allows_accepted_agent_model_training_pa
 
     assert candidate.policy_id == "local-model"
     assert candidate.review_decision == "accepted"
+    assert candidate.mechanical_redundancy_assessment.evaluation_status == "complete"
+    assert candidate.mechanical_redundancy_assessment.blocks == []
     assert candidate.training_eligibility.positive_sft_allowed
     assert not candidate.training_eligibility.negative_example_allowed
     assert candidate.training_eligibility.preference_data_allowed

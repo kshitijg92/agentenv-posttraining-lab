@@ -28,6 +28,9 @@ from agentenv.audits.runtime import (
     capture_harness_runtime_provenance,
     harness_repo_root,
 )
+from agentenv.controls.public_check_idempotency_schema import (
+    PublicCheckIdempotencyCalibration,
+)
 from agentenv.hashing import hash_directory, hash_file
 from agentenv.tasks.hashing import build_eval_task_hashes
 from agentenv.tasks.validate import load_task_manifest, load_task_pack_manifest
@@ -38,6 +41,7 @@ from agentenv.trajectories.review import TrajectoryReviewValidation
 class TrainingExportGateValidation:
     harness_audit_gate: TrainingCandidateHarnessAuditManifestRef
     control_calibration_gate: TrainingCandidateControlCalibrationManifestRef
+    public_check_idempotency_calibrations: tuple[PublicCheckIdempotencyCalibration, ...]
 
 
 def validate_training_export_gates(
@@ -116,6 +120,9 @@ def validate_training_export_gates(
             ),
             overall_match=True,
             flake_detection_status="stable",
+        ),
+        public_check_idempotency_calibrations=tuple(
+            control_manifest.flake_detection.public_check_idempotency
         ),
     )
 

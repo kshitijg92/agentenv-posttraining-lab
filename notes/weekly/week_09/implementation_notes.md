@@ -84,7 +84,8 @@ proves that omission fails manifest validation.
 
 Runtime tool-result workspace evidence, repeatability calibration execution,
 and control-flake integration are implemented as described below.
-Redundant-block detection is not implemented yet.
+Redundant-block detection is implemented by the candidate-assessment checkpoint
+recorded below.
 
 Adding the required field intentionally changes every task-manifest hash.
 Existing Qwen and trajectory artifacts remain historical evidence for the old
@@ -155,8 +156,8 @@ that record.
 
 #### Status
 
-Placement is decided. The redundant-block assessment schema and detector remain
-to be designed.
+Placement, schema, detector, and candidate integration are implemented by the
+candidate-assessment checkpoint recorded below.
 
 ### Public-Check Idempotence Calibration Statuses
 
@@ -1477,6 +1478,81 @@ No compatibility shim or schema-version bump was added.
 focused reward-hack audit/detection/schema and leakage tests: 73 passed
 focused trajectory/schema/review/training-builder tests: 78 passed
 focused reward/trajectory/training export tests: 12 passed
+targeted Ruff: passed
+repo-wide Pyright: passed
+git diff --check: passed
+```
+
+The full repository pytest suite was not run for this checkpoint.
+
+#### Mechanical Tool-Call Redundancy Candidate Assessment
+
+Added a required `MechanicalRedundancyAssessment` to
+`TrainingCandidateRecord`. The assessment owns producer provenance once through
+`detector_version` and `detector_code_hash`, an explicit
+`complete | incomplete` evaluation status, and a list of structured
+`MechanicallyRedundantToolCallBlock` findings. An empty block list means the
+detector completed and found no qualifying block; it cannot represent a failed
+or skipped evaluation.
+
+Each block records:
+
+```text
+tool_name
+arguments_hash
+baseline_tool_call_id
+ordered redundant_tool_call_ids
+redundant_call_count
+stable_workspace_hash
+normalized_observation_hash
+optional public_check_index for run_tests only
+```
+
+The count must exactly match the redundant ID list. IDs are unique within and
+across blocks, the baseline cannot be one of its own redundant calls, and
+`public_check_index` is required only for `run_tests`. Source IDs are the stable
+`tool_call_NNNN` identities already persisted in the prompt-loop transcript;
+the candidate export manifest continues to pin the source trajectory and
+suite-level trust artifacts rather than copying them into every block.
+
+The detector evaluates maximal consecutive runs only. The first successful
+call is the baseline. Later calls qualify when they have the same tool and
+validated semantic argument hash, produce the same canonical model-visible
+tool observation, begin from the baseline's resulting canonical workspace
+state, and leave that state unchanged. This allows the first `write_file` to
+establish a new state while correctly labeling an immediate identical second
+write as redundant. Tool errors and timeouts do not qualify. Alternating cycles
+such as `read, write, read, write` remain outside the v0 detector.
+
+The normalized observation hash is derived from the JSON content actually
+shown to the model. Evaluator-only duration, workspace hashes, and successful
+runner stdout/stderr therefore do not create superficial observation drift.
+Canonical tool argument hashing now lives in `agentenv.tools.hashing`, shared
+by execution and assessment rather than being duplicated or placed in a schema
+module.
+
+Repeated `run_tests` calls receive the label only when the command identifies
+one task public check, that check declares `are_tests_idempotent: true`, and the
+validated control artifact contains the exact matching `IDEMPOTENT`
+calibration. A normally completed failing validator result remains eligible:
+tool execution succeeded even though `passed=false`. Missing or mismatched
+calibration and observed calibrated runtime drift produce an incomplete
+assessment with no partial blocks.
+
+Candidate construction validates the prompt-loop and task-manifest artifact
+hashes before assessment. Hash mismatch or missing hash-pinned source bytes is
+an artifact-integrity failure rather than an ordinary detector finding.
+Trajectory-specific evidence that cannot be interpreted is represented as an
+incomplete, redacted assessment. This checkpoint records the interpretation
+but does not yet change positive-SFT, negative-example, or preference
+eligibility; those consumers can choose repair, masking, rejection, or
+comparison policies explicitly.
+
+No compatibility shim or schema-version bump was added.
+
+```text
+focused training tests: 78 passed
+focused tool/prompt-loop tests: 107 passed
 targeted Ruff: passed
 repo-wide Pyright: passed
 git diff --check: passed

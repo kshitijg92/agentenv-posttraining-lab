@@ -1,6 +1,13 @@
 from pathlib import Path
+from collections.abc import Sequence
 
+from agentenv.controls.public_check_idempotency_schema import (
+    PublicCheckIdempotencyCalibration,
+)
 from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
+from agentenv.training.mechanical_redundancy import (
+    assess_trajectory_mechanical_redundancy,
+)
 from agentenv.training.schema import (
     TrainingCandidateRecord,
     TrainingEligibility,
@@ -64,6 +71,9 @@ def build_training_candidate_records_from_review_validation(
         build_training_candidate_record(
             trajectory,
             review_by_trajectory_id[trajectory.identity.trajectory_id],
+            public_check_calibrations=(
+                gate_validation.public_check_idempotency_calibrations
+            ),
         )
         for trajectory in validation.source_export.records
     )
@@ -72,6 +82,8 @@ def build_training_candidate_records_from_review_validation(
 def build_training_candidate_record(
     trajectory: TrajectoryRecord,
     review: TrajectoryReviewRecord,
+    *,
+    public_check_calibrations: Sequence[PublicCheckIdempotencyCalibration] = (),
 ) -> TrainingCandidateRecord:
     return TrainingCandidateRecord(
         trajectory_id=trajectory.identity.trajectory_id,
@@ -82,6 +94,12 @@ def build_training_candidate_record(
         review_id=review.review_id,
         reviewer_id=review.reviewer_id,
         review_decision=review.review_decision,
+        mechanical_redundancy_assessment=(
+            assess_trajectory_mechanical_redundancy(
+                trajectory,
+                public_check_calibrations=public_check_calibrations,
+            )
+        ),
         training_eligibility=build_training_eligibility(trajectory, review),
     )
 

@@ -41,6 +41,7 @@ def stub_training_export_gates(
             overall_match=True,
             flake_detection_status="stable",
         ),
+        public_check_idempotency_calibrations=(),
     )
 
     def fake_validation(*args: Any, **kwargs: Any) -> TrainingExportGateValidation:

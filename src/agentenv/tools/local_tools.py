@@ -1,17 +1,15 @@
-import json
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from subprocess import TimeoutExpired
 from time import perf_counter
 
-import xxhash
 from pydantic import ValidationError
 
 from agentenv.agents.schema import AgentTaskView, ToolCallAction
 from agentenv.hashing import hash_directory
 from agentenv.runners.public_check_runner import run_public_check
 from agentenv.security.secrets import redact_secrets
+from agentenv.tools.hashing import hash_tool_arguments, hash_tool_input
 from agentenv.tools.schema import (
     TOOL_REGISTRY,
     ListFilesInput,
@@ -85,7 +83,7 @@ def _execute_tool_call(
     started: float,
 ) -> _ToolExecutionOutcome:
     tool_name = tool_call_action.tool_name
-    arguments_hash = _arguments_hash(tool_call_action.arguments)
+    arguments_hash = hash_tool_arguments(tool_call_action.arguments)
 
     if tool_name not in agent_task_view.allowed_tools:
         return _error_result(
@@ -116,7 +114,7 @@ def _execute_tool_call(
             error_message=str(exc),
         )
 
-    arguments_hash = _validated_arguments_hash(tool_input)
+    arguments_hash = hash_tool_input(tool_input)
     if tool_name == "list_files":
         return _execute_list_files(
             tool_name=tool_name,
@@ -470,15 +468,6 @@ def _resolve_workspace_path(workspace_path: Path, requested_path: str) -> Path |
     if workspace_root == resolved_path or workspace_root in resolved_path.parents:
         return resolved_path
     return None
-
-
-def _arguments_hash(arguments: Mapping[str, object]) -> str:
-    payload = json.dumps(arguments, sort_keys=True, separators=(",", ":"))
-    return f"xxh64:{xxhash.xxh64_hexdigest(payload.encode())}"
-
-
-def _validated_arguments_hash(tool_input: ToolInput) -> str:
-    return _arguments_hash(tool_input.model_dump(mode="json"))
 
 
 def _hash_workspace_state(workspace_path: Path, *, phase: str) -> str:

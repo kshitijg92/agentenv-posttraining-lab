@@ -7,6 +7,8 @@ from agentenv.agents.prompts import AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
 from agentenv.training.schema import (
     POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
     TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
+    MechanicalRedundancyAssessment,
+    MechanicallyRedundantToolCallBlock,
     PositiveSFTExampleRecord,
     PositiveSFTMessage,
     PositiveSFTTaskInput,
@@ -42,7 +44,36 @@ def _candidate_payload(**updates: Any) -> dict[str, Any]:
         "review_id": "review_001",
         "reviewer_id": "kshitij",
         "review_decision": "accepted",
+        "mechanical_redundancy_assessment": _mechanical_assessment_payload(),
         "training_eligibility": _eligibility_payload(),
+    }
+    payload.update(updates)
+    return payload
+
+
+def _mechanical_assessment_payload(**updates: Any) -> dict[str, Any]:
+    payload = {
+        "detector_version": "mechanical_redundancy_detector_v0",
+        "detector_code_hash": "xxh64:aaaaaaaaaaaaaaaa",
+        "evaluation_status": "complete",
+        "blocks": [],
+        "error_class": None,
+        "error_message": None,
+    }
+    payload.update(updates)
+    return payload
+
+
+def _redundant_block_payload(**updates: Any) -> dict[str, Any]:
+    payload = {
+        "tool_name": "read_file",
+        "arguments_hash": "xxh64:bbbbbbbbbbbbbbbb",
+        "baseline_tool_call_id": "tool_call_0001",
+        "redundant_tool_call_ids": ["tool_call_0002", "tool_call_0003"],
+        "redundant_call_count": 2,
+        "stable_workspace_hash": "xxh64:cccccccccccccccc",
+        "normalized_observation_hash": "xxh64:dddddddddddddddd",
+        "public_check_index": None,
     }
     payload.update(updates)
     return payload
@@ -126,9 +157,81 @@ def test_training_candidate_record_accepts_reviewed_candidate() -> None:
     assert record.trajectory_id == "trajectory_001"
     assert record.review_id == "review_001"
     assert record.review_decision == "accepted"
+    assert record.mechanical_redundancy_assessment.evaluation_status == "complete"
+    assert record.mechanical_redundancy_assessment.blocks == []
     assert record.training_eligibility.is_trainable
     assert not record.training_eligibility.is_analysis_only
     assert not record.training_eligibility.is_not_trainable
+
+
+def test_mechanically_redundant_tool_call_block_accepts_ordered_source_ids() -> None:
+    block = MechanicallyRedundantToolCallBlock.model_validate(
+        _redundant_block_payload()
+    )
+
+    assert block.baseline_tool_call_id == "tool_call_0001"
+    assert block.redundant_tool_call_ids == ["tool_call_0002", "tool_call_0003"]
+    assert block.redundant_call_count == 2
+
+
+def test_mechanically_redundant_tool_call_block_requires_exact_repeat_count() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="redundant_call_count must equal redundant_tool_call_ids length",
+    ):
+        MechanicallyRedundantToolCallBlock.model_validate(
+            _redundant_block_payload(redundant_call_count=1)
+        )
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "public_check_index", "match"),
+    [
+        ("run_tests", None, "run_tests redundancy requires public_check_index"),
+        ("read_file", 0, "public_check_index is only valid for run_tests"),
+    ],
+)
+def test_mechanically_redundant_tool_call_block_scopes_public_check_index(
+    tool_name: str,
+    public_check_index: int | None,
+    match: str,
+) -> None:
+    with pytest.raises(ValidationError, match=match):
+        MechanicallyRedundantToolCallBlock.model_validate(
+            _redundant_block_payload(
+                tool_name=tool_name,
+                public_check_index=public_check_index,
+            )
+        )
+
+
+def test_incomplete_mechanical_redundancy_assessment_requires_error() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="incomplete mechanical-redundancy assessments require errors",
+    ):
+        MechanicalRedundancyAssessment.model_validate(
+            _mechanical_assessment_payload(evaluation_status="incomplete")
+        )
+
+
+def test_mechanical_redundancy_assessment_rejects_overlapping_blocks() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="mechanical-redundancy blocks cannot share tool-call ids",
+    ):
+        MechanicalRedundancyAssessment.model_validate(
+            _mechanical_assessment_payload(
+                blocks=[
+                    _redundant_block_payload(),
+                    _redundant_block_payload(
+                        baseline_tool_call_id="tool_call_0003",
+                        redundant_tool_call_ids=["tool_call_0004"],
+                        redundant_call_count=1,
+                    ),
+                ]
+            )
+        )
 
 
 def test_training_eligibility_exposes_analysis_only_utility() -> None:
