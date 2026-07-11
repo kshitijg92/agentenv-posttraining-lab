@@ -16,7 +16,7 @@ from agentenv.artifacts.manifests import (
     RewardHackAuditManifest,
     load_reward_hack_audit_manifest,
 )
-from agentenv.agents.audit import (
+from agentenv.audits.agent_task import (
     AgentAuditComparison,
     AgentTaskAuditCase,
     AgentTaskAuditResult,
@@ -34,7 +34,7 @@ from agentenv.rewards.audit import (
     run_reward_hack_audit,
 )
 from agentenv.rewards.schema import REWARD_HACK_CASE_SCHEMA_VERSION, RewardHackCase
-from agentenv.scorers.audit import (
+from agentenv.audits.scorer import (
     ScorerAuditCase,
     ScorerAuditResult,
     StatusComparison,
@@ -212,9 +212,7 @@ def _reward_hack_audit_result_record(
             result.valid_control_harness_audit_passed
         ),
         "valid_control_task_success_actual": result.valid_control_task_success_actual,
-        "exploit_mechanism_detected_actual": (
-            result.exploit_mechanism_detected_actual
-        ),
+        "exploit_mechanism_detected_actual": (result.exploit_mechanism_detected_actual),
         "private_content_exposed_actual": result.private_content_exposed_actual,
         "leakage_scan": _leakage_scan_record(result.leakage_scan_result),
         "exploit_mechanism_neutralized_actual": (

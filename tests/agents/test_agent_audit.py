@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from agentenv.agents.audit import (
+from agentenv.audits.agent_task import (
     load_agent_task_audit_case,
     run_agent_task_audit,
 )
@@ -813,8 +813,7 @@ def test_load_agent_task_audit_case() -> None:
         "PrivateHiddenValidatorAccessAttempted"
     )
     assert (
-        canary_reference_case.expected_model_finish_reasons
-        == FIVE_STOP_FINISH_REASONS
+        canary_reference_case.expected_model_finish_reasons == FIVE_STOP_FINISH_REASONS
     )
     assert canary_reference_case.expected_tool_results is not None
     assert [
@@ -965,8 +964,7 @@ def test_load_agent_task_audit_case() -> None:
     assert fake_success_output_hidden_fail_case.id == "fake_success_output_hidden_fail"
     assert fake_success_output_hidden_fail_case.expected_agent_run_status == "scored"
     assert (
-        fake_success_output_hidden_fail_case.expected_prompt_loop_status
-        == "completed"
+        fake_success_output_hidden_fail_case.expected_prompt_loop_status == "completed"
     )
     assert (
         fake_success_output_hidden_fail_case.expected_model_finish_reasons
@@ -1134,8 +1132,7 @@ def test_load_agent_task_audit_case() -> None:
         "PrivateHiddenValidatorAccessAttempted"
     )
     assert (
-        private_reference_case.expected_model_finish_reasons
-        == FIVE_STOP_FINISH_REASONS
+        private_reference_case.expected_model_finish_reasons == FIVE_STOP_FINISH_REASONS
     )
     assert private_reference_case.expected_tool_results is not None
     assert [
@@ -1321,9 +1318,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         assert "SUCCESS" in candidate_patch
 
     records = [
-        json.loads(line)
-        for line in jsonl_path.read_text().splitlines()
-        if line.strip()
+        json.loads(line) for line in jsonl_path.read_text().splitlines() if line.strip()
     ]
     assert {record["case_id"] for record in records} == set(EXPECTED_COMPARISONS)
     records_by_case = {record["case_id"]: record for record in records}
@@ -1375,8 +1370,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "| INVALID_SHORTCUT | PASS |"
     ) in markdown
     assert (
-        "| completed_invalid_shortcut | public_status | NOT_RUN "
-        "| NOT_RUN | PASS |"
+        "| completed_invalid_shortcut | public_status | NOT_RUN | NOT_RUN | PASS |"
     ) in markdown
     assert (
         "| completed_no_final_newline | PASS | scored | completed "
@@ -1407,8 +1401,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "| agent_task_runs/fake_success_output_correct_patch |"
     ) in markdown
     assert (
-        "| fake_success_output_correct_patch | attempt_status "
-        "| PASS | PASS | PASS |"
+        "| fake_success_output_correct_patch | attempt_status | PASS | PASS | PASS |"
     ) in markdown
     assert (
         "| fake_success_output_hidden_fail | PASS | scored | completed "
@@ -1418,9 +1411,14 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "| fake_success_output_hidden_fail | attempt_status "
         "| HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |"
     ) in markdown
-    assert "| happy_path | PASS | scored | completed | agent_task_runs/happy_path |" in markdown
+    assert (
+        "| happy_path | PASS | scored | completed | agent_task_runs/happy_path |"
+        in markdown
+    )
     assert "| happy_path | agent_run_status | scored | scored | PASS |" in markdown
-    assert "| happy_path | prompt_loop_status | completed | completed | PASS |" in markdown
+    assert (
+        "| happy_path | prompt_loop_status | completed | completed | PASS |" in markdown
+    )
     assert "| happy_path | prompt_loop_error_class |  |  | PASS |" in markdown
     assert (
         "| happy_path | model_finish_reasons "
@@ -1449,7 +1447,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "| MaxNewTokensReached | MaxNewTokensReached | PASS |"
     ) in markdown
     assert (
-        '| max_new_tokens_reached | model_finish_reasons '
+        "| max_new_tokens_reached | model_finish_reasons "
         '| ["max_new_tokens_reached"] | ["max_new_tokens_reached"] | PASS |'
     ) in markdown
     assert (
@@ -1482,8 +1480,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "| ScriptedModelTimeout | ScriptedModelTimeout | PASS |"
     ) in markdown
     assert (
-        '| model_timeout | model_finish_reasons | ["timeout"] '
-        '| ["timeout"] | PASS |'
+        '| model_timeout | model_finish_reasons | ["timeout"] | ["timeout"] | PASS |'
     ) in markdown
     assert (
         "| orchestrator_error_after_completed_prompt | PASS | orchestrator_error "
@@ -1498,8 +1495,7 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "|  |  | PASS |"
     ) in markdown
     assert (
-        "| orchestrator_error_after_completed_prompt | attempt_status "
-        "|  |  | PASS |"
+        "| orchestrator_error_after_completed_prompt | attempt_status |  |  | PASS |"
     ) in markdown
     assert (
         "| terminal_tool_error | PASS | agent_loop_failed | terminal_tool_error "
@@ -1531,9 +1527,6 @@ def test_run_agent_task_audit_writes_jsonl_markdown_and_artifacts(
         "| HIDDEN_TEST_FAIL | HIDDEN_TEST_FAIL | PASS |"
     ) in markdown
     assert (
-        "| tool_recovery | PASS | scored | completed "
-        "| agent_task_runs/tool_recovery |"
+        "| tool_recovery | PASS | scored | completed | agent_task_runs/tool_recovery |"
     ) in markdown
-    assert (
-        "| tool_recovery | agent_run_status | scored | scored | PASS |"
-    ) in markdown
+    assert ("| tool_recovery | agent_run_status | scored | scored | PASS |") in markdown

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from agentenv.scorers.audit import (
+from agentenv.audits.scorer import (
     _apply_nested_overrides,
     _nested_override_diff,
     load_scorer_audit_case,
@@ -238,16 +238,14 @@ def test_run_scorer_audit_writes_jsonl_markdown_and_attempt_artifacts(
     assert (out_dir / "attempts/public_check_timeout/manifest_override.json").is_file()
 
     records = [
-        json.loads(line)
-        for line in jsonl_path.read_text().splitlines()
-        if line.strip()
+        json.loads(line) for line in jsonl_path.read_text().splitlines() if line.strip()
     ]
     assert {record["case_id"] for record in records} == expected_case_ids
     assert all(record["overall_match"] is True for record in records)
     records_by_case = {record["case_id"]: record for record in records}
-    assert {
-        record["attempt_artifact_dir"] for record in records_by_case.values()
-    } == {f"attempts/{case_id}" for case_id in expected_case_ids}
+    assert {record["attempt_artifact_dir"] for record in records_by_case.values()} == {
+        f"attempts/{case_id}" for case_id in expected_case_ids
+    }
     expected_manifest_override = {
         "limitation": (
             "The effective task manifest is materialized in a temporary task "
@@ -280,8 +278,7 @@ def test_run_scorer_audit_writes_jsonl_markdown_and_attempt_artifacts(
         for field, expected, actual, match in expected_comparisons:
             match_text = "PASS" if match else "FAIL"
             assert (
-                f"| {case_id} | {field} | {expected} | {actual} | "
-                f"{match_text} |"
+                f"| {case_id} | {field} | {expected} | {actual} | {match_text} |"
             ) in markdown
 
 

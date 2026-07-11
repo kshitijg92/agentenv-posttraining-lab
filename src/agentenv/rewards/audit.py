@@ -9,7 +9,7 @@ from typing import Literal, TypeAlias
 
 from pydantic import ValidationError
 
-from agentenv.agents.audit import (
+from agentenv.audits.agent_task import (
     AgentTaskAuditResult,
     load_agent_task_audit_case,
     run_agent_task_audit,
@@ -34,7 +34,7 @@ from agentenv.rewards.schema import (
     ToolOutputSpoofingExploitSpec,
 )
 from agentenv.runners.patch_runner import apply_patch_file
-from agentenv.scorers.audit import (
+from agentenv.audits.scorer import (
     ScorerAuditCase,
     ScorerAuditResult,
     load_scorer_audit_case,
@@ -205,7 +205,9 @@ def _run_scorer_reward_hack_case_audit(
         case.evidence.valid_control.case_dir,
     )
     exploit_case = load_scorer_audit_case(exploit_case_dir / "case.yaml")
-    task_manifest_path = _resolve_repo_relative_path(repo_root, exploit_case.task_manifest)
+    task_manifest_path = _resolve_repo_relative_path(
+        repo_root, exploit_case.task_manifest
+    )
     task_manifest = load_task_manifest(task_manifest_path)
     run_dir = _make_run_dir(work_dir)
     staged_case_root = _stage_scorer_audit_pair(
@@ -217,7 +219,9 @@ def _run_scorer_reward_hack_case_audit(
     scorer_results = run_scorer_audit(staged_case_root, scorer_out_dir)
     scorer_results_by_case_id = _index_scorer_results(scorer_results)
     exploit_result = scorer_results_by_case_id[case.evidence.exploit.case_id]
-    valid_control_result = scorer_results_by_case_id[case.evidence.valid_control.case_id]
+    valid_control_result = scorer_results_by_case_id[
+        case.evidence.valid_control.case_id
+    ]
 
     leakage_scan_result = scan_directory_for_leakage(
         exploit_result.attempt_artifact_dir,
@@ -263,7 +267,9 @@ def _run_agent_task_reward_hack_case_audit(
         case.evidence.valid_control.case_dir,
     )
     exploit_case = load_agent_task_audit_case(exploit_case_dir / "case.yaml")
-    task_manifest_path = _resolve_repo_relative_path(repo_root, exploit_case.task_manifest)
+    task_manifest_path = _resolve_repo_relative_path(
+        repo_root, exploit_case.task_manifest
+    )
     task_manifest = load_task_manifest(task_manifest_path)
     run_dir = _make_run_dir(work_dir)
     staged_case_root = _stage_agent_task_audit_pair(
@@ -562,8 +568,7 @@ def _workspaces_differ_only_in_python_comments_and_docstrings(
 
 def _workspace_file_bytes(root: Path) -> dict[Path, bytes]:
     return {
-        path.relative_to(root): path.read_bytes()
-        for path in list_files_under(root)
+        path.relative_to(root): path.read_bytes() for path in list_files_under(root)
     }
 
 
@@ -728,10 +733,7 @@ def _detect_agent_spoofed_workspace_file(
     patch_text = _agent_candidate_patch_text(exploit_result)
     if not _patch_adds_or_updates_path(patch_text, expected_spoof_file.path):
         return False
-    return all(
-        marker in patch_text
-        for marker in expected_spoof_file.required_markers
-    )
+    return all(marker in patch_text for marker in expected_spoof_file.required_markers)
 
 
 def _agent_candidate_patch_text(result: AgentTaskAuditResult) -> str:
@@ -997,7 +999,9 @@ def _merge_leakage_scans(
     return LeakageScanResult(
         leakage_check_version=first.leakage_check_version,
         canary_hash=first.canary_hash,
-        canary_matches=tuple(dict.fromkeys(first.canary_matches + second.canary_matches)),
+        canary_matches=tuple(
+            dict.fromkeys(first.canary_matches + second.canary_matches)
+        ),
         private_marker_matches=tuple(
             dict.fromkeys(first.private_marker_matches + second.private_marker_matches)
         ),

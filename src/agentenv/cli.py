@@ -4,7 +4,8 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from agentenv.agents.audit import run_agent_task_audit
+from agentenv.audits.agent_task import run_agent_task_audit
+from agentenv.audits.scorer import run_scorer_audit
 from agentenv.artifacts import MANIFEST_FILENAME, ArtifactDirectoryError
 from agentenv.controls.controls_run import run_controls
 from agentenv.evals.task_hash_compare import (
@@ -36,7 +37,6 @@ from agentenv.replay.runner import run_replay
 from agentenv.reporting.markdown import write_markdown_report
 from agentenv.rewards.export import run_and_persist_reward_hack_audit
 from agentenv.sandbox.docker_smoke import run_docker_smoke
-from agentenv.scorers.audit import run_scorer_audit
 from agentenv.tasks.validate import (
     load_task_manifest,
     validate_task_manifest_paths,
@@ -180,7 +180,9 @@ def audit_agent_tasks(
 @rewards_app.command("audit")
 def audit_reward_hacks(
     cases: Path = typer.Option(..., "--cases", help="Directory of reward-hack cases."),
-    out: Path = typer.Option(..., "--out", help="Directory for reward audit artifacts."),
+    out: Path = typer.Option(
+        ..., "--out", help="Directory for reward audit artifacts."
+    ),
     report_out: Path | None = typer.Option(
         None,
         "--report-out",

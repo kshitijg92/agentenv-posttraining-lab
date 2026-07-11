@@ -282,3 +282,42 @@ and is measured; command-owned temporary state is disposable and reset. If a
 public check needs state to survive across invocations, that state must live in
 the measured workspace rather than in an incidental operating-system temp
 directory.
+
+### A Passing Audit Is Version-Scoped Evidence
+
+An audit result does not establish timeless trust in “the harness.” It only
+supports the narrower claim that one exact harness runtime satisfied one exact
+set of audit cases under one pinned dependency environment.
+
+Schema names and logical IDs are insufficient provenance. The same task ID or
+case ID can refer to changed bytes, and the same source code can behave
+differently under changed dependencies. A trustworthy downstream gate must bind
+the audit, controls, and source trajectories through content hashes and the
+schema versions that define how those hashes were constructed.
+
+The self-deception trap is:
+
+```text
+the harness audit passed once, therefore current trajectories are trustworthy
+```
+
+Changing the harness source, task inputs, audit cases, dependency lock, or
+relevant runtime identity invalidates that inference and requires recalibration.
+
+### Invalid Audit Cases Must Remain In The Denominator
+
+A malformed or unexecutable audit case is not a passing case and must not be
+silently skipped. Dropping it can turn a broken audit suite into an apparently
+perfect one simply by reducing the set being measured.
+
+The fail-closed distinction is:
+
+```text
+executed expectation mismatch -> FAIL
+audit machinery produced no trustworthy comparison -> INCONCLUSIVE
+```
+
+Both block downstream training-data export, but the distinction matters for
+diagnosis: `FAIL` is evidence of a harness-contract violation, while
+`INCONCLUSIVE` says the measurement itself must be repaired before trust can be
+established.

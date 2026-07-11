@@ -11,16 +11,34 @@ from pydantic import (
 )
 
 from agentenv.agents.schema import PromptLoopStatus
+from agentenv.audits.schema import (
+    AGENT_TASK_AUDIT_CASE_SCHEMA_VERSION,
+    AGENT_TASK_AUDIT_RECORD_SCHEMA_VERSION,
+    HARNESS_AUDIT_RUNTIME_VERSION,
+    SCORER_AUDIT_CASE_SCHEMA_VERSION,
+    SCORER_AUDIT_RECORD_SCHEMA_VERSION,
+    AgentTaskAuditCaseSchemaVersion,
+    AgentTaskAuditRecordSchemaVersion,
+    HarnessAuditRuntimeVersion,
+    HarnessAuditLayerSummary,
+    HarnessAuditStatus,
+    HarnessRuntimeProvenance,
+    ScorerAuditCaseSchemaVersion,
+    ScorerAuditRecordSchemaVersion,
+    derive_harness_audit_status,
+)
 from agentenv.artifacts.base import (
     ArtifactType,
     load_json_object,
     validate_relative_artifact_ref,
 )
 from agentenv.artifacts.payloads import (
+    TASK_HASH_REPORT_SCHEMA_VERSION,
     ControlCalibrationResultRecord,
     ControlFlakeDetection,
     EvalTaskHashes,
     ReplayStatus,
+    TaskHashReportSchemaVersion,
     validate_replay_status_counts,
 )
 from agentenv.evals.schema import (
@@ -125,6 +143,11 @@ REWARD_HACK_AUDIT_ARTIFACT_REFS = {
     "results": "reward_hack_audit_results.jsonl",
     "case_runs": "case_runs",
 }
+HARNESS_AUDIT_ARTIFACT_REFS = {
+    "agent_audit": "agent",
+    "scorer_audit": "scorer",
+    "report": "harness_audit.md",
+}
 EVAL_RUN_REQUIRED_ARTIFACTS = frozenset(EVAL_RUN_ARTIFACT_REFS)
 EVAL_SUITE_REQUIRED_ARTIFACTS = frozenset({"policies"})
 CONTROL_CALIBRATION_REQUIRED_ARTIFACTS = frozenset(CONTROL_CALIBRATION_ARTIFACT_REFS)
@@ -138,6 +161,7 @@ TRAINING_CANDIDATE_EXPORT_REQUIRED_ARTIFACTS = frozenset(
 )
 POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_REFS)
 REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS = frozenset(REWARD_HACK_AUDIT_ARTIFACT_REFS)
+HARNESS_AUDIT_REQUIRED_ARTIFACTS = frozenset(HARNESS_AUDIT_ARTIFACT_REFS)
 
 
 ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
@@ -153,6 +177,7 @@ TrainingCandidateExportArtifactSchemaVersion = Literal[
 ]
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v1"]
+HarnessAuditArtifactSchemaVersion = Literal["harness_audit_artifact_v0"]
 TrajectoryExportSourceArtifactType = Literal["eval_run", "eval_suite"]
 TrajectoryReviewSourceArtifactType = Literal["trajectory_export"]
 
@@ -184,6 +209,9 @@ POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVers
 )
 REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION: RewardHackAuditArtifactSchemaVersion = (
     "reward_hack_audit_artifact_v1"
+)
+HARNESS_AUDIT_ARTIFACT_SCHEMA_VERSION: HarnessAuditArtifactSchemaVersion = (
+    "harness_audit_artifact_v0"
 )
 
 
@@ -1071,6 +1099,104 @@ class PositiveSFTExportManifest(ArtifactManifest):
         return self
 
 
+class HarnessAuditManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.HARNESS_AUDIT.value
+    expected_artifact_schema_version = HARNESS_AUDIT_ARTIFACT_SCHEMA_VERSION
+
+    harness_audit_run_id: str = Field(min_length=1)
+    created_at: str = Field(min_length=1)
+    git_sha_or_unknown: str = Field(min_length=1)
+    runtime_version: HarnessAuditRuntimeVersion
+    runtime_provenance: HarnessRuntimeProvenance
+    agent_task_audit_case_schema_version: AgentTaskAuditCaseSchemaVersion
+    scorer_audit_case_schema_version: ScorerAuditCaseSchemaVersion
+    agent_task_audit_record_schema_version: AgentTaskAuditRecordSchemaVersion
+    scorer_audit_record_schema_version: ScorerAuditRecordSchemaVersion
+    task_hash_report_schema_version: TaskHashReportSchemaVersion
+    agent_attempt_artifact_schema_version: AgentAttemptArtifactSchemaVersion
+    scorer_attempt_artifact_schema_version: ScorerAttemptArtifactSchemaVersion
+    status: HarnessAuditStatus
+    agent_audit: HarnessAuditLayerSummary
+    scorer_audit: HarnessAuditLayerSummary
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_harness_audit_contract(self) -> "HarnessAuditManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=HARNESS_AUDIT_ARTIFACT_REFS,
+            owner="harness audit manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=HARNESS_AUDIT_REQUIRED_ARTIFACTS,
+            owner="harness audit manifests",
+        )
+        if self.runtime_version != HARNESS_AUDIT_RUNTIME_VERSION:
+            raise ValueError(
+                f"runtime_version must be {HARNESS_AUDIT_RUNTIME_VERSION!r}"
+            )
+        if (
+            self.agent_task_audit_case_schema_version
+            != AGENT_TASK_AUDIT_CASE_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "agent_task_audit_case_schema_version must match the current "
+                "case contract"
+            )
+        if self.scorer_audit_case_schema_version != SCORER_AUDIT_CASE_SCHEMA_VERSION:
+            raise ValueError(
+                "scorer_audit_case_schema_version must match the current case contract"
+            )
+        if (
+            self.agent_task_audit_record_schema_version
+            != AGENT_TASK_AUDIT_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "agent_task_audit_record_schema_version must match the current "
+                "record contract"
+            )
+        if (
+            self.scorer_audit_record_schema_version
+            != SCORER_AUDIT_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "scorer_audit_record_schema_version must match the current record "
+                "contract"
+            )
+        if self.task_hash_report_schema_version != TASK_HASH_REPORT_SCHEMA_VERSION:
+            raise ValueError(
+                "task_hash_report_schema_version must match the current task hash "
+                "contract"
+            )
+        if self.agent_attempt_artifact_schema_version != (
+            AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "agent_attempt_artifact_schema_version must match the current "
+                "agent attempt contract"
+            )
+        if self.scorer_attempt_artifact_schema_version != (
+            SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "scorer_attempt_artifact_schema_version must match the current "
+                "scorer attempt contract"
+            )
+        if self.agent_audit.audit_layer != "agent":
+            raise ValueError("agent_audit must summarize the agent layer")
+        if self.scorer_audit.audit_layer != "scorer":
+            raise ValueError("scorer_audit must summarize the scorer layer")
+        expected_status = derive_harness_audit_status(
+            self.agent_audit.status,
+            self.scorer_audit.status,
+        )
+        if self.status != expected_status:
+            raise ValueError("status must reflect agent and scorer audit statuses")
+        return self
+
+
 class RewardHackAuditManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.REWARD_HACK_AUDIT.value
     expected_artifact_schema_version = REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION
@@ -1143,6 +1269,10 @@ def load_training_candidate_export_manifest(
 
 def load_positive_sft_export_manifest(path: Path) -> PositiveSFTExportManifest:
     return _validate_manifest(PositiveSFTExportManifest, path)
+
+
+def load_harness_audit_manifest(path: Path) -> HarnessAuditManifest:
+    return _validate_manifest(HarnessAuditManifest, path)
 
 
 def load_reward_hack_audit_manifest(path: Path) -> RewardHackAuditManifest:

@@ -778,3 +778,144 @@ real controls construction/report/manifest integration: 1 passed
 focused Ruff: passed
 Pyright: passed
 ```
+
+### Harness-Audit Trust-Root Schema
+
+#### Decision
+
+Use one atomic `harness_audit` artifact for the scorer and agent-task audit
+layers. The name deliberately avoids “harness faith” and does not claim that a
+finite audit proves complete harness correctness. The artifact records whether
+this exact harness runtime conformed to the exact versioned audit cases it ran.
+
+Each layer and the root manifest use:
+
+```text
+PASS
+FAIL
+INCONCLUSIVE
+```
+
+Status derivation gives observed violations precedence:
+
+```text
+any completed expectation mismatch -> FAIL
+otherwise, any AUDIT_ERROR          -> INCONCLUSIVE
+otherwise                           -> PASS
+```
+
+The root status applies the same three-valued AND to the agent and scorer layer
+statuses. Only `PASS + PASS` produces root `PASS`.
+
+#### Schema
+
+Added strict schema-only contracts under `agentenv.audits`. The agent and
+scorer JSONL files have separate discriminated record unions:
+
+```text
+COMPLETED   -> full provenance, typed comparisons, derived overall_match,
+               and a hash-pinned per-case artifact-directory reference
+AUDIT_ERROR -> available partial provenance plus audit_stage, error_class,
+               and error_message
+```
+
+The agent and scorer comparison-field vocabularies have one neutral definition
+under `agentenv.audits.types`. The existing runtime audit modules and the new
+persisted-record schemas import those definitions; neither redeclares the field
+lists.
+
+Completed agent records carry a bounded `scorer_result` summary whenever the
+agent run reached scoring. It includes the scorer attempt ID, attempt status,
+public status, hidden status, and scorer error class. This observation is
+unconditional; the comparison list remains limited to expectations explicitly
+declared by the audit case. The schema requires `scorer_result` exactly when
+`agent_run_status=scored` and applies the existing attempt terminal-state
+validator to its nested statuses.
+
+The stable audit stages are:
+
+```text
+CASE_PREPARATION
+HARNESS_EXECUTION
+EXPECTATION_COMPARISON
+RESULT_PERSISTENCE
+```
+
+An invalid case remains a discovered record and makes its layer inconclusive.
+Its source path and any computable hashes are retained, while unparsed case or
+task IDs remain null rather than being fabricated from directory names.
+
+Completed records require both the exact task-manifest hash and the existing
+composite `task_record_hash`; the latter is authoritative for task-version
+binding because task behavior can change through seed files, validators, or
+other referenced inputs without changing `task.yaml`. The root manifest also
+pins the task-hash-report schema version used to interpret that composite.
+
+The versioned runtime-provenance record contains:
+
+```text
+canonical hash of the entire src/agentenv tree
+root pyproject.toml hash
+root uv.lock hash
+Python implementation and exact version
+sys.platform and platform machine
+derived harness_runtime_hash over the complete structured record
+```
+
+Git SHA is retained as diagnostic metadata only. Hostname, kernel release, CPU
+features, system-package inventory, and container identity are explicitly
+outside the v0 runtime fingerprint.
+
+The root artifact points to separate `agent/` and `scorer/` directories. Each
+layer summary pins its source case-root hash, output directory hash, results
+JSONL hash, case-artifact directory hash, discovered/record/completed/error
+counts, and derived status. The root manifest pins current case, record,
+attempt-artifact, runtime, task-hash, and artifact schema versions.
+
+#### Status
+
+Schema and loaders only. The existing scorer and agent audit runners still
+write their historical JSONL/Markdown outputs and do not yet build this atomic
+artifact. CLI integration, readback hash verification, and training-candidate
+export gating remain future checkpoints.
+
+#### Verification
+
+```text
+focused harness-audit and artifact-schema tests: 128 passed
+focused Ruff: passed
+Pyright: passed
+```
+
+### Audit Module Ownership
+
+#### Implementation
+
+Moved the existing layer-specific audit modules into the first-class audit
+package:
+
+```text
+agentenv.agents.audit  -> agentenv.audits.agent_task
+agentenv.scorers.audit -> agentenv.audits.scorer
+```
+
+The underlying prompt-loop, agent-task, and scorer execution code remains in
+`agentenv.agents`, `agentenv.orchestrators`, and `agentenv.scorers`. Audit case
+schemas, comparisons, historical JSONL/Markdown renderers, and layer runners
+now live with the shared audit types and new atomic-artifact schema.
+
+Updated the CLI, reward-hack audit, reward-hack export/reporting, source-case
+validation, and tests to import the new modules. The old modules were removed
+without compatibility shims. This checkpoint changes module ownership only;
+the existing layer runner behavior and historical output formats remain
+unchanged.
+
+#### Verification
+
+```text
+focused agent/scorer runner and harness-schema tests: 28 passed
+focused reward-hack audit and source-schema tests: 32 passed
+CLI import/help smoke: passed
+focused Ruff: passed
+Pyright: passed
+```

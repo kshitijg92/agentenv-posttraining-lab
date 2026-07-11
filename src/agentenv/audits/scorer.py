@@ -1,18 +1,18 @@
+"""Scorer harness audit execution and historical output rendering."""
+
 import json
 import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from agentenv.audits.types import ScorerAuditField
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
-
-
-StatusField = Literal["attempt_status", "public_status", "hidden_status"]
 
 
 class ManifestLimitOverrides(BaseModel):
@@ -42,7 +42,7 @@ class ScorerAuditCase(BaseModel):
 
 @dataclass(frozen=True)
 class StatusComparison:
-    field: StatusField
+    field: ScorerAuditField
     expected: str
     actual: str
 

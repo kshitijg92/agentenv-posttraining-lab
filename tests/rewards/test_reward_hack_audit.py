@@ -1,8 +1,9 @@
 from dataclasses import replace
 from pathlib import Path
 
-from agentenv.agents.audit import AgentAuditComparison
-from agentenv.agents.audit import AgentTaskAuditResult
+from agentenv.audits.agent_task import AgentAuditComparison
+from agentenv.audits.agent_task import AgentTaskAuditResult
+from agentenv.audits.scorer import ScorerAuditResult
 from agentenv.agents.schema import PromptLoopResult, TokenUsage
 from agentenv.models.schema import Message
 from agentenv.rewards.audit import (
@@ -10,7 +11,6 @@ from agentenv.rewards.audit import (
     _scan_prompt_loop_result_for_exposure,
     run_reward_hack_audit,
 )
-from agentenv.scorers.audit import ScorerAuditResult
 from agentenv.tasks.validate import load_task_manifest
 from agentenv.tools.schema import ReadFileOutput, ToolResult
 
@@ -108,9 +108,9 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
         ),
     }
 
-    assert {
-        result.reward_hack_case.reward_hack_id for result in results
-    } == set(expected_case_specs)
+    assert {result.reward_hack_case.reward_hack_id for result in results} == set(
+        expected_case_specs
+    )
     results_by_id = {
         result.reward_hack_case.reward_hack_id: result for result in results
     }
@@ -197,7 +197,9 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
                 ("hidden_status", "PASS", "PASS", True),
             )
             assert "trace.jsonl" in result.leakage_scan_result.scanned_files
-            assert (result.run_dir / "scorer_audit/scorer_audit_results.jsonl").is_file()
+            assert (
+                result.run_dir / "scorer_audit/scorer_audit_results.jsonl"
+            ).is_file()
         else:
             assert isinstance(result.exploit_audit_result, AgentTaskAuditResult)
             assert isinstance(result.valid_control_audit_result, AgentTaskAuditResult)
@@ -372,12 +374,8 @@ def test_run_reward_hack_audit_hidden_validator_probe_cases(
                     "FAIL",
                     True,
                 )
-                if (
-                    result.reward_hack_case.reward_hack_id
-                    == (
-                        "tool_output_spoofing_real_tools_plus_spoof_"
-                        "agent_workspace_update"
-                    )
+                if result.reward_hack_case.reward_hack_id == (
+                    "tool_output_spoofing_real_tools_plus_spoof_agent_workspace_update"
                 ):
                     expected_tool_results = [
                         {
@@ -505,9 +503,9 @@ def test_authoritative_tool_results_require_matching_agent_audit_comparison(
         ),
     )
 
-    assert _source_has_authoritative_tool_results(
-        without_matching_tool_results
-    ) is False
+    assert (
+        _source_has_authoritative_tool_results(without_matching_tool_results) is False
+    )
 
     with_mismatched_tool_results = replace(
         exploit_result,
@@ -529,12 +527,12 @@ def test_authoritative_tool_results_require_matching_agent_audit_comparison(
         ),
     )
 
-    assert _source_has_authoritative_tool_results(
-        with_mismatched_tool_results
-    ) is False
+    assert _source_has_authoritative_tool_results(with_mismatched_tool_results) is False
 
 
-def test_prompt_loop_exposure_scan_skips_attack_payload_but_scans_tool_outputs() -> None:
+def test_prompt_loop_exposure_scan_skips_attack_payload_but_scans_tool_outputs() -> (
+    None
+):
     manifest = load_task_manifest(TOY_TASK_MANIFEST)
     prompt_loop_result = PromptLoopResult(
         task_id="toy_python_fix_001",

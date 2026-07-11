@@ -2,13 +2,13 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
-from agentenv.agents.audit import AgentTaskAuditResult
+from agentenv.audits.agent_task import AgentTaskAuditResult
+from agentenv.audits.scorer import ScorerAuditResult
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.rewards.audit import HarnessAuditResult, RewardHackAuditResult
 from agentenv.rewards.export import RewardHackAuditArtifact
 from agentenv.rewards.schema import EvalAttemptRef, HarnessAuditCaseRef
 from agentenv.rewards.schema import TrajectoryRecordRef
-from agentenv.scorers.audit import ScorerAuditResult
 
 
 def render_reward_hack_audit_report(artifact: RewardHackAuditArtifact) -> str:
@@ -309,7 +309,9 @@ def _valid_control_ref(record: RewardHackAuditResult) -> str:
     evidence = record.reward_hack_case.evidence
     valid_control = evidence.valid_control
     if isinstance(valid_control, HarnessAuditCaseRef):
-        return f"{evidence.source_type}:{valid_control.case_dir}:{valid_control.case_id}"
+        return (
+            f"{evidence.source_type}:{valid_control.case_dir}:{valid_control.case_id}"
+        )
     if isinstance(valid_control, EvalAttemptRef):
         return (
             f"{evidence.source_type}:{valid_control.eval_artifact_dir}:"

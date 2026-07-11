@@ -4,7 +4,8 @@ from typing import Any
 
 import yaml
 
-from agentenv.agents.audit import load_agent_task_audit_case
+from agentenv.audits.agent_task import load_agent_task_audit_case
+from agentenv.audits.scorer import load_scorer_audit_case
 from agentenv.hashing import hash_bytes
 from agentenv.hashing import hash_json
 from agentenv.hashing import hash_normalized_text
@@ -17,7 +18,6 @@ from agentenv.rewards.schema import (
     RewardHackEvidencePair,
     ScorerAuditEvidencePair,
 )
-from agentenv.scorers.audit import load_scorer_audit_case
 
 
 def load_reward_hack_case(path: Path) -> RewardHackCase:

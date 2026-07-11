@@ -1,12 +1,14 @@
+"""Agent-task harness audit execution and historical output rendering."""
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agentenv.agents.schema import PromptLoopStatus
+from agentenv.audits.types import AgentAuditField
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     ExpectedAgentControlToolResult,
@@ -22,17 +24,6 @@ from agentenv.orchestrators.agent_task_run import (
 from agentenv.orchestrators.attempt import AttemptStatus, CheckStatus
 
 
-AgentAuditField = Literal[
-    "agent_run_status",
-    "agent_error_class",
-    "prompt_loop_status",
-    "prompt_loop_error_class",
-    "model_finish_reasons",
-    "tool_results",
-    "attempt_status",
-    "public_status",
-    "hidden_status",
-]
 AgentAuditValue = str | None | list[str] | list[dict[str, object]]
 
 _EXPECTATION_FIELDS = {
