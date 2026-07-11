@@ -194,6 +194,15 @@ def load_training_candidate_export_artifact(
             f"Training candidate record count mismatch at {candidates_path}: "
             f"{len(records)} != {manifest.record_count}"
         )
+    expected_records = build_training_candidate_records_from_review_validation(
+        source_validation,
+        gate_validation=observed_gates,
+    )
+    if records != expected_records:
+        raise ValueError(
+            "Persisted training candidate records do not match eligibility "
+            "recomputed from their pinned trajectories and reviews"
+        )
     validate_training_candidate_counts_match_manifest(manifest, records)
     return TrainingCandidateExport(
         out_dir=export_dir,
@@ -404,25 +413,25 @@ def count_training_candidate_records(
 ) -> TrainingCandidateRecordCounts:
     return TrainingCandidateRecordCounts(
         analysis_allowed_count=sum(
-            record.final_eligibility.analysis_allowed for record in records
+            record.training_eligibility.analysis_allowed for record in records
         ),
         positive_sft_allowed_count=sum(
-            record.final_eligibility.positive_sft_allowed for record in records
+            record.training_eligibility.positive_sft_allowed for record in records
         ),
         negative_example_allowed_count=sum(
-            record.final_eligibility.negative_example_allowed for record in records
+            record.training_eligibility.negative_example_allowed for record in records
         ),
         preference_data_allowed_count=sum(
-            record.final_eligibility.preference_data_allowed for record in records
+            record.training_eligibility.preference_data_allowed for record in records
         ),
         trainable_count=sum(
-            record.final_eligibility.is_trainable for record in records
+            record.training_eligibility.is_trainable for record in records
         ),
         analysis_only_count=sum(
-            record.final_eligibility.is_analysis_only for record in records
+            record.training_eligibility.is_analysis_only for record in records
         ),
         not_trainable_count=sum(
-            record.final_eligibility.is_not_trainable for record in records
+            record.training_eligibility.is_not_trainable for record in records
         ),
     )
 

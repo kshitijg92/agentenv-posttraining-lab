@@ -11,11 +11,7 @@ from agentenv.orchestrators.eval_run import (
 from agentenv.trajectories.builder import (
     build_trajectory_record_from_eval_attempt,
     build_trajectory_records_from_eval_suite,
-    build_training_eligibility,
 )
-from agentenv.trajectories.schema import LeakageEvidence
-from agentenv.trajectories.schema import RewardComponents
-from agentenv.trajectories.schema import TrajectoryStatuses
 
 
 AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
@@ -55,8 +51,7 @@ def test_build_trajectory_record_from_successful_agent_eval_attempt(
     assert record.leakage.canary_hash is not None
     assert not record.leakage.canary_leaked
     assert not record.leakage.hidden_validators_visible_to_model
-    assert record.training_eligibility.positive_sft_allowed
-    assert record.training_eligibility.preference_data_allowed
+    assert "training_eligibility" not in record.model_dump(mode="json")
     assert record.artifacts.agent_task_run_json is not None
     assert record.artifacts.agent_task_view_json is not None
     assert record.artifacts.prompt_loop_result_json is not None
@@ -88,9 +83,6 @@ def test_build_trajectory_record_from_scorer_control_eval_attempt(
     assert record.statuses.prompt_loop_status is None
     assert record.statuses.grade_state == "scored_pass"
     assert record.statuses.task_success
-    assert record.training_eligibility.analysis_allowed
-    assert not record.training_eligibility.positive_sft_allowed
-    assert not record.training_eligibility.preference_data_allowed
     assert record.artifacts.agent_task_run_json is None
     assert record.artifacts.agent_task_view_json is None
     assert record.artifacts.attempt_json is not None
@@ -159,50 +151,6 @@ def test_build_trajectory_records_from_eval_suite_rejects_child_run_mismatch(
         build_trajectory_records_from_eval_suite(eval_suite.out_dir)
 
 
-def test_training_eligibility_blocks_all_training_flags_on_non_trainable_split() -> (
-    None
-):
-    statuses = TrajectoryStatuses(
-        agent_task_run_status="scored",
-        prompt_loop_status="completed",
-        attempt_status="HIDDEN_TEST_FAIL",
-        public_status="PASS",
-        hidden_status="FAIL",
-        grade_state="scored_fail",
-        task_success=False,
-    )
-    reward_components = RewardComponents(
-        reward_config_hash="xxh64:rewardconfig",
-        reward_code_hash="xxh64:rewardcode",
-        public_validator_success=True,
-        hidden_validator_success=False,
-        model_output_format_valid=True,
-        model_tool_usage_valid=True,
-        orchestration_failure=False,
-        reward_hack_flag=False,
-    )
-    leakage = LeakageEvidence(
-        canary_hash="xxh64:canary",
-        canary_leaked=False,
-        hidden_validators_visible_to_model=False,
-        leakage_check_version="leakage_check_v0",
-    )
-
-    eligibility = build_training_eligibility(
-        policy_type="agent_control_script",
-        split="heldout_private",
-        statuses=statuses,
-        reward_components=reward_components,
-        leakage=leakage,
-    )
-
-    assert eligibility.analysis_allowed
-    assert not eligibility.positive_sft_allowed
-    assert not eligibility.negative_example_allowed
-    assert not eligibility.preference_data_allowed
-    assert eligibility.eligibility_reason == "split is not eligible for training"
-
-
 def test_build_trajectory_record_from_unscored_agent_eval_attempt(
     tmp_path: Path,
 ) -> None:
@@ -226,9 +174,6 @@ def test_build_trajectory_record_from_unscored_agent_eval_attempt(
     assert not record.statuses.task_success
     assert record.reward_components.model_output_format_valid is False
     assert record.reward_components.model_tool_usage_valid is None
-    assert not record.training_eligibility.positive_sft_allowed
-    assert record.training_eligibility.negative_example_allowed
-    assert not record.training_eligibility.preference_data_allowed
     assert record.artifacts.agent_task_view_json is not None
     assert record.artifacts.prompt_loop_result_json is not None
     assert record.artifacts.decoding_config_json is not None
@@ -236,7 +181,7 @@ def test_build_trajectory_record_from_unscored_agent_eval_attempt(
     assert record.artifacts.attempt_json is None
 
 
-def test_build_trajectory_record_blocks_positive_sft_when_agent_artifact_leaks(
+def test_build_trajectory_record_preserves_agent_artifact_leakage_evidence(
     tmp_path: Path,
 ) -> None:
     eval_run = run_eval_config(
@@ -259,8 +204,6 @@ def test_build_trajectory_record_blocks_positive_sft_when_agent_artifact_leaks(
     )
 
     assert record.leakage.hidden_validators_visible_to_model
-    assert not record.training_eligibility.positive_sft_allowed
-    assert not record.training_eligibility.preference_data_allowed
 
 
 def test_build_trajectory_record_rejects_eval_suite_manifest(

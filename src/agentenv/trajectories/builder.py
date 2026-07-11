@@ -33,7 +33,6 @@ from agentenv.artifacts.payloads import (
     load_prompt_loop_result,
 )
 from agentenv.evals.resolve import resolve_task_pack_path, select_policy
-from agentenv.evals.schema import AGENT_EVAL_POLICY_TYPES
 from agentenv.evals.validate import load_eval_config
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.attempt import AttemptResult
@@ -50,7 +49,6 @@ from agentenv.trajectories.schema import (
     LeakageEvidence,
     RewardComponents,
     SourceProvenance,
-    TrainingEligibility,
     TrajectoryArtifacts,
     TrajectoryIdentity,
     TrajectoryPolicy,
@@ -221,13 +219,6 @@ def build_trajectory_record_from_eval_attempt(
         ),
         reward_components=reward_components,
         leakage=leakage,
-        training_eligibility=build_training_eligibility(
-            policy_type=policy_spec.type,
-            split=selected_task_hash.split,
-            statuses=statuses,
-            reward_components=reward_components,
-            leakage=leakage,
-        ),
     )
 
 
@@ -802,83 +793,6 @@ def derive_reward_hack_flag(attempt_status: object) -> bool | None:
         "INVALID_SHORTCUT",
         "HIDDEN_VALIDATOR_ACCESS_ATTEMPT",
     }
-
-
-def build_training_eligibility(
-    *,
-    policy_type: str,
-    split: str,
-    statuses: TrajectoryStatuses,
-    reward_components: RewardComponents,
-    leakage: LeakageEvidence,
-) -> TrainingEligibility:
-    is_agent_policy = policy_type in AGENT_EVAL_POLICY_TYPES
-    has_leakage = leakage.canary_leaked or leakage.hidden_validators_visible_to_model
-    has_orchestration_failure = reward_components.orchestration_failure
-    is_trainable_split = split not in {"heldout_private", "public_calibration"}
-    task_success = statuses.task_success
-    grade_state = statuses.grade_state
-
-    positive_sft_allowed = (
-        is_agent_policy
-        and task_success
-        and is_trainable_split
-        and not has_leakage
-        and not has_orchestration_failure
-    )
-    negative_example_allowed = (
-        is_agent_policy
-        and not task_success
-        and is_trainable_split
-        and not has_leakage
-        and not has_orchestration_failure
-    )
-    preference_data_allowed = (
-        is_agent_policy
-        and grade_state != "cannot_grade"
-        and is_trainable_split
-        and not has_leakage
-        and not has_orchestration_failure
-    )
-
-    return TrainingEligibility(
-        analysis_allowed=True,
-        positive_sft_allowed=positive_sft_allowed,
-        negative_example_allowed=negative_example_allowed,
-        preference_data_allowed=preference_data_allowed,
-        eligibility_reason=build_training_eligibility_reason(
-            is_agent_policy=is_agent_policy,
-            is_trainable_split=is_trainable_split,
-            has_leakage=has_leakage,
-            has_orchestration_failure=has_orchestration_failure,
-            task_success=task_success,
-            grade_state=grade_state,
-        ),
-    )
-
-
-def build_training_eligibility_reason(
-    *,
-    is_agent_policy: bool,
-    is_trainable_split: bool,
-    has_leakage: bool,
-    has_orchestration_failure: bool,
-    task_success: bool,
-    grade_state: object,
-) -> str:
-    if has_leakage:
-        return "leakage detected; analysis only"
-    if has_orchestration_failure:
-        return "orchestration failure; analysis only"
-    if not is_agent_policy:
-        return "scorer-control trajectory has no agent behavior to imitate"
-    if not is_trainable_split:
-        return "split is not eligible for training"
-    if task_success:
-        return "agent trajectory passed public and hidden validators"
-    if grade_state == "cannot_grade":
-        return "agent trajectory cannot be graded"
-    return "agent trajectory failed one or more validators"
 
 
 def build_trajectory_artifacts(

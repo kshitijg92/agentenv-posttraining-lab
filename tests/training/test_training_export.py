@@ -15,7 +15,10 @@ from agentenv.training.export import (
     load_training_candidate_export_artifact,
 )
 from agentenv.training.schema import TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION
-from agentenv.trajectories.export import export_trajectory_records_from_eval_artifact
+from agentenv.trajectories.export import (
+    export_trajectory_records_from_eval_artifact,
+    hash_file,
+)
 from agentenv.trajectories.review import (
     TrajectoryReviewArtifact,
     initialize_trajectory_review_artifact,
@@ -88,7 +91,7 @@ def test_export_training_candidate_records_writes_pending_review_artifact(
     }
 
     assert len(export.records) == 1
-    assert export.records[0].final_eligibility.is_analysis_only
+    assert export.records[0].training_eligibility.is_analysis_only
     assert (export.out_dir / "training_candidates.jsonl").is_file()
 
 
@@ -118,7 +121,7 @@ def test_export_training_candidate_records_keeps_accepted_controls_analysis_only
     assert export.manifest.trainable_count == 0
     assert export.manifest.analysis_only_count == 1
     assert export.manifest.not_trainable_count == 0
-    assert export.records[0].final_eligibility.is_analysis_only
+    assert export.records[0].training_eligibility.is_analysis_only
 
 
 def test_load_training_candidate_export_rejects_jsonl_hash_mismatch(
@@ -166,6 +169,38 @@ def test_load_training_candidate_export_rejects_summary_count_mismatch(
     with pytest.raises(
         ValueError,
         match="Training candidate manifest analysis_allowed_count mismatch",
+    ):
+        load_training_candidate_export_artifact(export.out_dir)
+
+
+def test_load_training_candidate_export_rejects_rehashed_eligibility_tamper(
+    tmp_path: Path,
+    stub_training_export_gates,
+) -> None:
+    trajectory_export_dir, review_dir, _review_artifact = build_review_fixture(
+        tmp_path,
+        policy="agent-happy",
+    )
+    export = export_training_candidate_records(
+        trajectory_export_dir,
+        review_dir,
+        tmp_path / "training-candidates",
+        harness_audit_dir=HARNESS_AUDIT_DIR,
+        control_calibration_dir=CONTROL_CALIBRATION_DIR,
+    )
+    candidates_path = export.out_dir / export.manifest.artifacts["training_candidates"]
+    candidate = json.loads(candidates_path.read_text())
+    candidate["training_eligibility"]["analysis_reason"] = "tampered decision"
+    candidates_path.write_text(json.dumps(candidate, sort_keys=True) + "\n")
+
+    manifest_path = export.out_dir / MANIFEST_FILENAME
+    manifest = json.loads(manifest_path.read_text())
+    manifest["training_candidates_jsonl_hash"] = hash_file(candidates_path)
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(
+        ValueError,
+        match="do not match eligibility recomputed from their pinned trajectories",
     ):
         load_training_candidate_export_artifact(export.out_dir)
 

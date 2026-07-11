@@ -7,18 +7,18 @@ from agentenv.models.schema import MessageWithoutMetadata
 from agentenv.trajectories.schema import ReviewDecision, ReviewStatus
 
 
-TrainingCandidateRecordSchemaVersion = Literal["training_candidate_record_v0"]
+TrainingCandidateRecordSchemaVersion = Literal["training_candidate_record_v1"]
 PositiveSFTExampleRecordSchemaVersion = Literal["positive_sft_example_record_v0"]
 
 TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION: TrainingCandidateRecordSchemaVersion = (
-    "training_candidate_record_v0"
+    "training_candidate_record_v1"
 )
 POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION: PositiveSFTExampleRecordSchemaVersion = (
     "positive_sft_example_record_v0"
 )
 
 
-class FinalTrainingEligibility(BaseModel):
+class TrainingEligibility(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     analysis_allowed: bool
@@ -61,7 +61,7 @@ class TrainingCandidateRecord(BaseModel):
     review_id: str | None = Field(default=None, min_length=1)
     reviewer_id: str | None = Field(default=None, min_length=1)
     review_decision: ReviewDecision | None = None
-    final_eligibility: FinalTrainingEligibility
+    training_eligibility: TrainingEligibility
 
     @model_validator(mode="after")
     def validate_review_gate(self) -> "TrainingCandidateRecord":
@@ -85,7 +85,7 @@ class TrainingCandidateRecord(BaseModel):
             if self.review_decision is None:
                 raise ValueError("reviewed training candidates require review_decision")
 
-        if self.final_eligibility.is_trainable and (
+        if self.training_eligibility.is_trainable and (
             self.review_status != "reviewed" or self.review_decision != "accepted"
         ):
             raise ValueError(

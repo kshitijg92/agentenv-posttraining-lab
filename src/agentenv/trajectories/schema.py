@@ -5,25 +5,24 @@ from pydantic.config import JsonDict
 
 from agentenv.agents.schema import PromptLoopStatus
 from agentenv.artifacts.base import validate_relative_artifact_ref
-from agentenv.evals.schema import AGENT_EVAL_POLICY_TYPES, EvalPolicy
+from agentenv.evals.schema import EvalPolicy
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunStatus
 from agentenv.orchestrators.attempt import AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt import validate_attempt_check_statuses
 from agentenv.tasks.schema import TaskSplit
 
 
-TrajectoryRecordSchemaVersion = Literal["trajectory_record_v0"]
+TrajectoryRecordSchemaVersion = Literal["trajectory_record_v1"]
 TrajectoryReviewSchemaVersion = Literal["trajectory_review_v0"]
 RewardComponentsVersion = Literal["reward_components_v0"]
 GradeState = Literal["scored_pass", "scored_fail", "cannot_grade"]
 ReviewStatus = Literal["not_reviewed", "reviewed"]
 ReviewDecision = Literal["accepted", "rejected", "needs_followup"]
 
-TRAJECTORY_RECORD_SCHEMA_VERSION: TrajectoryRecordSchemaVersion = "trajectory_record_v0"
+TRAJECTORY_RECORD_SCHEMA_VERSION: TrajectoryRecordSchemaVersion = "trajectory_record_v1"
 TRAJECTORY_REVIEW_SCHEMA_VERSION: TrajectoryReviewSchemaVersion = "trajectory_review_v0"
 REWARD_COMPONENTS_VERSION: RewardComponentsVersion = "reward_components_v0"
 REWARD_COMPONENT_METADATA_SCHEMA_EXTRA_KEY = "reward_component_metadata"
-NON_TRAINING_SPLITS = frozenset({"heldout_private", "public_calibration"})
 
 
 def build_reward_component_metadata_schema_extra() -> JsonDict:
@@ -217,16 +216,6 @@ class LeakageEvidence(BaseModel):
     leakage_check_version: str = Field(min_length=1)
 
 
-class TrainingEligibility(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    analysis_allowed: bool
-    positive_sft_allowed: bool
-    negative_example_allowed: bool
-    preference_data_allowed: bool
-    eligibility_reason: str = Field(min_length=1)
-
-
 class TrajectoryReviewRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -276,7 +265,6 @@ class TrajectoryRecord(BaseModel):
     artifacts: TrajectoryArtifacts
     reward_components: RewardComponents
     leakage: LeakageEvidence
-    training_eligibility: TrainingEligibility
 
     @model_validator(mode="after")
     def validate_cross_section_invariants(self) -> "TrajectoryRecord":
@@ -334,17 +322,6 @@ class TrajectoryRecord(BaseModel):
                 "scored trajectory records require identity.scorer_attempt_id"
             )
 
-        if (
-            self.training_eligibility.positive_sft_allowed
-            and not self.statuses.task_success
-        ):
-            raise ValueError("positive_sft_allowed=true requires task_success=true")
-
-        is_agent_policy = self.policy.policy_spec.type in AGENT_EVAL_POLICY_TYPES
-        has_leakage = (
-            self.leakage.canary_leaked
-            or self.leakage.hidden_validators_visible_to_model
-        )
         statuses_show_orchestration_failure = statuses_have_orchestration_failure(
             self.statuses
         )
@@ -357,105 +334,8 @@ class TrajectoryRecord(BaseModel):
                 "orchestrator terminal statuses"
             )
         self._validate_reward_component_consistency()
-        has_orchestration_failure = (
-            self.reward_components.orchestration_failure
-            or statuses_show_orchestration_failure
-        )
-
-        if self.training_eligibility.positive_sft_allowed and not is_agent_policy:
-            raise ValueError("positive_sft_allowed=true requires an agent policy")
-
-        if (
-            self.training_eligibility.positive_sft_allowed
-            and self.source_provenance.split in NON_TRAINING_SPLITS
-        ):
-            raise ValueError(
-                "positive_sft_allowed=true is forbidden for heldout_private "
-                "and public_calibration splits"
-            )
-
-        if self.training_eligibility.positive_sft_allowed:
-            self._validate_training_agent_evidence()
-            if self.statuses.agent_task_run_status != "scored":
-                raise ValueError(
-                    "positive_sft_allowed=true requires a scored agent trajectory"
-                )
-            if self.leakage.canary_leaked:
-                raise ValueError("positive_sft_allowed=true forbids canary leakage")
-            if self.leakage.hidden_validators_visible_to_model:
-                raise ValueError(
-                    "positive_sft_allowed=true forbids visible hidden validators"
-                )
-            if has_orchestration_failure:
-                raise ValueError(
-                    "positive_sft_allowed=true forbids orchestration failure"
-                )
-
-        if self.training_eligibility.negative_example_allowed:
-            if not is_agent_policy:
-                raise ValueError(
-                    "negative_example_allowed=true requires an agent policy"
-                )
-            if self.statuses.task_success:
-                raise ValueError(
-                    "negative_example_allowed=true requires task_success=false"
-                )
-            if self.source_provenance.split in NON_TRAINING_SPLITS:
-                raise ValueError(
-                    "negative_example_allowed=true is forbidden for heldout_private "
-                    "and public_calibration splits"
-                )
-            self._validate_training_agent_evidence()
-            if has_leakage:
-                raise ValueError("negative_example_allowed=true forbids leakage")
-            if has_orchestration_failure:
-                raise ValueError(
-                    "negative_example_allowed=true forbids orchestration failure"
-                )
-
-        if self.training_eligibility.preference_data_allowed:
-            if not is_agent_policy:
-                raise ValueError(
-                    "preference_data_allowed=true requires an agent policy"
-                )
-            if self.statuses.grade_state == "cannot_grade":
-                raise ValueError(
-                    "preference_data_allowed=true requires a gradable trajectory"
-                )
-            if self.source_provenance.split in NON_TRAINING_SPLITS:
-                raise ValueError(
-                    "preference_data_allowed=true is forbidden for heldout_private "
-                    "and public_calibration splits"
-                )
-            self._validate_training_agent_evidence()
-            if self.statuses.agent_task_run_status != "scored":
-                raise ValueError(
-                    "preference_data_allowed=true requires a scored agent trajectory"
-                )
-            if has_leakage:
-                raise ValueError("preference_data_allowed=true forbids leakage")
-            if has_orchestration_failure:
-                raise ValueError(
-                    "preference_data_allowed=true forbids orchestration failure"
-                )
 
         return self
-
-    def _validate_training_agent_evidence(self) -> None:
-        if self.identity.agent_attempt_id is None:
-            raise ValueError("training-eligible records require agent_attempt_id")
-        if self.statuses.agent_task_run_status is None:
-            raise ValueError("training-eligible records require agent_task_run_status")
-        if self.artifacts.agent_task_run_json is None:
-            raise ValueError("training-eligible records require agent_task_run_json")
-        if self.artifacts.agent_task_view_json is None:
-            raise ValueError("training-eligible records require agent_task_view_json")
-        if self.artifacts.prompt_loop_result_json is None:
-            raise ValueError(
-                "training-eligible records require prompt_loop_result_json"
-            )
-        if self.artifacts.decoding_config_json is None:
-            raise ValueError("training-eligible records require decoding_config_json")
 
     def _validate_reward_component_consistency(self) -> None:
         expected_public_success = validator_success(self.statuses.public_status)

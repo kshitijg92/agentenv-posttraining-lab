@@ -51,12 +51,12 @@ def test_build_training_candidate_records_blocks_pending_review(
     candidate = candidates[0]
     assert candidate.review_status == "not_reviewed"
     assert candidate.review_decision is None
-    assert candidate.final_eligibility.analysis_allowed
-    assert candidate.final_eligibility.is_analysis_only
-    assert not candidate.final_eligibility.positive_sft_allowed
-    assert not candidate.final_eligibility.negative_example_allowed
-    assert not candidate.final_eligibility.preference_data_allowed
-    assert candidate.final_eligibility.positive_sft_reason == (
+    assert candidate.training_eligibility.analysis_allowed
+    assert candidate.training_eligibility.is_analysis_only
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
         "trajectory has not been reviewed"
     )
 
@@ -82,11 +82,11 @@ def test_build_training_candidate_records_blocks_accepted_agent_control_training
     assert candidate.review_id == "review_001"
     assert candidate.reviewer_id == "kshitij"
     assert candidate.review_decision == "accepted"
-    assert not candidate.final_eligibility.positive_sft_allowed
-    assert not candidate.final_eligibility.negative_example_allowed
-    assert not candidate.final_eligibility.preference_data_allowed
-    assert candidate.final_eligibility.is_analysis_only
-    assert candidate.final_eligibility.positive_sft_reason == (
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.is_analysis_only
+    assert candidate.training_eligibility.positive_sft_reason == (
         "policy is not model-generated training data"
     )
 
@@ -109,10 +109,10 @@ def test_build_training_candidate_records_blocks_accepted_agent_control_negative
 
     candidate = candidates[0]
     assert candidate.review_decision == "accepted"
-    assert not candidate.final_eligibility.positive_sft_allowed
-    assert not candidate.final_eligibility.negative_example_allowed
-    assert not candidate.final_eligibility.preference_data_allowed
-    assert candidate.final_eligibility.negative_example_reason == (
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.negative_example_reason == (
         "policy is not model-generated training data"
     )
 
@@ -139,10 +139,176 @@ def test_build_training_candidate_record_allows_accepted_agent_model_training_pa
 
     assert candidate.policy_id == "local-model"
     assert candidate.review_decision == "accepted"
-    assert candidate.final_eligibility.positive_sft_allowed
-    assert not candidate.final_eligibility.negative_example_allowed
-    assert candidate.final_eligibility.preference_data_allowed
-    assert candidate.final_eligibility.is_trainable
+    assert candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.is_trainable
+
+
+@pytest.mark.parametrize("split", ["heldout_private", "public_calibration"])
+def test_training_candidate_blocks_model_trajectory_on_non_training_split(
+    tmp_path: Path,
+    split: str,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    trajectory = rebuild_trajectory(
+        trajectory,
+        source_provenance={"split": split},
+    )
+    review = build_reviewed_record(
+        build_review_record_for_trajectory(trajectory),
+        "accepted",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert candidate.training_eligibility.is_analysis_only
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
+        "split is not eligible for training"
+    )
+
+
+def test_training_candidate_blocks_leaked_model_trajectory(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    trajectory = rebuild_trajectory(
+        trajectory,
+        leakage={"hidden_validators_visible_to_model": True},
+    )
+    review = build_reviewed_record(
+        build_review_record_for_trajectory(trajectory),
+        "accepted",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert candidate.training_eligibility.is_analysis_only
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
+        "leakage detected in model-visible trajectory evidence"
+    )
+
+
+def test_training_candidate_blocks_orchestration_failure(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    trajectory = rebuild_trajectory(
+        trajectory,
+        identity={"scorer_attempt_id": None},
+        statuses={
+            "agent_task_run_status": "orchestrator_error",
+            "prompt_loop_status": None,
+            "attempt_status": None,
+            "public_status": None,
+            "hidden_status": None,
+            "grade_state": "cannot_grade",
+            "task_success": False,
+        },
+        reward_components={
+            "public_validator_success": None,
+            "hidden_validator_success": None,
+            "model_output_format_valid": None,
+            "model_tool_usage_valid": None,
+            "orchestration_failure": True,
+            "reward_hack_flag": None,
+        },
+    )
+    review = build_reviewed_record(
+        build_review_record_for_trajectory(trajectory),
+        "accepted",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert candidate.training_eligibility.is_analysis_only
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
+        "trajectory contains an orchestration failure"
+    )
+
+
+def test_reward_hack_trajectory_is_negative_or_preference_data_not_positive_sft(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    trajectory = rebuild_trajectory(
+        trajectory,
+        statuses={
+            "attempt_status": "INVALID_SHORTCUT",
+            "public_status": "NOT_RUN",
+            "hidden_status": "NOT_RUN",
+            "grade_state": "scored_fail",
+            "task_success": False,
+        },
+        reward_components={
+            "public_validator_success": False,
+            "hidden_validator_success": False,
+            "reward_hack_flag": True,
+        },
+    )
+    review = build_reviewed_record(
+        build_review_record_for_trajectory(trajectory),
+        "accepted",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
+        "reward-hack evidence forbids positive SFT"
+    )
+    assert candidate.training_eligibility.negative_example_allowed
+    assert candidate.training_eligibility.preference_data_allowed
+
+
+def test_training_candidate_blocks_missing_agent_evidence(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    trajectory = rebuild_trajectory(
+        trajectory,
+        artifacts={"agent_task_run_json": None},
+    )
+    review = build_reviewed_record(
+        build_review_record_for_trajectory(trajectory),
+        "accepted",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert candidate.training_eligibility.is_analysis_only
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
+        "required agent evidence is missing: agent_task_run_json"
+    )
+
+
+def test_training_candidate_allows_failed_model_trajectory_as_negative_only(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-malformed")
+    review = build_reviewed_record(
+        build_review_record_for_trajectory(trajectory),
+        "accepted",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.preference_data_reason == (
+        "preference data requires a gradable trajectory"
+    )
 
 
 def test_build_training_candidate_records_rejected_review_blocks_training_paths(
@@ -163,12 +329,12 @@ def test_build_training_candidate_records_rejected_review_blocks_training_paths(
 
     candidate = candidates[0]
     assert candidate.review_decision == "rejected"
-    assert candidate.final_eligibility.analysis_allowed
-    assert candidate.final_eligibility.is_analysis_only
-    assert not candidate.final_eligibility.positive_sft_allowed
-    assert not candidate.final_eligibility.negative_example_allowed
-    assert not candidate.final_eligibility.preference_data_allowed
-    assert candidate.final_eligibility.positive_sft_reason == (
+    assert candidate.training_eligibility.analysis_allowed
+    assert candidate.training_eligibility.is_analysis_only
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
         "human review rejected trajectory"
     )
 
@@ -236,6 +402,35 @@ def build_agent_model_trajectory_record(
         },
     }
     return type(trajectory).model_validate(payload)
+
+
+def build_agent_model_trajectory(
+    tmp_path: Path,
+    *,
+    policy: str,
+) -> TrajectoryRecord:
+    eval_run = run_eval_config(
+        AGENT_CONTROL_CONFIG,
+        policy,
+        tmp_path / policy,
+    )
+    trajectory = build_trajectory_record_from_eval_attempt(
+        eval_run.out_dir,
+        eval_attempt_id=eval_run.attempts[0].eval_attempt_id,
+    )
+    return build_agent_model_trajectory_record(trajectory)
+
+
+def rebuild_trajectory(
+    trajectory: TrajectoryRecord,
+    **section_updates: dict[str, object],
+) -> TrajectoryRecord:
+    payload = trajectory.model_dump(mode="json")
+    for section, updates in section_updates.items():
+        section_payload = payload[section]
+        assert isinstance(section_payload, dict)
+        section_payload.update(updates)
+    return TrajectoryRecord.model_validate(payload)
 
 
 def build_review_record_for_trajectory(

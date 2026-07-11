@@ -411,6 +411,8 @@ def render_review_queue_section(
                 "",
                 f"- task_id: `{record.identity.task_id}`",
                 f"- policy_id: `{record.identity.policy_id}`",
+                f"- policy_type: `{record.policy.policy_spec.type}`",
+                f"- split: `{record.source_provenance.split}`",
                 f"- eval_attempt_id: `{record.identity.eval_attempt_id}`",
                 f"- agent_task_run_status: "
                 f"`{format_markdown_value(record.statuses.agent_task_run_status)}`",
@@ -424,17 +426,13 @@ def render_review_queue_section(
                 f"`{format_markdown_value(record.statuses.hidden_status)}`",
                 f"- candidate_patch_empty: "
                 f"`{format_markdown_value(is_candidate_patch_empty(record))}`",
-                f"- positive_sft_allowed: "
-                f"`{record.training_eligibility.positive_sft_allowed}`",
-                f"- negative_example_allowed: "
-                f"`{record.training_eligibility.negative_example_allowed}`",
-                f"- preference_data_allowed: "
-                f"`{record.training_eligibility.preference_data_allowed}`",
-                f"- eligibility_reason: "
-                f"`{record.training_eligibility.eligibility_reason}`",
                 f"- canary_leaked: `{record.leakage.canary_leaked}`",
                 f"- hidden_validators_visible_to_model: "
                 f"`{record.leakage.hidden_validators_visible_to_model}`",
+                f"- orchestration_failure: "
+                f"`{record.reward_components.orchestration_failure}`",
+                f"- reward_hack_flag: "
+                f"`{format_markdown_value(record.reward_components.reward_hack_flag)}`",
                 "",
                 "Inspection refs:",
                 "",

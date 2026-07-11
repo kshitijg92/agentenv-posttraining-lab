@@ -95,6 +95,12 @@ def test_initialize_trajectory_review_artifact_writes_pending_review_rows(
     assert "## Control Trajectories" in queue
     assert trajectory.identity.trajectory_id in queue
     assert "- candidate_patch_empty: `null`" in queue
+    assert "- policy_type: `scorer_control_patch`" in queue
+    assert "- split: `practice`" in queue
+    assert "- orchestration_failure: `False`" in queue
+    assert "- reward_hack_flag: `False`" in queue
+    assert "positive_sft_allowed" not in queue
+    assert "preference_data_allowed" not in queue
     assert "Review row" in queue
 
 

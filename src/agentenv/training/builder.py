@@ -2,8 +2,8 @@ from pathlib import Path
 
 from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
 from agentenv.training.schema import (
-    FinalTrainingEligibility,
     TrainingCandidateRecord,
+    TrainingEligibility,
 )
 from agentenv.training.gates import (
     TrainingExportGateValidation,
@@ -14,6 +14,15 @@ from agentenv.trajectories.review import (
     validate_trajectory_review_artifact,
 )
 from agentenv.trajectories.schema import TrajectoryRecord, TrajectoryReviewRecord
+
+
+NON_TRAINING_SPLITS = frozenset({"heldout_private", "public_calibration"})
+REQUIRED_TRAINING_AGENT_ARTIFACT_FIELDS = (
+    "agent_task_run_json",
+    "agent_task_view_json",
+    "prompt_loop_result_json",
+    "decoding_config_json",
+)
 
 
 def build_training_candidate_records(
@@ -73,22 +82,19 @@ def build_training_candidate_record(
         review_id=review.review_id,
         reviewer_id=review.reviewer_id,
         review_decision=review.review_decision,
-        final_eligibility=build_final_training_eligibility(trajectory, review),
+        training_eligibility=build_training_eligibility(trajectory, review),
     )
 
 
-def build_final_training_eligibility(
+def build_training_eligibility(
     trajectory: TrajectoryRecord,
     review: TrajectoryReviewRecord,
-) -> FinalTrainingEligibility:
+) -> TrainingEligibility:
     if review.review_status != "reviewed" or review.review_decision != "accepted":
         review_block_reason = build_review_block_reason(review)
-        return FinalTrainingEligibility(
-            analysis_allowed=trajectory.training_eligibility.analysis_allowed,
-            analysis_reason=build_analysis_reason(
-                trajectory,
-                fallback_reason=review_block_reason,
-            ),
+        return TrainingEligibility(
+            analysis_allowed=True,
+            analysis_reason=f"trajectory remains analysis-eligible; {review_block_reason}",
             positive_sft_allowed=False,
             positive_sft_reason=review_block_reason,
             negative_example_allowed=False,
@@ -97,41 +103,95 @@ def build_final_training_eligibility(
             preference_data_reason=review_block_reason,
         )
 
-    if trajectory.policy.policy_spec.type != AGENT_MODEL_POLICY_TYPE:
-        non_model_policy_reason = "policy is not model-generated training data"
-        return FinalTrainingEligibility(
-            analysis_allowed=trajectory.training_eligibility.analysis_allowed,
-            analysis_reason=build_analysis_reason(trajectory),
-            positive_sft_allowed=False,
-            positive_sft_reason=non_model_policy_reason,
-            negative_example_allowed=False,
-            negative_example_reason=non_model_policy_reason,
-            preference_data_allowed=False,
-            preference_data_reason=non_model_policy_reason,
-        )
+    common_block_reason = build_common_training_block_reason(trajectory)
+    positive_sft_block_reason = common_block_reason or build_positive_sft_block_reason(
+        trajectory
+    )
+    negative_example_block_reason = (
+        common_block_reason or build_negative_example_block_reason(trajectory)
+    )
+    preference_data_block_reason = (
+        common_block_reason or build_preference_data_block_reason(trajectory)
+    )
 
-    return FinalTrainingEligibility(
-        analysis_allowed=trajectory.training_eligibility.analysis_allowed,
-        analysis_reason=build_analysis_reason(trajectory),
-        positive_sft_allowed=trajectory.training_eligibility.positive_sft_allowed,
-        positive_sft_reason=build_mechanical_path_reason(
+    return TrainingEligibility(
+        analysis_allowed=True,
+        analysis_reason="trajectory is available for analysis",
+        positive_sft_allowed=positive_sft_block_reason is None,
+        positive_sft_reason=build_training_path_reason(
             path_label="positive SFT",
-            allowed=trajectory.training_eligibility.positive_sft_allowed,
-            mechanical_reason=trajectory.training_eligibility.eligibility_reason,
+            block_reason=positive_sft_block_reason,
         ),
-        negative_example_allowed=trajectory.training_eligibility.negative_example_allowed,
-        negative_example_reason=build_mechanical_path_reason(
+        negative_example_allowed=negative_example_block_reason is None,
+        negative_example_reason=build_training_path_reason(
             path_label="negative example",
-            allowed=trajectory.training_eligibility.negative_example_allowed,
-            mechanical_reason=trajectory.training_eligibility.eligibility_reason,
+            block_reason=negative_example_block_reason,
         ),
-        preference_data_allowed=trajectory.training_eligibility.preference_data_allowed,
-        preference_data_reason=build_mechanical_path_reason(
+        preference_data_allowed=preference_data_block_reason is None,
+        preference_data_reason=build_training_path_reason(
             path_label="preference data",
-            allowed=trajectory.training_eligibility.preference_data_allowed,
-            mechanical_reason=trajectory.training_eligibility.eligibility_reason,
+            block_reason=preference_data_block_reason,
         ),
     )
+
+
+def build_common_training_block_reason(trajectory: TrajectoryRecord) -> str | None:
+    if trajectory.policy.policy_spec.type != AGENT_MODEL_POLICY_TYPE:
+        return "policy is not model-generated training data"
+    if trajectory.source_provenance.split in NON_TRAINING_SPLITS:
+        return "split is not eligible for training"
+    if (
+        trajectory.leakage.canary_leaked
+        or trajectory.leakage.hidden_validators_visible_to_model
+    ):
+        return "leakage detected in model-visible trajectory evidence"
+    if trajectory.reward_components.orchestration_failure:
+        return "trajectory contains an orchestration failure"
+
+    missing_evidence = list_missing_training_agent_evidence(trajectory)
+    if missing_evidence:
+        return f"required agent evidence is missing: {', '.join(missing_evidence)}"
+    return None
+
+
+def list_missing_training_agent_evidence(
+    trajectory: TrajectoryRecord,
+) -> tuple[str, ...]:
+    missing: list[str] = []
+    if trajectory.identity.agent_attempt_id is None:
+        missing.append("agent_attempt_id")
+    if trajectory.statuses.agent_task_run_status is None:
+        missing.append("agent_task_run_status")
+    missing.extend(
+        field_name
+        for field_name in REQUIRED_TRAINING_AGENT_ARTIFACT_FIELDS
+        if getattr(trajectory.artifacts, field_name) is None
+    )
+    return tuple(missing)
+
+
+def build_positive_sft_block_reason(trajectory: TrajectoryRecord) -> str | None:
+    if trajectory.reward_components.reward_hack_flag:
+        return "reward-hack evidence forbids positive SFT"
+    if not trajectory.statuses.task_success:
+        return "positive SFT requires task success"
+    if trajectory.statuses.agent_task_run_status != "scored":
+        return "positive SFT requires a scored agent trajectory"
+    return None
+
+
+def build_negative_example_block_reason(trajectory: TrajectoryRecord) -> str | None:
+    if trajectory.statuses.task_success:
+        return "negative examples require an unsuccessful trajectory"
+    return None
+
+
+def build_preference_data_block_reason(trajectory: TrajectoryRecord) -> str | None:
+    if trajectory.statuses.grade_state == "cannot_grade":
+        return "preference data requires a gradable trajectory"
+    if trajectory.statuses.agent_task_run_status != "scored":
+        return "preference data requires a scored agent trajectory"
+    return None
 
 
 def build_review_block_reason(review: TrajectoryReviewRecord) -> str:
@@ -144,27 +204,11 @@ def build_review_block_reason(review: TrajectoryReviewRecord) -> str:
     return "human review did not accept trajectory"
 
 
-def build_analysis_reason(
-    trajectory: TrajectoryRecord,
-    *,
-    fallback_reason: str | None = None,
-) -> str:
-    if not trajectory.training_eligibility.analysis_allowed:
-        return (
-            "underlying trajectory is not analysis eligible: "
-            f"{trajectory.training_eligibility.eligibility_reason}"
-        )
-    if fallback_reason is not None:
-        return f"trajectory remains analysis-eligible; {fallback_reason}"
-    return "trajectory is available for analysis"
-
-
-def build_mechanical_path_reason(
+def build_training_path_reason(
     *,
     path_label: str,
-    allowed: bool,
-    mechanical_reason: str,
+    block_reason: str | None,
 ) -> str:
-    if allowed:
-        return f"accepted human review; mechanically eligible for {path_label}"
-    return f"underlying trajectory is not {path_label} eligible: {mechanical_reason}"
+    if block_reason is None:
+        return f"accepted human review; trajectory evidence permits {path_label}"
+    return block_reason

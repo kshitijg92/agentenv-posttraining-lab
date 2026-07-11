@@ -1241,7 +1241,55 @@ this revalidation through the candidate-artifact loader.
 The CLI now requires `--harness-audit` and `--control-calibration` for training
 candidate export and reports both accepted run IDs.
 
-#### Real CLI Check
+#### Candidate-Owned Training Eligibility
+
+Advanced the trajectory-record and training-candidate-record schemas to v1.
+`TrajectoryRecord` no longer stores `TrainingEligibility`; it now ends at the
+trajectory evidence boundary: provenance, policy, statuses, artifact
+references, reward-component fields, and leakage evidence. Whether the reward
+components themselves belong at this boundary remains a separate decision.
+
+`TrainingCandidateRecord.training_eligibility` is the only persisted training-
+use decision. Candidate construction derives it from the pinned trajectory
+evidence plus the review decision, and only runs after harness-audit and
+control-calibration gates pass. The derivation enforces model-policy, split,
+leakage, orchestration, required-agent-evidence, task-success, gradability, and
+positive-SFT reward-hack conditions at the training boundary.
+
+The training-candidate artifact loader recomputes every candidate record from
+its pinned trajectories and reviews and requires exact equality with the
+persisted records. Rehashing a manually altered eligibility decision therefore
+does not make it authoritative. Positive-SFT construction consults only the
+candidate's `training_eligibility`; it still validates the referenced
+trajectory artifacts but no longer asks the trajectory for a second
+eligibility decision.
+
+Trajectory review rendering now shows raw evidence such as policy type, split,
+statuses, leakage, orchestration failure, and reward-hack state rather than
+precomputed training-use flags. Artifacts containing trajectory-record v0 or
+training-candidate-record v0 are intentionally incompatible; this lab does not
+carry backward-compatibility shims.
+
+Because harness runtime provenance hashes the complete `src/agentenv` tree,
+this source change also makes the previously generated real harness-audit,
+control-calibration, and gated candidate smoke chain historical rather than
+current. Regenerate that chain at the next real-artifact checkpoint; do not
+reuse its old runtime hash with the v1 record schemas.
+
+#### Candidate-Eligibility Verification
+
+```text
+consolidated trajectory/training/artifact-manifest tests: 195 passed
+affected trajectory/review/training CLI tests: 3 passed
+repo-wide Ruff: passed
+repo-wide Pyright: passed
+git diff --check: passed
+```
+
+The full repository test suite and real trust-artifact chain were not rerun for
+this boundary checkpoint.
+
+#### Historical Real CLI Check
 
 Regenerated both trust artifacts after the source change:
 
@@ -1275,7 +1323,7 @@ composite task-hash mismatch for `preserve_cli_error_codes` and left no output
 directory. This is expected: those trajectories predate the required public-
 check idempotency field and therefore describe older task bytes.
 
-#### Verification
+#### Historical Gate Verification
 
 ```text
 focused real trust-gate success/failure/tamper tests: 8 passed

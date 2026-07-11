@@ -48,7 +48,7 @@ def build_positive_sft_examples_from_training_candidate_export(
 
     examples: list[PositiveSFTExampleRecord] = []
     for candidate in training_candidate_export.records:
-        if not candidate.final_eligibility.positive_sft_allowed:
+        if not candidate.training_eligibility.positive_sft_allowed:
             continue
         trajectory = trajectory_by_id.get(candidate.trajectory_id)
         if trajectory is None:
@@ -153,10 +153,10 @@ def build_positive_sft_example_record(
     trajectory: TrajectoryRecord,
 ) -> PositiveSFTExampleRecord:
     validate_positive_sft_candidate_matches_trajectory(candidate, trajectory)
-    if not trajectory.training_eligibility.positive_sft_allowed:
+    if not candidate.training_eligibility.positive_sft_allowed:
         raise ValueError(
-            "Positive SFT candidate source trajectory is not mechanically "
-            f"positive-SFT eligible: {trajectory.identity.trajectory_id}"
+            "Training candidate is not positive-SFT eligible: "
+            f"{candidate.trajectory_id}"
         )
 
     agent_task_view_ref = require_artifact_ref(
