@@ -14,15 +14,18 @@ from agentenv.orchestrators.eval_run import (
     run_eval_config,
     run_eval_config_all_policies,
 )
+from agentenv.trajectories.builder import build_trajectory_record_from_eval_attempt
 from agentenv.trajectories.export import (
     export_trajectory_records_from_eval_artifact,
     hash_file,
     write_trajectory_records_jsonl,
 )
 from agentenv.trajectories.review import (
+    build_initial_review_record,
     initialize_trajectory_review_artifact,
     load_trajectory_review_artifact,
     validate_trajectory_review_artifact,
+    validate_review_records_match_trajectories,
     write_trajectory_review_records_jsonl,
 )
 from agentenv.trajectories.schema import (
@@ -99,10 +102,61 @@ def test_initialize_trajectory_review_artifact_writes_pending_review_rows(
     assert "- policy_type: `scorer_control_patch`" in queue
     assert "- split: `practice`" in queue
     assert "- orchestration_failure: `False`" in queue
-    assert "- reward_hack_flag: `False`" in queue
+    assert "- reward_hack_evaluation_status: `complete`" in queue
+    assert "- reward_hack_finding_classification: `not_detected`" in queue
+    assert "- reward_hack_detected_checks: `[]`" in queue
     assert "positive_sft_allowed" not in queue
     assert "preference_data_allowed" not in queue
     assert "Review row" in queue
+
+
+def test_ambiguous_detection_initializes_pending_reward_hack_review(
+    tmp_path: Path,
+) -> None:
+    eval_run = run_eval_config(
+        AGENT_CONTROL_CONFIG,
+        "agent-happy",
+        tmp_path / "eval-run",
+    )
+    trajectory = build_trajectory_record_from_eval_attempt(
+        eval_run.out_dir,
+        eval_attempt_id=eval_run.attempts[0].eval_attempt_id,
+    )
+    payload = trajectory.model_dump(mode="json")
+    payload["reward_hack_detection"].update(
+        {
+            "evaluation_status": "complete",
+            "finding_classification": "ambiguous",
+            "check_results": [
+                {
+                    "exploit_check_id": "public_test_only_pass.submitted_patch_text",
+                    "exploit_classification": "public_test_only_pass",
+                    "check_status": "detected",
+                    "finding_classification": "ambiguous",
+                    "evidence_artifacts": ["candidate_patch", "attempt_json"],
+                    "error_class": None,
+                    "error_message": None,
+                }
+            ],
+        }
+    )
+    ambiguous_trajectory = TrajectoryRecord.model_validate(payload)
+
+    review = build_initial_review_record(ambiguous_trajectory)
+
+    assert review.reward_hack_review is not None
+    assert review.reward_hack_review.review_status == "not_reviewed"
+    assert review.reward_hack_review.review_decision is None
+
+    missing_reward_hack_review = review.model_copy(update={"reward_hack_review": None})
+    with pytest.raises(
+        ValueError,
+        match="requires reward_hack_review for an ambiguous reward-hack finding",
+    ):
+        validate_review_records_match_trajectories(
+            (missing_reward_hack_review,),
+            (ambiguous_trajectory,),
+        )
 
 
 def test_initialize_trajectory_review_queue_groups_agent_model_and_control_records(

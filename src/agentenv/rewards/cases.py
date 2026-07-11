@@ -7,6 +7,7 @@ import yaml
 
 from agentenv.audits.agent_task import load_agent_task_audit_case
 from agentenv.audits.scorer import load_scorer_audit_case
+from agentenv.hashing import hash_json
 from agentenv.rewards.schema import (
     AgentTaskAuditEvidencePair,
     HarnessAuditCaseRef,
@@ -84,6 +85,14 @@ def build_reward_hack_check_catalogue(
         check_ids_by_exploit[exploit_key] = case.exploit_check_id
 
     return tuple(checks_by_id[check_id] for check_id in sorted(checks_by_id))
+
+
+def hash_reward_hack_check_catalogue(
+    catalogue: Sequence[RewardHackExploitCheck],
+) -> str:
+    if not catalogue:
+        raise ValueError("Cannot hash an empty reward-hack check catalogue")
+    return hash_json([check.model_dump(mode="json") for check in catalogue])
 
 
 def find_reward_hack_case_paths(case_root: Path) -> list[Path]:

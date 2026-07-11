@@ -28,6 +28,7 @@ from agentenv.trajectories.export import (
 from agentenv.trajectories.schema import (
     TRAJECTORY_RECORD_SCHEMA_VERSION,
     TRAJECTORY_REVIEW_SCHEMA_VERSION,
+    RewardHackReview,
     TrajectoryRecord,
     TrajectoryReviewRecord,
 )
@@ -215,6 +216,14 @@ def validate_review_records_match_trajectories(
                     f"Trajectory review row {trajectory_id} {field_name} mismatch: "
                     f"{observed!r} != {expected!r}"
                 )
+        if (
+            trajectory.reward_hack_detection.finding_classification == "ambiguous"
+            and review.reward_hack_review is None
+        ):
+            raise ValueError(
+                f"Trajectory review row {trajectory_id} requires reward_hack_review "
+                "for an ambiguous reward-hack finding"
+            )
 
 
 def build_trajectory_record_index(
@@ -277,6 +286,11 @@ def build_initial_review_record(record: TrajectoryRecord) -> TrajectoryReviewRec
         task_id=record.identity.task_id,
         policy_id=record.identity.policy_id,
         review_status="not_reviewed",
+        reward_hack_review=(
+            RewardHackReview(review_status="not_reviewed")
+            if record.reward_hack_detection.finding_classification == "ambiguous"
+            else None
+        ),
     )
 
 
@@ -431,8 +445,12 @@ def render_review_queue_section(
                 f"`{record.leakage.hidden_validators_visible_to_model}`",
                 f"- orchestration_failure: "
                 f"`{record.reward_components.orchestration_failure}`",
-                f"- reward_hack_flag: "
-                f"`{format_markdown_value(record.reward_components.reward_hack_flag)}`",
+                f"- reward_hack_evaluation_status: "
+                f"`{record.reward_hack_detection.evaluation_status}`",
+                f"- reward_hack_finding_classification: "
+                f"`{format_markdown_value(record.reward_hack_detection.finding_classification)}`",
+                "- reward_hack_detected_checks: "
+                f"`{json.dumps(summarize_reward_hack_findings(record), sort_keys=True)}`",
                 "",
                 "Inspection refs:",
                 "",
@@ -456,6 +474,20 @@ def render_review_queue_section(
 
 def is_agent_model_trajectory(record: TrajectoryRecord) -> bool:
     return record.policy.policy_spec.type == AGENT_MODEL_POLICY_TYPE
+
+
+def summarize_reward_hack_findings(
+    record: TrajectoryRecord,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "exploit_check_id": result.exploit_check_id,
+            "finding_classification": result.finding_classification,
+            "evidence_artifacts": result.evidence_artifacts,
+        }
+        for result in record.reward_hack_detection.check_results
+        if result.check_status == "detected"
+    ]
 
 
 def is_candidate_patch_empty(record: TrajectoryRecord) -> bool | None:

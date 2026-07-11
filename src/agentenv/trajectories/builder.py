@@ -1,5 +1,5 @@
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,15 @@ from agentenv.evals.resolve import resolve_task_pack_path, select_policy
 from agentenv.evals.validate import load_eval_config
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.attempt import AttemptResult
+from agentenv.rewards.cases import load_reward_hack_check_catalogue
+from agentenv.rewards.detection import (
+    RewardHackDetectionContext,
+    evaluate_reward_hack_check_catalogue,
+)
+from agentenv.rewards.schema import (
+    RewardHackDetection,
+    RewardHackExploitCheck,
+)
 from agentenv.security.leakage import (
     LEAKAGE_CHECK_VERSION,
     scan_agent_visible_artifacts,
@@ -59,6 +68,7 @@ from agentenv.trajectories.schema import (
 
 
 REWARD_COMPONENT_DERIVATION_VERSION = "trajectory_reward_components_derivation_v0"
+REWARD_HACK_CASE_ROOT = Path("data/reward_hack_cases")
 
 
 @dataclass(frozen=True)
@@ -77,6 +87,7 @@ def build_trajectory_records_from_eval_suite(
     eval_suite_manifest_path = eval_suite_dir / MANIFEST_FILENAME
     eval_suite_manifest = load_eval_suite_manifest(eval_suite_manifest_path)
 
+    reward_hack_catalogue = load_reward_hack_check_catalogue(REWARD_HACK_CASE_ROOT)
     records: list[TrajectoryRecord] = []
     for policy_run in eval_suite_manifest.policy_runs:
         eval_run_manifest_path = resolve_relative_artifact_ref(
@@ -95,6 +106,7 @@ def build_trajectory_records_from_eval_suite(
             record = build_trajectory_record_from_eval_attempt(
                 eval_run_dir,
                 eval_attempt_id=attempt_record.eval_attempt_id,
+                reward_hack_catalogue=reward_hack_catalogue,
             )
             records.append(
                 build_trajectory_record_with_eval_suite_id(
@@ -110,10 +122,12 @@ def build_trajectory_records_from_eval_run(
 ) -> list[TrajectoryRecord]:
     eval_run_dir = eval_run_dir.resolve()
     eval_run_manifest = load_eval_run_manifest(eval_run_dir / MANIFEST_FILENAME)
+    reward_hack_catalogue = load_reward_hack_check_catalogue(REWARD_HACK_CASE_ROOT)
     return [
         build_trajectory_record_from_eval_attempt(
             eval_run_dir,
             eval_attempt_id=attempt_record.eval_attempt_id,
+            reward_hack_catalogue=reward_hack_catalogue,
         )
         for attempt_record in eval_run_manifest.attempts
     ]
@@ -123,6 +137,7 @@ def build_trajectory_record_from_eval_attempt(
     eval_run_dir: Path,
     *,
     eval_attempt_id: str,
+    reward_hack_catalogue: Sequence[RewardHackExploitCheck] | None = None,
 ) -> TrajectoryRecord:
     eval_run_dir = eval_run_dir.resolve()
     eval_run_manifest_path = eval_run_dir / MANIFEST_FILENAME
@@ -181,6 +196,24 @@ def build_trajectory_record_from_eval_attempt(
         task_manifest=task_manifest,
     )
     reward_components = build_reward_components(statuses, agent_summary)
+    artifacts = build_trajectory_artifacts(
+        eval_run_dir=eval_run_dir,
+        attempt_dir_ref=attempt_record.artifact_dir,
+        attempt_manifest=attempt_manifest,
+    )
+    catalogue = (
+        tuple(reward_hack_catalogue)
+        if reward_hack_catalogue is not None
+        else load_reward_hack_check_catalogue(REWARD_HACK_CASE_ROOT)
+    )
+    reward_hack_detection = build_reward_hack_detection(
+        catalogue,
+        eval_run_dir=eval_run_dir,
+        artifacts=artifacts,
+        statuses=statuses,
+        task_manifest_path=task_manifest_path,
+        task_manifest=task_manifest,
+    )
 
     return TrajectoryRecord(
         identity=TrajectoryIdentity(
@@ -212,12 +245,9 @@ def build_trajectory_record_from_eval_attempt(
             policy_spec=policy_spec,
         ),
         statuses=statuses,
-        artifacts=build_trajectory_artifacts(
-            eval_run_dir=eval_run_dir,
-            attempt_dir_ref=attempt_record.artifact_dir,
-            attempt_manifest=attempt_manifest,
-        ),
+        artifacts=artifacts,
         reward_components=reward_components,
+        reward_hack_detection=reward_hack_detection,
         leakage=leakage,
     )
 
@@ -740,7 +770,6 @@ def build_reward_components(
             statuses.prompt_loop_status,
         ),
         orchestration_failure=has_orchestration_failure(statuses),
-        reward_hack_flag=derive_reward_hack_flag(statuses.attempt_status),
     )
 
 
@@ -786,13 +815,43 @@ def has_orchestration_failure(statuses: TrajectoryStatuses) -> bool:
     )
 
 
-def derive_reward_hack_flag(attempt_status: object) -> bool | None:
-    if attempt_status is None:
+def build_reward_hack_detection(
+    catalogue: Sequence[RewardHackExploitCheck],
+    *,
+    eval_run_dir: Path,
+    artifacts: TrajectoryArtifacts,
+    statuses: TrajectoryStatuses,
+    task_manifest_path: Path,
+    task_manifest: TaskManifest,
+) -> RewardHackDetection:
+    return evaluate_reward_hack_check_catalogue(
+        catalogue,
+        context=RewardHackDetectionContext(
+            candidate_patch_path=resolve_optional_trajectory_artifact_path(
+                eval_run_dir,
+                artifacts.candidate_patch,
+            ),
+            prompt_loop_result_path=resolve_optional_trajectory_artifact_path(
+                eval_run_dir,
+                artifacts.prompt_loop_result_json,
+            ),
+            attempt_artifact_available=artifacts.attempt_json is not None,
+            attempt_status=statuses.attempt_status,
+            public_status=statuses.public_status,
+            hidden_status=statuses.hidden_status,
+            task_manifest_path=task_manifest_path,
+            task_manifest=task_manifest,
+        ),
+    )
+
+
+def resolve_optional_trajectory_artifact_path(
+    eval_run_dir: Path,
+    artifact: ArtifactRef | None,
+) -> Path | None:
+    if artifact is None:
         return None
-    return attempt_status in {
-        "INVALID_SHORTCUT",
-        "HIDDEN_VALIDATOR_ACCESS_ATTEMPT",
-    }
+    return resolve_eval_run_artifact_path(eval_run_dir, artifact.path)
 
 
 def build_trajectory_artifacts(

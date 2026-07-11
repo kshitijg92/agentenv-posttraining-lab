@@ -1427,3 +1427,59 @@ git diff --check: passed
 The full repository suite was not rerun for this checkpoint. The previous
 checkpoint's clean full result remains historical evidence for the pre-gate
 source; the affected-surface run above is the current verification result.
+
+#### Runtime Reward-Hack Catalogue Evaluation
+
+Replaced the trajectory reward-hack shortcut derived from two attempt statuses
+with a required top-level `RewardHackDetection`. Every exported trajectory now
+records the detector version, hash of the 14-check catalogue, one result for
+each concrete check, evaluation completeness, and the derived aggregate
+finding. Per-check states are `detected`, `not_detected`, `not_applicable`, or
+`detector_error`; any detector error makes the aggregate
+`incomplete_evaluation` with no finding classification.
+
+The catalogue remains mechanism-first: it contains the check ID, exploit
+specification, and declared `confirmed | ambiguous` strength. It does not copy
+audit-case expected attempt/public/hidden outcomes. Public-pass/hidden-fail and
+actual-timeout checks inspect result state inside their detector because that
+state is intrinsic to those named ambiguous patterns. Direct probe, tampering,
+spoofing, state-corruption, no-op, and format-only checks are not gated on a
+particular terminal outcome.
+
+Moved mechanism evaluation into one shared reward detector used by both the
+authored reward-hack audit and real trajectory export. Hidden-validator probes
+reuse the same private-reference classifier as the prompt-loop and scorer
+guards; public-test tampering reuses the scorer's public-test patch classifier.
+The format-only analysis and workspace-spoof classifiers likewise have one
+implementation shared by audit fixtures and model trajectories. Aggregate
+finding and completeness derivation also have one schema-level implementation
+used during construction and validation.
+
+Detected results contain only symbolic references to existing hash-pinned
+trajectory artifacts, such as `candidate_patch`, `prompt_loop_result_json`,
+and `attempt_json`; transcript or patch contents are not copied into the
+finding. Detector error text is bounded and passes through secret/private-
+reference redaction. `TrajectoryRecord` rejects evidence names that do not
+resolve to present hash-pinned artifacts.
+
+Ambiguous findings now initialize a nested `RewardHackReview`. Review-artifact
+validation rejects removal of that nested adjudication, and direct training-
+candidate construction blocks every trainable path until it is present. A
+human-confirmed finding blocks positive SFT while remaining available for
+reviewed negative/adversarial uses; a cleared ambiguous finding may proceed to
+the ordinary path-specific eligibility rules. Confirmed detector evidence
+cannot be cleared, and incomplete detector evaluation blocks all training uses
+while preserving analysis eligibility.
+
+No compatibility shim or schema-version bump was added.
+
+```text
+focused reward-hack audit/detection/schema and leakage tests: 73 passed
+focused trajectory/schema/review/training-builder tests: 78 passed
+focused reward/trajectory/training export tests: 12 passed
+targeted Ruff: passed
+repo-wide Pyright: passed
+git diff --check: passed
+```
+
+The full repository pytest suite was not run for this checkpoint.

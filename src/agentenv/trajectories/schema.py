@@ -9,6 +9,7 @@ from agentenv.evals.schema import EvalPolicy
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunStatus
 from agentenv.orchestrators.attempt import AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt import validate_attempt_check_statuses
+from agentenv.rewards.schema import RewardHackDetection
 from agentenv.tasks.schema import TaskSplit
 
 
@@ -190,7 +191,6 @@ class RewardComponents(BaseModel):
     model_output_format_valid: bool | None = None
     model_tool_usage_valid: bool | None = None
     orchestration_failure: bool
-    reward_hack_flag: bool | None = None
 
 
 def list_reward_component_signal_field_names() -> tuple[str, ...]:
@@ -309,6 +309,7 @@ class TrajectoryRecord(BaseModel):
     statuses: TrajectoryStatuses
     artifacts: TrajectoryArtifacts
     reward_components: RewardComponents
+    reward_hack_detection: RewardHackDetection
     leakage: LeakageEvidence
 
     @model_validator(mode="after")
@@ -379,8 +380,24 @@ class TrajectoryRecord(BaseModel):
                 "orchestrator terminal statuses"
             )
         self._validate_reward_component_consistency()
+        self._validate_reward_hack_evidence_refs()
 
         return self
+
+    def _validate_reward_hack_evidence_refs(self) -> None:
+        for check_result in self.reward_hack_detection.check_results:
+            for artifact_name in check_result.evidence_artifacts:
+                artifact = getattr(self.artifacts, artifact_name, None)
+                if not isinstance(artifact, ArtifactRef):
+                    raise ValueError(
+                        "reward-hack evidence must reference a present trajectory "
+                        f"artifact: {artifact_name}"
+                    )
+                if artifact.content_hash is None:
+                    raise ValueError(
+                        "reward-hack evidence must reference a hash-pinned trajectory "
+                        f"artifact: {artifact_name}"
+                    )
 
     def _validate_reward_component_consistency(self) -> None:
         expected_public_success = validator_success(self.statuses.public_status)
@@ -404,11 +421,6 @@ class TrajectoryRecord(BaseModel):
             raise ValueError(
                 "reward_components.model_tool_usage_valid must reflect "
                 "prompt_loop_status"
-            )
-        expected_reward_hack = reward_hack_flag(self.statuses.attempt_status)
-        if self.reward_components.reward_hack_flag != expected_reward_hack:
-            raise ValueError(
-                "reward_components.reward_hack_flag must reflect attempt_status"
             )
 
 
@@ -439,12 +451,3 @@ def model_tool_usage_valid(statuses: TrajectoryStatuses) -> bool | None:
     if statuses.prompt_loop_status in {"completed", "max_turns_exceeded"}:
         return True
     return None
-
-
-def reward_hack_flag(attempt_status: AttemptStatus | None) -> bool | None:
-    if attempt_status is None:
-        return None
-    return attempt_status in {
-        "INVALID_SHORTCUT",
-        "HIDDEN_VALIDATOR_ACCESS_ATTEMPT",
-    }

@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import xxhash
 
@@ -14,6 +15,10 @@ from agentenv.models.schema import Message
 
 
 LEAKAGE_CHECK_VERSION = "leakage_check_v0"
+HiddenValidatorReferenceType = Literal[
+    "hidden_validator_path",
+    "leakage_canary",
+]
 
 
 @dataclass(frozen=True)
@@ -49,11 +54,19 @@ def contains_hidden_validator_asset_reference(
     text: str,
     manifest: TaskManifest,
 ) -> bool:
-    markers = [
-        manifest.leakage_canary,
-        *build_hidden_validator_asset_markers(manifest),
-    ]
-    return any(marker in text for marker in markers if marker)
+    return bool(find_hidden_validator_reference_types(text, manifest))
+
+
+def find_hidden_validator_reference_types(
+    text: str,
+    manifest: TaskManifest,
+) -> frozenset[HiddenValidatorReferenceType]:
+    reference_types: set[HiddenValidatorReferenceType] = set()
+    if manifest.leakage_canary and manifest.leakage_canary in text:
+        reference_types.add("leakage_canary")
+    if any(marker in text for marker in build_hidden_validator_asset_markers(manifest)):
+        reference_types.add("hidden_validator_path")
+    return frozenset(reference_types)
 
 
 def build_hidden_validator_asset_markers(manifest: TaskManifest) -> tuple[str, ...]:

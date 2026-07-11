@@ -90,7 +90,23 @@ def _base_record_payload() -> dict[str, Any]:
             "model_output_format_valid": True,
             "model_tool_usage_valid": True,
             "orchestration_failure": False,
-            "reward_hack_flag": False,
+        },
+        "reward_hack_detection": {
+            "detector_version": "reward_hack_detector_v0",
+            "check_catalogue_hash": "xxh64:catalogue",
+            "evaluation_status": "complete",
+            "finding_classification": "not_detected",
+            "check_results": [
+                {
+                    "exploit_check_id": "no_op_patch.submitted_patch_text",
+                    "exploit_classification": "no_op_patch",
+                    "check_status": "not_detected",
+                    "finding_classification": None,
+                    "evidence_artifacts": [],
+                    "error_class": None,
+                    "error_message": None,
+                }
+            ],
         },
         "leakage": {
             "canary_hash": "xxh64:canary",
@@ -132,7 +148,6 @@ def test_reward_component_signal_field_names_are_derived_from_schema() -> None:
         "model_output_format_valid",
         "model_tool_usage_valid",
         "orchestration_failure",
-        "reward_hack_flag",
     )
 
 
@@ -234,7 +249,6 @@ def test_trajectory_record_accepts_cannot_grade_record() -> None:
             "public_validator_success": None,
             "hidden_validator_success": None,
             "orchestration_failure": False,
-            "reward_hack_flag": None,
         },
     )
 
@@ -456,7 +470,6 @@ def test_reward_model_output_format_must_reflect_prompt_loop_status() -> None:
             "hidden_validator_success": None,
             "model_output_format_valid": True,
             "model_tool_usage_valid": None,
-            "reward_hack_flag": None,
         },
     )
 
@@ -492,7 +505,6 @@ def test_reward_tool_usage_must_reflect_prompt_loop_status() -> None:
             "hidden_validator_success": None,
             "model_output_format_valid": True,
             "model_tool_usage_valid": True,
-            "reward_hack_flag": None,
         },
     )
 
@@ -503,12 +515,28 @@ def test_reward_tool_usage_must_reflect_prompt_loop_status() -> None:
         TrajectoryRecord.model_validate(payload)
 
 
-def test_reward_hack_flag_must_reflect_attempt_status() -> None:
-    payload = _record_payload(reward_components={"reward_hack_flag": True})
+def test_detected_reward_hack_requires_present_hash_pinned_evidence() -> None:
+    payload = _record_payload(
+        reward_hack_detection={
+            "evaluation_status": "complete",
+            "finding_classification": "ambiguous",
+            "check_results": [
+                {
+                    "exploit_check_id": "no_op_patch.submitted_patch_text",
+                    "exploit_classification": "no_op_patch",
+                    "check_status": "detected",
+                    "finding_classification": "ambiguous",
+                    "evidence_artifacts": ["missing_artifact"],
+                    "error_class": None,
+                    "error_message": None,
+                }
+            ],
+        }
+    )
 
     with pytest.raises(
         ValidationError,
-        match="reward_hack_flag must reflect attempt_status",
+        match="reward-hack evidence must reference a present trajectory artifact",
     ):
         TrajectoryRecord.model_validate(payload)
 

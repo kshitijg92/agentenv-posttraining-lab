@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -16,6 +17,18 @@ ExploitClassification = Literal[
     "tool_output_spoofing",
 ]
 RewardHackFindingClassification = Literal["confirmed", "ambiguous"]
+RewardHackAggregateFindingClassification = Literal[
+    "confirmed",
+    "ambiguous",
+    "not_detected",
+]
+RewardHackExploitCheckStatus = Literal[
+    "detected",
+    "not_detected",
+    "not_applicable",
+    "detector_error",
+]
+RewardHackEvaluationStatus = Literal["complete", "incomplete_evaluation"]
 HiddenValidatorProbeReferenceType = Literal[
     "hidden_validator_path",
     "leakage_canary",
@@ -440,3 +453,111 @@ class RewardHackExploitCheck(BaseModel):
     exploit_check_id: str = Field(min_length=1)
     finding_classification: RewardHackFindingClassification
     exploit: RewardHackExploit
+
+
+class RewardHackExploitCheckResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exploit_check_id: str = Field(min_length=1)
+    exploit_classification: ExploitClassification
+    check_status: RewardHackExploitCheckStatus
+    finding_classification: RewardHackFindingClassification | None = None
+    evidence_artifacts: list[str] = Field(default_factory=list)
+    error_class: str | None = Field(default=None, min_length=1)
+    error_message: str | None = Field(default=None, min_length=1)
+
+    @field_validator("evidence_artifacts")
+    @classmethod
+    def validate_evidence_artifacts(cls, value: list[str]) -> list[str]:
+        if any(not artifact for artifact in value):
+            raise ValueError("reward-hack evidence artifact names must not be empty")
+        if len(value) != len(set(value)):
+            raise ValueError("reward-hack evidence artifact names must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_check_outcome(self) -> "RewardHackExploitCheckResult":
+        if self.check_status == "detected":
+            if self.finding_classification is None:
+                raise ValueError("detected reward-hack checks require classification")
+            if not self.evidence_artifacts:
+                raise ValueError("detected reward-hack checks require evidence")
+            if self.error_class is not None or self.error_message is not None:
+                raise ValueError("detected reward-hack checks cannot include errors")
+            return self
+
+        if self.finding_classification is not None:
+            raise ValueError(
+                "non-detected reward-hack checks cannot include classification"
+            )
+        if self.evidence_artifacts:
+            raise ValueError(
+                "non-detected reward-hack checks cannot include evidence artifacts"
+            )
+
+        if self.check_status == "detector_error":
+            if self.error_class is None or self.error_message is None:
+                raise ValueError(
+                    "detector_error reward-hack checks require error details"
+                )
+            return self
+
+        if self.error_class is not None or self.error_message is not None:
+            raise ValueError(
+                "successful reward-hack checks cannot include error details"
+            )
+        return self
+
+
+def derive_reward_hack_evaluation_status(
+    check_results: Sequence[RewardHackExploitCheckResult],
+) -> RewardHackEvaluationStatus:
+    if any(result.check_status == "detector_error" for result in check_results):
+        return "incomplete_evaluation"
+    return "complete"
+
+
+def derive_reward_hack_finding_classification(
+    check_results: Sequence[RewardHackExploitCheckResult],
+) -> RewardHackAggregateFindingClassification | None:
+    if derive_reward_hack_evaluation_status(check_results) == "incomplete_evaluation":
+        return None
+    detected_classifications = {
+        result.finding_classification
+        for result in check_results
+        if result.check_status == "detected"
+    }
+    if "confirmed" in detected_classifications:
+        return "confirmed"
+    if "ambiguous" in detected_classifications:
+        return "ambiguous"
+    return "not_detected"
+
+
+class RewardHackDetection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detector_version: str = Field(min_length=1)
+    check_catalogue_hash: str = Field(min_length=1)
+    evaluation_status: RewardHackEvaluationStatus
+    finding_classification: RewardHackAggregateFindingClassification | None = None
+    check_results: list[RewardHackExploitCheckResult] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_aggregate(self) -> "RewardHackDetection":
+        check_ids = [result.exploit_check_id for result in self.check_results]
+        if len(check_ids) != len(set(check_ids)):
+            raise ValueError("reward-hack check results require unique check ids")
+
+        expected_evaluation_status = derive_reward_hack_evaluation_status(
+            self.check_results
+        )
+        if self.evaluation_status != expected_evaluation_status:
+            raise ValueError("reward-hack evaluation_status must reflect check results")
+
+        expected_finding = derive_reward_hack_finding_classification(self.check_results)
+        if self.finding_classification != expected_finding:
+            raise ValueError(
+                "reward-hack finding_classification must reflect check results"
+            )
+        return self

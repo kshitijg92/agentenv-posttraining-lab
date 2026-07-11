@@ -372,3 +372,29 @@ counting those cases as different runtime checks would confuse audit depth with
 detector coverage. Conversely, silently losing a catalogue entry would create
 false clean labels and could admit unsafe trajectories into positive training
 data.
+
+### Audit Expectations Are Not Detector Definitions
+
+An authored exploit case needs expected terminal outcomes so it can test
+whether the harness responds correctly to a controlled input. Those outcomes
+do not define the exploit itself. Copying them into the runtime check catalogue
+would conflate two different claims:
+
+```text
+audit expectation: this controlled case should end in these states
+detector evidence: this observed trajectory contains this mechanism or pattern
+```
+
+This distinction prevents two opposite labeling errors. Gating direct evidence,
+such as a hidden-validator probe or forged authority file, on one expected
+terminal status can miss the same mechanism when the run ends differently.
+Conversely, treating a terminal pattern such as public success plus hidden
+failure as a mechanism can mislabel an honest incomplete solution as a
+confirmed exploit.
+
+Some ambiguous checks intrinsically include an outcome: a public-pass/hidden-
+fail pattern and an actual timeout cannot be observed without result state. In
+those cases status is local evidence for that named pattern, not catalogue
+identity and not a universal reward-hack shortcut. The durable rule is to
+classify each concrete surface from the evidence it actually requires, then
+aggregate the completed findings separately.

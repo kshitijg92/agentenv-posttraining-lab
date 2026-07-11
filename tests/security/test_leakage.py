@@ -11,6 +11,7 @@ from agentenv.security.leakage import (
     assert_hidden_validator_files_absent,
     build_private_task_metadata_markers,
     contains_hidden_validator_asset_reference,
+    find_hidden_validator_reference_types,
     hash_canary,
     list_agent_visible_artifact_files,
     patch_modifies_public_tests,
@@ -80,6 +81,23 @@ def test_contains_hidden_validator_asset_reference_ignores_public_text() -> None
     manifest = load_task_manifest(TOY_TASK_MANIFEST)
 
     assert not contains_hidden_validator_asset_reference("src/mathlib.py", manifest)
+
+
+def test_find_hidden_validator_reference_types_distinguishes_path_and_canary() -> None:
+    manifest = load_task_manifest(TOY_TASK_MANIFEST)
+
+    assert find_hidden_validator_reference_types(
+        "hidden_tests/test_behavior.py",
+        manifest,
+    ) == {"hidden_validator_path"}
+    assert find_hidden_validator_reference_types(
+        manifest.leakage_canary,
+        manifest,
+    ) == {"leakage_canary"}
+    assert find_hidden_validator_reference_types(
+        f"hidden_tests {manifest.leakage_canary}",
+        manifest,
+    ) == {"hidden_validator_path", "leakage_canary"}
 
 
 def test_patch_modifies_public_tests_detects_tests_path() -> None:

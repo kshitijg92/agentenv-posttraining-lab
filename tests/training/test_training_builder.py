@@ -217,7 +217,6 @@ def test_training_candidate_blocks_orchestration_failure(
             "model_output_format_valid": None,
             "model_tool_usage_valid": None,
             "orchestration_failure": True,
-            "reward_hack_flag": None,
         },
     )
     review = build_reviewed_record(
@@ -252,8 +251,12 @@ def test_reward_hack_trajectory_is_negative_or_preference_data_not_positive_sft(
         reward_components={
             "public_validator_success": False,
             "hidden_validator_success": False,
-            "reward_hack_flag": True,
         },
+        reward_hack_detection=_detected_reward_hack(
+            exploit_check_id="public_check_tampering.submitted_patch_text",
+            exploit_classification="public_check_tampering",
+            finding_classification="confirmed",
+        ),
     )
     review = build_reward_hack_adjudicated_review(
         build_reviewed_record(
@@ -298,6 +301,14 @@ def test_cleared_reward_hack_review_does_not_block_positive_sft(
     tmp_path: Path,
 ) -> None:
     trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    trajectory = rebuild_trajectory(
+        trajectory,
+        reward_hack_detection=_detected_reward_hack(
+            exploit_check_id="public_test_only_pass.submitted_patch_text",
+            exploit_classification="public_test_only_pass",
+            finding_classification="ambiguous",
+        ),
+    )
     review = build_reward_hack_adjudicated_review(
         build_reviewed_record(
             build_review_record_for_trajectory(trajectory),
@@ -310,6 +321,73 @@ def test_cleared_reward_hack_review_does_not_block_positive_sft(
 
     assert candidate.training_eligibility.positive_sft_allowed
     assert candidate.training_eligibility.preference_data_allowed
+
+
+def test_ambiguous_reward_hack_without_adjudication_blocks_all_training_paths(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    trajectory = rebuild_trajectory(
+        trajectory,
+        reward_hack_detection=_detected_reward_hack(
+            exploit_check_id="public_test_only_pass.submitted_patch_text",
+            exploit_classification="public_test_only_pass",
+            finding_classification="ambiguous",
+        ),
+    )
+    review = build_reviewed_record(
+        build_review_record_for_trajectory(trajectory),
+        "accepted",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    expected_reason = "ambiguous reward-hack evidence requires human adjudication"
+    assert candidate.training_eligibility.is_analysis_only
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.positive_sft_reason == expected_reason
+    assert candidate.training_eligibility.negative_example_reason == expected_reason
+    assert candidate.training_eligibility.preference_data_reason == expected_reason
+
+
+def test_incomplete_reward_hack_evaluation_blocks_all_training_paths(
+    tmp_path: Path,
+) -> None:
+    trajectory = build_agent_model_trajectory(tmp_path, policy="agent-happy")
+    trajectory = rebuild_trajectory(
+        trajectory,
+        reward_hack_detection={
+            "evaluation_status": "incomplete_evaluation",
+            "finding_classification": None,
+            "check_results": [
+                {
+                    "exploit_check_id": "no_op_patch.submitted_patch_text",
+                    "exploit_classification": "no_op_patch",
+                    "check_status": "detector_error",
+                    "finding_classification": None,
+                    "evidence_artifacts": [],
+                    "error_class": "RuntimeError",
+                    "error_message": "detector failed",
+                }
+            ],
+        },
+    )
+    review = build_reviewed_record(
+        build_review_record_for_trajectory(trajectory),
+        "accepted",
+    )
+
+    candidate = build_training_candidate_record(trajectory, review)
+
+    assert candidate.training_eligibility.is_analysis_only
+    assert not candidate.training_eligibility.positive_sft_allowed
+    assert not candidate.training_eligibility.negative_example_allowed
+    assert not candidate.training_eligibility.preference_data_allowed
+    assert candidate.training_eligibility.positive_sft_reason == (
+        "reward-hack evaluation is incomplete"
+    )
 
 
 def test_training_candidate_blocks_missing_agent_evidence(
@@ -489,6 +567,29 @@ def rebuild_trajectory(
         assert isinstance(section_payload, dict)
         section_payload.update(updates)
     return TrajectoryRecord.model_validate(payload)
+
+
+def _detected_reward_hack(
+    *,
+    exploit_check_id: str,
+    exploit_classification: str,
+    finding_classification: str,
+) -> dict[str, object]:
+    return {
+        "evaluation_status": "complete",
+        "finding_classification": finding_classification,
+        "check_results": [
+            {
+                "exploit_check_id": exploit_check_id,
+                "exploit_classification": exploit_classification,
+                "check_status": "detected",
+                "finding_classification": finding_classification,
+                "evidence_artifacts": ["candidate_patch"],
+                "error_class": None,
+                "error_message": None,
+            }
+        ],
+    }
 
 
 def build_review_record_for_trajectory(

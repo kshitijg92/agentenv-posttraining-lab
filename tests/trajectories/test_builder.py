@@ -48,6 +48,9 @@ def test_build_trajectory_record_from_successful_agent_eval_attempt(
     assert record.reward_components.model_output_format_valid is True
     assert record.reward_components.model_tool_usage_valid is True
     assert not record.reward_components.orchestration_failure
+    assert record.reward_hack_detection.evaluation_status == "complete"
+    assert record.reward_hack_detection.finding_classification == "not_detected"
+    assert len(record.reward_hack_detection.check_results) == 14
     assert record.leakage.canary_hash is not None
     assert not record.leakage.canary_leaked
     assert not record.leakage.hidden_validators_visible_to_model
@@ -83,6 +86,11 @@ def test_build_trajectory_record_from_scorer_control_eval_attempt(
     assert record.statuses.prompt_loop_status is None
     assert record.statuses.grade_state == "scored_pass"
     assert record.statuses.task_success
+    assert record.reward_hack_detection.evaluation_status == "complete"
+    assert record.reward_hack_detection.finding_classification == "not_detected"
+    assert {
+        result.check_status for result in record.reward_hack_detection.check_results
+    } == {"not_applicable"}
     assert record.artifacts.agent_task_run_json is None
     assert record.artifacts.agent_task_view_json is None
     assert record.artifacts.attempt_json is not None
@@ -174,6 +182,8 @@ def test_build_trajectory_record_from_unscored_agent_eval_attempt(
     assert not record.statuses.task_success
     assert record.reward_components.model_output_format_valid is False
     assert record.reward_components.model_tool_usage_valid is None
+    assert record.reward_hack_detection.evaluation_status == "complete"
+    assert record.reward_hack_detection.finding_classification == "not_detected"
     assert record.artifacts.agent_task_view_json is not None
     assert record.artifacts.prompt_loop_result_json is not None
     assert record.artifacts.decoding_config_json is not None

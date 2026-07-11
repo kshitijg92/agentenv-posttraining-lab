@@ -103,7 +103,9 @@ def build_training_eligibility(
             preference_data_reason=review_block_reason,
         )
 
-    common_block_reason = build_common_training_block_reason(trajectory)
+    common_block_reason = build_common_training_block_reason(
+        trajectory
+    ) or build_reward_hack_review_block_reason(trajectory, review)
     positive_sft_block_reason = common_block_reason or build_positive_sft_block_reason(
         trajectory,
         review,
@@ -148,6 +150,8 @@ def build_common_training_block_reason(trajectory: TrajectoryRecord) -> str | No
         return "leakage detected in model-visible trajectory evidence"
     if trajectory.reward_components.orchestration_failure:
         return "trajectory contains an orchestration failure"
+    if trajectory.reward_hack_detection.evaluation_status != "complete":
+        return "reward-hack evaluation is incomplete"
 
     missing_evidence = list_missing_training_agent_evidence(trajectory)
     if missing_evidence:
@@ -180,12 +184,30 @@ def build_positive_sft_block_reason(
         and review.reward_hack_review.review_decision == "confirmed"
     ):
         return "human review confirmed reward-hack evidence"
-    if trajectory.reward_components.reward_hack_flag:
+    finding = trajectory.reward_hack_detection.finding_classification
+    if finding == "confirmed":
         return "reward-hack evidence forbids positive SFT"
+    if finding == "ambiguous" and (
+        review.reward_hack_review is None
+        or review.reward_hack_review.review_decision != "cleared"
+    ):
+        return "ambiguous reward-hack evidence requires human clearance"
     if not trajectory.statuses.task_success:
         return "positive SFT requires task success"
     if trajectory.statuses.agent_task_run_status != "scored":
         return "positive SFT requires a scored agent trajectory"
+    return None
+
+
+def build_reward_hack_review_block_reason(
+    trajectory: TrajectoryRecord,
+    review: TrajectoryReviewRecord,
+) -> str | None:
+    if (
+        trajectory.reward_hack_detection.finding_classification == "ambiguous"
+        and review.reward_hack_review is None
+    ):
+        return "ambiguous reward-hack evidence requires human adjudication"
     return None
 
 
