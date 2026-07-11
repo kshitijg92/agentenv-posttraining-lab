@@ -12,14 +12,14 @@ from agentenv.orchestrators.attempt import validate_attempt_check_statuses
 from agentenv.tasks.schema import TaskSplit
 
 
-TrajectoryRecordSchemaVersion = Literal["trajectory_record_v1"]
+TrajectoryRecordSchemaVersion = Literal["trajectory_record_v0"]
 TrajectoryReviewSchemaVersion = Literal["trajectory_review_v0"]
 RewardComponentsVersion = Literal["reward_components_v0"]
 GradeState = Literal["scored_pass", "scored_fail", "cannot_grade"]
 ReviewStatus = Literal["not_reviewed", "reviewed"]
 ReviewDecision = Literal["accepted", "rejected", "needs_followup"]
 
-TRAJECTORY_RECORD_SCHEMA_VERSION: TrajectoryRecordSchemaVersion = "trajectory_record_v1"
+TRAJECTORY_RECORD_SCHEMA_VERSION: TrajectoryRecordSchemaVersion = "trajectory_record_v0"
 TRAJECTORY_REVIEW_SCHEMA_VERSION: TrajectoryReviewSchemaVersion = "trajectory_review_v0"
 REWARD_COMPONENTS_VERSION: RewardComponentsVersion = "reward_components_v0"
 REWARD_COMPONENT_METADATA_SCHEMA_EXTRA_KEY = "reward_component_metadata"

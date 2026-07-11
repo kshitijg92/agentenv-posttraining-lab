@@ -1561,7 +1561,7 @@ def _trajectory_export_manifest() -> dict[str, Any]:
         "source_manifest_hash": "xxh64:source",
         "source_eval_run_id": "eval_run_001",
         "source_eval_suite_id": None,
-        "trajectory_record_schema_version": "trajectory_record_v1",
+        "trajectory_record_schema_version": "trajectory_record_v0",
         "record_count": 1,
         "trajectories_jsonl_hash": "xxh64:trajectories",
         "artifacts": {

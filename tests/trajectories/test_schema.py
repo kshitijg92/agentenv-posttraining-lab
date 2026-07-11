@@ -18,7 +18,7 @@ def _artifact(path: str) -> dict[str, str]:
 
 def _base_record_payload() -> dict[str, Any]:
     return {
-        "schema_version": "trajectory_record_v1",
+        "schema_version": "trajectory_record_v0",
         "identity": {
             "trajectory_id": "traj_001",
             "eval_suite_id": "eval_suite_001",

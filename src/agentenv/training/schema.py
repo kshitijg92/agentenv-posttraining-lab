@@ -7,11 +7,11 @@ from agentenv.models.schema import MessageWithoutMetadata
 from agentenv.trajectories.schema import ReviewDecision, ReviewStatus
 
 
-TrainingCandidateRecordSchemaVersion = Literal["training_candidate_record_v1"]
+TrainingCandidateRecordSchemaVersion = Literal["training_candidate_record_v0"]
 PositiveSFTExampleRecordSchemaVersion = Literal["positive_sft_example_record_v0"]
 
 TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION: TrainingCandidateRecordSchemaVersion = (
-    "training_candidate_record_v1"
+    "training_candidate_record_v0"
 )
 POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION: PositiveSFTExampleRecordSchemaVersion = (
     "positive_sft_example_record_v0"

@@ -33,7 +33,7 @@ def _eligibility_payload(**updates: Any) -> dict[str, Any]:
 
 def _candidate_payload(**updates: Any) -> dict[str, Any]:
     payload = {
-        "schema_version": "training_candidate_record_v1",
+        "schema_version": "training_candidate_record_v0",
         "trajectory_id": "trajectory_001",
         "eval_attempt_id": "eval_attempt_001",
         "task_id": "repair_jsonl_deduper",

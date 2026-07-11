@@ -1243,11 +1243,12 @@ candidate export and reports both accepted run IDs.
 
 #### Candidate-Owned Training Eligibility
 
-Advanced the trajectory-record and training-candidate-record schemas to v1.
-`TrajectoryRecord` no longer stores `TrainingEligibility`; it now ends at the
-trajectory evidence boundary: provenance, policy, statuses, artifact
-references, reward-component fields, and leakage evidence. Whether the reward
-components themselves belong at this boundary remains a separate decision.
+Changed the current trajectory-record and training-candidate-record schemas in
+place, without a version bump or compatibility shim. `TrajectoryRecord` no
+longer stores `TrainingEligibility`; it now ends at the trajectory evidence
+boundary: provenance, policy, statuses, artifact references, reward-component
+fields, and leakage evidence. Whether the reward components themselves belong
+at this boundary remains a separate decision.
 
 `TrainingCandidateRecord.training_eligibility` is the only persisted training-
 use decision. Candidate construction derives it from the pinned trajectory
@@ -1266,15 +1267,15 @@ eligibility decision.
 
 Trajectory review rendering now shows raw evidence such as policy type, split,
 statuses, leakage, orchestration failure, and reward-hack state rather than
-precomputed training-use flags. Artifacts containing trajectory-record v0 or
-training-candidate-record v0 are intentionally incompatible; this lab does not
-carry backward-compatibility shims.
+precomputed training-use flags. Historical artifacts using the earlier shape
+may no longer validate even though the in-progress schema labels remain v0;
+this lab intentionally carries neither compatibility shims nor schema bumps.
 
 Because harness runtime provenance hashes the complete `src/agentenv` tree,
 this source change also makes the previously generated real harness-audit,
 control-calibration, and gated candidate smoke chain historical rather than
 current. Regenerate that chain at the next real-artifact checkpoint; do not
-reuse its old runtime hash with the v1 record schemas.
+reuse its old runtime hash with the changed record schemas.
 
 #### Candidate-Eligibility Verification
 
