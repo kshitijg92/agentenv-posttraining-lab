@@ -1,5 +1,6 @@
+import json
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any
 
 import yaml
@@ -11,6 +12,7 @@ from agentenv.rewards.schema import (
     HarnessAuditCaseRef,
     RewardHackCase,
     RewardHackEvidencePair,
+    RewardHackExploitCheck,
     ScorerAuditEvidencePair,
 )
 
@@ -20,6 +22,79 @@ def load_reward_hack_case(path: Path) -> RewardHackCase:
     if not isinstance(raw, dict):
         raise ValueError(f"Expected reward-hack case object at {path}")
     return RewardHackCase.model_validate(raw)
+
+
+def load_reward_hack_check_catalogue(
+    case_root: Path,
+) -> tuple[RewardHackExploitCheck, ...]:
+    case_paths = find_reward_hack_case_paths(case_root)
+    if not case_paths:
+        raise ValueError(
+            f"Reward-hack check catalogue contains no cases under {case_root}"
+        )
+    return build_reward_hack_check_catalogue(
+        [load_reward_hack_case(path) for path in case_paths]
+    )
+
+
+def build_reward_hack_check_catalogue(
+    cases: Sequence[RewardHackCase],
+) -> tuple[RewardHackExploitCheck, ...]:
+    if not cases:
+        raise ValueError("Reward-hack check catalogue requires at least one case")
+
+    cases_by_id: dict[str, RewardHackCase] = {}
+    checks_by_id: dict[str, RewardHackExploitCheck] = {}
+    check_ids_by_exploit: dict[str, str] = {}
+
+    for case in cases:
+        if case.reward_hack_id in cases_by_id:
+            raise ValueError(
+                "Reward-hack cases contain duplicate reward_hack_id: "
+                f"{case.reward_hack_id!r}"
+            )
+        cases_by_id[case.reward_hack_id] = case
+
+        check = RewardHackExploitCheck(
+            exploit_check_id=case.exploit_check_id,
+            finding_classification=case.finding_classification,
+            exploit=case.exploit,
+        )
+        existing_check = checks_by_id.get(case.exploit_check_id)
+        if existing_check is not None and existing_check != check:
+            raise ValueError(
+                "Reward-hack cases map exploit_check_id to conflicting check "
+                f"definitions: {case.exploit_check_id!r}"
+            )
+
+        exploit_key = json.dumps(
+            case.exploit.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        existing_check_id = check_ids_by_exploit.get(exploit_key)
+        if existing_check_id is not None and existing_check_id != case.exploit_check_id:
+            raise ValueError(
+                "Identical reward-hack exploit specifications use different "
+                f"exploit_check_id values: {existing_check_id!r} and "
+                f"{case.exploit_check_id!r}"
+            )
+
+        checks_by_id[case.exploit_check_id] = check
+        check_ids_by_exploit[exploit_key] = case.exploit_check_id
+
+    return tuple(checks_by_id[check_id] for check_id in sorted(checks_by_id))
+
+
+def find_reward_hack_case_paths(case_root: Path) -> list[Path]:
+    case_root = case_root.resolve()
+    if case_root.is_file():
+        if case_root.name != "case.yaml":
+            raise ValueError(f"Expected reward-hack case.yaml file: {case_root}")
+        return [case_root]
+    if (case_root / "case.yaml").is_file():
+        return [case_root / "case.yaml"]
+    return sorted(case_root.rglob("case.yaml"))
 
 
 def verify_reward_hack_case_source_refs(

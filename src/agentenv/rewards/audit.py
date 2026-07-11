@@ -26,7 +26,9 @@ from agentenv.audits.schema import (
     ScorerAuditRecord,
 )
 from agentenv.rewards.cases import (
+    find_reward_hack_case_paths,
     load_reward_hack_case,
+    load_reward_hack_check_catalogue,
     verify_reward_hack_case_source_refs,
 )
 from agentenv.rewards.schema import (
@@ -158,9 +160,10 @@ def run_reward_hack_audit(
     repo_root: Path | None = None,
 ) -> list[RewardHackAuditResult]:
     root = Path.cwd().resolve() if repo_root is None else repo_root.resolve()
+    load_reward_hack_check_catalogue(case_root)
     return [
         run_reward_hack_case_audit(case_path, work_dir=work_dir, repo_root=root)
-        for case_path in _reward_hack_case_paths(case_root)
+        for case_path in find_reward_hack_case_paths(case_root)
     ]
 
 
@@ -811,17 +814,6 @@ def _patch_adds_or_updates_path(patch_text: str, path: str) -> bool:
         line == f"--- a/{path}" or line == f"+++ b/{path}"
         for line in patch_text.splitlines()
     )
-
-
-def _reward_hack_case_paths(case_root: Path) -> list[Path]:
-    case_root = case_root.resolve()
-    if case_root.is_file():
-        if case_root.name != "case.yaml":
-            raise ValueError(f"Expected reward-hack case.yaml file: {case_root}")
-        return [case_root]
-    if (case_root / "case.yaml").is_file():
-        return [case_root / "case.yaml"]
-    return sorted(case_root.rglob("case.yaml"))
 
 
 def _stage_scorer_audit_pair(

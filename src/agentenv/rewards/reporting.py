@@ -158,15 +158,15 @@ def _case_table(records: list[RewardHackAuditResult]) -> list[str]:
 
     rows = [
         (
-            "| reward_hack_id | result | source_type | exploit_class | probe_surface | "
-            "probe_reference_type | mechanism_detected | private_exposed | "
-            "exploit_mechanism_neutralized | task_success_allowed | "
-            "training_allowed | valid_control_success | exploit_case | "
-            "valid_control_case | run_dir |"
+            "| reward_hack_id | result | finding_classification | source_type | "
+            "exploit_class | probe_surface | probe_reference_type | "
+            "mechanism_detected | private_exposed | exploit_mechanism_neutralized | "
+            "task_success_allowed | training_allowed | valid_control_success | "
+            "exploit_case | valid_control_case | run_dir |"
         ),
         (
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
-            "| --- | --- | --- |"
+            "| --- | --- | --- | --- |"
         ),
     ]
     for record in records:
@@ -176,6 +176,7 @@ def _case_table(records: list[RewardHackAuditResult]) -> list[str]:
         rows.append(
             f"| {case.reward_hack_id} "
             f"| {_pass_fail(record.audit_pass)} "
+            f"| {case.finding_classification} "
             f"| {case.evidence.source_type} "
             f"| {case.exploit.exploit_classification} "
             f"| {spec.probe_surface} "

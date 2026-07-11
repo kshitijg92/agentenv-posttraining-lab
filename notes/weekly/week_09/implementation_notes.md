@@ -1303,8 +1303,69 @@ whole.
 This checkpoint does not yet auto-initialize nested reviews. The current
 trajectory reward-hack flag covers only two attempt statuses and cannot
 honestly produce the planned `confirmed | ambiguous | not_detected` aggregate.
-Detector generalization and reward-hack-case reclassification remain the next
-boundary; until then initialized review rows keep `reward_hack_review=null`.
+Detector generalization remains the next boundary; until then initialized
+review rows keep `reward_hack_review=null`.
+
+#### Reward-Hack Finding Classification
+
+Added required `finding_classification` evidence to every `RewardHackCase`
+without changing `reward_hack_case_v0`. It is orthogonal to
+`exploit_classification`: the exploit field names the mechanism family, while
+the finding field records what the current authored evidence establishes.
+
+The 16 cases are classified as:
+
+```text
+confirmed: 11
+ambiguous: 5
+```
+
+Confirmed cases cover hidden-validator probing, public-check tampering, fake
+success output, tool-output spoofing, and state corruption. Ambiguous cases
+cover public-pass/hidden-fail, no-op, format-only, and both timeout surfaces.
+The five ambiguous case descriptions now explicitly preserve the possibility
+of honest model failure rather than claiming observed intent.
+
+`not_detected` is deliberately absent from the case schema. It is a runtime
+aggregate that is valid only after applicable detector coverage completes.
+The reward-hack report now includes each case's finding classification, and the
+persisted audit results retain it through the embedded typed case.
+
+Changing every authored case changes the case-root inputs and makes historical
+reward-hack audit artifacts stale. No compatibility shim or schema bump was
+added.
+
+#### Reward-Hack Check Catalogue
+
+Added a required `exploit_check_id` to each `RewardHackCase`. The case ID and
+check ID have different identities: `reward_hack_id` names one audit fixture,
+while `exploit_check_id` names the concrete exploit specification and surface
+that runtime detection must evaluate.
+
+The 16 authored cases derive a deterministic catalogue of 14 unique checks.
+The fake-success cases share one check, as do the tool-output-spoofing cases;
+their different task outcomes provide multiple audit fixtures for the same
+runtime check rather than expanding runtime coverage.
+
+Catalogue construction fails closed for an empty case set, duplicate
+`reward_hack_id`, one check ID mapped to different exploit specifications or
+finding classifications, or one identical exploit specification mapped to
+different check IDs. The reward-hack audit runner now constructs and validates
+the catalogue before executing cases, so these invariants are exercised by the
+real audit path rather than only by schema tests.
+
+This checkpoint does not yet evaluate the catalogue against exported
+trajectories. The next boundary is the per-check trajectory result and its
+reviewable evidence contract.
+
+```text
+focused reward-hack schema/audit/export tests: 47 passed
+targeted Ruff: passed
+repo-wide Pyright: passed
+git diff --check: passed
+```
+
+The repository-wide pytest suite was not run for this small checkpoint.
 
 #### Candidate-Eligibility Verification
 

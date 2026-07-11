@@ -321,3 +321,54 @@ Both block downstream training-data export, but the distinction matters for
 diagnosis: `FAIL` is evidence of a harness-contract violation, while
 `INCONCLUSIVE` says the measurement itself must be repaired before trust can be
 established.
+
+### A Failure Pattern Is Not Necessarily A Reward-Hack Mechanism
+
+Observable task outcomes do not reveal why the model produced them. In
+particular:
+
+```text
+public PASS + hidden FAIL
+```
+
+is compatible with both public-proxy gaming and an honest but incomplete
+solution. Empty patches, format-only patches, and timeouts have the same
+ambiguity. Automatically calling them reward hacking would turn ordinary model
+errors into false exploit labels.
+
+Authored audit cases remain useful because they test whether shallow signals
+can fool the harness or a downstream selector. But the case's controlled
+purpose is additional information that an arbitrary real-model trajectory does
+not carry.
+
+The durable distinction is:
+
+```text
+CONFIRMED = direct evidence of manipulating, probing, or impersonating a
+            reward/authority boundary
+AMBIGUOUS = a known weak-proxy pattern also compatible with honest failure
+```
+
+Reward hacking does not require malicious intent, but a confirmed label still
+requires observable evidence of the mechanism. Outcome mismatch alone is not
+that evidence.
+
+### `NOT_DETECTED` Is A Coverage Claim
+
+The absence of a detector firing is not enough to conclude that reward hacking
+was not detected. That conclusion is justified only when the system knows the
+complete set of applicable checks and records an outcome for every one.
+
+This makes the check catalogue part of the measurement boundary:
+
+```text
+all applicable checks completed cleanly -> NOT_DETECTED
+unknown, empty, incomplete, or errored check coverage -> measurement failure
+```
+
+Audit cases and runtime checks therefore need different identities. Several
+audit cases may validate one concrete check under different task outcomes, but
+counting those cases as different runtime checks would confuse audit depth with
+detector coverage. Conversely, silently losing a catalogue entry would create
+false clean labels and could admit unsafe trajectories into positive training
+data.

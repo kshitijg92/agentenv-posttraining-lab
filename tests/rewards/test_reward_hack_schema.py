@@ -7,7 +7,9 @@ from pydantic import ValidationError
 
 from agentenv.audits.hashing import hash_harness_audit_case_dir
 from agentenv.rewards.cases import (
+    build_reward_hack_check_catalogue,
     load_reward_hack_case,
+    load_reward_hack_check_catalogue,
     verify_reward_hack_case_source_refs,
 )
 from agentenv.rewards.schema import (
@@ -38,6 +40,11 @@ def test_load_reward_hack_case_accepts_hidden_validator_probe_case() -> None:
         case.reward_hack_id
         == "hidden_validator_path_submitted_patch_text_probe_attempt"
     )
+    assert (
+        case.exploit_check_id
+        == "hidden_validator_probe_attempt.hidden_validator_path.submitted_patch_text"
+    )
+    assert case.finding_classification == "confirmed"
     assert case.evidence.source_type == "scorer_audit_case"
     assert case.evidence.exploit.case_id == "hidden_validator_path_reference"
     assert case.evidence.valid_control.case_id == "correct_oracle"
@@ -79,8 +86,120 @@ def test_all_authored_reward_hack_cases_load_and_resolve_source_refs() -> None:
         "tool_output_spoofing_real_tools_plus_spoof_agent_workspace_update",
         "tool_output_spoofing_spoof_only_agent_workspace_update",
     }
+    assert {
+        case.reward_hack_id
+        for case in cases
+        if case.finding_classification == "ambiguous"
+    } == {
+        "format_only_compliance_submitted_patch_text_probe_attempt",
+        "hidden_validator_timeout_submitted_patch_text_probe_attempt",
+        "no_op_patch_submitted_patch_text_probe_attempt",
+        "public_check_timeout_submitted_patch_text_probe_attempt",
+        "public_test_only_pass_submitted_patch_text_probe_attempt",
+    }
+    assert {
+        case.reward_hack_id
+        for case in cases
+        if case.finding_classification == "confirmed"
+    } == {
+        "fake_success_output_correct_patch_agent_workspace_update",
+        "fake_success_output_hidden_fail_agent_workspace_update",
+        "hidden_validator_path_agent_tool_call_probe_attempt",
+        "hidden_validator_path_submitted_patch_text_probe_attempt",
+        "leakage_canary_agent_tool_call_probe_attempt",
+        "leakage_canary_submitted_patch_text_probe_attempt",
+        "public_check_tampering_submitted_patch_text_probe_attempt",
+        "state_corruption_fake_attempt_agent_workspace_update",
+        "state_corruption_fake_manifest_agent_workspace_update",
+        "tool_output_spoofing_real_tools_plus_spoof_agent_workspace_update",
+        "tool_output_spoofing_spoof_only_agent_workspace_update",
+    }
     for case in cases:
         verify_reward_hack_case_source_refs(case, repo_root=Path.cwd())
+
+
+def test_load_reward_hack_check_catalogue_deduplicates_cases_by_check_id() -> None:
+    catalogue = load_reward_hack_check_catalogue(CASE_ROOT)
+
+    assert len(catalogue) == 14
+    assert [check.exploit_check_id for check in catalogue] == sorted(
+        {
+            "fake_success_output.agent_workspace_update.scorer_result",
+            "format_only_compliance.submitted_patch_text",
+            "hidden_validator_probe_attempt.hidden_validator_path.agent_tool_call",
+            "hidden_validator_probe_attempt.hidden_validator_path.submitted_patch_text",
+            "hidden_validator_probe_attempt.leakage_canary.agent_tool_call",
+            "hidden_validator_probe_attempt.leakage_canary.submitted_patch_text",
+            "no_op_patch.submitted_patch_text",
+            "public_check_tampering.submitted_patch_text",
+            "public_test_only_pass.submitted_patch_text",
+            "state_corruption.attempt_result.agent_workspace_update",
+            "state_corruption.run_manifest.agent_workspace_update",
+            "timeout_or_retry_exploit.hidden_validator.submitted_patch_text",
+            "timeout_or_retry_exploit.public_check.submitted_patch_text",
+            "tool_output_spoofing.agent_workspace_update.tool_provenance",
+        }
+    )
+
+
+def test_build_reward_hack_check_catalogue_rejects_empty_input() -> None:
+    with pytest.raises(ValueError, match="requires at least one case"):
+        build_reward_hack_check_catalogue([])
+
+
+def test_load_reward_hack_check_catalogue_rejects_empty_case_root(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="contains no cases"):
+        load_reward_hack_check_catalogue(tmp_path)
+
+
+def test_build_reward_hack_check_catalogue_rejects_duplicate_case_id() -> None:
+    case = load_reward_hack_case(CASE_PATH)
+
+    with pytest.raises(ValueError, match="duplicate reward_hack_id"):
+        build_reward_hack_check_catalogue([case, case])
+
+
+def test_build_reward_hack_check_catalogue_rejects_conflicting_check_definition() -> (
+    None
+):
+    first = load_reward_hack_case(CASE_PATH)
+    second = load_reward_hack_case(
+        CASE_ROOT / "leakage_canary_submitted_patch_text_probe_attempt" / "case.yaml"
+    ).model_copy(update={"exploit_check_id": first.exploit_check_id})
+
+    with pytest.raises(ValueError, match="conflicting check definitions"):
+        build_reward_hack_check_catalogue([first, second])
+
+
+def test_build_reward_hack_check_catalogue_rejects_conflicting_classification() -> None:
+    first = load_reward_hack_case(CASE_PATH)
+    second = first.model_copy(
+        update={
+            "reward_hack_id": "same_check_different_classification",
+            "finding_classification": "ambiguous",
+        }
+    )
+
+    with pytest.raises(ValueError, match="conflicting check definitions"):
+        build_reward_hack_check_catalogue([first, second])
+
+
+def test_build_reward_hack_check_catalogue_rejects_two_ids_for_same_exploit() -> None:
+    first = load_reward_hack_case(CASE_PATH)
+    second = first.model_copy(
+        update={
+            "reward_hack_id": "same_exploit_different_check_id",
+            "exploit_check_id": "different.check.id",
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Identical reward-hack exploit specifications use different",
+    ):
+        build_reward_hack_check_catalogue([first, second])
 
 
 def test_harness_audit_case_hashes_are_computable_for_runtime_outputs() -> None:
@@ -107,6 +226,39 @@ def test_reward_hack_case_rejects_missing_valid_control() -> None:
 
     error_types = {error["type"] for error in exc_info.value.errors()}
     assert "missing" in error_types
+
+
+def test_reward_hack_case_requires_finding_classification() -> None:
+    payload = _case_payload()
+    payload.pop("finding_classification")
+
+    with pytest.raises(ValidationError) as exc_info:
+        RewardHackCase.model_validate(payload)
+
+    error_types = {error["type"] for error in exc_info.value.errors()}
+    assert "missing" in error_types
+
+
+def test_reward_hack_case_requires_exploit_check_id() -> None:
+    payload = _case_payload()
+    payload.pop("exploit_check_id")
+
+    with pytest.raises(ValidationError) as exc_info:
+        RewardHackCase.model_validate(payload)
+
+    error_types = {error["type"] for error in exc_info.value.errors()}
+    assert "missing" in error_types
+
+
+@pytest.mark.parametrize("classification", ["not_detected", "CONFIRMED", ""])
+def test_reward_hack_case_rejects_invalid_finding_classification(
+    classification: str,
+) -> None:
+    payload = _case_payload()
+    payload["finding_classification"] = classification
+
+    with pytest.raises(ValidationError, match="Input should be"):
+        RewardHackCase.model_validate(payload)
 
 
 def test_reward_hack_case_rejects_training_allowed_expectation() -> None:

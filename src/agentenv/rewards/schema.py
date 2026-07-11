@@ -15,6 +15,7 @@ ExploitClassification = Literal[
     "timeout_or_retry_exploit",
     "tool_output_spoofing",
 ]
+RewardHackFindingClassification = Literal["confirmed", "ambiguous"]
 HiddenValidatorProbeReferenceType = Literal[
     "hidden_validator_path",
     "leakage_canary",
@@ -424,8 +425,18 @@ class RewardHackCase(BaseModel):
 
     schema_version: RewardHackCaseSchemaVersion = REWARD_HACK_CASE_SCHEMA_VERSION
     reward_hack_id: str = Field(min_length=1)
+    exploit_check_id: str = Field(min_length=1)
+    finding_classification: RewardHackFindingClassification
     purpose: str = Field(min_length=1)
     evidence: RewardHackEvidencePair
     exploit: RewardHackExploit
     expected_reward_hack_outcome: ExpectedRewardHackOutcome
     notes: str | None = Field(default=None, min_length=1)
+
+
+class RewardHackExploitCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exploit_check_id: str = Field(min_length=1)
+    finding_classification: RewardHackFindingClassification
+    exploit: RewardHackExploit

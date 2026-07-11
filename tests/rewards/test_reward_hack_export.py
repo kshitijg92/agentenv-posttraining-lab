@@ -7,6 +7,7 @@ from agentenv.rewards.export import (
     load_reward_hack_audit_artifact,
     run_and_persist_reward_hack_audit,
 )
+from agentenv.rewards.reporting import render_reward_hack_audit_report
 
 
 CASE_ROOT = Path("data/reward_hack_cases")
@@ -55,6 +56,27 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
         "tool_output_spoofing_spoof_only_agent_workspace_update",
     }
     assert all(record.audit_pass for record in artifact.records)
+    assert (
+        sum(
+            record.reward_hack_case.finding_classification == "confirmed"
+            for record in artifact.records
+        )
+        == 11
+    )
+    assert (
+        sum(
+            record.reward_hack_case.finding_classification == "ambiguous"
+            for record in artifact.records
+        )
+        == 5
+    )
+
+    report = render_reward_hack_audit_report(artifact)
+    assert "| reward_hack_id | result | finding_classification |" in report
+    assert (
+        "| public_test_only_pass_submitted_patch_text_probe_attempt "
+        "| PASS | ambiguous |"
+    ) in report
 
     loaded = load_reward_hack_audit_artifact(out_dir)
 
@@ -79,6 +101,9 @@ def test_run_and_persist_reward_hack_audit_writes_artifact(
         "tool_output_spoofing_spoof_only_agent_workspace_update",
     }
     assert all(record.audit_pass for record in loaded.records)
+    assert {
+        record.reward_hack_case.finding_classification for record in loaded.records
+    } == {"confirmed", "ambiguous"}
     assert {record.leakage_scan_result.canary_hash for record in loaded.records} == {
         "xxh64:e5432f5538d562e7"
     }
