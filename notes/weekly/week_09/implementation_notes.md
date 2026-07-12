@@ -1559,3 +1559,102 @@ git diff --check: passed
 ```
 
 The full repository pytest suite was not run for this checkpoint.
+
+#### Real Qwen Mechanical-Redundancy Artifact Check
+
+The historical Qwen suite at
+`experiments/runs/qwen_model_eval_suite_sampling_4096` was submitted to the
+current trajectory-export CLI and correctly rejected before output. Its task
+YAML hash for `repair_jsonl_deduper` was
+`xxh64:2429eb19232c6c7a`, while the current required task hash is
+`xxh64:b07bfbf839a51530`. The old model behavior was not silently rebound to
+new task or calibration evidence.
+
+Generated fresh trust artifacts for the current committed harness source and
+task pack:
+
+```text
+harness audit:
+  experiments/harness_audit/week_09_redundancy_harness_audit_v0
+  status: PASS (agent PASS, scorer PASS)
+
+control calibration:
+  experiments/runs/week_09_redundancy_control_calibration_v0
+  status: PASS (72/72 records, flake status stable)
+
+common harness runtime hash:
+  xxh64:e68f06f50710432b
+```
+
+Ran the installed `hf.co/Qwen/Qwen3-14B-GGUF:Q4_K_M` model against the three
+current dev tasks using only policy `local-qwen-dev`. The initial sandboxed
+attempt produced provider connection errors and was overwritten; the retained
+artifact is the successful local-provider invocation:
+
+```text
+eval:
+  experiments/runs/week_09_qwen_redundancy_eval_v0
+report:
+  experiments/reports/eval_matrices/week_09_qwen_redundancy_eval_v0.md
+attempts: 3
+prompt-loop outcomes: terminal_tool_error=3
+terminal error: CommandNotAllowed=3
+```
+
+In every attempt, Qwen requested `uv run pytest tests/test_public.py` rather
+than the exact allowed frozen command. The traces remain valid failed model
+trajectories and preserve 6-7 executed tool calls each.
+
+Exported and validated the downstream artifacts:
+
+```text
+trajectory export:
+  experiments/runs/week_09_qwen_redundancy_trajectory_export_v0
+accepted smoke reviews:
+  experiments/runs/week_09_qwen_redundancy_trajectory_review_v0
+training candidates:
+  experiments/runs/week_09_qwen_redundancy_training_candidates_v0
+candidate JSONL hash:
+  xxh64:8a6707ae1cdaf2cc
+detector code hash:
+  xxh64:26e13c7727ff8c81
+```
+
+All three candidate assessments are `complete` with zero redundant blocks.
+Inspection confirmed that this is the correct negative result: successful tool
+calls were not immediately repeated with identical arguments. Each apparent
+two-call `write_file` sequence began with an argument-incomplete errored call,
+and each `run_tests` call occurred once and ended in `CommandNotAllowed`.
+Neither error class satisfies the successful-observation requirement.
+
+With the explicitly accepted smoke reviews, all three candidates are permitted
+as negative examples, none is positive-SFT eligible, and none is preference-
+data eligible because the terminal tool error made the trajectories
+ungradable. This check validates persisted assessment construction; it does not
+claim model quality or provide a positive detector firing from real Qwen
+behavior.
+
+#### Post-Training Data Contract
+
+Added `docs/post_training_data_contract.md` as the Week 9 Checkpoint 1 boundary.
+It records the existing candidate authority and suite-level fail-closed trust
+gates, then distinguishes candidate permission from objective-specific dataset
+construction and token-level loss.
+
+The contract treats `negative_example_allowed` as permission to retain reviewed,
+labeled negative source evidence. It does not call that evidence directly
+trainable under ordinary SFT. Preference pairing, unlikelihood training, or any
+other negative objective must define its own transformation and comparison or
+credit-assignment rules.
+
+The contract also exposes the next implementation gap instead of hiding it:
+`PositiveSFTExampleRecord` currently stores source-level messages, but there is
+no deterministic tool-call serialization or loss mask. The positive-SFT builder
+also does not yet reject, repair, or mask a source containing a complete
+mechanical-redundancy finding. Such a row is not trainer-ready merely because
+candidate-level positive-SFT eligibility is true.
+
+Current implementation status is listed in the contract. Negative-example and
+preference-pair exporters, human-repair provenance, and token loss masking
+remain unimplemented. No schema, code path, compatibility shim, or artifact
+version changed in this documentation-only checkpoint.
