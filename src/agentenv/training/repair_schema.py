@@ -4,17 +4,21 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
 from agentenv.models.schema import Message
 from agentenv.training.schema import MechanicalRedundancyAssessment
-from agentenv.trajectories.schema import ArtifactRef
+from agentenv.trajectories.schema import ArtifactRef, ReviewDecision, ReviewStatus
 
 
 TrainingCandidateRepairRecordSchemaVersion = Literal[
     "training_candidate_repair_record_v0"
+]
+TrainingCandidateRepairReviewRecordSchemaVersion = Literal[
+    "training_candidate_repair_review_record_v0"
 ]
 RepairStatus = Literal["completed", "cannot_complete", "repair_error"]
 RepairArtifactType = Literal["transcript"]
 MechanicalRedundancyRepairMethod = Literal["mechanical_redundancy_deletion"]
 
 TRAINING_CANDIDATE_REPAIR_RECORD_SCHEMA_VERSION: TrainingCandidateRepairRecordSchemaVersion = "training_candidate_repair_record_v0"
+TRAINING_CANDIDATE_REPAIR_REVIEW_RECORD_SCHEMA_VERSION: TrainingCandidateRepairReviewRecordSchemaVersion = "training_candidate_repair_review_record_v0"
 
 
 class RepairedTranscriptArtifact(RootModel[list[Message]]):
@@ -170,3 +174,46 @@ class TrainingCandidateRepairRecord(BaseModel):
     ) -> None:
         if artifact_ref.content_hash is None:
             raise ValueError(f"{field_name} must be content-hash pinned")
+
+
+class TrainingCandidateRepairReviewRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: TrainingCandidateRepairReviewRecordSchemaVersion = (
+        TRAINING_CANDIDATE_REPAIR_REVIEW_RECORD_SCHEMA_VERSION
+    )
+    repair_id: str = Field(min_length=1)
+    source_training_candidate_repair_record_hash: str = Field(
+        pattern=r"^xxh64:[0-9a-f]{16}$",
+        strict=True,
+    )
+    review_status: ReviewStatus
+    review_id: str | None = Field(default=None, min_length=1)
+    reviewer_id: str | None = Field(default=None, min_length=1)
+    review_decision: ReviewDecision | None = None
+    review_notes_ref: ArtifactRef | None = None
+
+    @model_validator(mode="after")
+    def validate_review_state(self) -> "TrainingCandidateRepairReviewRecord":
+        if self.review_status == "not_reviewed":
+            if any(
+                value is not None
+                for value in (
+                    self.review_id,
+                    self.reviewer_id,
+                    self.review_decision,
+                    self.review_notes_ref,
+                )
+            ):
+                raise ValueError(
+                    "not_reviewed repair reviews cannot include review details"
+                )
+            return self
+
+        if self.review_id is None:
+            raise ValueError("reviewed repair reviews require review_id")
+        if self.reviewer_id is None:
+            raise ValueError("reviewed repair reviews require reviewer_id")
+        if self.review_decision is None:
+            raise ValueError("reviewed repair reviews require review_decision")
+        return self

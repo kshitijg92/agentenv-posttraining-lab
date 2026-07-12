@@ -7,6 +7,7 @@ from agentenv.training.repair_schema import (
     TRAINING_CANDIDATE_REPAIR_RECORD_SCHEMA_VERSION,
     RepairedTranscriptArtifact,
     TrainingCandidateRepairRecord,
+    TrainingCandidateRepairReviewRecord,
 )
 
 
@@ -357,3 +358,59 @@ def test_repair_error_rejects_inconsistent_status_fields(
 
     with pytest.raises(ValidationError, match=match):
         TrainingCandidateRepairRecord.model_validate(payload)
+
+
+def test_repair_review_accepts_pending_record() -> None:
+    review = TrainingCandidateRepairReviewRecord(
+        repair_id="repair_001",
+        source_training_candidate_repair_record_hash="xxh64:5555555555555555",
+        review_status="not_reviewed",
+    )
+
+    assert review.review_decision is None
+
+
+def test_repair_review_accepts_reviewed_decision() -> None:
+    review = TrainingCandidateRepairReviewRecord(
+        repair_id="repair_001",
+        source_training_candidate_repair_record_hash="xxh64:5555555555555555",
+        review_status="reviewed",
+        review_id="review_001",
+        reviewer_id="reviewer",
+        review_decision="accepted",
+    )
+
+    assert review.review_decision == "accepted"
+
+
+def test_pending_repair_review_rejects_review_details() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="not_reviewed repair reviews cannot include review details",
+    ):
+        TrainingCandidateRepairReviewRecord(
+            repair_id="repair_001",
+            source_training_candidate_repair_record_hash="xxh64:5555555555555555",
+            review_status="not_reviewed",
+            review_id="review_001",
+        )
+
+
+@pytest.mark.parametrize(
+    "missing_field", ["review_id", "reviewer_id", "review_decision"]
+)
+def test_reviewed_repair_review_requires_complete_decision(
+    missing_field: str,
+) -> None:
+    payload: dict[str, str | None] = {
+        "repair_id": "repair_001",
+        "source_training_candidate_repair_record_hash": ("xxh64:5555555555555555"),
+        "review_status": "reviewed",
+        "review_id": "review_001",
+        "reviewer_id": "reviewer",
+        "review_decision": "accepted",
+    }
+    payload[missing_field] = None
+
+    with pytest.raises(ValidationError):
+        TrainingCandidateRepairReviewRecord.model_validate(payload)

@@ -69,7 +69,9 @@ from agentenv.training.schema import (
     TrainingCandidateRecordSchemaVersion,
 )
 from agentenv.training.repair_schema import (
+    TRAINING_CANDIDATE_REPAIR_REVIEW_RECORD_SCHEMA_VERSION,
     TRAINING_CANDIDATE_REPAIR_RECORD_SCHEMA_VERSION,
+    TrainingCandidateRepairReviewRecordSchemaVersion,
     TrainingCandidateRepairRecordSchemaVersion,
 )
 from agentenv.trajectories.schema import (
@@ -145,6 +147,10 @@ TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS = {
 TRAINING_CANDIDATE_REPAIR_EXPORT_ARTIFACT_REFS = {
     "repair_records": "repair_records.jsonl",
 }
+TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_REFS = {
+    "reviews": "reviews.jsonl",
+    "review_queue": "review_queue.md",
+}
 POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
     "positive_sft_examples": "positive_sft_examples.jsonl",
 }
@@ -179,6 +185,9 @@ TRAINING_CANDIDATE_EXPORT_REQUIRED_ARTIFACTS = frozenset(
 TRAINING_CANDIDATE_REPAIR_EXPORT_REQUIRED_ARTIFACTS = frozenset(
     TRAINING_CANDIDATE_REPAIR_EXPORT_ARTIFACT_REFS
 )
+TRAINING_CANDIDATE_REPAIR_REVIEW_REQUIRED_ARTIFACTS = frozenset(
+    TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_REFS
+)
 POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_REFS)
 REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS = frozenset(REWARD_HACK_AUDIT_ARTIFACT_REFS)
 SCORER_AUDIT_REQUIRED_ARTIFACTS = frozenset(SCORER_AUDIT_ARTIFACT_REFS)
@@ -199,6 +208,9 @@ TrainingCandidateExportArtifactSchemaVersion = Literal[
 ]
 TrainingCandidateRepairExportArtifactSchemaVersion = Literal[
     "training_candidate_repair_export_artifact_v0"
+]
+TrainingCandidateRepairReviewArtifactSchemaVersion = Literal[
+    "training_candidate_repair_review_artifact_v0"
 ]
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v2"]
@@ -232,6 +244,7 @@ TRAJECTORY_REVIEW_ARTIFACT_SCHEMA_VERSION: TrajectoryReviewArtifactSchemaVersion
 )
 TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateExportArtifactSchemaVersion = "training_candidate_export_artifact_v1"
 TRAINING_CANDIDATE_REPAIR_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateRepairExportArtifactSchemaVersion = "training_candidate_repair_export_artifact_v0"
+TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_SCHEMA_VERSION: TrainingCandidateRepairReviewArtifactSchemaVersion = "training_candidate_repair_review_artifact_v0"
 POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVersion = (
     "positive_sft_export_artifact_v0"
 )
@@ -1240,6 +1253,53 @@ class TrainingCandidateRepairExportManifest(ArtifactManifest):
         return self
 
 
+class TrainingCandidateRepairExportManifestRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+
+
+class TrainingCandidateRepairReviewManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.TRAINING_CANDIDATE_REPAIR_REVIEW.value
+    expected_artifact_schema_version = (
+        TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    source_training_candidate_repair_export: TrainingCandidateRepairExportManifestRef
+    training_candidate_repair_review_record_schema_version: (
+        TrainingCandidateRepairReviewRecordSchemaVersion
+    )
+    record_count: NonNegativeInt
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_training_candidate_repair_review_contract(
+        self,
+    ) -> "TrainingCandidateRepairReviewManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_REFS,
+            owner="training candidate repair review manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=(TRAINING_CANDIDATE_REPAIR_REVIEW_REQUIRED_ARTIFACTS),
+            owner="training candidate repair review manifests",
+        )
+        if (
+            self.training_candidate_repair_review_record_schema_version
+            != TRAINING_CANDIDATE_REPAIR_REVIEW_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "training_candidate_repair_review_record_schema_version must be "
+                f"{TRAINING_CANDIDATE_REPAIR_REVIEW_RECORD_SCHEMA_VERSION!r}"
+            )
+        return self
+
+
 class PositiveSFTExportManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.POSITIVE_SFT_EXPORT.value
     expected_artifact_schema_version = POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION
@@ -1604,6 +1664,12 @@ def load_training_candidate_repair_export_manifest(
     path: Path,
 ) -> TrainingCandidateRepairExportManifest:
     return _validate_manifest(TrainingCandidateRepairExportManifest, path)
+
+
+def load_training_candidate_repair_review_manifest(
+    path: Path,
+) -> TrainingCandidateRepairReviewManifest:
+    return _validate_manifest(TrainingCandidateRepairReviewManifest, path)
 
 
 def load_positive_sft_export_manifest(path: Path) -> PositiveSFTExportManifest:

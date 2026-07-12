@@ -280,6 +280,29 @@ Non-completed repairs do not carry a repaired artifact or after-repair
 assessment. Source artifact or candidate hash failures abort the repair export
 rather than becoming per-record repair errors.
 
+Every emitted repair record, including `cannot_complete` and `repair_error`,
+has exactly one repair-review record. Candidates for which no repair was needed
+have no repair record and therefore no repair review. The review artifact pins
+the source repair-export manifest, and each review row carries both the
+`repair_id` join key and the canonical hash of the exact source repair record.
+Missing, duplicate, unknown, or hash-mismatched review rows invalidate the
+review artifact.
+
+Repair-review acceptance is scoped to the claim represented by the repair
+record. For a `completed` repair, an accepted review may establish that the
+transformation and resulting artifact are acceptable. For `cannot_complete`
+or `repair_error`, acceptance means only that the recorded failure outcome is
+accurate; it never supplies a repaired artifact or authorizes training use.
+`not_reviewed`, `rejected`, and `needs_followup` do not satisfy the
+repair-specific positive-SFT gate.
+
+Consequently, a selected repaired transcript may enter positive SFT only when
+the source candidate is independently positive-SFT eligible, the exact selected
+repair record is `completed`, its repair review is accepted and bound to that
+record hash, and the transformed output passes its downstream validations. A
+repair review cannot clear source-level split, leakage, harness, task-outcome,
+reward-hack, or trajectory-review blockers.
+
 One candidate may have multiple completed repairs. A positive-SFT export must
 select a specific `repair_id`; it must not choose implicitly based on directory
 order, recency, or whichever record loads first. That selection belongs to the
@@ -529,6 +552,7 @@ real, valid trajectory does not have to yield a positive training row
 | Repair-export manifest and source-reference schemas | Implemented |
 | Deterministic repair transformation and repair-export artifact | Implemented |
 | Fail-closed repair source traversal and deterministic reload | Implemented |
+| Repair-review record, exact-row binding, and review artifact | Implemented |
 | Explicit positive-SFT repair selection and builder integration | Not implemented |
 | Deterministic tool-call serialization and token loss masks | Not implemented |
 | Negative-example dataset/export objective | Not implemented |

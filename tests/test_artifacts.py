@@ -17,6 +17,10 @@ def test_artifact_type_values_are_stable_json_strings() -> None:
         ArtifactType.TRAINING_CANDIDATE_REPAIR_EXPORT
         == "training_candidate_repair_export"
     )
+    assert (
+        ArtifactType.TRAINING_CANDIDATE_REPAIR_REVIEW
+        == "training_candidate_repair_review"
+    )
     assert ArtifactType.POSITIVE_SFT_EXPORT == "positive_sft_export"
     assert ArtifactType.SCORER_AUDIT == "scorer_audit"
     assert ArtifactType.AGENT_TASK_AUDIT == "agent_task_audit"

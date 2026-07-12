@@ -14,7 +14,10 @@ from agentenv.tools.schema import ToolResult
 from agentenv.training.mechanical_redundancy import (
     assess_prompt_loop_mechanical_redundancy,
 )
-from agentenv.training.repair_schema import RepairedTranscriptArtifact
+from agentenv.training.repair_schema import (
+    RepairedTranscriptArtifact,
+    TrainingCandidateRepairRecord,
+)
 from agentenv.training.schema import (
     MechanicalRedundancyAssessment,
     TrainingCandidateRecord,
@@ -40,6 +43,12 @@ def compute_mechanical_redundancy_repairer_code_hash() -> str:
 
 
 def hash_training_candidate_record(record: TrainingCandidateRecord) -> str:
+    return hash_json(record.model_dump(mode="json"))
+
+
+def hash_training_candidate_repair_record(
+    record: TrainingCandidateRepairRecord,
+) -> str:
     return hash_json(record.model_dump(mode="json"))
 
 

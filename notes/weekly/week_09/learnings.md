@@ -432,3 +432,30 @@ deterministic repair    -> changes the context presented to the model
 
 Both are data transformations, but they solve different problems and require
 different validity arguments.
+
+### Review Acceptance Is Scoped To The Reviewed Claim
+
+An `accepted` review decision is not a universal permission bit. Its meaning is
+limited to the layer and claim being reviewed. For a completed repair, it can
+mean the reviewer accepts the declared transformation and resulting artifact.
+For a `cannot_complete` or `repair_error` record, it means the failure outcome
+was represented accurately; there is still no repaired example to train on.
+
+The self-deception trap is:
+
+```text
+some review says accepted -> the example is approved for training
+```
+
+Training authorization is instead a conjunction of independently scoped
+claims. A repaired positive-SFT example still needs an eligible source
+candidate, a completed exact repair, an accepted review bound to that repair
+record, and valid transformed output. A downstream reviewer can validate its
+own layer but cannot erase an upstream split, leakage, task-outcome,
+reward-hack, or harness blocker.
+
+Binding the decision only to a stable ID is also insufficient when the record's
+content can change. The ID identifies which logical repair attempt is under
+discussion; a canonical source-record hash identifies the exact status,
+artifact, evidence, and errors the reviewer actually saw. This prevents an old
+approval from silently migrating onto a materially different record.

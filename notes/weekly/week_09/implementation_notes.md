@@ -1819,3 +1819,37 @@ targeted Pyright: passed
 ```
 
 The full repository pytest suite was not run for this checkpoint.
+
+#### Training-Candidate Repair Review Artifact
+
+Added a distinct repair-review layer in
+`src/agentenv/training/repair_review.py`, with its record schema in
+`src/agentenv/training/repair_schema.py` and its artifact manifest in
+`src/agentenv/artifacts/manifests.py`.
+
+The initializer emits one `not_reviewed` row for every actual repair record,
+including `completed`, `cannot_complete`, and `repair_error`. A zero-record
+repair export produces an empty review artifact; no no-op repair or review rows
+are synthesized. The review queue explicitly states that accepting a
+non-completed repair validates the recorded failure outcome only and never
+authorizes training use.
+
+The review manifest hash-pins the source repair-export manifest. Each review
+row additionally carries `repair_id` and
+`source_training_candidate_repair_record_hash`. Validation requires exact
+one-to-one ID coverage and recomputes the canonical repair-record hash, so a
+review decision cannot be silently transferred to a changed repair status,
+reason, error, artifact reference, assessment, or repairer provenance under the
+same ID.
+
+Focused verification:
+
+```text
+repair/review/artifact tests: 63 passed
+targeted Ruff: passed
+targeted format check: passed
+targeted Pyright: passed
+```
+
+The full repository pytest suite was not run for this checkpoint. Repair-review
+CLI commands and positive-SFT selection/gating remain unimplemented.
