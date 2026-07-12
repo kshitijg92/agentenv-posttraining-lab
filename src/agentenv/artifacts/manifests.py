@@ -1300,6 +1300,14 @@ class TrainingCandidateRepairReviewManifest(ArtifactManifest):
         return self
 
 
+class TrainingCandidateRepairReviewArtifactRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    reviews_jsonl_hash: ContentHash
+
+
 class PositiveSFTExportManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.POSITIVE_SFT_EXPORT.value
     expected_artifact_schema_version = POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION
@@ -1311,9 +1319,17 @@ class PositiveSFTExportManifest(ArtifactManifest):
     )
     source_training_candidate_export_manifest_hash: str = Field(min_length=1)
     source_training_candidates_jsonl_hash: str = Field(min_length=1)
+    source_training_candidate_repair_export: (
+        TrainingCandidateRepairExportManifestRef | None
+    ) = None
+    source_training_candidate_repair_review: (
+        TrainingCandidateRepairReviewArtifactRef | None
+    ) = None
     training_candidate_record_schema_version: TrainingCandidateRecordSchemaVersion
     positive_sft_example_record_schema_version: PositiveSFTExampleRecordSchemaVersion
     record_count: NonNegativeInt
+    original_record_count: NonNegativeInt
+    repaired_record_count: NonNegativeInt
     positive_sft_examples_jsonl_hash: str = Field(min_length=1)
     artifacts: dict[str, str]
 
@@ -1353,6 +1369,27 @@ class PositiveSFTExportManifest(ArtifactManifest):
             raise ValueError(
                 "positive_sft_example_record_schema_version must be "
                 f"{POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.original_record_count + self.repaired_record_count != self.record_count:
+            raise ValueError(
+                "original and repaired positive SFT counts must sum to record_count"
+            )
+        repair_sources = (
+            self.source_training_candidate_repair_export,
+            self.source_training_candidate_repair_review,
+        )
+        if self.repaired_record_count > 0 and any(
+            source is None for source in repair_sources
+        ):
+            raise ValueError(
+                "repaired positive SFT records require repair export and review refs"
+            )
+        if self.repaired_record_count == 0 and any(
+            source is not None for source in repair_sources
+        ):
+            raise ValueError(
+                "positive SFT manifests without repaired records cannot pin unused "
+                "repair sources"
             )
         return self
 

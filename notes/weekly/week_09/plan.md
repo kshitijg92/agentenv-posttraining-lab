@@ -320,6 +320,14 @@ Done when:
 - current zero-row export is regenerated or validated;
 - tests prove bad positive examples are rejected by code.
 
+Current state:
+
+- original and repaired positive-SFT sources have exact provenance;
+- repaired rows require an explicit completed, accepted repair selection;
+- the repair/review source chain is hash-pinned and rebuilt on load;
+- current deterministic deletion has a narrow task-outcome inheritance rule;
+- repair-selection CLI wiring remains before a real repaired artifact smoke.
+
 Self-deception trap:
 
 ```text

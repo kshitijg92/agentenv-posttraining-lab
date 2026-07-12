@@ -17,6 +17,7 @@ from agentenv.training.mechanical_redundancy import (
 from agentenv.training.repair_schema import (
     RepairedTranscriptArtifact,
     TrainingCandidateRepairRecord,
+    TrainingCandidateRepairReviewRecord,
 )
 from agentenv.training.schema import (
     MechanicalRedundancyAssessment,
@@ -48,6 +49,12 @@ def hash_training_candidate_record(record: TrainingCandidateRecord) -> str:
 
 def hash_training_candidate_repair_record(
     record: TrainingCandidateRepairRecord,
+) -> str:
+    return hash_json(record.model_dump(mode="json"))
+
+
+def hash_training_candidate_repair_review_record(
+    record: TrainingCandidateRepairReviewRecord,
 ) -> str:
     return hash_json(record.model_dump(mode="json"))
 

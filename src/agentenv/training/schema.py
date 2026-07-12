@@ -1,10 +1,11 @@
-from typing import Literal
+from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agentenv.agents.schema import AgentTaskPromptInput
 from agentenv.models.schema import MessageWithoutMetadata
-from agentenv.trajectories.schema import ReviewDecision, ReviewStatus
+from agentenv.training.sft_identity import build_positive_sft_example_id
+from agentenv.trajectories.schema import ArtifactRef, ReviewDecision, ReviewStatus
 from agentenv.tools.schema import ToolName
 
 
@@ -201,6 +202,53 @@ class PositiveSFTPromptProvenance(BaseModel):
     prompt_builder_code_hash: str = Field(min_length=1)
 
 
+class _PositiveSFTSourceProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_training_candidate_record_hash: str = Field(
+        pattern=r"^xxh64:[0-9a-f]{16}$",
+        strict=True,
+    )
+    source_artifact_ref: ArtifactRef
+
+    @model_validator(mode="after")
+    def validate_source_artifact_is_hash_pinned(
+        self,
+    ) -> "_PositiveSFTSourceProvenance":
+        if self.source_artifact_ref.content_hash is None:
+            raise ValueError("positive SFT source artifact must be content-hash pinned")
+        return self
+
+
+class OriginalPositiveSFTSourceProvenance(_PositiveSFTSourceProvenance):
+    source_type: Literal["original"]
+    task_outcome_provenance: Literal["executed_source_trajectory"]
+
+
+class RepairedPositiveSFTSourceProvenance(_PositiveSFTSourceProvenance):
+    source_type: Literal["repaired"]
+    repair_id: str = Field(min_length=1)
+    source_training_candidate_repair_record_hash: str = Field(
+        pattern=r"^xxh64:[0-9a-f]{16}$",
+        strict=True,
+    )
+    source_training_candidate_repair_review_record_hash: str = Field(
+        pattern=r"^xxh64:[0-9a-f]{16}$",
+        strict=True,
+    )
+    repair_review_id: str = Field(min_length=1)
+    task_outcome_provenance: Literal["inherited_from_source_trajectory"]
+    task_outcome_inheritance_basis: Literal[
+        "mechanical_redundancy_state_and_observation_preserving_deletion"
+    ]
+
+
+PositiveSFTSourceProvenance: TypeAlias = Annotated[
+    OriginalPositiveSFTSourceProvenance | RepairedPositiveSFTSourceProvenance,
+    Field(discriminator="source_type"),
+]
+
+
 class PositiveSFTExampleRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -210,17 +258,34 @@ class PositiveSFTExampleRecord(BaseModel):
     example_id: str = Field(min_length=1)
     provenance_ids: PositiveSFTProvenanceIds
     prompt_provenance: PositiveSFTPromptProvenance
+    source_provenance: PositiveSFTSourceProvenance
     task_input: PositiveSFTTaskInput
     messages: list[PositiveSFTMessage] = Field(min_length=2)
 
     @model_validator(mode="after")
     def validate_positive_sft_contract(self) -> "PositiveSFTExampleRecord":
+        source_artifact_hash = self.source_provenance.source_artifact_ref.content_hash
+        if source_artifact_hash is None:
+            raise ValueError("positive SFT source artifact must be content-hash pinned")
+        source_repair_record_hash = (
+            self.source_provenance.source_training_candidate_repair_record_hash
+            if isinstance(
+                self.source_provenance,
+                RepairedPositiveSFTSourceProvenance,
+            )
+            else None
+        )
         expected_example_id = build_positive_sft_example_id(
-            self.provenance_ids.trajectory_id
+            source_type=self.source_provenance.source_type,
+            source_training_candidate_record_hash=(
+                self.source_provenance.source_training_candidate_record_hash
+            ),
+            source_artifact_content_hash=source_artifact_hash,
+            source_training_candidate_repair_record_hash=source_repair_record_hash,
         )
         if self.example_id != expected_example_id:
             raise ValueError(
-                "positive SFT example_id must be derived from trajectory_id"
+                "positive SFT example_id must be derived from its selected source"
             )
 
         if self.provenance_ids.task_id != self.task_input.task_id:
@@ -235,13 +300,3 @@ class PositiveSFTExampleRecord(BaseModel):
             )
 
         return self
-
-
-def build_positive_sft_example_id(trajectory_id: str) -> str:
-    prefix = "trajectory_"
-    suffix = (
-        trajectory_id.removeprefix(prefix)
-        if trajectory_id.startswith(prefix)
-        else trajectory_id
-    )
-    return f"positive_sft_example_{suffix}"

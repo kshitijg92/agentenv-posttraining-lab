@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
@@ -17,6 +19,7 @@ from agentenv.artifacts.manifests import (
     POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION,
     TRAINING_CANDIDATE_EXPORT_ARTIFACT_REFS,
     TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION,
+    TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_REFS,
     TRAJECTORY_EXPORT_ARTIFACT_REFS,
     TRAJECTORY_REVIEW_ARTIFACT_REFS,
     PositiveSFTExportManifest,
@@ -35,6 +38,7 @@ from agentenv.training.schema import (
     POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
     TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
     PositiveSFTExampleRecord,
+    RepairedPositiveSFTSourceProvenance,
     TrainingCandidateRecord,
 )
 from agentenv.trajectories.export import hash_file
@@ -43,6 +47,13 @@ from agentenv.trajectories.schema import (
     TRAJECTORY_RECORD_SCHEMA_VERSION,
     TRAJECTORY_REVIEW_SCHEMA_VERSION,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from agentenv.training.repair_review import (
+        TrainingCandidateRepairReviewValidation,
+    )
 
 
 @dataclass(frozen=True)
@@ -128,17 +139,29 @@ def export_positive_sft_examples(
     training_candidate_export_dir: Path,
     out_dir: Path,
     *,
+    repair_export_dir: Path | None = None,
+    repair_review_dir: Path | None = None,
+    selected_repair_ids: Sequence[str] = (),
     overwrite: bool = False,
 ) -> PositiveSFTExport:
     from agentenv.training.sft_builder import (
         build_positive_sft_examples_from_training_candidate_export,
+        load_positive_sft_repair_sources,
     )
 
     training_candidate_export = load_training_candidate_export_artifact(
         training_candidate_export_dir
     )
+    repair_validation = load_positive_sft_repair_sources(
+        training_candidate_export,
+        repair_export_dir=repair_export_dir,
+        repair_review_dir=repair_review_dir,
+        selected_repair_ids=selected_repair_ids,
+    )
     records = build_positive_sft_examples_from_training_candidate_export(
-        training_candidate_export
+        training_candidate_export,
+        repair_validation=repair_validation,
+        selected_repair_ids=selected_repair_ids,
     )
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
@@ -148,6 +171,7 @@ def export_positive_sft_examples(
     manifest = build_positive_sft_export_manifest(
         out_dir=out_dir,
         training_candidate_export=training_candidate_export,
+        repair_validation=repair_validation,
         examples_path=examples_path,
         records=records,
     )
@@ -231,11 +255,177 @@ def load_positive_sft_export_artifact(export_dir: Path) -> PositiveSFTExport:
             f"Positive SFT example record count mismatch at {examples_path}: "
             f"{len(records)} != {manifest.record_count}"
         )
+    original_count = sum(
+        record.source_provenance.source_type == "original" for record in records
+    )
+    repaired_count = sum(
+        record.source_provenance.source_type == "repaired" for record in records
+    )
+    if original_count != manifest.original_record_count:
+        raise ValueError(
+            "Positive SFT original record count mismatch: "
+            f"{original_count} != {manifest.original_record_count}"
+        )
+    if repaired_count != manifest.repaired_record_count:
+        raise ValueError(
+            "Positive SFT repaired record count mismatch: "
+            f"{repaired_count} != {manifest.repaired_record_count}"
+        )
+
+    training_candidate_export = load_pinned_positive_sft_candidate_export(
+        export_dir,
+        manifest,
+    )
+    repair_validation = load_pinned_positive_sft_repair_sources(
+        export_dir,
+        manifest,
+        training_candidate_export=training_candidate_export,
+    )
+    selected_repair_ids = tuple(
+        record.source_provenance.repair_id
+        for record in records
+        if isinstance(
+            record.source_provenance,
+            RepairedPositiveSFTSourceProvenance,
+        )
+    )
+    from agentenv.training.sft_builder import (
+        build_positive_sft_examples_from_training_candidate_export,
+    )
+
+    expected_records = build_positive_sft_examples_from_training_candidate_export(
+        training_candidate_export,
+        repair_validation=repair_validation,
+        selected_repair_ids=selected_repair_ids,
+    )
+    if records != expected_records:
+        raise ValueError(
+            "Persisted positive SFT records do not match records rebuilt from "
+            "their pinned sources"
+        )
     return PositiveSFTExport(
         out_dir=export_dir,
         manifest=manifest,
         records=records,
     )
+
+
+def load_pinned_positive_sft_candidate_export(
+    positive_sft_export_dir: Path,
+    manifest: PositiveSFTExportManifest,
+) -> TrainingCandidateExport:
+    source_dir = Path(manifest.source_training_candidate_export_dir)
+    if not source_dir.is_absolute():
+        source_dir = positive_sft_export_dir / source_dir
+    source_dir = source_dir.resolve()
+    source_manifest_path = source_dir / MANIFEST_FILENAME
+    observed_manifest_hash = hash_file(source_manifest_path)
+    if (
+        observed_manifest_hash
+        != manifest.source_training_candidate_export_manifest_hash
+    ):
+        raise ValueError(
+            "Positive SFT source training candidate manifest hash mismatch: "
+            f"{observed_manifest_hash!r} != "
+            f"{manifest.source_training_candidate_export_manifest_hash!r}"
+        )
+    source_export = load_training_candidate_export_artifact(source_dir)
+    observed_jsonl_hash = hash_source_training_candidates_jsonl(source_export)
+    if observed_jsonl_hash != manifest.source_training_candidates_jsonl_hash:
+        raise ValueError(
+            "Positive SFT source training candidates JSONL hash mismatch: "
+            f"{observed_jsonl_hash!r} != "
+            f"{manifest.source_training_candidates_jsonl_hash!r}"
+        )
+    if hash_file(source_manifest_path) != observed_manifest_hash:
+        raise ValueError(
+            "Positive SFT source training candidate manifest changed while loading"
+        )
+    return source_export
+
+
+def load_pinned_positive_sft_repair_sources(
+    positive_sft_export_dir: Path,
+    manifest: PositiveSFTExportManifest,
+    *,
+    training_candidate_export: TrainingCandidateExport,
+) -> TrainingCandidateRepairReviewValidation | None:
+    repair_ref = manifest.source_training_candidate_repair_export
+    review_ref = manifest.source_training_candidate_repair_review
+    if repair_ref is None and review_ref is None:
+        return None
+    if repair_ref is None or review_ref is None:
+        raise ValueError(
+            "Positive SFT repair provenance requires both repair and review refs"
+        )
+
+    repair_dir = Path(repair_ref.artifact_dir)
+    if not repair_dir.is_absolute():
+        repair_dir = positive_sft_export_dir / repair_dir
+    repair_dir = repair_dir.resolve()
+    review_dir = Path(review_ref.artifact_dir)
+    if not review_dir.is_absolute():
+        review_dir = positive_sft_export_dir / review_dir
+    review_dir = review_dir.resolve()
+
+    repair_manifest_path = repair_dir / MANIFEST_FILENAME
+    review_manifest_path = review_dir / MANIFEST_FILENAME
+    reviews_path = resolve_relative_artifact_ref(
+        review_dir,
+        TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_REFS["reviews"],
+    )
+    compared_hashes = (
+        (
+            "repair manifest",
+            hash_file(repair_manifest_path),
+            repair_ref.manifest_hash,
+        ),
+        (
+            "repair review manifest",
+            hash_file(review_manifest_path),
+            review_ref.manifest_hash,
+        ),
+        (
+            "repair reviews JSONL",
+            hash_file(reviews_path),
+            review_ref.reviews_jsonl_hash,
+        ),
+    )
+    for source_name, observed_hash, expected_hash in compared_hashes:
+        if observed_hash != expected_hash:
+            raise ValueError(
+                f"Positive SFT source {source_name} hash mismatch: "
+                f"{observed_hash!r} != {expected_hash!r}"
+            )
+
+    from agentenv.training.repair_review import (
+        validate_training_candidate_repair_review_artifact,
+    )
+    from agentenv.training.sft_builder import (
+        validate_positive_sft_repair_source_matches_candidate_export,
+    )
+
+    validation = validate_training_candidate_repair_review_artifact(
+        repair_dir,
+        review_dir,
+    )
+    validate_positive_sft_repair_source_matches_candidate_export(
+        training_candidate_export,
+        validation,
+    )
+    after_hashes = (
+        hash_file(repair_manifest_path),
+        hash_file(review_manifest_path),
+        hash_file(reviews_path),
+    )
+    expected_hashes = (
+        repair_ref.manifest_hash,
+        review_ref.manifest_hash,
+        review_ref.reviews_jsonl_hash,
+    )
+    if after_hashes != expected_hashes:
+        raise ValueError("Positive SFT repair sources changed while loading")
+    return validation
 
 
 def write_training_candidate_records_jsonl(
@@ -353,6 +543,7 @@ def build_positive_sft_export_manifest(
     *,
     out_dir: Path,
     training_candidate_export: TrainingCandidateExport,
+    repair_validation: TrainingCandidateRepairReviewValidation | None,
     examples_path: Path,
     records: tuple[PositiveSFTExampleRecord, ...],
 ) -> PositiveSFTExportManifest:
@@ -362,6 +553,39 @@ def build_positive_sft_export_manifest(
 
     source_dir = training_candidate_export.out_dir
     source_manifest_path = source_dir / MANIFEST_FILENAME
+    original_record_count = sum(
+        record.source_provenance.source_type == "original" for record in records
+    )
+    repaired_record_count = sum(
+        record.source_provenance.source_type == "repaired" for record in records
+    )
+    repair_export_ref: dict[str, str] | None = None
+    repair_review_ref: dict[str, str] | None = None
+    if repaired_record_count:
+        if repair_validation is None:
+            raise ValueError(
+                "Repaired positive SFT records require validated repair sources"
+            )
+        repair_export = repair_validation.source_export
+        repair_review = repair_validation.review_artifact
+        repair_export_ref = {
+            "artifact_dir": str(repair_export.out_dir),
+            "manifest_hash": hash_file(repair_export.out_dir / MANIFEST_FILENAME),
+        }
+        reviews_path = resolve_relative_artifact_ref(
+            repair_review.out_dir,
+            repair_review.manifest.artifacts["reviews"],
+        )
+        repair_review_ref = {
+            "artifact_dir": str(repair_review.out_dir),
+            "manifest_hash": hash_file(repair_review.out_dir / MANIFEST_FILENAME),
+            "reviews_jsonl_hash": hash_file(reviews_path),
+        }
+    elif repair_validation is not None:
+        raise ValueError(
+            "Positive SFT export cannot pin unused repair sources without repaired "
+            "records"
+        )
     return PositiveSFTExportManifest.model_validate(
         {
             "artifact_type": ArtifactType.POSITIVE_SFT_EXPORT,
@@ -377,6 +601,8 @@ def build_positive_sft_export_manifest(
             "source_training_candidates_jsonl_hash": hash_source_training_candidates_jsonl(
                 training_candidate_export
             ),
+            "source_training_candidate_repair_export": repair_export_ref,
+            "source_training_candidate_repair_review": repair_review_ref,
             "training_candidate_record_schema_version": (
                 training_candidate_export.manifest.training_candidate_record_schema_version
             ),
@@ -384,6 +610,8 @@ def build_positive_sft_export_manifest(
                 POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
             ),
             "record_count": len(records),
+            "original_record_count": original_record_count,
+            "repaired_record_count": repaired_record_count,
             "positive_sft_examples_jsonl_hash": hash_file(examples_path),
             "artifacts": dict(POSITIVE_SFT_EXPORT_ARTIFACT_REFS),
         }

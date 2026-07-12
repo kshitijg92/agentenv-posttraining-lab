@@ -309,10 +309,31 @@ order, recency, or whichever record loads first. That selection belongs to the
 dataset export and is pinned in its manifest, not recorded as a globally
 preferred repair in the repair artifact.
 
+Each positive-SFT row distinguishes an `original` source from a `repaired`
+source. Both forms pin the exact training-candidate record and transcript
+artifact. A repaired row additionally pins the selected repair record and
+repair-review record and records the accepted repair-review id. Its example id
+is derived from the exact selected source rather than from `trajectory_id`
+alone. The positive-SFT manifest pins the repair-export manifest, the
+repair-review manifest, and the editable repair-review JSONL snapshot; its hash
+of the output JSONL transitively pins each row's repair selection.
+
 A completed repair proves only that the declared deterministic transformation
 was reproduced and validated. It does not change task outcome, human-review
 state, reward-hack evidence, split, or candidate eligibility, and therefore
 cannot upgrade an otherwise ineligible candidate into positive SFT.
+
+For the current `mechanical_redundancy_deletion` method only, a positive-SFT
+consumer may inherit the source trajectory's already trusted task-success
+claim. This is valid because the repair deletes only a call/result pair whose
+workspace state and normalized observation were proven equivalent to a
+retained baseline, while every subsequent action remains unchanged. The repair
+does not create a new success claim; it preserves the authority of the source
+claim under a narrowly state-and-observation-preserving transformation.
+
+This inheritance is not a general property of `completed` repairs. Future
+human, model, hybrid, or behavior-changing repairs require their own outcome
+evidence or re-evaluation policy before they may support positive SFT.
 
 Loss masking is not an accepted repair. Masking a redundant call gives it zero
 direct SFT pressure, but the call and observation remain in the context for
@@ -324,8 +345,12 @@ An auditable preference comparison may separately use the original redundant
 action as rejected behavior. That is a different objective and does not make
 the unmodified transcript a positive-SFT example.
 
-The current positive-SFT builder does not yet implement this policy. Auditing
-and closing that gap belongs to Week 9 Checkpoint 2.
+The positive-SFT builder now implements this policy. A positive-eligible
+candidate with a complete zero-block assessment uses its original transcript.
+A candidate with blocks produces no row unless the caller explicitly selects a
+repair id. An explicit invalid selection is a hard error rather than a silent
+exclusion. Loading a persisted positive-SFT export revalidates its pinned
+candidate, repair, and review sources and deterministically rebuilds the rows.
 
 ### Loss-Bearing Tokens
 
@@ -553,15 +578,16 @@ real, valid trajectory does not have to yield a positive training row
 | Deterministic repair transformation and repair-export artifact | Implemented |
 | Fail-closed repair source traversal and deterministic reload | Implemented |
 | Repair-review record, exact-row binding, and review artifact | Implemented |
-| Explicit positive-SFT repair selection and builder integration | Not implemented |
+| Explicit positive-SFT repair selection and builder/export integration | Implemented |
+| Positive-SFT repair selection CLI | Not implemented |
 | Deterministic tool-call serialization and token loss masks | Not implemented |
 | Negative-example dataset/export objective | Not implemented |
 | Preference-pair schema, pair validation, and export | Not implemented |
 | Human-repair provenance contract | Not implemented |
 | External-data license/source contract | Out of scope |
 
-The next checkpoint must audit the current positive-SFT schema and builder
-against this table before any training smoke is attempted.
+The next training-validity checkpoint must define deterministic tool-call
+serialization and loss masks before any training smoke is attempted.
 
 ## Non-Claims
 

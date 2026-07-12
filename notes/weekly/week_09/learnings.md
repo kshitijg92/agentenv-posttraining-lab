@@ -459,3 +459,35 @@ content can change. The ID identifies which logical repair attempt is under
 discussion; a canonical source-record hash identifies the exact status,
 artifact, evidence, and errors the reviewer actually saw. This prevents an old
 approval from silently migrating onto a materially different record.
+
+### Outcome Inheritance Is Transformation-Specific
+
+A repaired transcript was not itself the trajectory that the harness executed,
+so `repair_status=completed` cannot create a new task-success claim. Completion
+only says the declared transformation produced a valid artifact.
+
+There is nevertheless a narrow case where the source outcome remains
+authoritative. If a transformation deletes an action that is proven not to
+change workspace state and whose equivalent observation is already retained,
+then the environment state before every later action is unchanged. The source
+task outcome can be inherited because the transformation preserves the causal
+facts on which that outcome was measured.
+
+The durable rule is:
+
+```text
+repair completed                      != task success established
+state-and-observation-preserving edit -> source outcome may be inherited
+behavior-changing edit                -> new outcome evidence is required
+```
+
+This is why the current mechanical-redundancy deletion can inherit trusted
+source success while a future human or model rewrite cannot do so
+automatically. The relevant question is not who produced the repair or whether
+it looks better; it is whether the transformation's invariant is strong enough
+to preserve the measurement being reused.
+
+Explicit selection matters for the same reason. When several valid derivatives
+exist, neither recency nor directory order is evidence that one is the intended
+training target. The dataset row must name and hash the selected derivative,
+and the export manifest must pin that decision.

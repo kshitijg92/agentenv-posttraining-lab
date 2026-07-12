@@ -125,11 +125,64 @@ def _positive_sft_messages_payload() -> list[dict[str, object]]:
     ]
 
 
+def _original_positive_sft_source_payload() -> dict[str, object]:
+    return {
+        "source_type": "original",
+        "source_training_candidate_record_hash": "xxh64:1111111111111111",
+        "source_artifact_ref": {
+            "path": "agent/attempt_001/prompt_loop_result.json",
+            "content_hash": "xxh64:2222222222222222",
+        },
+        "task_outcome_provenance": "executed_source_trajectory",
+    }
+
+
+def _repaired_positive_sft_source_payload() -> dict[str, object]:
+    return {
+        "source_type": "repaired",
+        "source_training_candidate_record_hash": "xxh64:1111111111111111",
+        "source_artifact_ref": {
+            "path": "transcripts/repair_001.json",
+            "content_hash": "xxh64:3333333333333333",
+        },
+        "repair_id": "repair_001",
+        "source_training_candidate_repair_record_hash": ("xxh64:4444444444444444"),
+        "source_training_candidate_repair_review_record_hash": (
+            "xxh64:5555555555555555"
+        ),
+        "repair_review_id": "repair_review_001",
+        "task_outcome_provenance": "inherited_from_source_trajectory",
+        "task_outcome_inheritance_basis": (
+            "mechanical_redundancy_state_and_observation_preserving_deletion"
+        ),
+    }
+
+
+def _positive_sft_example_id(source: dict[str, object]) -> str:
+    artifact_ref = source["source_artifact_ref"]
+    assert isinstance(artifact_ref, dict)
+    content_hash = artifact_ref["content_hash"]
+    assert isinstance(content_hash, str)
+    source_type = source["source_type"]
+    candidate_hash = source["source_training_candidate_record_hash"]
+    assert isinstance(source_type, str)
+    assert isinstance(candidate_hash, str)
+    repair_record_hash = source.get("source_training_candidate_repair_record_hash")
+    assert repair_record_hash is None or isinstance(repair_record_hash, str)
+    return build_positive_sft_example_id(
+        source_type=source_type,
+        source_training_candidate_record_hash=candidate_hash,
+        source_artifact_content_hash=content_hash,
+        source_training_candidate_repair_record_hash=repair_record_hash,
+    )
+
+
 def _positive_sft_payload(**updates: Any) -> dict[str, Any]:
     task_input = PositiveSFTTaskInput.model_validate(_positive_sft_task_input_payload())
+    source_provenance = _original_positive_sft_source_payload()
     payload = {
         "schema_version": "positive_sft_example_record_v0",
-        "example_id": build_positive_sft_example_id("trajectory_001"),
+        "example_id": _positive_sft_example_id(source_provenance),
         "provenance_ids": {
             "trajectory_id": "trajectory_001",
             "eval_suite_id": "eval_suite_001",
@@ -143,6 +196,7 @@ def _positive_sft_payload(**updates: Any) -> dict[str, Any]:
             "prompt_builder_version": AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
             "prompt_builder_code_hash": "xxh64:promptbuilder",
         },
+        "source_provenance": source_provenance,
         "task_input": task_input.model_dump(mode="json"),
         "messages": _positive_sft_messages_payload(),
     }
@@ -351,7 +405,7 @@ def test_positive_sft_example_record_accepts_model_visible_row() -> None:
     record = PositiveSFTExampleRecord.model_validate(_positive_sft_payload())
 
     assert record.schema_version == POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
-    assert record.example_id == "positive_sft_example_001"
+    assert record.example_id.startswith("positive_sft_example_")
     assert record.provenance_ids.trajectory_id == "trajectory_001"
     assert record.provenance_ids.task_id == record.task_input.task_id
     assert (
@@ -361,6 +415,45 @@ def test_positive_sft_example_record_accepts_model_visible_row() -> None:
     assert record.prompt_provenance.prompt_builder_code_hash == "xxh64:promptbuilder"
     assert [message.role for message in record.messages[:2]] == ["system", "user"]
     assert any(message.role == "assistant" for message in record.messages)
+
+
+def test_positive_sft_example_accepts_exact_repaired_source() -> None:
+    source_provenance = _repaired_positive_sft_source_payload()
+    record = PositiveSFTExampleRecord.model_validate(
+        _positive_sft_payload(
+            source_provenance=source_provenance,
+            example_id=_positive_sft_example_id(source_provenance),
+        )
+    )
+
+    assert record.source_provenance.source_type == "repaired"
+    assert record.source_provenance.repair_id == "repair_001"
+    assert (
+        record.source_provenance.task_outcome_inheritance_basis
+        == "mechanical_redundancy_state_and_observation_preserving_deletion"
+    )
+
+
+def test_positive_sft_example_id_distinguishes_selected_source() -> None:
+    original = _original_positive_sft_source_payload()
+    repaired = _repaired_positive_sft_source_payload()
+
+    assert _positive_sft_example_id(original) != _positive_sft_example_id(repaired)
+
+
+def test_positive_sft_source_artifact_must_be_hash_pinned() -> None:
+    source_provenance = _original_positive_sft_source_payload()
+    artifact_ref = source_provenance["source_artifact_ref"]
+    assert isinstance(artifact_ref, dict)
+    artifact_ref["content_hash"] = None
+
+    with pytest.raises(
+        ValidationError,
+        match="positive SFT source artifact must be content-hash pinned",
+    ):
+        PositiveSFTExampleRecord.model_validate(
+            _positive_sft_payload(source_provenance=source_provenance)
+        )
 
 
 def test_positive_sft_task_input_rejects_workspace_path() -> None:
@@ -438,7 +531,7 @@ def test_positive_sft_example_rejects_wrong_example_id() -> None:
 
     with pytest.raises(
         ValidationError,
-        match="positive SFT example_id must be derived from trajectory_id",
+        match="positive SFT example_id must be derived from its selected source",
     ):
         PositiveSFTExampleRecord.model_validate(payload)
 

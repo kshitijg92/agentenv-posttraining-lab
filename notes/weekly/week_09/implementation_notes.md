@@ -1853,3 +1853,63 @@ targeted Pyright: passed
 
 The full repository pytest suite was not run for this checkpoint. Repair-review
 CLI commands and positive-SFT selection/gating remain unimplemented.
+
+#### Positive-SFT Repair Consumption
+
+Extended the positive-SFT schema and artifact path to consume explicitly
+selected deterministic repairs.
+
+`PositiveSFTExampleRecord` now has discriminated `original` and `repaired`
+source provenance. Both forms carry the exact source candidate hash and
+hash-pinned transcript reference. Repaired rows additionally carry the selected
+`repair_id`, canonical repair-record hash, canonical repair-review-record hash,
+accepted repair-review id, and the narrow task-outcome inheritance basis. The
+example id is content-derived from the selected source rather than from
+`trajectory_id`, so multiple derivatives of one trajectory cannot share an
+ambiguous identity.
+
+The positive-SFT manifest records original/repaired counts. When repaired rows
+exist it pins the repair-export manifest, repair-review manifest, and editable
+repair-review JSONL snapshot. Unused repair sources are forbidden. The loader
+now traverses all pinned sources and deterministically rebuilds the expected
+rows instead of trusting only the output JSONL hash.
+
+The builder accepts an explicit set of repair ids. Its policy is:
+
+```text
+complete assessment + zero blocks -> original transcript
+complete assessment + blocks + no selection -> no positive-SFT row
+explicit completed + accepted selection -> repaired transcript
+explicit invalid selection -> hard error
+```
+
+Unknown ids, duplicate ids, multiple selections for one candidate,
+non-completed repairs, unaccepted repair reviews, ineligible source candidates,
+and source-artifact mismatches fail closed. An accepted `cannot_complete`
+record remains unusable because review acceptance validates that failure record
+but cannot satisfy the independent `completed` gate.
+
+Only `mechanical_redundancy_deletion` currently inherits the trusted source
+task outcome. The row states that its basis is state-and-observation-preserving
+deletion. No general inheritance rule was added for future repair producers or
+methods.
+
+Focused verification:
+
+```text
+positive-SFT/repair/review focused tests: 110 passed
+full repository pytest: 946 passed, 1 stale reporting assertion failed
+corrected reporting assertion rerun: 1 passed
+repository Ruff check: passed
+repository Pyright: passed
+targeted format check: passed
+git diff --check: passed
+```
+
+The full suite's only failure expected the pre-classification reward-hack report
+column order. The report correctly contained the newer `confirmed | ambiguous`
+field, so the stale expected rows were updated and the failing test passed on a
+targeted rerun. The entire 14-minute suite was not repeated. Repository-wide
+format checking still identifies 22 unchanged files outside this checkpoint;
+they were not reformatted. Repair/review and repair-selection CLI commands
+remain a later artifact-usability checkpoint.

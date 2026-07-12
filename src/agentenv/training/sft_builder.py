@@ -1,9 +1,15 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import TRAJECTORY_REVIEW_ARTIFACT_REFS
 from agentenv.artifacts.payloads import load_agent_task_view, load_prompt_loop_result
+from agentenv.hashing import hash_file
 from agentenv.security.leakage import LeakageScanText, scan_texts_for_leakage
 from agentenv.tasks.validate import load_task_manifest
 from agentenv.training.export import (
@@ -12,52 +18,259 @@ from agentenv.training.export import (
     load_training_candidate_export_artifact,
 )
 from agentenv.training.schema import (
+    OriginalPositiveSFTSourceProvenance,
     PositiveSFTExampleRecord,
     PositiveSFTMessage,
     PositiveSFTPromptProvenance,
     PositiveSFTProvenanceIds,
     PositiveSFTTaskInput,
+    RepairedPositiveSFTSourceProvenance,
     TrainingCandidateRecord,
-    build_positive_sft_example_id,
 )
+from agentenv.training.repair import (
+    MECHANICAL_REDUNDANCY_REPAIR_METHOD,
+    hash_training_candidate_record,
+    hash_training_candidate_repair_record,
+    hash_training_candidate_repair_review_record,
+)
+from agentenv.training.repair_schema import (
+    TrainingCandidateRepairRecord,
+    TrainingCandidateRepairReviewRecord,
+)
+from agentenv.training.sft_identity import build_positive_sft_example_id
 from agentenv.trajectories.export import (
     TrajectoryExport,
-    hash_file,
     load_trajectory_export_artifact,
 )
 from agentenv.trajectories.schema import ArtifactRef, TrajectoryRecord
 
+if TYPE_CHECKING:
+    from agentenv.training.repair_review import (
+        TrainingCandidateRepairReviewValidation,
+    )
+
+
+MECHANICAL_REDUNDANCY_TASK_OUTCOME_INHERITANCE_BASIS = (
+    "mechanical_redundancy_state_and_observation_preserving_deletion"
+)
+
+
+@dataclass(frozen=True)
+class _SelectedPositiveSFTRepair:
+    repair_export_dir: Path
+    record: TrainingCandidateRepairRecord
+    review: TrainingCandidateRepairReviewRecord
+
 
 def build_positive_sft_examples(
     training_candidate_export_dir: Path,
+    *,
+    repair_export_dir: Path | None = None,
+    repair_review_dir: Path | None = None,
+    selected_repair_ids: Sequence[str] = (),
 ) -> tuple[PositiveSFTExampleRecord, ...]:
     training_candidate_export = load_training_candidate_export_artifact(
         training_candidate_export_dir
     )
+    repair_validation = load_positive_sft_repair_sources(
+        training_candidate_export,
+        repair_export_dir=repair_export_dir,
+        repair_review_dir=repair_review_dir,
+        selected_repair_ids=selected_repair_ids,
+    )
     return build_positive_sft_examples_from_training_candidate_export(
-        training_candidate_export
+        training_candidate_export,
+        repair_validation=repair_validation,
+        selected_repair_ids=selected_repair_ids,
     )
 
 
 def build_positive_sft_examples_from_training_candidate_export(
     training_candidate_export: TrainingCandidateExport,
+    *,
+    repair_validation: TrainingCandidateRepairReviewValidation | None = None,
+    selected_repair_ids: Sequence[str] = (),
 ) -> tuple[PositiveSFTExampleRecord, ...]:
     validate_pinned_source_review_artifact(training_candidate_export)
     trajectory_export = load_pinned_source_trajectory_export(training_candidate_export)
     trajectory_by_id = build_trajectory_record_index(trajectory_export.records)
+    selected_repairs = build_selected_positive_sft_repair_index(
+        training_candidate_export,
+        repair_validation=repair_validation,
+        selected_repair_ids=selected_repair_ids,
+    )
 
     examples: list[PositiveSFTExampleRecord] = []
     for candidate in training_candidate_export.records:
         if not candidate.training_eligibility.positive_sft_allowed:
             continue
+        assessment = candidate.mechanical_redundancy_assessment
+        if assessment.evaluation_status != "complete":
+            continue
+        candidate_hash = hash_training_candidate_record(candidate)
+        selected_repair = selected_repairs.get(candidate_hash)
+        if assessment.blocks and selected_repair is None:
+            continue
+        if not assessment.blocks and selected_repair is not None:
+            raise ValueError(
+                "Positive SFT repair selected for a candidate with no mechanical "
+                "redundancy blocks"
+            )
         trajectory = trajectory_by_id.get(candidate.trajectory_id)
         if trajectory is None:
             raise ValueError(
                 "Training candidate references unknown trajectory_id: "
                 f"{candidate.trajectory_id}"
             )
-        examples.append(build_positive_sft_example_record(candidate, trajectory))
+        examples.append(
+            build_positive_sft_example_record(
+                candidate,
+                trajectory,
+                selected_repair=selected_repair,
+            )
+        )
     return tuple(examples)
+
+
+def load_positive_sft_repair_sources(
+    training_candidate_export: TrainingCandidateExport,
+    *,
+    repair_export_dir: Path | None,
+    repair_review_dir: Path | None,
+    selected_repair_ids: Sequence[str],
+) -> TrainingCandidateRepairReviewValidation | None:
+    selected_ids = tuple(selected_repair_ids)
+    if len(selected_ids) != len(set(selected_ids)):
+        raise ValueError("Positive SFT repair selections contain duplicate repair_id")
+    if not selected_ids:
+        if repair_export_dir is not None or repair_review_dir is not None:
+            raise ValueError(
+                "Positive SFT repair sources require at least one selected repair_id"
+            )
+        return None
+    if repair_export_dir is None or repair_review_dir is None:
+        raise ValueError(
+            "Selected positive SFT repairs require repair export and review artifacts"
+        )
+
+    from agentenv.training.repair_review import (
+        validate_training_candidate_repair_review_artifact,
+    )
+
+    validation = validate_training_candidate_repair_review_artifact(
+        repair_export_dir,
+        repair_review_dir,
+    )
+    validate_positive_sft_repair_source_matches_candidate_export(
+        training_candidate_export,
+        validation,
+    )
+    return validation
+
+
+def validate_positive_sft_repair_source_matches_candidate_export(
+    training_candidate_export: TrainingCandidateExport,
+    repair_validation: TrainingCandidateRepairReviewValidation,
+) -> None:
+    repair_export = repair_validation.source_export
+    source_ref = repair_export.manifest.source_training_candidate_export
+    source_dir = Path(source_ref.artifact_dir)
+    if not source_dir.is_absolute():
+        source_dir = repair_export.out_dir / source_dir
+    if source_dir.resolve() != training_candidate_export.out_dir.resolve():
+        raise ValueError(
+            "Positive SFT repair export references a different training candidate "
+            "export"
+        )
+    candidate_manifest_hash = hash_file(
+        training_candidate_export.out_dir / MANIFEST_FILENAME
+    )
+    if source_ref.manifest_hash != candidate_manifest_hash:
+        raise ValueError(
+            "Positive SFT repair export source training candidate manifest hash "
+            "mismatch"
+        )
+
+
+def build_selected_positive_sft_repair_index(
+    training_candidate_export: TrainingCandidateExport,
+    *,
+    repair_validation: TrainingCandidateRepairReviewValidation | None,
+    selected_repair_ids: Sequence[str],
+) -> dict[str, _SelectedPositiveSFTRepair]:
+    selected_ids = tuple(selected_repair_ids)
+    if not selected_ids:
+        if repair_validation is not None:
+            raise ValueError(
+                "Positive SFT repair validation is unused without selected repair ids"
+            )
+        return {}
+    if len(selected_ids) != len(set(selected_ids)):
+        raise ValueError("Positive SFT repair selections contain duplicate repair_id")
+    if repair_validation is None:
+        raise ValueError("Positive SFT repair selections require validated artifacts")
+
+    repairs_by_id = {
+        record.repair_id: record for record in repair_validation.source_export.records
+    }
+    reviews_by_id = {
+        review.repair_id: review for review in repair_validation.review_artifact.reviews
+    }
+    candidates_by_hash = {
+        hash_training_candidate_record(candidate): candidate
+        for candidate in training_candidate_export.records
+    }
+    selected_by_candidate_hash: dict[str, _SelectedPositiveSFTRepair] = {}
+    for repair_id in selected_ids:
+        repair = repairs_by_id.get(repair_id)
+        if repair is None:
+            raise ValueError(f"Positive SFT selected unknown repair_id: {repair_id}")
+        review = reviews_by_id[repair_id]
+        if repair.repair_status != "completed":
+            raise ValueError(
+                "Positive SFT selected repair is not completed: "
+                f"{repair_id} ({repair.repair_status})"
+            )
+        if review.review_status != "reviewed" or review.review_decision != "accepted":
+            raise ValueError(
+                "Positive SFT selected repair does not have an accepted review: "
+                f"{repair_id}"
+            )
+        if repair.repair.repair_method != MECHANICAL_REDUNDANCY_REPAIR_METHOD:
+            raise ValueError(
+                "Positive SFT cannot inherit task outcome for unsupported repair "
+                f"method: {repair.repair.repair_method}"
+            )
+
+        candidate_hash = repair.source_training_candidate_record_hash
+        candidate = candidates_by_hash.get(candidate_hash)
+        if candidate is None:
+            raise ValueError(
+                "Positive SFT selected repair references an unknown training "
+                f"candidate: {repair_id}"
+            )
+        if not candidate.training_eligibility.positive_sft_allowed:
+            raise ValueError(
+                "Positive SFT selected repair belongs to an ineligible candidate: "
+                f"{repair_id}"
+            )
+        assessment = candidate.mechanical_redundancy_assessment
+        if assessment.evaluation_status != "complete" or not assessment.blocks:
+            raise ValueError(
+                "Positive SFT selected repair requires a complete source assessment "
+                f"with redundancy blocks: {repair_id}"
+            )
+        if candidate_hash in selected_by_candidate_hash:
+            raise ValueError(
+                "Positive SFT selected multiple repairs for one training candidate: "
+                f"{candidate.trajectory_id} / {candidate.eval_attempt_id}"
+            )
+        selected_by_candidate_hash[candidate_hash] = _SelectedPositiveSFTRepair(
+            repair_export_dir=repair_validation.source_export.out_dir,
+            record=repair,
+            review=review,
+        )
+    return selected_by_candidate_hash
 
 
 def load_pinned_source_trajectory_export(
@@ -151,12 +364,29 @@ def build_trajectory_record_index(
 def build_positive_sft_example_record(
     candidate: TrainingCandidateRecord,
     trajectory: TrajectoryRecord,
+    *,
+    selected_repair: _SelectedPositiveSFTRepair | None = None,
 ) -> PositiveSFTExampleRecord:
     validate_positive_sft_candidate_matches_trajectory(candidate, trajectory)
     if not candidate.training_eligibility.positive_sft_allowed:
         raise ValueError(
             "Training candidate is not positive-SFT eligible: "
             f"{candidate.trajectory_id}"
+        )
+    assessment = candidate.mechanical_redundancy_assessment
+    if assessment.evaluation_status != "complete":
+        raise ValueError(
+            "Positive SFT requires a complete mechanical-redundancy assessment"
+        )
+    if assessment.blocks and selected_repair is None:
+        raise ValueError(
+            "Positive SFT candidates with mechanical redundancy require a selected "
+            "repair"
+        )
+    if not assessment.blocks and selected_repair is not None:
+        raise ValueError(
+            "Positive SFT repair selected for a candidate with no mechanical "
+            "redundancy blocks"
         )
 
     agent_task_view_ref = require_artifact_ref(
@@ -202,6 +432,48 @@ def build_positive_sft_example_record(
         timeout_seconds=agent_task_view.timeout_seconds,
         network=agent_task_view.network,
     )
+    source_candidate_hash = hash_training_candidate_record(candidate)
+    if selected_repair is None:
+        source_provenance = OriginalPositiveSFTSourceProvenance(
+            source_type="original",
+            source_training_candidate_record_hash=source_candidate_hash,
+            source_artifact_ref=prompt_loop_result_ref,
+            task_outcome_provenance="executed_source_trajectory",
+        )
+        source_messages = prompt_loop_result.messages
+    else:
+        repair = selected_repair.record
+        review = selected_repair.review
+        repaired_ref = repair.repaired_artifact_ref
+        if repair.repair_status != "completed" or repaired_ref is None:
+            raise ValueError("Positive SFT selected repair is not completed")
+        if review.review_status != "reviewed" or review.review_decision != "accepted":
+            raise ValueError("Positive SFT selected repair review is not accepted")
+        if review.review_id is None:
+            raise ValueError("Positive SFT selected repair review is missing review_id")
+        if repair.source_training_candidate_record_hash != source_candidate_hash:
+            raise ValueError(
+                "Positive SFT selected repair source candidate hash mismatch"
+            )
+        source_messages = load_selected_repaired_messages(selected_repair)
+        source_provenance = RepairedPositiveSFTSourceProvenance(
+            source_type="repaired",
+            source_training_candidate_record_hash=source_candidate_hash,
+            source_artifact_ref=repaired_ref,
+            repair_id=repair.repair_id,
+            source_training_candidate_repair_record_hash=(
+                hash_training_candidate_repair_record(repair)
+            ),
+            source_training_candidate_repair_review_record_hash=(
+                hash_training_candidate_repair_review_record(review)
+            ),
+            repair_review_id=review.review_id,
+            task_outcome_provenance="inherited_from_source_trajectory",
+            task_outcome_inheritance_basis=(
+                MECHANICAL_REDUNDANCY_TASK_OUTCOME_INHERITANCE_BASIS
+            ),
+        )
+
     messages = tuple(
         PositiveSFTMessage(
             role=message.role,
@@ -209,12 +481,29 @@ def build_positive_sft_example_record(
             name=message.name,
             tool_call_id=message.tool_call_id,
         )
-        for message in prompt_loop_result.messages
+        for message in source_messages
     )
     task_manifest_path = Path(trajectory.source_provenance.task_manifest_path)
     validate_task_manifest_hash(trajectory, task_manifest_path=task_manifest_path)
     record = PositiveSFTExampleRecord(
-        example_id=build_positive_sft_example_id(trajectory.identity.trajectory_id),
+        example_id=build_positive_sft_example_id(
+            source_type=source_provenance.source_type,
+            source_training_candidate_record_hash=(
+                source_provenance.source_training_candidate_record_hash
+            ),
+            source_artifact_content_hash=require_content_hash(
+                source_provenance.source_artifact_ref,
+                field_name="positive SFT source artifact",
+            ),
+            source_training_candidate_repair_record_hash=(
+                source_provenance.source_training_candidate_repair_record_hash
+                if isinstance(
+                    source_provenance,
+                    RepairedPositiveSFTSourceProvenance,
+                )
+                else None
+            ),
+        ),
         provenance_ids=PositiveSFTProvenanceIds(
             trajectory_id=trajectory.identity.trajectory_id,
             eval_suite_id=trajectory.identity.eval_suite_id,
@@ -228,6 +517,7 @@ def build_positive_sft_example_record(
             prompt_builder_version=prompt_loop_result.prompt_builder_version,
             prompt_builder_code_hash=prompt_loop_result.prompt_builder_code_hash,
         ),
+        source_provenance=source_provenance,
         task_input=task_input,
         messages=list(messages),
     )
@@ -236,6 +526,40 @@ def build_positive_sft_example_record(
         task_manifest_path=task_manifest_path,
     )
     return record
+
+
+def load_selected_repaired_messages(
+    selected_repair: _SelectedPositiveSFTRepair,
+) -> list:
+    from agentenv.training.repair_export import load_repaired_transcript_artifact
+
+    repaired_ref = selected_repair.record.repaired_artifact_ref
+    if repaired_ref is None:
+        raise ValueError("Positive SFT selected repair is missing repaired artifact")
+    expected_hash = require_content_hash(
+        repaired_ref,
+        field_name="repaired transcript",
+    )
+    repaired_path = resolve_relative_artifact_ref(
+        selected_repair.repair_export_dir,
+        repaired_ref.path,
+    )
+    observed_hash = hash_file(repaired_path)
+    if observed_hash != expected_hash:
+        raise ValueError(
+            "Positive SFT repaired transcript hash mismatch: "
+            f"{observed_hash!r} != {expected_hash!r}"
+        )
+    transcript = load_repaired_transcript_artifact(repaired_path)
+    if hash_file(repaired_path) != expected_hash:
+        raise ValueError("Positive SFT repaired transcript changed while loading")
+    return transcript.root
+
+
+def require_content_hash(artifact_ref: ArtifactRef, *, field_name: str) -> str:
+    if artifact_ref.content_hash is None:
+        raise ValueError(f"{field_name} must be content-hash pinned")
+    return artifact_ref.content_hash
 
 
 def validate_positive_sft_candidate_matches_trajectory(

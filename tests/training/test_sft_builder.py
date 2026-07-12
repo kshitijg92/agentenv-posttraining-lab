@@ -65,6 +65,12 @@ def test_build_positive_sft_examples_from_training_candidate_export(
         "agent_task_initial_prompt_builder_v0"
     )
     assert example.prompt_provenance.prompt_builder_code_hash.startswith("xxh64:")
+    assert example.source_provenance.source_type == "original"
+    assert (
+        example.source_provenance.task_outcome_provenance
+        == "executed_source_trajectory"
+    )
+    assert example.source_provenance.source_artifact_ref.content_hash is not None
     assert example.task_input.task_id == "toy_python_fix_001"
     assert [message.role for message in example.messages[:2]] == ["system", "user"]
     assert any(message.role == "assistant" for message in example.messages)
@@ -183,6 +189,10 @@ def test_export_positive_sft_examples_writes_manifest_and_jsonl(
         == POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
     )
     assert manifest.record_count == 1
+    assert manifest.original_record_count == 1
+    assert manifest.repaired_record_count == 0
+    assert manifest.source_training_candidate_repair_export is None
+    assert manifest.source_training_candidate_repair_review is None
     assert manifest.positive_sft_examples_jsonl_hash.startswith("xxh64:")
     assert manifest.artifacts == {
         "positive_sft_examples": "positive_sft_examples.jsonl",
@@ -205,6 +215,8 @@ def test_export_positive_sft_examples_allows_empty_export(
     )
 
     assert export.manifest.record_count == 0
+    assert export.manifest.original_record_count == 0
+    assert export.manifest.repaired_record_count == 0
     assert export.records == ()
     assert (export.out_dir / "positive_sft_examples.jsonl").read_text() == ""
 
