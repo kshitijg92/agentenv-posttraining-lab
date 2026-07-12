@@ -884,6 +884,7 @@ def _model_config() -> dict[str, Any]:
             "supports_top_k": False,
         },
         "prompt_adapter": None,
+        "agent_action_format": "prompt_only",
     }
 
 

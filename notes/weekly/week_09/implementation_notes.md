@@ -1913,3 +1913,182 @@ targeted rerun. The entire 14-minute suite was not repeated. Repository-wide
 format checking still identifies 22 unchanged files outside this checkpoint;
 they were not reformatted. Repair/review and repair-selection CLI commands
 remain a later artifact-usability checkpoint.
+
+## 2026-07-12
+
+### Acquisition Prompt And Model-Action Contract
+
+Corrected the agent prompt's `run_tests` example so it uses the exact public
+check command rather than a generic placeholder. The prompt now also states
+that an action must be the JSON tool-call envelope itself, without Markdown
+fences or a second copy of the tool name inside the arguments.
+
+Added `agent_action_format: prompt_only | json_schema` to model configuration.
+The OpenAI-compatible client sends a strict action response schema when
+configured, and the Qwen Ollama acquisition configs use that mode. This
+substantially reduced malformed action envelopes. The Qwen `/no_think` suffix
+was used where supported so hidden reasoning did not consume the local
+generation budget.
+
+These interface changes were used to improve the rate of harness-clean,
+gradable model trajectories. How prompt or action-interface provenance should
+constrain future pairing remains an open design question.
+
+### Eval Runtime Provenance
+
+`EvalRunManifest` and `EvalSuiteManifest` now require complete
+`HarnessRuntimeProvenance`. Eval orchestration captures it at run start and
+refuses to finalize a manifest if harness source, dependencies, or interpreter
+provenance changes before completion.
+
+Training gates require the source eval runtime to exactly match the runtime
+pinned by the current passing harness-audit and control-calibration artifacts.
+This invalidated an early acquisition pilot whose run predated the final source
+changes; it was discarded rather than reinterpreted under the new audit.
+
+### Task Pack And Acquisition Runs
+
+Added four dev tasks with public/hidden tests, oracle and known-bad patches, and
+agent controls:
+
+```text
+repair_header_merge
+repair_duration_parser
+repair_record_chunking
+repair_query_encoding
+```
+
+The task pack now contains one practice and seven dev tasks. Control
+calibration passed all 48 task/control combinations at one repeat, and public
+check idempotency calibration remained stable.
+
+Added local acquisition configs for Qwen2.5-Coder 14B, 7B, and 3B and Qwen3 8B,
+plus greedy retry and high-diversity sampling configs. Qwen3 structured
+generation was too slow and sometimes ended with empty/max-token responses, so
+its partial runs were stopped and excluded.
+
+Final trust artifacts:
+
+```text
+experiments/runs/week09_dpo_harness_audit_v4
+experiments/runs/week09_dpo_control_calibration_v3
+```
+
+Both pass and pin the post-revert harness runtime
+`xxh64:2e228ddac2b3c29f`.
+
+Historical candidate exports retained for acquisition-yield analysis:
+
+```text
+experiments/runs/week09_dpo_qwen2-5-coder-14b_candidates_v2
+experiments/runs/week09_dpo_qwen2-5-coder-7b_candidates_v2
+experiments/runs/week09_dpo_qwen2-5-coder-3b_candidates_v2
+experiments/runs/week09_dpo_qwen2_5_coder_14b_retries_candidates_v2
+experiments/runs/week09_dpo_high_diversity_rejected_yield_candidates_v2
+```
+
+All accepted source reviews use reviewer id
+`codex_provisional_under_user_authorization`. That records the user's temporary
+authorization to mark reviews accepted for artifact construction; it is not a
+claim that every long transcript received human review.
+
+These model evals, trajectories, reviews, and candidates were produced under
+pre-revert runtime `xxh64:9292345e1dff4cad`. Removing the prematurely designed
+preference subsystem correctly changed the whole-tree runtime hash. The
+historical artifacts were not relabeled. They remain useful evidence about
+acquisition yield and failure modes, but they do not satisfy the current-runtime
+training gate. Fresh model evals are required after preference design is
+settled and before constructing current candidate or pair artifacts.
+
+### Acquisition Diversity Observation
+
+An earlier pilot had eight distinct eval attempt ids but only one behavior
+transcript. It was stopped and excluded from the candidate pool. The result
+shows that additional attempt ids do not necessarily provide additional
+behavioral coverage. The definition and enforcement of behavior-level
+deduplication remain for the later preference design discussion.
+
+### Verification Notes
+
+The first repository run used `pytest -n auto` and produced subprocess-heavy
+harness/reward audit failures under CPU contention. The same harness and reward
+tests passed serially (`6 passed`), showing that those failures were test-runner
+resource contention rather than audit mismatches. Stale eval-manifest fixtures
+were updated for required runtime provenance, and task-pack assertions were
+updated from four to eight tasks. Final verification results are recorded after
+the concluding test pass.
+
+#### Timeout Audit Flake Correction And Artifact Rebuild
+
+The first serial full suite exposed that the `hidden_check_timeout` scorer
+audit case used a one-second task timeout for both public and hidden phases.
+Under sustained suite load, ordinary public pytest startup occasionally
+exceeded one second, so the case produced a public timeout instead of reaching
+the intentional hidden hang. This was a case-design flake: it tested whichever
+phase happened to consume the tiny budget first.
+
+Raised that case's timeout override to five seconds. The public tests now have
+startup headroom while the deliberately non-terminating hidden behavior still
+guarantees a hidden-phase timeout. The separate `public_check_timeout` case
+retains its one-second override.
+
+Because audit-case and runtime bytes are provenance, old trust pins were not
+reused. After removing the premature preference subsystem, generated:
+
+```text
+experiments/runs/week09_dpo_harness_audit_v4
+experiments/runs/week09_dpo_control_calibration_v3
+```
+
+The regenerated audit is aggregate/agent/scorer `PASS` and retains harness
+runtime `xxh64:2e228ddac2b3c29f`. Control calibration has 48 matching records,
+stable flake detection, and complete idempotency evidence for the expanded task
+pack.
+
+Final verification:
+
+```text
+post-revert manifest/model/eval/CLI regression set: 168 passed
+post-revert training package: 150 passed
+current harness audit: PASS (agent PASS, scorer PASS)
+current controls: 48/48 matching, flake stable
+repository Ruff: passed
+repository Pyright: passed
+git diff --check: passed
+```
+
+The full repository suite was not repeated after the scoped rollback. The
+focused sets cover every mixed file changed by the removal and the complete
+retained training package.
+
+### Cadence-Neutral Acquisition Configuration
+
+Renamed the eight acquisition eval configs and their internal `name` values so
+reusable configuration does not encode the weekly learning cadence. Names now
+describe the model, split, and acquisition strategy, for example:
+
+```text
+agent_model_dev_multi_policy_acquisition.yaml
+qwen2_5_coder_14b_dev_repeated_sampling.yaml
+qwen3_8b_dev_targeted.yaml
+```
+
+Historical experiment manifests retain their original config paths as honest
+records of what executed. Added a root `AGENTS.md` rule allowing week/date
+labels only in notes, documentation, and generated `experiments/` paths, not in
+source, APIs, schemas, task ids, or reusable config filenames and names.
+
+### Qwen3 Token-Budget Limitation
+
+All attempted Qwen3 acquisitions used `max_new_tokens: 4096`; no larger-budget
+diagnostic was run. The Qwen3 8B targeted attempt reached that limit on its
+first turn and the provider returned empty content. A future rerun should try
+one controlled 8192-token diagnostic before excluding that configuration,
+while recognizing that a structured tool action should normally be much
+shorter and that a second ceiling hit would indicate a template/decoding issue
+rather than a legitimate need for long actions.
+
+Qwen3 14B showed a different problem: provider timeouts, max-turn cycling, and
+repeated short behaviors. Its recorded responses did not exhaust the 4096-token
+limit, so increasing the per-turn budget is not the primary intervention for
+that model.

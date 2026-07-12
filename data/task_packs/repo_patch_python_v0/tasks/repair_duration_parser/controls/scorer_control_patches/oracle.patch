@@ -1,0 +1,28 @@
+diff --git a/src/duration.py b/src/duration.py
+index 288606d..a3a954a 100644
+--- a/src/duration.py
++++ b/src/duration.py
+@@ -1,5 +1,20 @@
++import re
++
++
++_DURATION_RE = re.compile(r"([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)")
++_MULTIPLIERS = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
++
++
+ def parse_duration(value: str) -> float:
+     """Parse a compact duration and return seconds."""
+-    if not value.endswith("s"):
+-        raise ValueError("duration must use seconds")
+-    return float(value[:-1])
++    if not isinstance(value, str):
++        raise ValueError("duration must be a string")
++    match = _DURATION_RE.fullmatch(value)
++    if match is None:
++        raise ValueError("invalid duration")
++    number_text, unit = match.groups()
++    try:
++        number = float(number_text)
++    except ValueError as exc:
++        raise ValueError("invalid duration number") from exc
++    return number * _MULTIPLIERS[unit]

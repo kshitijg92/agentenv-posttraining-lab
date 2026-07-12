@@ -21,6 +21,11 @@ from agentenv.artifacts.manifests import EvalSuiteManifest
 from agentenv.artifacts.manifests import REPLAY_RUN_ARTIFACT_REFS
 from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_REFS
 from agentenv.artifacts.payloads import EvalTaskHashes
+from agentenv.audits.runtime import (
+    capture_harness_runtime_provenance,
+    harness_repo_root,
+)
+from agentenv.audits.schema import HarnessRuntimeProvenance
 from agentenv.controls.agent_control_scripts import (
     AgentControlScriptCase,
     load_agent_control_script_case,
@@ -119,6 +124,7 @@ class EvalRun:
     config_path: Path
     config_hash: str
     task_hashes: EvalTaskHashes
+    runtime_provenance: HarnessRuntimeProvenance
     policy: str
     out_dir: Path
     created_at: str
@@ -132,6 +138,7 @@ class EvalMatrixRun:
     config_path: Path
     config_hash: str
     task_hashes: EvalTaskHashes
+    runtime_provenance: HarnessRuntimeProvenance
     out_dir: Path
     created_at: str
     policy_runs: list[EvalRun]
@@ -152,6 +159,7 @@ def run_eval_config(
     out_dir: Path,
     *,
     overwrite: bool = False,
+    runtime_provenance: HarnessRuntimeProvenance | None = None,
 ) -> EvalRun:
     config_path = config_path.resolve()
     config = load_eval_config(config_path)
@@ -160,6 +168,8 @@ def run_eval_config(
     config_hash = _hash_file(config_path)
     task_pack_path = resolve_task_pack_path(config, config_path)
     task_hashes = build_eval_task_hashes(task_pack_path, config.tasks)
+    if runtime_provenance is None:
+        runtime_provenance = capture_harness_runtime_provenance(harness_repo_root())
     eval_run_id = new_eval_run_id()
     created_at = _utc_now()
 
@@ -372,6 +382,7 @@ def run_eval_config(
         config_path=config_path,
         config_hash=config_hash,
         task_hashes=task_hashes,
+        runtime_provenance=runtime_provenance,
         policy=policy,
         out_dir=out_dir,
         created_at=created_at,
@@ -389,6 +400,7 @@ def run_eval_config(
         payload_refs={"manifest": MANIFEST_FILENAME},
     )
     _write_eval_trace(eval_run, trace_events)
+    _require_unchanged_eval_runtime(eval_run.runtime_provenance)
     _write_eval_run_manifest(eval_run)
     return eval_run
 
@@ -405,6 +417,7 @@ def run_eval_config_all_policies(
     config_hash = _hash_file(config_path)
     task_pack_path = resolve_task_pack_path(config, config_path)
     task_hashes = build_eval_task_hashes(task_pack_path, config.tasks)
+    runtime_provenance = capture_harness_runtime_provenance(harness_repo_root())
     eval_suite_id = new_eval_suite_id()
     created_at = _utc_now()
 
@@ -413,7 +426,12 @@ def run_eval_config_all_policies(
     policies_dir.mkdir(parents=True, exist_ok=True)
 
     policy_runs = [
-        run_eval_config(config_path, policy, policies_dir / policy)
+        run_eval_config(
+            config_path,
+            policy,
+            policies_dir / policy,
+            runtime_provenance=runtime_provenance,
+        )
         for policy in config.policies
     ]
     replay_runs = _replay_configured_policy_runs(config, policy_runs, out_dir)
@@ -423,11 +441,13 @@ def run_eval_config_all_policies(
         config_path=config_path,
         config_hash=config_hash,
         task_hashes=task_hashes,
+        runtime_provenance=runtime_provenance,
         out_dir=out_dir,
         created_at=created_at,
         policy_runs=policy_runs,
         replay_runs=replay_runs,
     )
+    _require_unchanged_eval_runtime(eval_matrix.runtime_provenance)
     _write_eval_matrix_manifest(eval_matrix)
     return eval_matrix
 
@@ -505,6 +525,7 @@ def _build_eval_run_manifest(eval_run: EvalRun) -> EvalRunManifest:
         "task_pack": eval_run.config.task_pack,
         "split": eval_run.config.split,
         "task_hashes": eval_run.task_hashes,
+        "runtime_provenance": eval_run.runtime_provenance,
         "policy": eval_run.policy,
         "attempt_count": len(eval_run.attempts),
         "layer_counts": count_eval_run_layers(eval_run),
@@ -538,6 +559,7 @@ def _build_eval_suite_manifest(eval_matrix: EvalMatrixRun) -> EvalSuiteManifest:
             "task_pack": eval_matrix.config.task_pack,
             "split": eval_matrix.config.split,
             "task_hashes": eval_matrix.task_hashes,
+            "runtime_provenance": eval_matrix.runtime_provenance,
             "tasks": eval_matrix.config.tasks,
             "task_count": len(eval_matrix.config.tasks),
             "policy_count": len(eval_matrix.policy_runs),
@@ -573,6 +595,17 @@ def _build_eval_suite_manifest(eval_matrix: EvalMatrixRun) -> EvalSuiteManifest:
             ],
         }
     )
+
+
+def _require_unchanged_eval_runtime(
+    expected: HarnessRuntimeProvenance,
+) -> None:
+    observed = capture_harness_runtime_provenance(harness_repo_root())
+    if observed != expected:
+        raise ValueError(
+            "Harness runtime changed while the eval was running; refusing to "
+            "persist a manifest with ambiguous execution provenance"
+        )
 
 
 def _manifest_payload(

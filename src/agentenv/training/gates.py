@@ -24,6 +24,7 @@ from agentenv.audits.runner import (
     HarnessAuditArtifact,
     load_harness_audit_artifact,
 )
+from agentenv.audits.schema import HarnessRuntimeProvenance
 from agentenv.audits.runtime import (
     capture_harness_runtime_provenance,
     harness_repo_root,
@@ -89,7 +90,11 @@ def validate_training_export_gates(
         )
 
     _require_current_harness_audit_cases(harness_artifact)
-    source_task_hashes = _load_source_eval_task_hashes(validation)
+    source_task_hashes, source_runtime = _load_source_eval_provenance(validation)
+    if source_runtime != current_runtime:
+        raise ValueError(
+            "Source eval runtime does not match the audited harness runtime"
+        )
     _require_matching_control_tasks(
         validation,
         source_task_hashes=source_task_hashes,
@@ -194,9 +199,9 @@ def _require_current_harness_audit_cases(artifact: HarnessAuditArtifact) -> None
             )
 
 
-def _load_source_eval_task_hashes(
+def _load_source_eval_provenance(
     validation: TrajectoryReviewValidation,
-) -> EvalTaskHashes:
+) -> tuple[EvalTaskHashes, HarnessRuntimeProvenance]:
     trajectory_manifest = validation.source_export.manifest
     source_artifact_dir = _external_path(trajectory_manifest.source_artifact_dir)
     expected_manifest_path = source_artifact_dir / MANIFEST_FILENAME
@@ -230,7 +235,7 @@ def _load_source_eval_task_hashes(
             source_manifest.eval_suite_id != trajectory_manifest.source_eval_suite_id
         ):
             raise ValueError("Trajectory export source eval suite identity mismatch")
-    return source_manifest.task_hashes
+    return source_manifest.task_hashes, source_manifest.runtime_provenance
 
 
 def _require_matching_control_tasks(

@@ -39,10 +39,17 @@ def _system_prompt(prompt_input: AgentTaskPromptInput) -> str:
     sections = [
         "You are a coding agent operating through a restricted tool interface.",
         "Do not output free-form chat, markdown, or multiple actions.",
+        "Do not wrap the JSON object in ``` fences.",
         "Only interact through tool_call or final_answer actions.",
+        'For every tool call, action must be exactly "tool_call"; put the '
+        'selected tool name only in "tool_name". Never put a tool name in '
+        '"action".',
         "",
         "Allowed tool-call actions:",
-        *_tool_action_lines(prompt_input.allowed_tools),
+        *_tool_action_lines(prompt_input),
+        "",
+        "For run_tests, copy one listed public-check command exactly. Do not "
+        "shorten, reformat, or otherwise alter it; command variants are rejected.",
         "",
         "Valid final-answer action:",
         '{"action":"final_answer","text":"done"}',
@@ -74,9 +81,9 @@ def _user_prompt(prompt_input: AgentTaskPromptInput) -> str:
     return "\n".join(sections)
 
 
-def _tool_action_lines(allowed_tools: list[str]) -> list[str]:
+def _tool_action_lines(prompt_input: AgentTaskPromptInput) -> list[str]:
     lines: list[str] = []
-    for tool_name in allowed_tools:
+    for tool_name in prompt_input.allowed_tools:
         tool_definition = (
             TOOL_REGISTRY.get(tool_name) if tool_name in TOOL_REGISTRY else None
         )
@@ -88,6 +95,8 @@ def _tool_action_lines(allowed_tools: list[str]) -> list[str]:
         example_arguments = (
             tool_definition.example_arguments if tool_definition is not None else {}
         )
+        if tool_name == "run_tests":
+            example_arguments = {"command": prompt_input.public_checks[0]}
         lines.append(f"- {tool_name}: {description}")
         example = _tool_action_example(tool_name, example_arguments)
         lines.append(f"  Example: {example}")

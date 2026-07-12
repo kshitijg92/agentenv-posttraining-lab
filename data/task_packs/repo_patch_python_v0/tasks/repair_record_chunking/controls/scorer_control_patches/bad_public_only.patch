@@ -1,0 +1,10 @@
+diff --git a/src/chunking.py b/src/chunking.py
+index 34b107c..30325aa 100644
+--- a/src/chunking.py
++++ b/src/chunking.py
+@@ -7,4 +7,5 @@ T = TypeVar("T")
+ 
+ def chunk_records(records: list[T], size: int) -> list[list[T]]:
+     """Split records into ordered chunks."""
++    # Slice the concrete list shown by the visible test.
+     return [records[index : index + size] for index in range(0, len(records), size)]

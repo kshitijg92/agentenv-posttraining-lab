@@ -1,0 +1,12 @@
+diff --git a/src/header_tools.py b/src/header_tools.py
+index c5e10b1..7aee41c 100644
+--- a/src/header_tools.py
++++ b/src/header_tools.py
+@@ -4,6 +4,7 @@ def merge_headers(
+     overrides: dict[str, str],
+ ) -> dict[str, str]:
+     """Merge default and override HTTP-style headers."""
++    # Exact-key update is enough for the visible example.
+     result = dict(defaults)
+     result.update(overrides)
+     return result

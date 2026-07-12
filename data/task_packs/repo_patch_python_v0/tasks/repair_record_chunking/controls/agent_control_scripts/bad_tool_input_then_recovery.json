@@ -1,0 +1,10 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {"steps": [
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{}}"},
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/chunking.py\",\"content\":\"from collections.abc import Iterable\\nfrom typing import TypeVar\\nT = TypeVar('T')\\ndef chunk_records(records: Iterable[T], size: int) -> list[list[T]]:\\n    if isinstance(size, bool) or not isinstance(size, int) or size <= 0: raise ValueError('positive int required')\\n    try: values = list(records)\\n    except TypeError as exc: raise ValueError('iterable required') from exc\\n    return [values[i:i + size] for i in range(0, len(values), size)]\\n\"}}"},
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"},
+    {"output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"}
+  ]},
+  "expected_result": {"prompt_loop_status": "completed", "tool_results": [{"tool_name": "read_file", "status": "error", "error_class": "InvalidToolInput"}, {"tool_name": "write_file", "status": "ok"}, {"tool_name": "run_tests", "status": "ok"}]}
+}

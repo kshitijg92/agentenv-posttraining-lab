@@ -1,0 +1,24 @@
+name: qwen2_5_coder_14b_dev_repeated_sampling
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_jsonl_deduper
+  - preserve_cli_error_codes
+  - repair_config_precedence
+  - repair_header_merge
+  - repair_duration_parser
+  - repair_record_chunking
+  - repair_query_encoding
+split: dev
+policies:
+  qwen2-5-coder-14b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 4
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

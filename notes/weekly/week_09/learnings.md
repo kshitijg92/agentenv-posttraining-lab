@@ -491,3 +491,49 @@ Explicit selection matters for the same reason. When several valid derivatives
 exist, neither recency nor directory order is evidence that one is the intended
 training target. The dataset row must name and hash the selected derivative,
 and the export manifest must pin that decision.
+
+### Run Identity Is Not Behavioral Diversity
+
+Different attempt ids, seeds, timestamps, or model labels can still contain the
+same policy behavior. Counting them as independent acquisition yield makes the
+candidate pool look more diverse without adding a new learning signal.
+
+The self-deception trap is:
+
+```text
+many eval attempts -> many training examples
+```
+
+Attempt count measures execution volume. It does not measure distinct prompts,
+decisions, errors, or candidate behaviors. How behavioral identity should be
+defined remains a later preference-data design question.
+
+### Harness Trust Must Be Bound To The Source Evaluation Runtime
+
+A passing current harness audit cannot retroactively validate an evaluation
+whose harness bytes and dependencies were never pinned. It proves something
+about the audited runtime, not every artifact that happens to share a task id
+or schema.
+
+The trustworthy relation is:
+
+```text
+source eval runtime == passing audit runtime == passing calibration runtime
+```
+
+Task hashes alone are insufficient because the same task can produce different
+evidence under changed prompt-loop, tool, scorer, or orchestration code. Runtime
+provenance must therefore be captured when the eval executes, not reconstructed
+from the repository later.
+
+### Temporary Review Authorization Must Remain Visible Provenance
+
+A provisional acceptance used to exercise an artifact pipeline is not
+equivalent to careful human transcript review. If both use the same undifferentiated
+`accepted` bit, downstream consumers can forget why the decision was made and
+treat plumbing evidence as quality evidence.
+
+The reviewer identity and scope must remain visible and hash-pinned. Before a
+future dataset is used for training, the provisional decision must be ratified
+or replaced, and all dependent artifacts must be rebuilt. A numerical data
+target is not a reason to silently upgrade temporary review authority.

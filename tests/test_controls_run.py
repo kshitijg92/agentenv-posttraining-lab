@@ -12,7 +12,11 @@ TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
 TASK_IDS = {
     "preserve_cli_error_codes",
     "repair_config_precedence",
+    "repair_duration_parser",
+    "repair_header_merge",
     "repair_jsonl_deduper",
+    "repair_query_encoding",
+    "repair_record_chunking",
     "toy_python_fix_001",
 }
 CONTROL_NAMES = {"oracle", "bad.noop", "bad.public_only"}
@@ -351,9 +355,19 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert (
         "Per-file normalized hashes and drift details are in `manifest.json`."
     ) in report
-    assert "| all controls | 4 | 24 | 24/24 | 0 | " in report
-    assert "| malformed | 4 | 8 | 8/8 | 0 | " in report
-    assert "| oracle | 4 | 8 | 8/8 | 0 | " in report
+    assert (
+        f"| all controls | {len(TASK_IDS)} | {expected_scorer_count} | "
+        f"{expected_scorer_count}/{expected_scorer_count} | 0 | "
+    ) in report
+    per_control_record_count = len(TASK_IDS) * 2
+    assert (
+        f"| malformed | {len(TASK_IDS)} | {per_control_record_count} | "
+        f"{per_control_record_count}/{per_control_record_count} | 0 | "
+    ) in report
+    assert (
+        f"| oracle | {len(TASK_IDS)} | {per_control_record_count} | "
+        f"{per_control_record_count}/{per_control_record_count} | 0 | "
+    ) in report
     assert "background-color: #dcfce7" in report
     assert ("| toy_python_fix_001 | oracle | 2 | 2/2 | PASS | PASS | PASS |") in report
     assert (

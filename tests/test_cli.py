@@ -5,6 +5,10 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 import agentenv.cli as cli_module
+from agentenv.audits.schema import (
+    HARNESS_RUNTIME_PROVENANCE_SCHEMA_VERSION,
+    derive_harness_runtime_hash,
+)
 from agentenv.cli import app
 
 
@@ -755,6 +759,7 @@ def _eval_hash_run_manifest(
         "task_pack": "data/task_packs/repo_patch_python_v0",
         "split": "practice",
         "task_hashes": task_hashes,
+        "runtime_provenance": _runtime_provenance(),
         "policy": "oracle",
         "policy_type": "scorer_control_patch",
         "policy_family": "control",
@@ -785,6 +790,7 @@ def _eval_hash_suite_manifest(
         "task_pack": "data/task_packs/repo_patch_python_v0",
         "split": "practice",
         "task_hashes": task_hashes,
+        "runtime_provenance": _runtime_provenance(),
         "tasks": ["toy_python_fix_001"],
         "task_count": 1,
         "policy_count": 1,
@@ -811,6 +817,35 @@ def _eval_hash_suite_manifest(
         "replay_policy_count": 0,
         "replay_run_success_summary": "0/0",
         "replay_runs": [],
+    }
+
+
+def _runtime_provenance() -> dict[str, object]:
+    harness_source_hash = "xxh64:aaaaaaaaaaaaaaaa"
+    pyproject_hash = "xxh64:bbbbbbbbbbbbbbbb"
+    uv_lock_hash = "xxh64:cccccccccccccccc"
+    runtime_hash = derive_harness_runtime_hash(
+        harness_source_hash=harness_source_hash,
+        root_pyproject_hash=pyproject_hash,
+        root_uv_lock_hash=uv_lock_hash,
+        python_implementation="cpython",
+        python_version="3.11.14",
+        sys_platform="linux",
+        platform_machine="x86_64",
+    )
+    return {
+        "schema_version": HARNESS_RUNTIME_PROVENANCE_SCHEMA_VERSION,
+        "harness_source_root": "src/agentenv",
+        "harness_source_hash": harness_source_hash,
+        "root_pyproject_path": "pyproject.toml",
+        "root_pyproject_hash": pyproject_hash,
+        "root_uv_lock_path": "uv.lock",
+        "root_uv_lock_hash": uv_lock_hash,
+        "python_implementation": "cpython",
+        "python_version": "3.11.14",
+        "sys_platform": "linux",
+        "platform_machine": "x86_64",
+        "harness_runtime_hash": runtime_hash,
     }
 
 

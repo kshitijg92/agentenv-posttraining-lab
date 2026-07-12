@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 TokenUsageCapability = Literal["native", "unavailable"]
+AgentActionFormat = Literal["prompt_only", "json_schema"]
 _ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -33,6 +34,7 @@ class OpenAICompatibleChatModelConfig(BaseModel):
     base_url_env: str | None = Field(default=None, min_length=1)
     capabilities: ModelCapabilities
     prompt_adapter: PromptAdapterConfig | None = None
+    agent_action_format: AgentActionFormat = "prompt_only"
 
     @field_validator("api_key_env", "base_url_env")
     @classmethod

@@ -271,6 +271,7 @@ def test_agent_model_eval_records_missing_model_env_failure(
         },
         "model_id": "placeholder-model",
         "prompt_adapter": None,
+        "agent_action_format": "prompt_only",
         "provider": "openai_compatible_chat",
         "version": "model_config_v0",
     }

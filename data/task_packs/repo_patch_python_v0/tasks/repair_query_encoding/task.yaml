@@ -1,0 +1,32 @@
+id: repair_query_encoding
+domain: repo_patch_python
+split: dev
+instruction: "Fix encode_query so it accepts a mapping from string keys to either a string or a finite sequence of strings. Sort keys lexicographically, preserve each value sequence's order, emit repeated key=value pairs, and percent-encode UTF-8 using RFC 3986 escaping (spaces become %20, not +). Empty sequences emit no pair. Return an empty string for an empty mapping. Non-mappings, non-string keys, invalid value containers, or non-string sequence elements raise ValueError."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: query_encoding_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 20
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_QUERY_ENCODING_PRIVATE"

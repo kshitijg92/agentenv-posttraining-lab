@@ -1,0 +1,10 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {"steps": [
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{}}"},
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/query.py\",\"content\":\"from collections.abc import Mapping, Sequence\\nfrom urllib.parse import quote\\ndef encode_query(params: Mapping[str, str | Sequence[str]]) -> str:\\n    if not isinstance(params, Mapping): raise ValueError('mapping required')\\n    if any(not isinstance(key, str) for key in params): raise ValueError('string key required')\\n    pairs = []\\n    for key in sorted(params):\\n        raw = params[key]\\n        if isinstance(raw, str): values = [raw]\\n        elif isinstance(raw, Sequence) and not isinstance(raw, (bytes, bytearray)): values = list(raw)\\n        else: raise ValueError('invalid query value')\\n        if any(not isinstance(value, str) for value in values): raise ValueError('string values required')\\n        pairs.extend((key, value) for value in values)\\n    return '&'.join(quote(key, safe='') + '=' + quote(value, safe='') for key, value in pairs)\\n\"}}"},
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"},
+    {"output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"}
+  ]},
+  "expected_result": {"prompt_loop_status": "completed", "tool_results": [{"tool_name": "read_file", "status": "error", "error_class": "InvalidToolInput"}, {"tool_name": "write_file", "status": "ok"}, {"tool_name": "run_tests", "status": "ok"}]}
+}

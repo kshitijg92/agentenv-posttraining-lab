@@ -557,6 +557,7 @@ class EvalRunManifest(ArtifactManifest, PolicyMetadataFields):
     task_pack: str = Field(min_length=1)
     split: TaskSplit
     task_hashes: EvalTaskHashes
+    runtime_provenance: HarnessRuntimeProvenance
     policy: str = Field(min_length=1)
     attempt_count: NonNegativeInt
     layer_counts: LayerCounts
@@ -685,6 +686,7 @@ class EvalSuiteManifest(ArtifactManifest):
     task_pack: str = Field(min_length=1)
     split: TaskSplit
     task_hashes: EvalTaskHashes
+    runtime_provenance: HarnessRuntimeProvenance
     tasks: list[str] = Field(min_length=1)
     task_count: NonNegativeInt
     policy_count: PositiveInt

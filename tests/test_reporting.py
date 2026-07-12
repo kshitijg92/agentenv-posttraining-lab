@@ -3,6 +3,10 @@ from pathlib import Path
 
 import pytest
 
+from agentenv.audits.schema import (
+    HARNESS_RUNTIME_PROVENANCE_SCHEMA_VERSION,
+    derive_harness_runtime_hash,
+)
 from agentenv.controls.agent_control_scripts import load_agent_control_script_case
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_run import (
@@ -26,6 +30,35 @@ TOY_HAPPY_AGENT_CONTROL = Path(
     "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/"
     "controls/agent_control_scripts/happy_path.json"
 )
+
+
+def _runtime_provenance() -> dict[str, object]:
+    harness_source_hash = "xxh64:aaaaaaaaaaaaaaaa"
+    pyproject_hash = "xxh64:bbbbbbbbbbbbbbbb"
+    uv_lock_hash = "xxh64:cccccccccccccccc"
+    runtime_hash = derive_harness_runtime_hash(
+        harness_source_hash=harness_source_hash,
+        root_pyproject_hash=pyproject_hash,
+        root_uv_lock_hash=uv_lock_hash,
+        python_implementation="cpython",
+        python_version="3.11.14",
+        sys_platform="linux",
+        platform_machine="x86_64",
+    )
+    return {
+        "schema_version": HARNESS_RUNTIME_PROVENANCE_SCHEMA_VERSION,
+        "harness_source_root": "src/agentenv",
+        "harness_source_hash": harness_source_hash,
+        "root_pyproject_path": "pyproject.toml",
+        "root_pyproject_hash": pyproject_hash,
+        "root_uv_lock_path": "uv.lock",
+        "root_uv_lock_hash": uv_lock_hash,
+        "python_implementation": "cpython",
+        "python_version": "3.11.14",
+        "sys_platform": "linux",
+        "platform_machine": "x86_64",
+        "harness_runtime_hash": runtime_hash,
+    }
 
 
 def _write_agent_control_source_artifact(out_dir: Path) -> None:
@@ -152,6 +185,7 @@ def test_write_agent_model_eval_report_includes_model_and_decoding_config(
                 "replay_repeats": 0,
                 "split": "practice",
                 "task_pack": "data/task_packs/repo_patch_python_v0",
+                "runtime_provenance": _runtime_provenance(),
                 "task_hashes": {
                     "schema_version": "eval_task_hashes_v0",
                     "task_pack_id": "repo_patch_python_v0",
