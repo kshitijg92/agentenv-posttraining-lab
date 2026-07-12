@@ -19,6 +19,7 @@ class ArtifactType(StrEnum):
     TRAJECTORY_EXPORT = "trajectory_export"
     TRAJECTORY_REVIEW = "trajectory_review"
     TRAINING_CANDIDATE_EXPORT = "training_candidate_export"
+    TRAINING_CANDIDATE_REPAIR_EXPORT = "training_candidate_repair_export"
     POSITIVE_SFT_EXPORT = "positive_sft_export"
     SCORER_AUDIT = "scorer_audit"
     AGENT_TASK_AUDIT = "agent_task_audit"

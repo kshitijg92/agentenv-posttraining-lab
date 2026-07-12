@@ -1658,3 +1658,164 @@ Current implementation status is listed in the contract. Negative-example and
 preference-pair exporters, human-repair provenance, and token loss masking
 remain unimplemented. No schema, code path, compatibility shim, or artifact
 version changed in this documentation-only checkpoint.
+
+#### Deterministic Positive-SFT Redundancy Repair Policy
+
+Tightened the post-training data contract so loss masking is no longer an
+accepted way to clean a mechanically redundant positive-SFT trajectory. Masked
+actions and observations remain in the model context for later loss-bearing
+assistant spans.
+
+The initial allowed repair is limited to deterministic deletion of a detected
+redundant assistant tool call and its matching tool-result message. The baseline
+call/result pair and all other message bytes remain unchanged, and the source
+trajectory remains immutable. Ambiguous linkage, malformed output, an
+incomplete redundancy assessment, or failed post-repair leakage validation
+blocks positive-SFT export.
+
+This checkpoint changes the written contract only. The repair provenance
+schema, transformation, and positive-SFT builder integration remain to be
+designed and implemented in small follow-up checkpoints.
+
+#### Training-Candidate Repair Record Schema
+
+Added `src/agentenv/training/repair_schema.py` and focused schema tests in
+`tests/training/test_repair_schema.py`.
+
+`TrainingCandidateRepairRecord` represents one actual repair attempt and maps
+back to a training candidate through `trajectory_id` and `eval_attempt_id`.
+`repair_id` permits one candidate to have multiple repair records. No no-op
+record is emitted: a candidate with a complete zero-block assessment can use
+its original transcript, while a blocked candidate without a completed repair
+remains unavailable for positive SFT.
+
+The common record contains repair identity, status, artifact type, the existing
+hash-pinned source artifact ref, an optional repaired artifact ref, repairer
+version/code hash, status errors, and method-specific repair details. The only
+current artifact type is `transcript`; a repaired transcript artifact is a root
+JSON list of typed model `Message` values. The original ref points to the
+existing prompt-loop result rather than copying the original messages.
+
+The only current method is `mechanical_redundancy_deletion`. Its details retain
+the original assessment, the optional after-repair assessment, and an optional
+`cannot_complete_reason`. The schema enforces:
+
+```text
+completed:
+  hash-pinned changed output artifact
+  complete zero-block after-repair assessment
+  same detector version and code hash before and after
+  no cannot-complete or error fields
+
+cannot_complete:
+  method-specific non-empty reason
+  no repaired artifact, after assessment, or error fields
+
+repair_error:
+  error class and message
+  no repaired artifact, after assessment, or cannot-complete reason
+```
+
+All repair records require a complete original assessment with at least one
+detected block. At this point source-candidate artifact pinning, record
+uniqueness, explicit `repair_id` selection, deterministic message deletion, and
+export persistence remained later manifest/builder checkpoints. No
+compatibility shim or existing schema-version bump was added.
+
+#### Training-Candidate Repair Export Manifest Schema
+
+Added `training_candidate_repair_export` to the artifact taxonomy and added a
+`TrainingCandidateRepairExportManifest` schema. This is an artifact contract
+only; no writer, loader that traverses the source chain, or CLI was added.
+
+The manifest owns artifact-level provenance through a minimal
+`TrainingCandidateExportManifestRef` containing the source export directory and
+manifest content hash. It does not repeat the candidate JSONL hash or the
+trajectory, review, harness-audit, and control-calibration fields already
+authoritative in the referenced manifest. The eventual loader must validate
+that referenced manifest and follow its own pinned artifacts.
+
+Each `TrainingCandidateRepairRecord` now owns
+`source_training_candidate_record_hash` in addition to `trajectory_id` and
+`eval_attempt_id`. The eventual loader must locate the source candidate by the
+two ids, match the exact record hash, and require the embedded original
+mechanical-redundancy assessment to equal the candidate assessment.
+
+The repair manifest pins `repair_records.jsonl`, its content hash, the current
+repair-record schema version, and counts for `completed`, `cannot_complete`, and
+`repair_error`. Status counts must sum to total records, and a zero-record
+artifact is valid because no-op repairs are intentionally absent. Repaired
+transcript refs remain hash-pinned inside completed repair records rather than
+being duplicated into the manifest.
+
+Focused verification:
+
+```text
+repair/artifact manifest schema tests: 113 passed
+targeted Ruff: passed
+targeted format check: passed
+targeted Pyright: passed
+```
+
+Source-record hashing, source-chain traversal, record uniqueness, transcript
+artifact verification, and persistence remain the next runtime/export
+checkpoint. No existing schema or artifact version was bumped.
+
+#### Deterministic Repair Runtime And Artifact Export
+
+Added `src/agentenv/training/repair.py` and
+`src/agentenv/training/repair_export.py`.
+
+The repairer computes a canonical content hash for the validated source
+`TrainingCandidateRecord` and a deterministic `repair_id` from the source hash,
+repair method, repairer version, and repairer code hash. The source candidate
+remains immutable.
+
+For each candidate with a complete mechanical-redundancy assessment containing
+at least one block, the repairer:
+
+1. resolves and hash-validates the original prompt-loop artifact;
+2. requires exactly one adjacent assistant/tool-result message pair for every
+   baseline and redundant tool-call id named by the assessment;
+3. removes only redundant pairs and their aligned `ToolResult` values;
+4. preserves every other typed message value and retains every baseline;
+5. validates complete tool-call/result linkage in the repaired transcript;
+6. reruns the same redundancy detector against the repaired in-memory prompt
+   loop;
+7. permits `completed` only for a complete zero-block assessment from the same
+   detector version and code hash.
+
+Candidates with complete zero-block assessments produce no repair record. A
+known unsafe transformation becomes `cannot_complete`; unexpected
+transformation or per-transcript persistence failure becomes `repair_error`.
+Source manifest, candidate, trajectory, task-manifest, and artifact integrity
+failures remain hard export failures rather than per-record outcomes.
+
+`export_training_candidate_repairs` writes completed transcripts under
+`transcripts/<repair_id>.json`, writes `repair_records.jsonl`, and writes the
+typed repair manifest. Its loader revalidates the source candidate export and
+its full trust chain, matches candidate ids and record hashes, checks original
+assessment equality, verifies repairer provenance and deterministic ids,
+recomputes non-error repairs, and compares completed transcript bytes and
+after-repair assessments. Repair-error records remain audit evidence and do not
+authorize training use.
+
+Focused integration tests construct a real candidate artifact chain, inject a
+mechanically redundant successful `read_file` call, and verify completed repair
+export and reload. They also cover a valid empty no-op-free export, transcript
+tamper rejection, source-candidate rebinding rejection, and source-manifest
+drift rejection.
+
+No CLI or positive-SFT consumption was added. In particular, completed repair
+does not change task outcome, review state, reward-hack evidence, split, or
+candidate eligibility. Repair selection and review inheritance remain the next
+positive-SFT design boundary.
+
+```text
+focused repair/training tests: 66 passed
+targeted Ruff: passed
+targeted format check: passed
+targeted Pyright: passed
+```
+
+The full repository pytest suite was not run for this checkpoint.

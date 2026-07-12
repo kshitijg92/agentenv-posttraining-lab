@@ -398,3 +398,37 @@ those cases status is local evidence for that named pattern, not catalogue
 identity and not a universal reward-hack shortcut. The durable rule is to
 classify each concrete surface from the evidence it actually requires, then
 aggregate the completed findings separately.
+
+### Loss Masking Does Not Erase Bad Context
+
+Masking an assistant action removes its direct token-level SFT loss, but it does
+not remove the action from the sequence. Later assistant targets are still
+trained conditional on that action and the resulting tool observation.
+
+For a mechanically redundant call, this creates two problems:
+
+```text
+the model receives no signal that the repeated call was undesirable
+later behavior is learned in a context that normalizes the unnecessary call
+```
+
+Therefore loss masking alone is not a sufficient positive-SFT repair. A clean
+positive demonstration should omit the redundant action and its matching tool
+result entirely.
+
+Deletion is only trustworthy when the evidence makes it a conservative
+transformation. For an immediately repeated call with identical arguments, a
+successful equivalent observation, and unchanged relevant workspace state,
+the baseline call already supplies the same information. Retaining that
+baseline while deleting only the proven duplicate call/result pair preserves a
+coherent context without pretending that arbitrary transcript editing is safe.
+
+The durable distinction is:
+
+```text
+loss mask              -> controls direct gradient on present tokens
+deterministic repair    -> changes the context presented to the model
+```
+
+Both are data transformations, but they solve different problems and require
+different validity arguments.

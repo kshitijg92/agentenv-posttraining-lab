@@ -113,6 +113,11 @@ that preserves:
 Until that exists, editing a transcript in place must not turn a failed or
 wasteful trajectory into a positive example.
 
+This prohibition does not include the narrow deterministic mechanical repair
+defined below. That repair is a reproducible dataset transformation which only
+deletes already-proven redundant call/result pairs; it does not rewrite model
+content or substitute a human-authored answer.
+
 External datasets are also out of scope. The current records do not carry a
 license contract suitable for importing or redistributing external data.
 
@@ -225,15 +230,76 @@ decision. The positive-SFT transformation must nevertheless handle it
 explicitly:
 
 - a complete assessment with no blocks needs no redundancy-specific action;
-- a complete assessment with blocks must cause the raw full-transcript example
-  to be rejected, repaired under explicit repair provenance, or serialized
-  with the redundant assistant-action spans masked from loss;
+- a complete assessment with blocks forbids the raw full-transcript example;
+  only a validated deterministic repair may produce a positive-SFT derivative;
 - an incomplete assessment must not be represented as "no redundancy" and
   blocks any claim that the raw transcript is a clean positive target.
 
-Masking a redundant call gives it zero direct SFT pressure. It does not teach
-the model that the call was bad. A repaired target or an auditable preference
-comparison is required to provide a positive alternative or negative signal.
+The initial deterministic repair may only delete each detector-identified
+redundant assistant tool call and its matching tool-result message. It must
+retain the baseline call and result, preserve the order and typed values of
+every other message, keep the source trajectory immutable, and carry
+hash-pinned provenance sufficient to reproduce the transformation. The repaired
+transcript must have valid call/result linkage and pass a fresh leakage scan. If
+the matching result cannot be identified unambiguously or the transformed
+message sequence is malformed, the example is rejected from positive SFT.
+
+Repair records have a one-to-many relationship with training candidates. A
+repair-export manifest contains one hash-pinned reference to its source
+training-candidate export manifest. The referenced candidate manifest remains
+authoritative for the candidate JSONL and its trajectory, review, harness-audit,
+and control-calibration provenance; the repair manifest does not duplicate
+those fields.
+
+Each repair record carries the exact source training-candidate record hash plus
+its trajectory and eval-attempt ids. Loading must locate the candidate by those
+ids, require the record hash to match, and require the repair's original
+mechanical-redundancy assessment to equal the candidate assessment. The ids are
+join keys, while the hash and referenced export establish authority.
+
+A record is created only for an actual repair attempt; there is no no-op repair
+record. Absence is interpreted with the candidate assessment:
+
+```text
+complete assessment, zero blocks, no repair -> original transcript may proceed
+complete assessment, blocks, no repair      -> positive SFT is blocked
+complete assessment, blocks, valid repair   -> repaired transcript may proceed
+incomplete assessment                       -> positive SFT is blocked
+```
+
+The initial repair statuses are:
+
+- `completed`: a changed transcript artifact was persisted and its after-repair
+  assessment is complete with zero blocks;
+- `cannot_complete`: valid source evidence could not be transformed safely and
+  the method-specific details contain a non-empty reason;
+- `repair_error`: repair execution or persistence failed unexpectedly and the
+  record contains an error class and message.
+
+Non-completed repairs do not carry a repaired artifact or after-repair
+assessment. Source artifact or candidate hash failures abort the repair export
+rather than becoming per-record repair errors.
+
+One candidate may have multiple completed repairs. A positive-SFT export must
+select a specific `repair_id`; it must not choose implicitly based on directory
+order, recency, or whichever record loads first. That selection belongs to the
+dataset export and is pinned in its manifest, not recorded as a globally
+preferred repair in the repair artifact.
+
+A completed repair proves only that the declared deterministic transformation
+was reproduced and validated. It does not change task outcome, human-review
+state, reward-hack evidence, split, or candidate eligibility, and therefore
+cannot upgrade an otherwise ineligible candidate into positive SFT.
+
+Loss masking is not an accepted repair. Masking a redundant call gives it zero
+direct SFT pressure, but the call and observation remain in the context for
+later loss-bearing targets. That can normalize the wasteful behavior and alter
+what the model learns to do next. The redundant call/result pair must be absent
+from the positive-SFT derivative.
+
+An auditable preference comparison may separately use the original redundant
+action as rejected behavior. That is a different objective and does not make
+the unmodified transcript a positive-SFT example.
 
 The current positive-SFT builder does not yet implement this policy. Auditing
 and closing that gap belongs to Week 9 Checkpoint 2.
@@ -249,7 +315,7 @@ The intended default mask is:
 | Valid chosen assistant tool call | Yes | Yes |
 | Tool observation | Yes | No |
 | Valid chosen assistant final response | Yes | Yes |
-| Redundant or otherwise excluded assistant action | Possibly | No |
+| Detector-identified redundant call and result | No; removed by deterministic repair | No |
 | Scorer output, hidden validator, review metadata | No | No |
 
 Whether every assistant span in a successful trajectory is a valid target must
@@ -412,7 +478,7 @@ denied. At minimum the reason must distinguish:
 | Ambiguous reward hack without adjudication | Block trainable use pending review |
 | Task failure | Deny positive SFT; possibly negative or preference-rejected consideration |
 | Cannot grade | Deny positive SFT and preference pairing; possibly labeled negative evidence |
-| Mechanical redundancy unhandled | Deny raw full-transcript positive SFT; retain assessment for repair, masking, or pairing |
+| Mechanical redundancy unhandled | Deny raw full-transcript positive SFT; retain assessment for deterministic repair or pairing |
 | Preference basis unauditable | Deny pair construction even if both sides are individually eligible |
 | Serialization or leakage scan failure | Deny the constructed dataset row |
 
@@ -459,7 +525,11 @@ real, valid trajectory does not have to yield a positive training row
 | Split, model-policy, leakage, orchestration, review, and reward-hack candidate gates | Implemented |
 | Positive-SFT source record and post-transformation leakage scan | Implemented |
 | Mechanical-redundancy assessment on candidates | Implemented |
-| Positive-SFT redundancy rejection/repair/masking policy | Not implemented |
+| Deterministic mechanical-redundancy repair record schema | Implemented |
+| Repair-export manifest and source-reference schemas | Implemented |
+| Deterministic repair transformation and repair-export artifact | Implemented |
+| Fail-closed repair source traversal and deterministic reload | Implemented |
+| Explicit positive-SFT repair selection and builder integration | Not implemented |
 | Deterministic tool-call serialization and token loss masks | Not implemented |
 | Negative-example dataset/export objective | Not implemented |
 | Preference-pair schema, pair validation, and export | Not implemented |
