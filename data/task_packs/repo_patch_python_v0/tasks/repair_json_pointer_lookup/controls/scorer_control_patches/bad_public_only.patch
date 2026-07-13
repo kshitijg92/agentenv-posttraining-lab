@@ -1,0 +1,19 @@
+diff --git a/src/json_pointer.py b/src/json_pointer.py
+--- a/src/json_pointer.py
++++ b/src/json_pointer.py
+@@ -1,8 +1,12 @@
+-def resolve_pointer(document: object, pointer: str) -> object:
+-    """Resolve a slash-separated path in a JSON-like value."""
++def resolve_pointer(document, pointer):
++    if not isinstance(pointer, str):
++        raise ValueError("pointer must be a string")
+     if pointer == "":
+         return document
+     current = document
+     for part in pointer.strip("/").split("/"):
+-        current = current[part]  # type: ignore[index]
++        try:
++            current = current[part]
++        except (KeyError, TypeError, IndexError) as exc:
++            raise ValueError("missing path") from exc
+     return current

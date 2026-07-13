@@ -969,3 +969,50 @@ Relabeling already inspected or trained-on tasks as heldout does not restore
 the missing counterfactual. If the final claim needs unseen-task evidence, the
 slice must be frozen before training and before its outcomes are used to tune
 the data, prompt, decoding, or scorer.
+
+### Heldout Authorship Is Not The Same As Outcome Contamination
+
+A task author must inspect the task instruction, seed bug, hidden validator,
+and controls to establish that the measurement works. Calling those bytes
+"private" cannot mean nobody responsible for the evaluator has ever seen
+them.
+
+The relevant untouched boundary is policy feedback:
+
+```text
+task/scorer author inspects contract before freeze -> necessary calibration
+evaluated policy sees hidden validator             -> leakage
+model outcome changes training or eval choices     -> heldout contamination
+```
+
+Oracle, known-bad, and scripted-agent controls can run before freeze because
+they encode author knowledge and test the harness/scorer contract. Natural-
+model attempts are different: their outcomes reveal how the policy interacts
+with the slice and can influence prompts, data, decoding, or hyperparameters.
+
+This boundary prevents two opposite mistakes: treating an uncalibrated task as
+rigorous merely because nobody inspected it, and spending heldout information
+by iterating on real model failures before the experiment is fixed.
+
+### A Pre-Training Baseline Need Not Be Evaluated Before Training
+
+"Pre-training baseline" should identify the unadapted checkpoint, not impose a
+wall-clock order that leaks heldout outcomes into training decisions.
+
+Running the base model on heldout tasks first and inspecting the result can
+change which examples are selected, which hyperparameters are tried, or which
+prompt is used. The slice is then no longer untouched for the adapted policy.
+
+The safer sequence is:
+
+```text
+freeze tasks
+freeze training and evaluation choices
+train adapter
+run exact base and adapter as one paired evaluation
+inspect both results
+```
+
+If operational constraints require an earlier base run, its outcomes must be
+sealed until the adapter and evaluation protocol are fixed. Causal comparison
+depends on information flow, not just checkpoint timestamps.

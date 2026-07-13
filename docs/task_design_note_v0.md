@@ -17,7 +17,7 @@ each task has:
 
 ## Current Task Family
 
-The current dev split contains three self-authored Python repo-patch tasks:
+The original v0 dev split contained three self-authored Python repo-patch tasks:
 
 ```text
 repair_jsonl_deduper
@@ -25,8 +25,9 @@ preserve_cli_error_codes
 repair_config_precedence
 ```
 
-All three are local, deterministic, single-repository patch tasks. They ask for
-small behavioral fixes rather than broad refactors.
+The suite has since expanded to thirteen dev tasks with the same local,
+deterministic, single-repository patch shape. The authoritative inventory is
+`data/task_packs/repo_patch_python_v0/splits.lock.json`.
 
 The practice split contains:
 
@@ -34,20 +35,31 @@ The practice split contains:
 toy_python_fix_001
 ```
 
-The heldout split is empty. That is intentional. These tasks were inspected
-during design and calibration, so calling them heldout would be false rigor.
+Six separately authored tasks now form a frozen heldout-private slice. Existing
+inspected dev tasks were not relabeled. The heldout tasks were inspected only
+for task/scorer authorship and deterministic control calibration before freeze;
+zero natural-model attempts existed at the freeze point. Their outcomes may not
+drive training, prompt, decoding, scorer, or hyperparameter iteration.
+
+See `docs/heldout_evaluation_protocol.md` and
+`data/task_packs/repo_patch_python_v0/heldout_private.freeze.json`.
 
 ## What The Suite Measures
 
 The suite measures whether an attempted patch can repair focused Python
 behavior while preserving the visible contract and satisfying hidden edge cases.
 
-The current tasks exercise:
+The original three tasks exercise:
 
 - caller-supplied key handling and JSONL validation,
 - CLI exit-code preservation across expected user/input errors,
 - config precedence and type validation across defaults, JSON config, and
   environment overrides.
+
+Later dev and heldout tasks extend the same construct family to deterministic
+parsing, ordering, validation, batching, path, interval, numeric, and
+record-transformation contracts. Per-task cards remain the authoritative
+description of what each task does and does not measure.
 
 These are not prompt-list tasks. Each task requires reading the seed code,
 understanding the local contract, and changing implementation behavior so that

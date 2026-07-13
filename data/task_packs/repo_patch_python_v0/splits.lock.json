@@ -20,7 +20,14 @@
     "repair_interval_coalescing",
     "repair_template_expansion"
   ],
-  "heldout_private": [],
+  "heldout_private": [
+    "repair_stable_toposort",
+    "repair_json_pointer_lookup",
+    "repair_utf8_batching",
+    "repair_env_assignment_parser",
+    "repair_decimal_rounding",
+    "repair_latest_record_selection"
+  ],
   "public_calibration": [],
-  "policy": "heldout_private is read-only and never used for training, prompt tuning, task design, or baseline iteration. Authored tasks enter dev when they are actively inspected during task design."
+  "policy": "heldout_private tasks may be authored and control-calibrated before their freeze, then become read-only and may never be used for training, prompt tuning, decoding or hyperparameter selection, scorer iteration, or baseline iteration. Authored tasks used for iterative model feedback enter dev instead."
 }

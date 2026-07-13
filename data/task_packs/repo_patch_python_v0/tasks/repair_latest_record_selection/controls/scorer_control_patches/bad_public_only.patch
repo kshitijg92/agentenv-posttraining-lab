@@ -1,0 +1,15 @@
+diff --git a/src/record_versions.py b/src/record_versions.py
+--- a/src/record_versions.py
++++ b/src/record_versions.py
+@@ -1,6 +1,7 @@
+-def select_latest(records: list[dict[str, object]]) -> list[dict[str, object]]:
+-    """Keep the last record observed for each id."""
+-    latest: dict[object, dict[str, object]] = {}
++def select_latest(records):
++    latest = {}
+     for record in records:
+-        latest[record["id"]] = record
++        if not isinstance(record, dict) or "id" not in record:
++            raise ValueError("invalid record")
++        latest[record["id"]] = dict(record)
+     return list(latest.values())

@@ -20,6 +20,6 @@ required_task_files:
 baseline_policy:
   practice: "Calibration and harness-shaping tasks."
   dev: "Authored tasks used for baseline iteration and reporting."
-  heldout_private: "Read-only tasks, never used for training, prompt tuning, task design, or baseline iteration."
+  heldout_private: "Authored and control-calibrated before freeze, then read-only and never used for training, prompt tuning, decoding or hyperparameter selection, scorer iteration, or baseline iteration."
   public_calibration: "External or public calibration tasks, empty unless explicitly added."
 provenance_policy: "Tasks must be self-authored or source-identified, and must not use employer-private, third-party-proprietary, or benchmark-heldout material."

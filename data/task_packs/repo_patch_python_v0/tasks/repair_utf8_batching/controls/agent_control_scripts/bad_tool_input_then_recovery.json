@@ -1,0 +1,37 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/record_batches.py\",\"content\":\"def batch_records(\\n    records: list[str],\\n    max_items: int,\\n    max_bytes: int,\\n) -> list[list[str]]:\\n    \\\"\\\"\\\"Greedily batch strings by item count and UTF-8 byte length.\\\"\\\"\\\"\\n    if (\\n        isinstance(max_items, bool)\\n        or not isinstance(max_items, int)\\n        or max_items <= 0\\n        or isinstance(max_bytes, bool)\\n        or not isinstance(max_bytes, int)\\n        or max_bytes <= 0\\n    ):\\n        raise ValueError(\\\"batch limits must be positive integers\\\")\\n    if isinstance(records, (str, bytes)):\\n        raise ValueError(\\\"records must be a non-string iterable\\\")\\n    try:\\n        values = list(records)\\n    except TypeError as exc:\\n        raise ValueError(\\\"records must be iterable\\\") from exc\\n\\n    batches: list[list[str]] = []\\n    current: list[str] = []\\n    current_size = 0\\n    for record in values:\\n        if not isinstance(record, str):\\n            raise ValueError(\\\"every record must be a string\\\")\\n        try:\\n            record_size = len(record.encode(\\\"utf-8\\\"))\\n        except UnicodeEncodeError as exc:\\n            raise ValueError(\\\"record must be UTF-8 encodable\\\") from exc\\n        if record_size > max_bytes:\\n            raise ValueError(\\\"record exceeds max_bytes\\\")\\n        if current and (\\n            len(current) >= max_items\\n            or current_size + record_size > max_bytes\\n        ):\\n            batches.append(current)\\n            current = []\\n            current_size = 0\\n        current.append(record)\\n        current_size += record_size\\n    if current:\\n        batches.append(current)\\n    return batches\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed",
+    "tool_results": [
+      {
+        "tool_name": "read_file",
+        "status": "error",
+        "error_class": "InvalidToolInput"
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "run_tests",
+        "status": "ok"
+      }
+    ]
+  }
+}

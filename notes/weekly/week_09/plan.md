@@ -568,3 +568,53 @@ Readiness audit:
 ```text
 experiments/analysis/downstream_foundation_readiness.md
 ```
+
+## Heldout-Private Foundation Checkpoint (2026-07-13)
+
+The untouched-evaluation prerequisite above is now established without running
+any natural-model policy on it.
+
+Six newly authored tasks were added directly to `heldout_private`; no inspected
+dev task was relabeled. Before freeze, only deterministic scorer and scripted-
+agent controls were run:
+
+```text
+task pack: 1 practice, 13 dev, 6 heldout-private
+oracle: 6/6 hidden PASS
+no-op: 6/6 public PASS, hidden FAIL
+public-only: 6/6 public PASS, hidden FAIL
+happy agent control: 6/6 hidden PASS
+recoverable agent control: 6/6 hidden PASS
+malformed agent control: 6/6 invalid model output
+replay groups: 6/6 PASS, 0 mismatches
+public checks: 6/6 IDEMPOTENT at repeat_count=2
+natural-model attempts before freeze: 0
+```
+
+The task bytes and split are pinned by:
+
+```text
+data/task_packs/repo_patch_python_v0/heldout_private.freeze.json
+docs/heldout_evaluation_protocol.md
+tests/test_heldout_freeze.py
+```
+
+The heldout slice may not influence training data, filtering, prompts,
+decoding, budgets, hyperparameters, scorer changes, or task selection. The
+base checkpoint and adapter should be evaluated only after all such choices
+are frozen, preferably as one paired operation through the same serving path.
+
+The remaining hard execution foundation is therefore the trainable-model
+round trip:
+
+```text
+exact base checkpoint + tokenizer
+tokenizer-level serialization and loss mask
+minimal adapter training runtime
+same-path base and adapter serving
+paired heldout evaluation after all choices are frozen
+```
+
+Checkpoint/model selection, loss-bearing spans, and adapter/serving semantics
+remain guided post-training design questions. Task-pack authoring and control
+mechanics do not require user design time.

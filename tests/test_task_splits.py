@@ -16,11 +16,11 @@ def test_check_splits_lock_accepts_current_task_pack() -> None:
     result = check_splits_lock(TASK_PACK / "splits.lock.json")
 
     assert result.task_pack_id == "repo_patch_python_v0"
-    assert result.task_count == 14
+    assert result.task_count == 20
     assert result.split_counts == {
         "practice": 1,
         "dev": 13,
-        "heldout_private": 0,
+        "heldout_private": 6,
         "public_calibration": 0,
     }
 
@@ -102,9 +102,10 @@ def test_check_splits_cli_reports_split_counts() -> None:
     assert result.exit_code == 0, result.output
     assert "valid" in result.output
     assert "repo_patch_python_v0" in result.output
-    assert "tasks=14" in result.output
+    assert "tasks=20" in result.output
     assert "practice=1" in result.output
     assert "dev=13" in result.output
+    assert "heldout_private=6" in result.output
 
 
 def _copy_task_pack(tmp_path: Path) -> Path:

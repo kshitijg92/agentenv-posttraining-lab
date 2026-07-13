@@ -1,0 +1,26 @@
+diff --git a/src/env_assignments.py b/src/env_assignments.py
+--- a/src/env_assignments.py
++++ b/src/env_assignments.py
+@@ -1,10 +1,16 @@
+-def parse_env_assignments(text: str) -> dict[str, str]:
+-    """Parse simple KEY=VALUE lines."""
+-    result: dict[str, str] = {}
++import re
++
++_KEY_RE = re.compile(r"[A-Z_][A-Z0-9_]*")
++
++def parse_env_assignments(text):
++    if not isinstance(text, str): raise ValueError("string required")
++    result = {}
+     for raw_line in text.splitlines():
+         line = raw_line.strip()
+-        if not line or line.startswith("#"):
+-            continue
++        if not line or line.startswith("#"): continue
++        if "=" not in line: raise ValueError("equals required")
+         key, value = line.split("=", 1)
+-        result[key.strip()] = value.strip().strip('"')
++        key = key.strip()
++        if _KEY_RE.fullmatch(key) is None: raise ValueError("invalid key")
++        result[key] = value.strip().strip('"')
+     return result

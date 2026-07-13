@@ -1,0 +1,52 @@
+diff --git a/src/record_versions.py b/src/record_versions.py
+--- a/src/record_versions.py
++++ b/src/record_versions.py
+@@ -1,6 +1,43 @@
++from collections.abc import Mapping
++
++
+ def select_latest(records: list[dict[str, object]]) -> list[dict[str, object]]:
+-    """Keep the last record observed for each id."""
+-    latest: dict[object, dict[str, object]] = {}
+-    for record in records:
+-        latest[record["id"]] = record
+-    return list(latest.values())
++    """Select the highest version per id in first-id order."""
++    if isinstance(records, (str, bytes)):
++        raise ValueError("records must be a non-string iterable")
++    try:
++        values = list(records)
++    except TypeError as exc:
++        raise ValueError("records must be iterable") from exc
++
++    first_ids: list[str] = []
++    latest: dict[str, dict[str, object]] = {}
++    seen_versions: dict[str, set[int]] = {}
++    required_keys = {"id", "version", "payload"}
++    for record in values:
++        if not isinstance(record, Mapping) or set(record) != required_keys:
++            raise ValueError("records must contain exactly id, version, payload")
++        record_id = record["id"]
++        version = record["version"]
++        if not isinstance(record_id, str) or not record_id:
++            raise ValueError("record id must be a non-empty string")
++        if (
++            isinstance(version, bool)
++            or not isinstance(version, int)
++            or version < 0
++        ):
++            raise ValueError("record version must be a non-negative integer")
++        if record_id not in seen_versions:
++            first_ids.append(record_id)
++            seen_versions[record_id] = set()
++        if version in seen_versions[record_id]:
++            raise ValueError("duplicate id and version")
++        seen_versions[record_id].add(version)
++        previous = latest.get(record_id)
++        if previous is None or version > previous["version"]:
++            latest[record_id] = {
++                "id": record_id,
++                "version": version,
++                "payload": record["payload"],
++            }
++    return [latest[record_id] for record_id in first_ids]

@@ -2996,3 +2996,74 @@ experiments/analysis/downstream_foundation_readiness.md
 No training dependency, trainer, checkpoint, serving route, or heldout task was
 added. Those choices materially affect the post-training and measurement
 contracts and remain for the guided design thread.
+
+### Frozen Heldout-Private Slice
+
+After the user chose to require an untouched-task claim, added six new
+same-distribution synthetic repo-patch tasks directly to `heldout_private`.
+Existing dev tasks were not relabeled. The new tasks cover deterministic graph,
+structured-path, UTF-8 batching, assignment-parsing, exact-decimal, and
+versioned-record behaviors without adding a new domain or dependency family.
+
+Each task contains the standard seed workspace, weak public check, stronger
+hidden validator, oracle/no-op/public-only scorer controls, happy/malformed/
+recoverable agent controls, task card, local lockfile, and unique leakage
+canary.
+
+Pre-freeze control gate:
+
+```text
+config: configs/eval/heldout_private_control_gate.yaml
+attempts: 36
+replay groups: 6
+replay result: 6/6 PASS, 0 mismatches
+
+oracle: 6 PASS
+no-op: 6 public PASS / hidden FAIL
+public-only: 6 public PASS / hidden FAIL
+agent happy: 6 completed / hidden PASS
+agent recoverable: 6 completed / hidden PASS
+agent malformed: 6 invalid_model_output
+
+public-check idempotency: 6/6 IDEMPOTENT at repeat_count=2
+natural-model attempts: 0
+```
+
+Self-review caught and repaired two pre-freeze contract holes:
+
+- escaped-newline fixture generation initially produced invalid Python source
+  for the assignment parser, and an unescaped internal quote was not rejected;
+- UTF-8 batching initially allowed `UnicodeEncodeError` to escape instead of
+  normalizing a lone-surrogate record to `ValueError`.
+
+All controls were rerun after the fixes. The final task and control evidence is
+pinned in:
+
+```text
+data/task_packs/repo_patch_python_v0/heldout_private.freeze.json
+docs/heldout_evaluation_protocol.md
+tests/test_heldout_freeze.py
+```
+
+The freeze regression recomputes every heldout task hash, split assignment,
+pack hash, and control-gate config hash. It also proves the pre-freeze gate
+contains only deterministic scorer or scripted-agent controls.
+
+No natural-model heldout config was added and no base or candidate model was
+run on the slice. The next natural-policy access is reserved for the paired
+base-versus-adapter experiment after training and evaluation choices are
+frozen.
+
+Verification:
+
+```text
+task/split/hash/freeze/agent-control regressions: 93 passed
+focused freeze/task regressions after final hash pinning: 29 passed
+heldout control gate: 36 attempts, expected outcomes in every policy
+heldout control replays: 6/6 PASS
+heldout public-check idempotency: 6/6 IDEMPOTENT
+core model-free reproduction smoke: passed with 20-task split validation
+Ruff: passed
+Pyright: 0 errors
+git diff --check: passed
+```

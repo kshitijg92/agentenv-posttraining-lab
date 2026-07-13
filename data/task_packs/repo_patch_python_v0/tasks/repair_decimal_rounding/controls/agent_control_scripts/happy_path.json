@@ -1,0 +1,19 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/decimal_format.py\",\"content\":\"from decimal import Decimal, ROUND_HALF_EVEN, localcontext\\nimport re\\n\\n\\n_DECIMAL_RE = re.compile(r\\\"[+-]?[0-9]+(?:\\\\.[0-9]+)?\\\", re.ASCII)\\n\\n\\ndef round_decimal(value: str, places: int) -> str:\\n    \\\"\\\"\\\"Round validated decimal text exactly with half-even semantics.\\\"\\\"\\\"\\n    if not isinstance(value, str) or _DECIMAL_RE.fullmatch(value) is None:\\n        raise ValueError(\\\"invalid decimal text\\\")\\n    if (\\n        isinstance(places, bool)\\n        or not isinstance(places, int)\\n        or not 0 <= places <= 6\\n    ):\\n        raise ValueError(\\\"places must be an integer from zero through six\\\")\\n    digit_count = sum(character.isdigit() for character in value)\\n    with localcontext() as context:\\n        context.prec = max(28, digit_count + places + 2)\\n        quantum = Decimal(1).scaleb(-places)\\n        rounded = Decimal(value).quantize(quantum, rounding=ROUND_HALF_EVEN)\\n    if rounded == 0:\\n        rounded = rounded.copy_abs()\\n    return format(rounded, f\\\".{places}f\\\")\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed"
+  }
+}

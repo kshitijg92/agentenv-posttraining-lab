@@ -1,0 +1,31 @@
+diff --git a/src/decimal_format.py b/src/decimal_format.py
+--- a/src/decimal_format.py
++++ b/src/decimal_format.py
+@@ -1,3 +1,25 @@
++from decimal import Decimal, ROUND_HALF_EVEN, localcontext
++import re
++
++
++_DECIMAL_RE = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?", re.ASCII)
++
++
+ def round_decimal(value: str, places: int) -> str:
+-    """Round decimal text for display."""
+-    return f"{float(value):.{places}f}"
++    """Round validated decimal text exactly with half-even semantics."""
++    if not isinstance(value, str) or _DECIMAL_RE.fullmatch(value) is None:
++        raise ValueError("invalid decimal text")
++    if (
++        isinstance(places, bool)
++        or not isinstance(places, int)
++        or not 0 <= places <= 6
++    ):
++        raise ValueError("places must be an integer from zero through six")
++    digit_count = sum(character.isdigit() for character in value)
++    with localcontext() as context:
++        context.prec = max(28, digit_count + places + 2)
++        quantum = Decimal(1).scaleb(-places)
++        rounded = Decimal(value).quantize(quantum, rounding=ROUND_HALF_EVEN)
++    if rounded == 0:
++        rounded = rounded.copy_abs()
++    return format(rounded, f".{places}f")

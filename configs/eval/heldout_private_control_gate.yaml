@@ -1,0 +1,52 @@
+name: heldout_private_control_gate
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_stable_toposort
+  - repair_json_pointer_lookup
+  - repair_utf8_batching
+  - repair_env_assignment_parser
+  - repair_decimal_rounding
+  - repair_latest_record_selection
+split: heldout_private
+policies:
+  oracle:
+    type: scorer_control_patch
+    control: oracle
+    attempts: 1
+    replay:
+      repeats: 1
+  bad-noop:
+    type: scorer_control_patch
+    control: bad.noop
+    attempts: 1
+    replay:
+      repeats: 1
+  bad-public-only:
+    type: scorer_control_patch
+    control: bad.public_only
+    attempts: 1
+    replay:
+      repeats: 1
+  agent-happy:
+    type: agent_control_script
+    control: happy
+    attempts: 1
+    replay:
+      repeats: 1
+  agent-malformed:
+    type: agent_control_script
+    control: malformed
+    attempts: 1
+    replay:
+      repeats: 1
+  agent-recoverable:
+    type: agent_control_script
+    control: recoverable
+    attempts: 1
+    replay:
+      repeats: 1
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

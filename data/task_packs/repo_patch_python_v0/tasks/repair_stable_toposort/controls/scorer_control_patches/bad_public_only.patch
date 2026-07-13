@@ -1,0 +1,17 @@
+diff --git a/src/dependency_order.py b/src/dependency_order.py
+--- a/src/dependency_order.py
++++ b/src/dependency_order.py
+@@ -1,6 +1,7 @@
+-def stable_toposort(
+-    nodes: list[str],
+-    dependencies: dict[str, list[str]],
+-) -> list[str]:
+-    """Return nodes in dependency order."""
+-    return list(nodes)
++def stable_toposort(nodes, dependencies):
++    if isinstance(nodes, (str, bytes)) or not isinstance(dependencies, dict):
++        raise ValueError("invalid input")
++    result = list(nodes)
++    if any(not isinstance(node, str) or not node for node in result):
++        raise ValueError("invalid node")
++    return result
