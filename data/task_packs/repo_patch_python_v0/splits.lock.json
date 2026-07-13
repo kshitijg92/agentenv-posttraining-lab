@@ -8,7 +8,17 @@
   "dev": [
     "repair_jsonl_deduper",
     "preserve_cli_error_codes",
-    "repair_config_precedence"
+    "repair_config_precedence",
+    "repair_header_merge",
+    "repair_duration_parser",
+    "repair_record_chunking",
+    "repair_query_encoding",
+    "repair_semver_precedence",
+    "repair_csv_projection",
+    "repair_relative_path",
+    "repair_retry_schedule",
+    "repair_interval_coalescing",
+    "repair_template_expansion"
   ],
   "heldout_private": [],
   "public_calibration": [],

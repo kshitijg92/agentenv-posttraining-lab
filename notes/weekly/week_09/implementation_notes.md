@@ -1913,3 +1913,656 @@ targeted rerun. The entire 14-minute suite was not repeated. Repository-wide
 format checking still identifies 22 unchanged files outside this checkpoint;
 they were not reformatted. Repair/review and repair-selection CLI commands
 remain a later artifact-usability checkpoint.
+
+## 2026-07-12
+
+### Acquisition Prompt And Model-Action Contract
+
+Corrected the agent prompt's `run_tests` example so it uses the exact public
+check command rather than a generic placeholder. The prompt now also states
+that an action must be the JSON tool-call envelope itself, without Markdown
+fences or a second copy of the tool name inside the arguments.
+
+Added `agent_action_format: prompt_only | json_schema` to model configuration.
+The OpenAI-compatible client sends a strict action response schema when
+configured, and the Qwen Ollama acquisition configs use that mode. This
+substantially reduced malformed action envelopes. The Qwen `/no_think` suffix
+was used where supported so hidden reasoning did not consume the local
+generation budget.
+
+These interface changes were used to improve the rate of harness-clean,
+gradable model trajectories. How prompt or action-interface provenance should
+constrain future pairing remains an open design question.
+
+### Eval Runtime Provenance
+
+`EvalRunManifest` and `EvalSuiteManifest` now require complete
+`HarnessRuntimeProvenance`. Eval orchestration captures it at run start and
+refuses to finalize a manifest if harness source, dependencies, or interpreter
+provenance changes before completion.
+
+Training gates require the source eval runtime to exactly match the runtime
+pinned by the current passing harness-audit and control-calibration artifacts.
+This invalidated an early acquisition pilot whose run predated the final source
+changes; it was discarded rather than reinterpreted under the new audit.
+
+### Task Pack And Acquisition Runs
+
+Added four dev tasks with public/hidden tests, oracle and known-bad patches, and
+agent controls:
+
+```text
+repair_header_merge
+repair_duration_parser
+repair_record_chunking
+repair_query_encoding
+```
+
+The task pack now contains one practice and seven dev tasks. Control
+calibration passed all 48 task/control combinations at one repeat, and public
+check idempotency calibration remained stable.
+
+Added local acquisition configs for Qwen2.5-Coder 14B, 7B, and 3B and Qwen3 8B,
+plus greedy retry and high-diversity sampling configs. Qwen3 structured
+generation was too slow and sometimes ended with empty/max-token responses, so
+its partial runs were stopped and excluded.
+
+Final trust artifacts:
+
+```text
+experiments/runs/week09_dpo_harness_audit_v4
+experiments/runs/week09_dpo_control_calibration_v3
+```
+
+Both pass and pin the post-revert harness runtime
+`xxh64:2e228ddac2b3c29f`.
+
+Historical candidate exports retained for acquisition-yield analysis:
+
+```text
+experiments/runs/week09_dpo_qwen2-5-coder-14b_candidates_v2
+experiments/runs/week09_dpo_qwen2-5-coder-7b_candidates_v2
+experiments/runs/week09_dpo_qwen2-5-coder-3b_candidates_v2
+experiments/runs/week09_dpo_qwen2_5_coder_14b_retries_candidates_v2
+experiments/runs/week09_dpo_high_diversity_rejected_yield_candidates_v2
+```
+
+All accepted source reviews use reviewer id
+`codex_provisional_under_user_authorization`. That records the user's temporary
+authorization to mark reviews accepted for artifact construction; it is not a
+claim that every long transcript received human review.
+
+These model evals, trajectories, reviews, and candidates were produced under
+pre-revert runtime `xxh64:9292345e1dff4cad`. Removing the prematurely designed
+preference subsystem correctly changed the whole-tree runtime hash. The
+historical artifacts were not relabeled. They remain useful evidence about
+acquisition yield and failure modes, but they do not satisfy the current-runtime
+training gate. Fresh model evals are required after preference design is
+settled and before constructing current candidate or pair artifacts.
+
+### Acquisition Diversity Observation
+
+An earlier pilot had eight distinct eval attempt ids but only one behavior
+transcript. It was stopped and excluded from the candidate pool. The result
+shows that additional attempt ids do not necessarily provide additional
+behavioral coverage. The definition and enforcement of behavior-level
+deduplication remain for the later preference design discussion.
+
+### Verification Notes
+
+The first repository run used `pytest -n auto` and produced subprocess-heavy
+harness/reward audit failures under CPU contention. The same harness and reward
+tests passed serially (`6 passed`), showing that those failures were test-runner
+resource contention rather than audit mismatches. Stale eval-manifest fixtures
+were updated for required runtime provenance, and task-pack assertions were
+updated from four to eight tasks. Final verification results are recorded after
+the concluding test pass.
+
+#### Timeout Audit Flake Correction And Artifact Rebuild
+
+The first serial full suite exposed that the `hidden_check_timeout` scorer
+audit case used a one-second task timeout for both public and hidden phases.
+Under sustained suite load, ordinary public pytest startup occasionally
+exceeded one second, so the case produced a public timeout instead of reaching
+the intentional hidden hang. This was a case-design flake: it tested whichever
+phase happened to consume the tiny budget first.
+
+Raised that case's timeout override to five seconds. The public tests now have
+startup headroom while the deliberately non-terminating hidden behavior still
+guarantees a hidden-phase timeout. The separate `public_check_timeout` case
+retains its one-second override.
+
+Because audit-case and runtime bytes are provenance, old trust pins were not
+reused. After removing the premature preference subsystem, generated:
+
+```text
+experiments/runs/week09_dpo_harness_audit_v4
+experiments/runs/week09_dpo_control_calibration_v3
+```
+
+The regenerated audit is aggregate/agent/scorer `PASS` and retains harness
+runtime `xxh64:2e228ddac2b3c29f`. Control calibration has 48 matching records,
+stable flake detection, and complete idempotency evidence for the expanded task
+pack.
+
+Final verification:
+
+```text
+post-revert manifest/model/eval/CLI regression set: 168 passed
+post-revert training package: 150 passed
+current harness audit: PASS (agent PASS, scorer PASS)
+current controls: 48/48 matching, flake stable
+repository Ruff: passed
+repository Pyright: passed
+git diff --check: passed
+```
+
+The full repository suite was not repeated after the scoped rollback. The
+focused sets cover every mixed file changed by the removal and the complete
+retained training package.
+
+### Cadence-Neutral Acquisition Configuration
+
+Renamed the eight acquisition eval configs and their internal `name` values so
+reusable configuration does not encode the weekly learning cadence. Names now
+describe the model, split, and acquisition strategy, for example:
+
+```text
+agent_model_dev_multi_policy_acquisition.yaml
+qwen2_5_coder_14b_dev_repeated_sampling.yaml
+qwen3_8b_dev_targeted.yaml
+```
+
+Historical experiment manifests retain their original config paths as honest
+records of what executed. Added a root `AGENTS.md` rule allowing week/date
+labels only in notes, documentation, and generated `experiments/` paths, not in
+source, APIs, schemas, task ids, or reusable config filenames and names.
+
+### Qwen3 Token-Budget Diagnostic
+
+The initial Qwen3 acquisitions used `max_new_tokens: 4096`. The Qwen3 8B
+targeted attempt reached that limit on its first turn and the provider returned
+empty content. A later controlled 8192-token diagnostic did not repeat the
+ceiling: it stopped normally after 76 completion tokens with valid structured
+output. It nevertheless returned a final answer without editing the workspace
+and scored `HIDDEN_TEST_FAIL`. More output budget removed the truncation symptom
+but did not make the policy act on the task.
+
+Qwen3 14B showed a different problem: provider timeouts, max-turn cycling, and
+repeated short behaviors. Its recorded responses did not exhaust the 4096-token
+limit, so increasing the per-turn budget is not the primary intervention for
+that model.
+
+### Acquisition Foundation Worktree Checkpoint
+
+Continued autonomous foundation work in the isolated worktree:
+
+```text
+/home/kshitij/agentenv-posttraining-foundation-wt
+branch: codex/acquisition-foundation
+```
+
+No commit was created.
+
+### Current-Runtime Rescore, Clustering, Taxonomy, And Privacy Checkpoint
+
+This checkpoint supersedes the replay counts and review-packet state in the
+historical acquisition sections below.
+
+Completed two fresh scorer executions for every scored trajectory in the
+55-record compatible cohort. The rescorer now fails unless the current full
+task-input hash set equals the source eval task hashes, in addition to the
+existing harness-runtime, trajectory-export, and candidate-patch hash checks.
+
+```text
+52 source scored trajectories
+104 fresh scorer executions
+104/104 exact outcome matches
+rescorer code hash: xxh64:8e74f5afbec83ae5
+
+experiments/runs/model_diversity_near_solution_acquisition_final_runtime_patch_rescore_r3
+experiments/runs/model_decoding_task_gap_acquisition_final_runtime_patch_rescore_r2
+experiments/runs/qwen3_coder_30b_interval_probe_final_runtime_patch_rescore_r2
+experiments/runs/qwen3_coder_30b_task_gap_acquisition_final_runtime_patch_rescore_r2
+```
+
+Added analysis-only behavior clustering. The 55 trajectories form 46 exact
+assistant-action clusters; five clusters contain duplicates and nine rows are
+duplicates beyond the cluster representatives. Tool observations are excluded
+from the behavior hash and remain individually linked in review artifacts.
+
+Added an analysis-only public-contract taxonomy for the four acquisition tasks.
+It verifies source task hashes, validates every probe against the corresponding
+oracle, uses no hidden-validator evidence, and labels its output as
+`review_hypothesis`. All four oracles passed all probes; all 46 clusters received
+a hypothesis record.
+
+Added a content-level privacy scanner over semantic messages, typed tool-result
+strings, and candidate patches. It verifies source manifests, exact cohort
+coverage, task-manifest hashes, and artifact content hashes before scanning. It
+stores only finding classes and hashes of matched values.
+
+```text
+status: NORMALIZATION_REQUIRED
+55 trajectories scanned
+50 trajectories with findings
+64 ephemeral harness-path occurrences
+1 user-host-path occurrence
+0 configured sensitive-pattern matches
+```
+
+The path findings occur only in environment/tool observations. The generated
+artifact explicitly states that a zero sensitive-pattern count is not proof of
+arbitrary private-content absence.
+
+Generated compact review cards that join the evidence, 46 behavior clusters,
+public-contract hypotheses, privacy audit, unreviewed review rows, and all
+hash-pinned artifact locators:
+
+```text
+experiments/analysis/current_runtime_behavior_clusters.json
+experiments/analysis/current_runtime_contract_failure_taxonomy.json
+experiments/analysis/current_runtime_privacy_audit.json
+experiments/analysis/current_runtime_compact_review_cards.md
+```
+
+No preference schema, pair label, accepted review, training candidate, or DPO
+export was added.
+
+Verification for this checkpoint:
+
+```text
+full-cohort patch replay: 104/104 matched
+empty-runtime cluster/privacy requests: failed closed without artifacts
+focused model/config/provider/eval tests: 54 passed
+repository and analysis-helper Ruff: passed
+repository and analysis-helper Pyright: passed
+git diff --check: passed
+Ollama processes: 0
+orphan AgentEnv attempt/probe processes: 0
+all 55 source reviews: not_reviewed
+```
+
+### Deterministic Rescore, Task-Gap Acquisition, And Review Packet
+
+Continued only in the isolated acquisition-foundation worktree. No commit was
+created and no preference schema, pair builder, decision, or training export
+was added.
+
+The repository replay CLI re-executes scripted agent controls and requires an
+`agent_control_script`. Real model trajectories intentionally have no such
+artifact. Added the analysis-only scorer replay helper:
+
+```text
+experiments/analysis/rescore_model_patches.py
+```
+
+It joins the eval suite to its hash-pinned trajectory export, requires exact
+source-runtime equality, verifies each live candidate-patch content hash, and
+re-scores every scored patch twice in fresh workspaces. The then-authoritative
+run, now superseded by the full-cohort checkpoint above, was:
+
+```text
+experiments/runs/model_diversity_near_solution_acquisition_final_runtime_patch_rescore_r2
+```
+
+Result: 44/44 re-scores matched the 22 source trajectories on status,
+public/hidden outcome, error class, and final-diff hash. The earlier `r1`
+artifact used an earlier helper that did not join through the trajectory export
+and is superseded for trust purposes.
+
+Added equal-budget decoding and acquisition configs:
+
+```text
+configs/decoding/greedy_8192.yaml
+configs/eval/model_decoding_task_gap_acquisition.yaml
+```
+
+The matrix fixed three tasks, two model families, greedy/sampling decoding, and
+two attempts per cell before execution: 24 attempts total. Greedy and sampling
+both used 8192 maximum tokens and a 300-second provider timeout so decoding was
+not confounded with response budget.
+
+Artifact:
+
+```text
+experiments/runs/model_decoding_task_gap_acquisition_final_runtime
+```
+
+Outcome:
+
+```text
+24 attempts
+23 scored
+17 HIDDEN_TEST_FAIL
+6 PUBLIC_TEST_FAIL
+1 model_error
+0 PASS
+```
+
+Devstral greedy produced duplicate interval patches and repeated no-ops on
+retry/SemVer. The matrix was retained in full; no outcome-dependent early stop
+or filtering occurred.
+
+Because fewer than two of the three target tasks gained a passing endpoint,
+the predeclared additional-model probe triggered. Added:
+
+```text
+configs/models/ollama_qwen3_coder_30b.yaml
+configs/eval/qwen3_coder_30b_interval_probe.yaml
+configs/eval/qwen3_coder_30b_task_gap_acquisition.yaml
+```
+
+The exact provider identity is:
+
+```text
+qwen3-coder:30b-a3b-q4_K_M
+sha256:06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca
+Ollama 0.30.11
+```
+
+The official Ollama catalogue describes this as an Apache-2.0 30.5B MoE code
+model with 3.3B active parameters. Its 18.5 GB local artifact partially
+offloaded on the 16 GB GPU but remained practical for a bounded probe.
+
+The one-task probe reached scoring with a substantive nonempty interval patch,
+so the predeclared branch expanded to two sampling attempts on each of interval,
+retry, and SemVer. Acquisition then stopped regardless of outcome.
+
+```text
+probe:     1 HIDDEN_TEST_FAIL
+expansion: 6 HIDDEN_TEST_FAIL
+public checks: 7/7 PASS
+nonempty patches: 6/7
+```
+
+Exports and initialized unreviewed review artifacts:
+
+```text
+experiments/runs/model_decoding_task_gap_acquisition_final_runtime_trajectories
+experiments/runs/model_decoding_task_gap_acquisition_final_runtime_reviews_unreviewed
+experiments/runs/qwen3_coder_30b_interval_probe_final_runtime_trajectories
+experiments/runs/qwen3_coder_30b_interval_probe_final_runtime_reviews_unreviewed
+experiments/runs/qwen3_coder_30b_task_gap_acquisition_final_runtime_trajectories
+experiments/runs/qwen3_coder_30b_task_gap_acquisition_final_runtime_reviews_unreviewed
+```
+
+Strengthened `acquisition_evidence_audit.py` during self-review:
+
+- every live transcript, model-provenance, and patch file must match its
+  trajectory content hash before analysis;
+- source export, calibration, and generator hashes are recorded;
+- duplicate trajectory ids are rejected;
+- missing patch/status values are explicit;
+- runtime cohorts remain separate;
+- `PASS`-versus-non-`PASS` counts are separate from generic cross-status counts.
+
+Final compatible cohort under runtime `xxh64:48587f8f45327ef3`:
+
+```text
+55 records
+52 scored
+2 PASS
+40 HIDDEN_TEST_FAIL
+10 PUBLIC_TEST_FAIL
+3 unscored prompt-loop failures
+46 exact task/action behaviors
+37 exact task/patch combinations
+123 scored cross-status pairs
+8 PASS-versus-non-PASS pairs
+```
+
+All eight obvious success/failure comparisons are on `repair_relative_path`.
+Interval, retry, and SemVer still have no current-runtime passing model
+trajectory. The expanded failure pool is useful evidence but does not solve
+positive-anchor coverage.
+
+Added an analysis-only task-grouped review navigator:
+
+```text
+experiments/analysis/build_trajectory_review_packet.py
+experiments/analysis/current_runtime_trajectory_review_packet.md
+```
+
+It validates each trajectory/review join and current runtime, rejects duplicate
+trajectory ids, requires every review to remain `not_reviewed`, and lists
+hash-pinned review, transcript, patch, agent-result, and model-provenance
+locators without reproducing their content.
+
+Final analysis artifacts:
+
+```text
+experiments/analysis/acquisition_foundation_evidence.json
+experiments/analysis/acquisition_foundation_evidence.md
+experiments/analysis/current_runtime_trajectory_review_packet.md
+```
+
+Verification:
+
+```text
+44/44 hash-pinned patch re-scores matched
+27/27 eval configs and all model/decoding configs loaded and resolved
+focused model/config/provider/eval regression tests: 54 passed
+repository Ruff: passed
+analysis-script Ruff: passed
+repository Pyright: passed
+analysis-script Pyright: passed
+git diff --check: passed
+Ollama stopped
+orphan AgentEnv processes: 0
+```
+
+Only configs, generated experiments, analysis helpers, and notes changed in
+this continuation, so the final harness runtime and passing r6/v3 trust
+artifacts remain unchanged.
+
+Addressed the main-session review findings:
+
+- `repair_duration_parser` now rejects post-conversion non-finite values in the
+  oracle and successful agent controls, with an explicit numeric-overflow
+  hidden test;
+- eval finalization has a direct negative test proving runtime mutation refuses
+  the manifest;
+- training export has a direct negative test proving source-eval runtime
+  mismatch creates no candidate artifact;
+- future reusable training/data config paths in the Week 9 plan are
+  cadence-neutral.
+
+Added optional `provider_runtime_probe: ollama` to model configs. All Ollama
+acquisition configs require it. Before a model attempt, the runtime queries the
+native Ollama version and tag catalogue, requires one exact model-id match, and
+records a canonical `sha256:<digest>` plus server version in
+`model_config.json`. Missing or ambiguous identity fails before acquisition.
+The trajectory artifact layer already hashes this file, so later consumers can
+pin the observed provider identity without a preference-specific schema.
+
+Added six dev tasks with complete public/hidden/oracle/known-bad/agent-control
+surfaces:
+
+```text
+repair_semver_precedence
+repair_csv_projection
+repair_relative_path
+repair_retry_schedule
+repair_interval_coalescing
+repair_template_expansion
+```
+
+The task pack now contains one practice task and thirteen dev tasks. Every new
+oracle passed its public and hidden tests in a fresh workspace. Pack validation,
+split locking, and task hashing were updated to fourteen total tasks.
+
+Added cadence-neutral acquisition configs:
+
+```text
+configs/decoding/sampling_8192.yaml
+configs/eval/qwen2_5_coder_14b_dev_task_expansion.yaml
+configs/eval/model_scale_dev_task_expansion.yaml
+configs/eval/qwen3_8b_dev_long_output_diagnostic.yaml
+```
+
+The general multi-policy acquisition config now includes all thirteen dev
+tasks. All 21 eval configs validate their referenced task, model, and decoding
+paths.
+
+Current trust artifacts:
+
+```text
+experiments/runs/acquisition_foundation_control_calibration_r4
+experiments/runs/acquisition_foundation_harness_audit
+```
+
+The final calibration has 252/252 matching control records at three repeats,
+stable flake detection, and 14/14 `IDEMPOTENT` public-check calibrations. The
+harness audit is aggregate/agent/scorer `PASS`. Both pin runtime
+`xxh64:5dc09c553267a93a`.
+
+Fresh model evidence under that same runtime:
+
+```text
+experiments/runs/qwen3_8b_long_output_diagnostic
+experiments/runs/qwen2_5_coder_14b_task_expansion
+experiments/runs/model_scale_task_expansion
+```
+
+The Qwen3 8B 8192-token diagnostic ended normally after 76 completion tokens,
+so it did not repeat the earlier 4096-token ceiling. It immediately returned a
+final answer without modifying the workspace and scored `HIDDEN_TEST_FAIL`.
+
+The repeated Qwen2.5-Coder 14B run produced 12/12 harness-clean scored
+trajectories: five `HIDDEN_TEST_FAIL` and seven `PUBLIC_TEST_FAIL`. The scale
+sweep produced 18/18 harness-clean scored trajectories: fourteen
+`HIDDEN_TEST_FAIL` and four `PUBLIC_TEST_FAIL`. No model trajectory passed the
+hidden contract. The runs are acquisition-yield evidence, not preference rows
+and not evidence of model improvement.
+
+All fresh evals, the final audit, final calibration, and the current harness
+capture share runtime `xxh64:5dc09c553267a93a`. Observed model digests are
+pinned per attempt for Qwen3 8B and Qwen2.5-Coder 14B/7B/3B.
+
+Final verification:
+
+```text
+full serial pytest: 985 passed, 1 stale eight-task count assertion failed
+corrected control integration test: 1 passed
+repository Ruff: passed
+repository Pyright: passed
+git diff --check: passed
+```
+
+The failed test's control execution itself produced 168/168 matching records;
+only its explicit eight-task `TASK_IDS` fixture was stale. After adding the six
+new task ids, the same integration test passed. The sixteen-minute full suite
+was not repeated solely for that fixture correction.
+
+### Final Acquisition-Foundation And Timeout-Isolation Checkpoint
+
+Exported the three earlier acquisition suites into canonical trajectory
+artifacts and initialized review artifacts without accepting any records:
+
+```text
+experiments/runs/qwen3_8b_long_output_diagnostic_trajectories
+experiments/runs/qwen2_5_coder_14b_task_expansion_trajectories
+experiments/runs/model_scale_task_expansion_trajectories
+```
+
+Added `experiments/analysis/acquisition_evidence_audit.py`. It reports only
+trajectory metadata, action patterns, statuses, and content hashes; it does
+not reproduce transcript, tool-output, or patch content. Runtime cohorts are
+separate, exact duplicates are scoped by runtime and task, missing patch hashes
+are explicit, and scored cross-status counts exclude prompt-loop failures.
+
+Tightened calibration semantics so `stable` requires at least two executions.
+One matching repeat now derives `inconclusive`, and training export rejects a
+control calibration with fewer than two repeats. Payload validation enforces
+the same rule as the runner.
+
+Added a pinned Ollama model config for:
+
+```text
+devstral-small-2:24b-instruct-2512-q4_K_M
+sha256:24277f07f62db8f9cb68e9dfc679ea1818a7fbac47a50eff0a701d3f645b63c8
+Ollama 0.30.11
+```
+
+The model was selected as a 24B agentic-coding diagnostic that fits the local
+16 GB GPU at the explicit 15 GB Q4 tag. The 19 GB Qwen3-Coder alternative was
+not pulled. Added cadence-neutral one-task and focused acquisition configs:
+
+```text
+configs/eval/devstral_small_2_near_solution_diagnostic.yaml
+configs/eval/model_family_14b_near_solution_diagnostic.yaml
+configs/eval/model_diversity_near_solution_acquisition.yaml
+```
+
+The focused acquisition uses four identical tasks, three model policies, and
+two attempts per policy. This creates task-matched comparison structure without
+adding a preference schema, pair builder, preference decisions, or DPO rows.
+
+During final full-suite self-review, timeout audit cases left descendant pytest
+processes running after their direct parents timed out. Some survived for more
+than fifteen minutes and materially slowed later tests. The shared command
+runner now starts each command in its own process group, kills the entire group
+on timeout, reaps it, and then re-raises the existing `TimeoutExpired` outcome.
+A real descendant-process regression test and timeout-heavy audit integration
+prove that no `/tmp/agentenv-*` processes remain orphaned.
+
+Because that runner correction changed harness bytes, the preceding
+`e94a0d9d505c3281` acquisitions were retained as historical evidence rather
+than relabeled. Final trust artifacts and acquisition were regenerated under:
+
+```text
+harness runtime: xxh64:48587f8f45327ef3
+control calibration: experiments/runs/acquisition_foundation_control_calibration_r6
+harness audit: experiments/runs/acquisition_foundation_harness_audit_v3
+model acquisition: experiments/runs/model_diversity_near_solution_acquisition_final_runtime
+trajectory export: experiments/runs/model_diversity_near_solution_acquisition_final_runtime_trajectories
+review artifact: experiments/runs/model_diversity_near_solution_acquisition_final_runtime_reviews_unreviewed
+```
+
+Final control calibration is 252/252 matching at three repeats with stable
+flake detection and 14/14 idempotent public checks. Harness audit is aggregate,
+agent, and scorer `PASS`.
+
+Final-runtime acquisition outcome:
+
+```text
+24 attempts
+22 scored
+2 PASS
+16 HIDDEN_TEST_FAIL
+4 PUBLIC_TEST_FAIL
+1 invalid_model_output
+1 terminal_tool_error
+```
+
+The machine-readable audit finds 21 scored cross-status comparison
+opportunities: 11 relative-path, 6 retry-schedule, and 4 SemVer. Interval
+coalescing has 15 behaviorally distinct unordered comparisons but all six
+records are hidden failures. These are comparison opportunities only; reviews
+remain unreviewed, ambiguous reward-hack findings remain uncleared, and no
+record is called a valid preference pair or training example.
+
+No canary leak, hidden-validator visibility, orchestration failure, confirmed
+reward-hack finding, or mechanical-redundancy block was detected in the final
+cohort. The evidence summaries are:
+
+```text
+experiments/analysis/acquisition_foundation_evidence.json
+experiments/analysis/acquisition_foundation_final_runtime_evidence.json
+experiments/analysis/acquisition_foundation_evidence.md
+```
+
+Verification:
+
+```text
+full serial pytest before timeout-runner correction: 987 passed in 17m45s
+post-correction command-runner regression: 4 passed
+post-correction scorer/harness timeout integration: 2 passed, 0 orphans
+post-correction direct runner consumers: 63 passed
+repository Ruff: passed
+repository Pyright: passed
+git diff --check: passed
+```
+
+No commit was created.

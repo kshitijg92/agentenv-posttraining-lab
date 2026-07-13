@@ -1,0 +1,43 @@
+diff --git a/src/header_tools.py b/src/header_tools.py
+index c5e10b1..ad45376 100644
+--- a/src/header_tools.py
++++ b/src/header_tools.py
+@@ -1,8 +1,35 @@
++from collections.abc import Mapping
++
++
+ def merge_headers(
+     defaults: dict[str, str],
+     overrides: dict[str, str],
+ ) -> dict[str, str]:
+     """Merge default and override HTTP-style headers."""
+-    result = dict(defaults)
+-    result.update(overrides)
+-    return result
++
++    def validated_items(source: object) -> list[tuple[str, str]]:
++        if not isinstance(source, Mapping):
++            raise ValueError("headers must be a mapping")
++        items: list[tuple[str, str]] = []
++        seen: set[str] = set()
++        for key, value in source.items():
++            if not isinstance(key, str) or not isinstance(value, str):
++                raise ValueError("header names and values must be strings")
++            normalized = key.casefold()
++            if normalized in seen:
++                raise ValueError("duplicate case-insensitive header name")
++            seen.add(normalized)
++            items.append((key, value))
++        return items
++
++    merged = validated_items(defaults)
++    positions = {key.casefold(): index for index, (key, _) in enumerate(merged)}
++    for key, value in validated_items(overrides):
++        normalized = key.casefold()
++        position = positions.get(normalized)
++        if position is None:
++            positions[normalized] = len(merged)
++            merged.append((key, value))
++        else:
++            merged[position] = (key, value)
++    return dict(merged)

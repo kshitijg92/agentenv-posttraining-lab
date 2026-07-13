@@ -1,0 +1,31 @@
+diff --git a/src/relative_path.py b/src/relative_path.py
+index 27b668d..99132d7 100644
+--- a/src/relative_path.py
++++ b/src/relative_path.py
+@@ -1,6 +1,22 @@
+-import posixpath
+-
+-
+ def normalize_relative_path(path: str) -> str:
+     """Normalize a path for storage as a relative POSIX path."""
+-    return posixpath.normpath(path).lstrip("/")
++    if not isinstance(path, str) or not path:
++        raise ValueError("path must be a non-empty string")
++    if path.startswith("/"):
++        raise ValueError("path must be relative")
++    if "\\" in path or "\x00" in path:
++        raise ValueError("path contains a forbidden character")
++
++    components: list[str] = []
++    for component in path.split("/"):
++        if component in ("", "."):
++            continue
++        if component == "..":
++            if not components:
++                raise ValueError("path escapes the relative root")
++            components.pop()
++        else:
++            components.append(component)
++    if not components:
++        raise ValueError("path resolves to an empty result")
++    return "/".join(components)

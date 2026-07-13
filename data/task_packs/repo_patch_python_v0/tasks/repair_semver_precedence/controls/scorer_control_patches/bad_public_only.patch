@@ -1,0 +1,14 @@
+diff --git a/src/semver.py b/src/semver.py
+index 226e8b1..03c2143 100644
+--- a/src/semver.py
++++ b/src/semver.py
+@@ -1,3 +1,8 @@
+ def compare_semver(left: str, right: str) -> int:
+     """Compare two version strings."""
+-    return (left > right) - (left < right)
++    try:
++        left_core = tuple(int(part) for part in left.split("."))
++        right_core = tuple(int(part) for part in right.split("."))
++    except (AttributeError, ValueError) as exc:
++        raise ValueError("invalid version") from exc
++    return (left_core > right_core) - (left_core < right_core)

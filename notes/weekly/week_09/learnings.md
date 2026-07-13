@@ -491,3 +491,242 @@ Explicit selection matters for the same reason. When several valid derivatives
 exist, neither recency nor directory order is evidence that one is the intended
 training target. The dataset row must name and hash the selected derivative,
 and the export manifest must pin that decision.
+
+### Run Identity Is Not Behavioral Diversity
+
+Different attempt ids, seeds, timestamps, or model labels can still contain the
+same policy behavior. Counting them as independent acquisition yield makes the
+candidate pool look more diverse without adding a new learning signal.
+
+The self-deception trap is:
+
+```text
+many eval attempts -> many training examples
+```
+
+Attempt count measures execution volume. It does not measure distinct prompts,
+decisions, errors, or candidate behaviors. How behavioral identity should be
+defined remains a later preference-data design question.
+
+### Harness Trust Must Be Bound To The Source Evaluation Runtime
+
+A passing current harness audit cannot retroactively validate an evaluation
+whose harness bytes and dependencies were never pinned. It proves something
+about the audited runtime, not every artifact that happens to share a task id
+or schema.
+
+The trustworthy relation is:
+
+```text
+source eval runtime == passing audit runtime == passing calibration runtime
+```
+
+Task hashes alone are insufficient because the same task can produce different
+evidence under changed prompt-loop, tool, scorer, or orchestration code. Runtime
+provenance must therefore be captured when the eval executes, not reconstructed
+from the repository later.
+
+### Temporary Review Authorization Must Remain Visible Provenance
+
+A provisional acceptance used to exercise an artifact pipeline is not
+equivalent to careful human transcript review. If both use the same undifferentiated
+`accepted` bit, downstream consumers can forget why the decision was made and
+treat plumbing evidence as quality evidence.
+
+The reviewer identity and scope must remain visible and hash-pinned. Before a
+future dataset is used for training, the provisional decision must be ratified
+or replaced, and all dependent artifacts must be rebuilt. A numerical data
+target is not a reason to silently upgrade temporary review authority.
+
+### Parsed Values Must Satisfy The Output Contract Too
+
+Syntactic validation is not enough when parsing or arithmetic can create a
+value outside the task's semantic contract. A decimal string may match the
+accepted grammar while conversion to a machine float produces infinity; a
+direct exponential formula may overflow before a cap is applied.
+
+The self-deception trap is:
+
+```text
+input matched the grammar -> output satisfies the contract
+```
+
+Validators and oracle controls must check the post-conversion result and any
+intermediate behavior that can violate the promised invariant. Otherwise a
+passing oracle calibrates the harness against an incomplete specification and
+makes the hidden validator less authoritative than the task instruction.
+
+### Stability Requires Replication, Not One Successful Observation
+
+One matching control execution establishes only that the expected outcome was
+observed once. It cannot distinguish a deterministic harness from a flaky one
+that happened to return the expected result.
+
+```text
+one matching run       -> outcome evidence
+repeated matching runs -> initial stability evidence
+```
+
+Replication still does not prove absence of flakiness, but it changes what the
+artifact is entitled to claim. A `stable` label backed by repeated fresh
+workspaces is materially stronger than the same label derived from one sample.
+The repeat count must remain visible provenance so downstream gates and humans
+can judge that strength rather than trusting the aggregate word alone.
+
+### A Model Tag Is A Locator, Not A Policy Identity
+
+A model configuration hash can pin the text `model_id: qwen:tag` while the
+provider later resolves that tag to different weights. Two trajectories can
+therefore appear configuration-identical even though different policies
+generated them.
+
+Acquisition provenance should record the provider-observed immutable model
+digest, alongside provider runtime identity such as server version. This does
+not independently attest that the provider is honest, but it makes tag drift
+observable and allows later comparability rules to require identical weights.
+The durable distinction is:
+
+```text
+model tag/config bytes -> how the model was requested
+observed model digest  -> which weights the provider said it served
+```
+
+Both are needed before outcome differences can be attributed to decoding or
+behavior rather than silent policy replacement.
+
+### A Timeout Must Terminate The Whole Execution Tree
+
+Recording a command as timed out is not enough if descendant processes remain
+alive. An orphaned validator can continue consuming CPU, writing files, holding
+pipes, or changing timing for later cases after the harness has declared the
+attempt terminal.
+
+The self-deception trap is:
+
+```text
+parent command timed out -> execution stopped
+```
+
+For shell commands and test runners, the real execution unit is the process
+tree. Timeout handling must terminate and reap that unit before the harness
+continues. Otherwise later flake measurements and audit outcomes are no longer
+independent: they are contaminated by work from cases that supposedly ended.
+
+This is both an isolation invariant and an evidence invariant. A trustworthy
+`TIMEOUT` means the bounded computation stopped, not merely that the
+orchestrator stopped waiting for its direct child.
+
+### Scorer Replay And Policy Replay Establish Different Claims
+
+Re-scoring a pinned candidate patch in fresh workspaces can show that the
+scorer outcome is reproducible for that artifact. It does not show that a
+stochastic model would generate the same actions or patch again.
+
+```text
+patch replay  -> scorer determinism for fixed submitted behavior
+policy replay -> behavioral reproducibility under a declared policy interface
+```
+
+For real model trajectories, reconstructing a scripted policy from the observed
+transcript would not be a genuine policy replay. It would turn recorded behavior
+into a control and then "prove" that the control repeats itself. The honest
+fallback is to name the narrower claim: verify the hash-pinned patch and rerun
+the scorer, while leaving model-generation reproducibility unclaimed.
+
+The live patch must also be checked against the trajectory-export content hash
+before rescoring. Pinning only the parent eval manifest while reading mutable
+child files can make a replay look provenance-bound even when the submitted
+artifact has drifted.
+
+### Cross-Status Pair Counts Can Hide A Missing Positive Anchor
+
+A comparison between `HIDDEN_TEST_FAIL` and `PUBLIC_TEST_FAIL` has two different
+outcomes, but neither side is known to be correct. A large number of such pairs
+can therefore make an acquisition pool appear ready for preference training
+without supplying a trustworthy chosen endpoint.
+
+The useful accounting distinction is:
+
+```text
+cross-status pairs       -> outcomes differ
+PASS vs non-PASS pairs   -> one side has trusted task success
+valid preference pairs   -> a reviewer accepts the comparison basis
+```
+
+None of these quantities substitutes for the next one. Failure-versus-failure
+comparisons may still support useful judgments about progress, rationality, or
+tool use, but those judgments require semantic review. They cannot inherit a
+chosen/rejected label from scorer-status ordering alone.
+
+### Exact Action Equality Is Not Exact Trajectory Equality
+
+Two runs can emit byte-identical assistant actions while receiving different
+tool observations because workspace paths, timing, provider metadata, or other
+environment details differ. Clustering on assistant actions is useful for
+reducing duplicated behavioral review, but it does not prove that the full
+training contexts are interchangeable.
+
+```text
+same assistant actions != same environment-conditioned trajectory
+```
+
+This matters for both review and data weighting. Counting duplicate action
+sequences as independent behavioral diversity inflates acquisition yield, while
+discarding every duplicate transcript can hide materially different context.
+The clustering key and what it omits must therefore remain explicit, and member
+artifacts must remain individually inspectable.
+
+### A Privacy Scanner Is Evidence, Not Privacy Clearance
+
+Pattern-based scanning can establish that configured canaries, credential
+shapes, private-key markers, or forbidden paths were not matched. It cannot
+prove that arbitrary private content is absent. Calling a zero-match scan
+"leak-free" would turn detector coverage into a universal claim.
+
+Operational paths are also not harmless merely because they contain no secret.
+When tool observations include scratch directories or a user's home path, those
+bytes become model context. Loss masking later assistant tokens does not remove
+that context, and repeated training can teach environment-specific artifacts.
+
+The conservative boundary is:
+
+```text
+no configured sensitive match -> useful negative evidence
+host/infrastructure path found -> normalize or repair before training
+privacy cleared                -> requires scoped review beyond one scanner
+```
+
+### Public-Contract Probes Produce Review Hypotheses, Not Ground Truth
+
+Independent probes derived from the public instruction can make long failure
+sets reviewable without exposing private validators. Calibrating those probes
+against the oracle checks that they accept known-correct behavior, but it does
+not make them complete or authoritative.
+
+A failed public-contract clause is evidence for a concrete review hypothesis.
+A probe pass alongside hidden failure means only that this probe set did not
+isolate the gap. Treating the taxonomy as hidden-failure truth would quietly
+replace the scorer contract with an incomplete analysis tool.
+
+```text
+oracle accepts probe suite -> probe suite is not obviously over-restrictive
+candidate fails probe      -> public-contract review hypothesis
+candidate passes probes    -> hidden failure remains unresolved
+```
+
+### Reproducibility Requires The Task Bytes As Well As The Submitted Patch
+
+Re-scoring the same patch with a changed seed workspace, public check, hidden
+validator, or oracle is not a replay of the original measurement. Even if the
+terminal status happens to match, the apparent agreement may be coincidental.
+
+The reproducibility claim must bind all inputs that causally determine the
+score:
+
+```text
+same harness runtime + same full task inputs + same candidate patch
+    -> scorer replay is comparable
+```
+
+Pinning only a task id or task manifest is too weak because referenced files can
+drift while those identifiers stay unchanged.

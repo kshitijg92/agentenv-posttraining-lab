@@ -1,0 +1,13 @@
+diff --git a/src/intervals.py b/src/intervals.py
+index bb635c3..886f3ba 100644
+--- a/src/intervals.py
++++ b/src/intervals.py
+@@ -2,6 +2,8 @@ def coalesce_intervals(
+     intervals: list[tuple[int, int]],
+ ) -> list[tuple[int, int]]:
+     """Merge overlapping intervals."""
++    if not isinstance(intervals, list):
++        raise ValueError("intervals must be a list")
+     if not intervals:
+         return []
+     merged = [intervals[0]]

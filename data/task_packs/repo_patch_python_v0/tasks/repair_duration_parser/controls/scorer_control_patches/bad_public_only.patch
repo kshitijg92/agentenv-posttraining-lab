@@ -1,0 +1,11 @@
+diff --git a/src/duration.py b/src/duration.py
+index 288606d..b52b00c 100644
+--- a/src/duration.py
++++ b/src/duration.py
+@@ -1,5 +1,6 @@
+ def parse_duration(value: str) -> float:
+     """Parse a compact duration and return seconds."""
++    # The visible contract only demonstrates seconds.
+     if not value.endswith("s"):
+         raise ValueError("duration must use seconds")
+     return float(value[:-1])

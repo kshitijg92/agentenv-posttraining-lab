@@ -24,6 +24,7 @@ from agentenv.audits.runner import (
     HarnessAuditArtifact,
     load_harness_audit_artifact,
 )
+from agentenv.audits.schema import HarnessRuntimeProvenance
 from agentenv.audits.runtime import (
     capture_harness_runtime_provenance,
     harness_repo_root,
@@ -35,6 +36,9 @@ from agentenv.hashing import hash_directory, hash_file
 from agentenv.tasks.hashing import build_eval_task_hashes
 from agentenv.tasks.validate import load_task_manifest, load_task_pack_manifest
 from agentenv.trajectories.review import TrajectoryReviewValidation
+
+
+MINIMUM_TRAINING_CONTROL_REPEATS = 2
 
 
 @dataclass(frozen=True)
@@ -89,7 +93,11 @@ def validate_training_export_gates(
         )
 
     _require_current_harness_audit_cases(harness_artifact)
-    source_task_hashes = _load_source_eval_task_hashes(validation)
+    source_task_hashes, source_runtime = _load_source_eval_provenance(validation)
+    if source_runtime != current_runtime:
+        raise ValueError(
+            "Source eval runtime does not match the audited harness runtime"
+        )
     _require_matching_control_tasks(
         validation,
         source_task_hashes=source_task_hashes,
@@ -139,6 +147,12 @@ def _require_successful_control_calibration(
     artifact_dir: Path,
     manifest: ControlCalibrationManifest,
 ) -> None:
+    if manifest.repeats < MINIMUM_TRAINING_CONTROL_REPEATS:
+        raise ValueError(
+            "Training-candidate export requires at least "
+            f"{MINIMUM_TRAINING_CONTROL_REPEATS} control repeats; observed "
+            f"{manifest.repeats}"
+        )
     if not manifest.overall_match:
         raise ValueError(
             "Training-candidate export requires control calibration overall_match=true"
@@ -194,9 +208,9 @@ def _require_current_harness_audit_cases(artifact: HarnessAuditArtifact) -> None
             )
 
 
-def _load_source_eval_task_hashes(
+def _load_source_eval_provenance(
     validation: TrajectoryReviewValidation,
-) -> EvalTaskHashes:
+) -> tuple[EvalTaskHashes, HarnessRuntimeProvenance]:
     trajectory_manifest = validation.source_export.manifest
     source_artifact_dir = _external_path(trajectory_manifest.source_artifact_dir)
     expected_manifest_path = source_artifact_dir / MANIFEST_FILENAME
@@ -230,7 +244,7 @@ def _load_source_eval_task_hashes(
             source_manifest.eval_suite_id != trajectory_manifest.source_eval_suite_id
         ):
             raise ValueError("Trajectory export source eval suite identity mismatch")
-    return source_manifest.task_hashes
+    return source_manifest.task_hashes, source_manifest.runtime_provenance
 
 
 def _require_matching_control_tasks(

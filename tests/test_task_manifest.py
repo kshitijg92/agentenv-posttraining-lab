@@ -58,7 +58,7 @@ def test_repo_patch_python_task_pack_validates() -> None:
     result = validate_task_pack(TASK_PACK)
 
     assert result.task_pack_id == "repo_patch_python_v0"
-    assert result.task_count == 4
+    assert result.task_count == 14
 
 
 def test_task_pack_validation_rejects_missing_required_file(tmp_path: Path) -> None:

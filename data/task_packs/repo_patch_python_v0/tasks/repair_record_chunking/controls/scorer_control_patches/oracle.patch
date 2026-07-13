@@ -1,0 +1,27 @@
+diff --git a/src/chunking.py b/src/chunking.py
+index 34b107c..968104e 100644
+--- a/src/chunking.py
++++ b/src/chunking.py
+@@ -1,9 +1,19 @@
+-from typing import TypeVar
++from collections.abc import Iterable
++from typing import TypeVar
+ 
+ 
+ T = TypeVar("T")
+ 
+ 
+-def chunk_records(records: list[T], size: int) -> list[list[T]]:
++def chunk_records(records: Iterable[T], size: int) -> list[list[T]]:
+     """Split records into ordered chunks."""
+-    return [records[index : index + size] for index in range(0, len(records), size)]
++    if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
++        raise ValueError("size must be a positive integer")
++    try:
++        materialized = list(records)
++    except TypeError as exc:
++        raise ValueError("records must be iterable") from exc
++    return [
++        materialized[index : index + size]
++        for index in range(0, len(materialized), size)
++    ]

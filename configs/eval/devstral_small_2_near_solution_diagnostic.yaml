@@ -1,0 +1,18 @@
+name: devstral_small_2_near_solution_diagnostic
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_interval_coalescing
+split: dev
+policies:
+  devstral-small-2-24b:
+    type: agent_model
+    model_config: configs/models/ollama_devstral_small_2_24b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

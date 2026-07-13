@@ -1,0 +1,32 @@
+id: repair_interval_coalescing
+domain: repo_patch_python
+split: dev
+instruction: "Fix coalesce_intervals so it accepts a finite iterable of two-item iterables, validates both endpoints as integers other than bool with start <= end, and returns a new sorted list of (start, end) tuples. Merge overlapping intervals and intervals that share an endpoint; do not merge merely adjacent integer ranges. Empty input returns an empty list. Do not mutate the input or nested interval objects. Non-iterable input, malformed pairs, invalid endpoints, and reversed intervals raise ValueError."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: interval_coalescing_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 20
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_INTERVAL_COALESCING_PRIVATE"

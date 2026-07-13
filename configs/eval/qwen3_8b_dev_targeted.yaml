@@ -1,0 +1,21 @@
+name: qwen3_8b_dev_targeted
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_config_precedence
+  - repair_header_merge
+  - repair_record_chunking
+  - repair_query_encoding
+split: dev
+policies:
+  qwen3-8b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_8b.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

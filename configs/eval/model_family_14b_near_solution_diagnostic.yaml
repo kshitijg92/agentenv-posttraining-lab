@@ -1,0 +1,25 @@
+name: model_family_14b_near_solution_diagnostic
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_interval_coalescing
+split: dev
+policies:
+  qwen3-14b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  deepseek-r1-distill-14b:
+    type: agent_model
+    model_config: configs/models/ollama_deepseek_r1_distill_qwen_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

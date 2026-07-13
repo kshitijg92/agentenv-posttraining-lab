@@ -1,0 +1,14 @@
+diff --git a/src/template.py b/src/template.py
+index d9178d8..b3d63dc 100644
+--- a/src/template.py
++++ b/src/template.py
+@@ -1,5 +1,9 @@
+ def expand_template(template: str, values: dict[str, str]) -> str:
+     """Expand named placeholders in a template."""
++    if not isinstance(template, str):
++        raise ValueError("template must be a string")
++    if not isinstance(values, dict):
++        raise ValueError("values must be a dict")
+     result = template
+     for name, value in values.items():
+         result = result.replace("${" + name + "}", value)

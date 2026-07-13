@@ -1,0 +1,11 @@
+diff --git a/src/retry.py b/src/retry.py
+index 4f793b9..f477ca0 100644
+--- a/src/retry.py
++++ b/src/retry.py
+@@ -5,4 +5,6 @@ def retry_delays(
+     cap: float,
+ ) -> list[float]:
+     """Build a capped exponential retry schedule."""
++    if not isinstance(attempts, int) or attempts < 0:
++        raise ValueError("attempts must be non-negative")
+     return [min(base_delay * multiplier**index, cap) for index in range(attempts)]

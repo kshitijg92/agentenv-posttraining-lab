@@ -1,0 +1,49 @@
+diff --git a/src/retry.py b/src/retry.py
+index 4f793b9..f5afcd3 100644
+--- a/src/retry.py
++++ b/src/retry.py
+@@ -1,8 +1,43 @@
++import math
++
++
++def _finite_float(value: object, name: str, minimum: float) -> float:
++    if isinstance(value, bool) or not isinstance(value, (int, float)):
++        raise ValueError(f"{name} must be an int or float")
++    try:
++        result = float(value)
++    except (OverflowError, TypeError, ValueError) as exc:
++        raise ValueError(f"{name} must be representable as a float") from exc
++    if not math.isfinite(result) or result < minimum:
++        raise ValueError(f"{name} is outside its valid range")
++    return result
++
++
+ def retry_delays(
+     base_delay: float,
+     multiplier: float,
+     attempts: int,
+     cap: float,
+ ) -> list[float]:
+     """Build a capped exponential retry schedule."""
+-    return [min(base_delay * multiplier**index, cap) for index in range(attempts)]
++    base = _finite_float(base_delay, "base_delay", 0.0)
++    factor = _finite_float(multiplier, "multiplier", 1.0)
++    limit = _finite_float(cap, "cap", 0.0)
++    if isinstance(attempts, bool) or not isinstance(attempts, int) or attempts < 0:
++        raise ValueError("attempts must be a non-negative integer")
++
++    delays: list[float] = []
++    current = min(base, limit)
++    for _ in range(attempts):
++        delays.append(current)
++        if current >= limit or current == 0.0 or factor == 1.0:
++            continue
++        if current > limit / factor:
++            current = limit
++            continue
++        candidate = current * factor
++        if not math.isfinite(candidate) or candidate >= limit:
++            current = limit
++        else:
++            current = candidate
++    return delays

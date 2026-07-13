@@ -1,0 +1,10 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {"steps": [
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{}}"},
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/duration.py\",\"content\":\"import math\\nimport re\\n_DURATION_RE = re.compile(r'([0-9]+(?:\\\\.[0-9]+)?)(ms|s|m|h)')\\n_MULTIPLIERS = {'ms': .001, 's': 1., 'm': 60., 'h': 3600.}\\ndef parse_duration(value: str) -> float:\\n    if not isinstance(value, str): raise ValueError('string required')\\n    match = _DURATION_RE.fullmatch(value)\\n    if match is None: raise ValueError('invalid duration')\\n    number, unit = match.groups()\\n    result = float(number) * _MULTIPLIERS[unit]\\n    if not math.isfinite(result): raise ValueError('finite required')\\n    return result\\n\"}}"},
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"},
+    {"output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"}
+  ]},
+  "expected_result": {"prompt_loop_status": "completed", "tool_results": [{"tool_name": "read_file", "status": "error", "error_class": "InvalidToolInput"}, {"tool_name": "write_file", "status": "ok"}, {"tool_name": "run_tests", "status": "ok"}]}
+}

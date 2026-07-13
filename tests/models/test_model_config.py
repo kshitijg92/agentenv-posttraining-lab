@@ -15,6 +15,7 @@ from agentenv.orchestrators.agent_task_run import (
 
 
 MODEL_CONFIG = Path("configs/models/openai_compatible_chat_placeholder.yaml")
+OLLAMA_MODEL_CONFIG = Path("configs/models/ollama_qwen2_5_coder_14b.yaml")
 DECODING_CONFIG = Path("configs/decoding/greedy_1024.yaml")
 
 
@@ -31,6 +32,15 @@ def test_load_model_config_reads_openai_compatible_chat_config() -> None:
     assert config.capabilities.supports_stop is True
     assert config.capabilities.supports_top_k is False
     assert config.prompt_adapter is None
+    assert config.agent_action_format == "prompt_only"
+    assert config.provider_runtime_probe is None
+
+
+def test_load_ollama_model_config_requires_runtime_probe() -> None:
+    config = load_model_config(OLLAMA_MODEL_CONFIG)
+
+    assert config.model_id == "qwen2.5-coder:14b"
+    assert config.provider_runtime_probe == "ollama"
 
 
 def test_load_decoding_config_reads_generation_config() -> None:
@@ -69,10 +79,13 @@ def test_model_config_provenance_artifact_records_sanitized_config() -> None:
             "token_usage": "native",
         },
         "model_id": "placeholder-model",
+        "agent_action_format": "prompt_only",
         "prompt_adapter": None,
         "provider": "openai_compatible_chat",
+        "provider_runtime_probe": None,
         "version": "model_config_v0",
     }
+    assert artifact["provider_runtime"] is None
 
 
 def test_file_backed_decoding_config_provenance_artifact_records_source() -> None:

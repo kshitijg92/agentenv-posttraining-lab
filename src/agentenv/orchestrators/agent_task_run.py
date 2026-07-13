@@ -33,6 +33,7 @@ from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.ids import new_agent_attempt_id
 from agentenv.models.client import ModelClient
 from agentenv.models.config_schema import ModelConfig
+from agentenv.models.runtime_schema import ProviderRuntimeProvenance
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_schema import (
     AgentTaskRunResult,
@@ -417,6 +418,7 @@ def model_config_provenance_artifact(
     model_config: ModelConfig,
     model_config_path: Path,
     model_config_hash: str,
+    provider_runtime_provenance: ProviderRuntimeProvenance | None = None,
 ) -> ModelConfigProvenance:
     return ModelConfigProvenance.model_validate(
         {
@@ -424,6 +426,7 @@ def model_config_provenance_artifact(
             "source_path": str(model_config_path),
             "source_hash": model_config_hash,
             "config": redact_jsonable(json.loads(model_config.model_dump_json())),
+            "provider_runtime": provider_runtime_provenance,
         }
     )
 

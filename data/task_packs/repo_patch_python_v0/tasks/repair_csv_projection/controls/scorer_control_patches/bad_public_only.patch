@@ -1,0 +1,14 @@
+diff --git a/src/csv_projection.py b/src/csv_projection.py
+index a5d8609..169ad91 100644
+--- a/src/csv_projection.py
++++ b/src/csv_projection.py
+@@ -1,5 +1,9 @@
+ def project_csv(text: str, columns: list[str]) -> str:
+     """Return selected CSV columns."""
++    if not isinstance(text, str) or not text:
++        raise ValueError("CSV text required")
++    if not isinstance(columns, list) or not columns:
++        raise ValueError("columns required")
+     lines = text.strip().splitlines()
+     header = lines[0].split(",")
+     indices = [header.index(column) for column in columns]

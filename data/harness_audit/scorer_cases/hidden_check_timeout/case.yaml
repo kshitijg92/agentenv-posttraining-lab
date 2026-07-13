@@ -7,4 +7,4 @@ expected_hidden_status: FAIL
 purpose: "Patch that passes public checks but hangs during hidden validation should time out with phase-specific status."
 manifest_overrides:
   limits:
-    timeout_seconds: 1
+    timeout_seconds: 5

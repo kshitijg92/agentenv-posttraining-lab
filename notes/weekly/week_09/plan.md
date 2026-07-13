@@ -173,8 +173,8 @@ docs/post_training_data_contract.md
 preference dataset schema/builder/export
 negative-example export boundary
 tool-call serialization and loss-masking tests
-configs/train/week09_sft_smoke.yaml
-configs/train/week09_dpo_deferred.yaml
+configs/train/positive_sft_smoke.yaml
+configs/train/preference_smoke_deferred.yaml
 docs/dpo_deferred_note.md
 notes/weekly/week_09/implementation_notes.md
 notes/weekly/week_09/learnings.md
@@ -247,8 +247,8 @@ notes/weekly/week_09/implementation_notes.md
 notes/weekly/week_09/learnings.md
 docs/post_training_data_contract.md
 docs/dpo_deferred_note.md
-configs/train/week09_sft_smoke.yaml
-configs/train/week09_dpo_deferred.yaml
+configs/train/positive_sft_smoke.yaml
+configs/train/preference_smoke_deferred.yaml
 ```
 
 Likely code/test artifacts, after design:
@@ -268,7 +268,7 @@ src/agentenv/training/negative_examples.py
 src/agentenv/training/sft_schema.py
 src/agentenv/training/serialization.py
 src/agentenv/training/loss_masking.py
-configs/data/post_training_week09.yaml
+configs/data/post_training_candidates.yaml
 ```
 
 Only create these if they clarify the boundary. Do not split files just to match

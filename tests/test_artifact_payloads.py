@@ -884,6 +884,8 @@ def _model_config() -> dict[str, Any]:
             "supports_top_k": False,
         },
         "prompt_adapter": None,
+        "agent_action_format": "prompt_only",
+        "provider_runtime_probe": None,
     }
 
 
@@ -907,6 +909,7 @@ def _model_config_provenance() -> dict[str, Any]:
         "source_path": "configs/models/unit.yaml",
         "source_hash": "xxh64:model",
         "config": _model_config(),
+        "provider_runtime": None,
     }
 
 

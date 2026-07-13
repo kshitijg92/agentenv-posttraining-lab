@@ -1,0 +1,32 @@
+id: repair_retry_schedule
+domain: repo_patch_python
+split: dev
+instruction: "Fix retry_delays so it returns exactly attempts floating-point delays. base_delay, multiplier, and cap must each be an int or float other than bool that converts to a finite float; base_delay and cap must be non-negative and multiplier must be at least 1. attempts must be a non-boolean integer at least zero. Delay i is min(base_delay * multiplier**i, cap), but the implementation must avoid overflow and every returned value must remain finite. Invalid inputs raise ValueError."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: retry_schedule_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 20
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_RETRY_SCHEDULE_PRIVATE"

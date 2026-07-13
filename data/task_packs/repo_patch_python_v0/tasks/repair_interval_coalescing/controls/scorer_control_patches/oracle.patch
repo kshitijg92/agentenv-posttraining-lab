@@ -1,0 +1,55 @@
+diff --git a/src/intervals.py b/src/intervals.py
+index bb635c3..fe30acd 100644
+--- a/src/intervals.py
++++ b/src/intervals.py
+@@ -1,14 +1,47 @@
++def _validated_intervals(intervals: object) -> list[tuple[int, int]]:
++    if isinstance(intervals, (str, bytes)):
++        raise ValueError("intervals must be a non-string iterable")
++    try:
++        raw_intervals = list(intervals)  # type: ignore[arg-type]
++    except TypeError as exc:
++        raise ValueError("intervals must be iterable") from exc
++
++    validated: list[tuple[int, int]] = []
++    for item in raw_intervals:
++        if isinstance(item, (str, bytes)):
++            raise ValueError("each interval must be a two-item iterable")
++        try:
++            pair = tuple(item)  # type: ignore[arg-type]
++        except TypeError as exc:
++            raise ValueError("each interval must be iterable") from exc
++        if len(pair) != 2:
++            raise ValueError("each interval must contain two endpoints")
++        start, end = pair
++        if (
++            isinstance(start, bool)
++            or isinstance(end, bool)
++            or not isinstance(start, int)
++            or not isinstance(end, int)
++        ):
++            raise ValueError("interval endpoints must be integers")
++        if start > end:
++            raise ValueError("interval start must not exceed end")
++        validated.append((start, end))
++    return sorted(validated)
++
++
+ def coalesce_intervals(
+     intervals: list[tuple[int, int]],
+ ) -> list[tuple[int, int]]:
+     """Merge overlapping intervals."""
+-    if not intervals:
++    validated = _validated_intervals(intervals)
++    if not validated:
+         return []
+-    merged = [intervals[0]]
+-    for start, end in intervals[1:]:
++    merged = [validated[0]]
++    for start, end in validated[1:]:
+         previous_start, previous_end = merged[-1]
+         if start <= previous_end:
+             merged[-1] = (previous_start, max(previous_end, end))
+         else:
+             merged.append((start, end))
+     return merged

@@ -1,0 +1,20 @@
+name: qwen3_14b_dev_yield_pilot
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_jsonl_deduper
+  - preserve_cli_error_codes
+  - repair_config_precedence
+split: dev
+policies:
+  local-qwen-dpo-yield-pilot:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 8
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

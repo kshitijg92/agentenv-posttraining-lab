@@ -266,16 +266,21 @@ def test_run_scorer_audit_layer_persists_hash_pinned_typed_records(
             "directory for execution. This file records the supported override "
             "only; it is not a replay manifest."
         ),
-        "overrides": {"limits": {"timeout_seconds": {"from": 120, "to": 1}}},
         "source_task_manifest": (
             "data/task_packs/repo_patch_python_v0/tasks/toy_python_fix/task.yaml"
         ),
     }
     assert records_by_case["hidden_check_timeout"].manifest_override == (
-        expected_manifest_override
+        {
+            **expected_manifest_override,
+            "overrides": {"limits": {"timeout_seconds": {"from": 120, "to": 5}}},
+        }
     )
     assert records_by_case["public_check_timeout"].manifest_override == (
-        expected_manifest_override
+        {
+            **expected_manifest_override,
+            "overrides": {"limits": {"timeout_seconds": {"from": 120, "to": 1}}},
+        }
     )
     for record in layer_run.records:
         assert isinstance(record, CompletedScorerAuditRecord)

@@ -18,6 +18,10 @@ from agentenv.controls.public_check_idempotency_schema import (
 )
 from agentenv.evals.schema import SCORER_CONTROL_LAYER, ControlLayer
 from agentenv.models.config_schema import ModelConfig
+from agentenv.models.runtime_schema import (
+    OllamaProviderRuntimeProvenance,
+    ProviderRuntimeProvenance,
+)
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunStatus
@@ -463,7 +467,7 @@ class ControlFlakeDetection(BaseModel):
         }
         if drifted_groups or "NON_IDEMPOTENT" in public_check_statuses:
             expected_status: ControlFlakeDetectionStatus = "drifted"
-        elif "INCONCLUSIVE" in public_check_statuses:
+        elif self.repeats < 2 or "INCONCLUSIVE" in public_check_statuses:
             expected_status = "inconclusive"
         else:
             expected_status = "stable"
@@ -616,6 +620,30 @@ class ModelConfigProvenance(BaseModel):
     source_path: str = Field(min_length=1)
     source_hash: str = Field(min_length=1)
     config: ModelConfig
+    provider_runtime: ProviderRuntimeProvenance | None = None
+
+    @model_validator(mode="after")
+    def validate_provider_runtime(self) -> "ModelConfigProvenance":
+        probe = self.config.provider_runtime_probe
+        if probe is None:
+            if self.provider_runtime is not None:
+                raise ValueError(
+                    "provider_runtime requires a configured provider_runtime_probe"
+                )
+            return self
+        if self.provider_runtime is None:
+            raise ValueError(
+                "configured provider_runtime_probe requires provider_runtime evidence"
+            )
+        if probe == "ollama" and not isinstance(
+            self.provider_runtime, OllamaProviderRuntimeProvenance
+        ):
+            raise ValueError("ollama probe requires Ollama provider runtime evidence")
+        if self.provider_runtime.model_id != self.config.model_id:
+            raise ValueError(
+                "provider_runtime model_id must match the configured model_id"
+            )
+        return self
 
 
 class DecodingConfigProvenance(BaseModel):

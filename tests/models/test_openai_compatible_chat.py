@@ -167,6 +167,50 @@ def test_openai_compatible_chat_applies_system_prompt_suffix(
     assert response.output_text == '{"action":"final_answer"}'
 
 
+def test_openai_compatible_chat_can_request_agent_action_json_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1/")
+    monkeypatch.setenv("AGENTENV_MODEL_API_KEY", "secret-token")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        response_format = payload["response_format"]
+        assert response_format["type"] == "json_schema"
+        schema = response_format["json_schema"]["schema"]
+        assert schema["oneOf"][0]["properties"]["action"] == {
+            "type": "string",
+            "const": "tool_call",
+        }
+        assert schema["oneOf"][1]["properties"]["action"] == {
+            "type": "string",
+            "const": "final_answer",
+        }
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"action":"final_answer","text":"done"}'
+                        },
+                        "finish_reason": "stop",
+                    }
+                ]
+            },
+        )
+
+    config = _model_config().model_copy(update={"agent_action_format": "json_schema"})
+    client = OpenAICompatibleChatModelClient(
+        config=config,
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    response = client.generate(_messages(), _decoding_config())
+
+    assert response.finish_reason == "stop_criteria_met"
+
+
 def test_openai_compatible_chat_maps_length_finish_reason(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

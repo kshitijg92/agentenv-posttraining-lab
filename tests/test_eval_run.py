@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import agentenv.orchestrators.eval_run as eval_run_module
 from agentenv.agents.prompts import AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
 from agentenv.artifacts import ArtifactDirectoryError
 from agentenv.artifacts.manifests import load_eval_run_manifest
@@ -271,9 +272,12 @@ def test_agent_model_eval_records_missing_model_env_failure(
         },
         "model_id": "placeholder-model",
         "prompt_adapter": None,
+        "agent_action_format": "prompt_only",
+        "provider_runtime_probe": None,
         "provider": "openai_compatible_chat",
         "version": "model_config_v0",
     }
+    assert model_config_provenance["provider_runtime"] is None
     assert "secret-token" not in (attempt_dir / "model_config.json").read_text()
     validate_trace_file(tmp_path / "eval/trace.jsonl")
     trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
@@ -557,6 +561,30 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
         tmp_path / "eval/attempts/toy_python_fix_001__attempt_001/attempt.json"
     ).is_file()
     assert (tmp_path / "eval/trace.jsonl").is_file()
+
+
+def test_run_eval_config_refuses_manifest_if_harness_runtime_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = eval_run_module.capture_harness_runtime_provenance(
+        eval_run_module.harness_repo_root()
+    )
+    changed_runtime = runtime.model_copy(
+        update={"python_version": f"{runtime.python_version}-changed"}
+    )
+    captures = iter((runtime, changed_runtime))
+    monkeypatch.setattr(
+        eval_run_module,
+        "capture_harness_runtime_provenance",
+        lambda _repo_root: next(captures),
+    )
+    out_dir = tmp_path / "eval"
+
+    with pytest.raises(ValueError, match="Harness runtime changed while the eval"):
+        run_eval_config(CONTROL_EVAL_CONFIG, "oracle", out_dir)
+
+    assert not (out_dir / "manifest.json").exists()
 
 
 def test_validate_unique_eval_attempt_ids_rejects_duplicates(tmp_path: Path) -> None:

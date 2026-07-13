@@ -1139,6 +1139,7 @@ def test_control_manifest_rejects_false_overall_match(tmp_path: Path) -> None:
         "error_class": "MaxTurnsExceeded",
     }
     agent_record["match"] = False
+    manifest["overall_match"] = True
     path = _write_json(tmp_path / "manifest.json", manifest)
 
     with pytest.raises(
@@ -1168,6 +1169,8 @@ def test_control_manifest_requires_every_record_repeat_index(
     manifest = _control_manifest()
     manifest["repeats"] = 2
     manifest["flake_detection"]["repeats"] = 2
+    manifest["flake_detection"]["status"] = "stable"
+    manifest["overall_match"] = True
     path = _write_json(tmp_path / "manifest.json", manifest)
 
     with pytest.raises(
@@ -1294,6 +1297,7 @@ def _eval_run_manifest() -> dict[str, Any]:
         "task_pack": "data/task_packs/repo_patch_python_v0",
         "split": "dev",
         "task_hashes": _eval_task_hashes(),
+        "runtime_provenance": _runtime_provenance(),
         "policy": "agent-happy",
         "policy_type": "agent_control_script",
         "policy_family": "control",
@@ -1351,6 +1355,7 @@ def _eval_suite_manifest() -> dict[str, Any]:
         "task_pack": "data/task_packs/repo_patch_python_v0",
         "split": "dev",
         "task_hashes": _eval_task_hashes(),
+        "runtime_provenance": _runtime_provenance(),
         "tasks": ["task_001"],
         "task_count": 1,
         "policy_count": 1,
@@ -1403,10 +1408,10 @@ def _control_manifest() -> dict[str, Any]:
         "task_hashes": _eval_task_hashes(),
         "repeats": 1,
         "record_count": 2,
-        "overall_match": True,
+        "overall_match": False,
         "flake_detection": {
             "schema_version": CONTROL_FLAKE_DETECTION_SCHEMA_VERSION,
-            "status": "stable",
+            "status": "inconclusive",
             "repeats": 1,
             "groups_checked": 2,
             "drifted_groups": 0,

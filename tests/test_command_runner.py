@@ -1,3 +1,5 @@
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -67,3 +69,39 @@ def test_run_process_applies_non_sensitive_env_overrides_and_scrubs_sensitive_on
     )
 
     assert result.stdout == f"{runner_temp}\nmissing\n"
+
+
+def test_run_shell_timeout_kills_descendant_processes(tmp_path: Path) -> None:
+    child_pid_path = tmp_path / "child.pid"
+    child_script = tmp_path / "child.py"
+    child_script.write_text(
+        "import os, sys, time\n"
+        "from pathlib import Path\n"
+        "Path(sys.argv[1]).write_text(str(os.getpid()))\n"
+        "time.sleep(30)\n"
+    )
+    parent_script = tmp_path / "parent.py"
+    parent_script.write_text(
+        "import subprocess, sys, time\n"
+        "subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2]])\n"
+        "time.sleep(30)\n"
+    )
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        run_shell(
+            shlex.join(
+                [
+                    sys.executable,
+                    str(parent_script),
+                    str(child_script),
+                    str(child_pid_path),
+                ]
+            ),
+            tmp_path,
+            timeout_seconds=1,
+        )
+
+    child_pid = int(child_pid_path.read_text())
+    child_stat_path = Path(f"/proc/{child_pid}/stat")
+    if child_stat_path.exists():
+        assert child_stat_path.read_text().split()[2] == "Z"

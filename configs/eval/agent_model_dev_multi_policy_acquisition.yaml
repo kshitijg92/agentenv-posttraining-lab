@@ -1,0 +1,65 @@
+name: agent_model_dev_multi_policy_acquisition
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_jsonl_deduper
+  - preserve_cli_error_codes
+  - repair_config_precedence
+  - repair_header_merge
+  - repair_duration_parser
+  - repair_record_chunking
+  - repair_query_encoding
+  - repair_semver_precedence
+  - repair_csv_projection
+  - repair_relative_path
+  - repair_retry_schedule
+  - repair_interval_coalescing
+  - repair_template_expansion
+split: dev
+policies:
+  qwen2-5-coder-14b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-7b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_7b.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-3b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-14b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-8b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_8b.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  deepseek-r1-distill-14b:
+    type: agent_model
+    model_config: configs/models/ollama_deepseek_r1_distill_qwen_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

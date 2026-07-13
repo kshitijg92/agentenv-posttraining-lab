@@ -59,9 +59,11 @@ def test_system_message_defines_strict_json_action_protocol(
 
     assert "Return exactly one JSON object per turn." in system_message.content
     assert "Do not output free-form chat" in system_message.content
+    assert "Do not wrap the JSON object in ``` fences." in system_message.content
     assert "Only interact through tool_call or final_answer actions." in (
         system_message.content
     )
+    assert 'action must be exactly "tool_call"' in system_message.content
     assert '"action":"tool_call"' in system_message.content
     assert '"action":"final_answer"' in system_message.content
     assert "- list_files: List files under" in system_message.content
@@ -72,7 +74,27 @@ def test_system_message_defines_strict_json_action_protocol(
     assert '"max_files":200' in system_message.content
     assert '"arguments":{"path":"src/file.py"}' in system_message.content
     assert '"content":"entire replacement file contents..."' in system_message.content
+    assert '"command":"uv run pytest tests/test_public.py"' in system_message.content
+    assert "copy one listed public-check command exactly" in system_message.content
     assert "Public checks are diagnostic only" in system_message.content
+
+
+def test_run_tests_example_uses_exact_task_public_check(tmp_path: Path) -> None:
+    agent_task_view = _agent_task_view(tmp_path).model_copy(
+        update={
+            "public_checks": ["uv run --quiet --frozen pytest tests/test_public.py"]
+        }
+    )
+
+    system_message = build_initial_messages(agent_task_view)[0]
+
+    assert (
+        '"command":"uv run --quiet --frozen pytest tests/test_public.py"'
+        in system_message.content
+    )
+    assert '"command":"uv run pytest tests/test_public.py"' not in (
+        system_message.content
+    )
 
 
 def test_system_message_places_one_json_rule_before_final_answer_usage(

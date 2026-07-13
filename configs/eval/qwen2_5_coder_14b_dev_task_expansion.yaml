@@ -1,0 +1,23 @@
+name: qwen2_5_coder_14b_dev_task_expansion
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_semver_precedence
+  - repair_csv_projection
+  - repair_relative_path
+  - repair_retry_schedule
+  - repair_interval_coalescing
+  - repair_template_expansion
+split: dev
+policies:
+  qwen2-5-coder-14b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_4096.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true
