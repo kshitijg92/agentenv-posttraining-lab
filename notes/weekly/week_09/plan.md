@@ -465,3 +465,36 @@ If GPU training or positive data is blocked:
 - continue filtering and preference-schema work.
 
 Do not claim model improvement from this week.
+
+## Current Acquisition Checkpoint (2026-07-13)
+
+The current-runtime anchor/contrast acquisition now provides:
+
+```text
+60 trajectories
+18 hidden PASS
+30 scored non-PASS
+12 unscored model-loop failures
+39 scored PASS-vs-non-PASS combinations with matching logical initial context
+31 such combinations after exact assistant-behavior deduplication
+27 such combinations after exact patch deduplication
+```
+
+The aggregate harness audit passes, control calibration is stable at three
+repeats, and all 14 declared public checks are idempotent across two seed-state
+runs. All 60 trajectory reviews remain `not_reviewed`, so all 60 training
+candidates remain analysis-only.
+
+This satisfies the acquisition-groundwork objective for later review of at
+least 20 comparison candidates. It does not satisfy Checkpoint 3: no
+chosen/rejected authority, comparability rule beyond initial context, review
+decision, preference record, serialization contract, or DPO loss policy has
+been designed.
+
+The next guided design question remains:
+
+```text
+Which differences between two trajectories with the same logical initial
+context are allowed before a human preference judgment becomes too confounded
+to support one chosen/rejected label?
+```

@@ -2668,3 +2668,108 @@ control, replay, and trajectory regressions passed 93 tests after this change.
 
 Final harness audit and control calibration were intentionally deferred until
 after current-runtime reacquisition is complete.
+
+### Current-Runtime Anchor/Contrast Acquisition And Final Trust Checkpoint
+
+Ran the cadence-neutral acquisition config:
+
+```text
+configs/eval/natural_model_anchor_contrast_acquisition.yaml
+configs/decoding/sampling_8192_long_timeout.yaml
+```
+
+The fixed matrix used five historically positive-yield dev tasks, four local
+models, three sampled attempts per model/task, 8192 maximum new tokens, and a
+900-second provider timeout. It produced 60 attempts under one eval-config hash
+and harness runtime:
+
+```text
+config hash: xxh64:77f2d392852eb08e
+harness runtime: xxh64:b899f465ef82ddef
+
+18 PASS
+22 HIDDEN_TEST_FAIL
+8 PUBLIC_TEST_FAIL
+12 unscored model-loop failures
+```
+
+Per-policy hidden-pass yield was Devstral 9, Qwen3 14B 0, Qwen3-Coder 30B-A3B
+6, and Qwen2.5-Coder 14B 3. Each attempt pins the observed Ollama server
+version and immutable model digest.
+
+Five Qwen3 14B attempts exhausted the 20-turn task limit. Compact signature
+analysis showed exact periodic multi-tool cycles covering most of every run,
+with only the initial write changing canonical workspace state. A proposed
+50-turn follow-up was therefore skipped: it would lengthen demonstrated loops
+rather than isolate a decoding-budget ceiling. The official redundancy detector
+reported zero blocks because its current declared scope covers adjacent
+identical calls, not periodic multi-tool cycles.
+
+Exported all four policy runs into canonical trajectory artifacts and
+initialized 60 reviews. All reviews remain `not_reviewed`; none were
+auto-accepted. After current-runtime trust evidence existed, exported four
+training-candidate artifacts. The gate result was deliberately:
+
+```text
+analysis-only: 60
+positive-SFT review eligible: 0
+negative-example eligible: 0
+preference-pairing eligible: 0
+```
+
+Final trust artifacts for this cohort:
+
+```text
+harness audit:
+  experiments/runs/natural_model_anchor_contrast_acquisition/harness_audit
+  PASS aggregate, PASS agent, PASS scorer
+
+control calibration:
+  experiments/runs/natural_model_anchor_contrast_acquisition/control_calibration
+  252/252 matching controls
+  repeats=3
+  flake status=stable
+  84 groups checked, 0 drifted
+  14/14 public checks IDEMPOTENT at repeat_count=2
+```
+
+Both trust artifacts and all four eval manifests pin runtime
+`xxh64:b899f465ef82ddef`.
+
+Updated the ignored acquisition evidence helper after the training-package
+reorganization and added a logical-initial-context comparison key. The key
+includes the semantic pre-adapter message prefix, provider prompt adapter, and
+agent action format, while excluding occurrence ids. This corrected an initial
+overcount that treated `/no_think` and non-`/no_think` policies as prompt
+equivalent.
+
+Current comparison inventory:
+
+```text
+task-only scored PASS-vs-non-PASS combinations: 91
+logical-context-matched combinations: 39
+exact-assistant-behavior-distinct combinations: 31
+exact-patch-distinct combinations: 27
+same-policy combinations: 6
+```
+
+These remain acquisition ingredients, not preference rows or labels.
+
+The behavior audit found 55 exact assistant-action clusters across 60
+trajectories. The privacy audit found zero configured sensitive matches, zero
+semantic-transcript findings, and zero candidate-patch findings. It retained
+`NORMALIZATION_REQUIRED` because 18 user-home Python-installation paths across
+10 trajectories remain in audit-only raw `ToolResult.stdout`. The current
+positive-SFT builder consumes semantic messages rather than those raw fields;
+future consumers must declare their serialization boundary before relying on
+that narrower fact.
+
+Current analysis entry points:
+
+```text
+experiments/analysis/natural_model_anchor_contrast_acquisition_evidence.json
+experiments/analysis/natural_model_anchor_contrast_acquisition_evidence.md
+experiments/analysis/natural_model_anchor_contrast_acquisition_behavior_clusters.json
+experiments/analysis/natural_model_anchor_contrast_acquisition_privacy_audit.json
+experiments/analysis/natural_model_anchor_contrast_acquisition_review_packet.md
+```

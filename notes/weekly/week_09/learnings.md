@@ -800,3 +800,65 @@ Such traces can remain useful for explicitly labeled historical analysis. They
 must not silently enter the new training pipeline. Training eligibility needs
 current-runtime reacquisition or an explicit, separately reviewed
 transformation whose weaker claim remains visible.
+
+### More Interaction Budget Can Amplify A Limit Cycle
+
+Reaching `max_turns` does not by itself show that the model needed more budget.
+The model may have been making useful progress when the boundary stopped it, or
+it may have entered a repeated policy loop much earlier.
+
+```text
+progressing trajectory + turn limit -> more turns may test a capacity boundary
+periodic state/action cycle         -> more turns amplify the same failure
+```
+
+The distinction requires trajectory evidence, not terminal status alone. Exact
+periodic action signatures, unchanged relevant state, and repeated equivalent
+observations are strong evidence against treating a larger limit as a fair
+"upper bound." Otherwise an acquisition can spend more compute while only
+creating longer, less reviewable negatives.
+
+A narrow mechanical-redundancy detector may legitimately decline to label a
+multi-tool cycle if its contract covers only adjacent identical calls. Detector
+silence then means the cycle lies outside current coverage, not that the
+behavior was efficient. Analysis observations and automated labels must retain
+their different authority.
+
+### Stored Transcript Equality May Omit Provider-Side Prompt Adaptation
+
+Two persisted transcript prefixes can be byte-identical even when the provider
+sent different logical instructions to the models. A prompt adapter may append
+content such as a thinking-mode directive only at request time, after the
+pre-adapter transcript has been recorded.
+
+The self-deception trap is:
+
+```text
+same stored prefix -> same compared prompt
+```
+
+Prompt comparability must include every transformation that affects the model's
+logical input, as well as the action-format contract. Occurrence ids should be
+excluded because they are provenance rather than semantics; provider-side
+instruction changes must be included because they can causally change behavior.
+This matters before counting cross-model outcomes as candidate comparisons.
+
+### Privacy Findings Need A Declared Consumer Boundary
+
+A trajectory artifact can contain both the semantic messages used for training
+and richer audit-only evidence. A path present in raw command-runner stdout but
+absent from the rendered tool observation has a different data consequence from
+a path present in the model's transcript.
+
+```text
+semantic-message finding -> already part of model context
+audit-only finding       -> becomes context only if a consumer serializes it
+```
+
+The second case is not permission to ignore the finding. It means eligibility
+depends on the declared dataset transformation. A consumer that uses only
+semantic messages can establish a narrower clean-context claim; a future
+consumer that embeds raw tool results must normalize or review those fields.
+Privacy audits should therefore report artifact scope and keep conservative
+overall status, rather than collapsing every finding into either harmlessness
+or universal leakage.
