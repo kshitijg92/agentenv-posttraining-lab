@@ -92,7 +92,11 @@ def run_agent_task_attempt(
     model_client: ModelClient,
     decoding_config: DecodingConfig,
     workspace_parent: Path | None = None,
+    *,
+    max_turns_override: int | None = None,
 ) -> AgentTaskRun:
+    if max_turns_override is not None and max_turns_override <= 0:
+        raise ValueError("max_turns_override must be greater than zero")
     task_manifest_path = task_manifest_path.resolve()
     agent_attempt_id = new_agent_attempt_id()
     started_at = _utc_now()
@@ -118,7 +122,11 @@ def run_agent_task_attempt(
             workspace_path=agent_interaction_workspace.path,
             allowed_tools=list(manifest.allowed_tools),
             public_checks=[check.command for check in manifest.public_checks],
-            max_turns=manifest.limits.max_turns,
+            max_turns=(
+                max_turns_override
+                if max_turns_override is not None
+                else manifest.limits.max_turns
+            ),
             timeout_seconds=manifest.limits.timeout_seconds,
             network=manifest.limits.network,
         )
@@ -232,11 +240,13 @@ def run_and_persist_agent_task_attempt_to_dir(
     agent_control_script: AgentControlScriptCase | dict[str, Any] | None = None,
     model_config_provenance: ModelConfigProvenance | dict[str, Any] | None = None,
     decoding_config_provenance: DecodingConfigProvenance | dict[str, Any] | None = None,
+    max_turns_override: int | None = None,
 ) -> AgentTaskRun:
     agent_task_run = run_agent_task_attempt(
         task_manifest_path,
         model_client,
         decoding_config,
+        max_turns_override=max_turns_override,
     )
     write_agent_task_run_artifacts(
         agent_task_run,

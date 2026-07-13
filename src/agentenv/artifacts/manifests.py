@@ -507,18 +507,23 @@ class PolicyMetadataFields(BaseModel):
         alias="decoding_config",
         min_length=1,
     )
+    max_turns_override: PositiveInt | None = None
     attempts_per_task: PositiveInt
     replay_repeats: NonNegativeInt
 
     @model_validator(mode="after")
     def validate_policy_metadata(self) -> "PolicyMetadataFields":
         if self.policy_type == SCORER_CONTROL_PATCH_POLICY_TYPE:
+            if self.max_turns_override is not None:
+                raise ValueError("control policies cannot override max_turns")
             _require_control_policy(
                 self,
                 policy_family=CONTROL_POLICY_FAMILY,
                 control_layer=SCORER_CONTROL_LAYER,
             )
         elif self.policy_type == AGENT_CONTROL_SCRIPT_POLICY_TYPE:
+            if self.max_turns_override is not None:
+                raise ValueError("control policies cannot override max_turns")
             _require_control_policy(
                 self,
                 policy_family=CONTROL_POLICY_FAMILY,

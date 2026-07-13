@@ -683,6 +683,20 @@ def test_eval_manifest_rejects_invalid_policy_metadata(tmp_path: Path) -> None:
         load_eval_run_manifest(path)
 
 
+def test_eval_manifest_rejects_max_turns_override_for_control_policy(
+    tmp_path: Path,
+) -> None:
+    manifest = _eval_run_manifest()
+    manifest["max_turns_override"] = 37
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    with pytest.raises(
+        ValidationError,
+        match="control policies cannot override max_turns",
+    ):
+        load_eval_run_manifest(path)
+
+
 def test_eval_manifest_rejects_field_name_alias_for_model_config(
     tmp_path: Path,
 ) -> None:

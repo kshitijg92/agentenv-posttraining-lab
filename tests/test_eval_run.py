@@ -46,6 +46,7 @@ def _write_agent_model_eval_config(path: Path) -> None:
                 "    type: agent_model",
                 "    model_config: configs/models/openai_compatible_chat_placeholder.yaml",
                 "    decoding_config: configs/decoding/greedy_1024.yaml",
+                "    max_turns_override: 37",
                 "    attempts: 2",
                 "    replay:",
                 "      repeats: 0",
@@ -173,6 +174,7 @@ def test_agent_model_eval_config_loads_and_validates_paths(tmp_path: Path) -> No
         == "configs/models/openai_compatible_chat_placeholder.yaml"
     )
     assert policy.decoding_config_path == "configs/decoding/greedy_1024.yaml"
+    assert policy.max_turns_override == 37
     assert policy.attempts == 2
     assert policy.replay.repeats == 0
     validate_eval_config_paths(config, config_path)
@@ -200,6 +202,7 @@ def test_agent_model_eval_records_missing_model_env_failure(
         "configs/models/openai_compatible_chat_placeholder.yaml"
     )
     assert run_manifest["decoding_config"] == "configs/decoding/greedy_1024.yaml"
+    assert run_manifest["max_turns_override"] == 37
     assert run_manifest["layer_counts"] == {
         "agent_status": {"agent_loop_failed": 2},
         "prompt_loop_status": {"model_error": 2},
@@ -228,6 +231,8 @@ def test_agent_model_eval_records_missing_model_env_failure(
     assert (attempt_dir / "agent_task_view.json").is_file()
     assert (attempt_dir / "model_config.json").is_file()
     assert (attempt_dir / "decoding_config.json").is_file()
+    agent_task_view = json.loads((attempt_dir / "agent_task_view.json").read_text())
+    assert agent_task_view["max_turns"] == 37
     assert (attempt_dir / "prompt_loop_result.json").is_file()
     assert not (attempt_dir / "agent_control_script.json").exists()
     assert not (attempt_dir / "candidate.patch").exists()
@@ -717,6 +722,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "control_name": "oracle",
             "attempts_per_task": 1,
             "replay_repeats": 1,
+            "max_turns_override": None,
             "eval_run_id": eval_matrix.policy_runs[0].eval_run_id,
             "artifact_dir": "policies/oracle",
             "manifest": "policies/oracle/manifest.json",
@@ -735,6 +741,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "control_name": "bad.noop",
             "attempts_per_task": 1,
             "replay_repeats": 1,
+            "max_turns_override": None,
             "eval_run_id": eval_matrix.policy_runs[1].eval_run_id,
             "artifact_dir": "policies/bad-noop",
             "manifest": "policies/bad-noop/manifest.json",
@@ -753,6 +760,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "control_name": "bad.public_only",
             "attempts_per_task": 1,
             "replay_repeats": 1,
+            "max_turns_override": None,
             "eval_run_id": eval_matrix.policy_runs[2].eval_run_id,
             "artifact_dir": "policies/bad-public-only",
             "manifest": "policies/bad-public-only/manifest.json",
