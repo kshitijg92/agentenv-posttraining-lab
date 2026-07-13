@@ -1,0 +1,43 @@
+name: natural_model_anchor_contrast_acquisition
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - preserve_cli_error_codes
+  - repair_jsonl_deduper
+  - repair_record_chunking
+  - repair_relative_path
+  - repair_semver_precedence
+split: dev
+policies:
+  devstral-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_devstral_small_2_24b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 3
+    replay:
+      repeats: 0
+  qwen3-14b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 3
+    replay:
+      repeats: 0
+  qwen3-coder-30b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 3
+    replay:
+      repeats: 0
+  qwen2-5-coder-14b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 3
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true
