@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from agentenv.training.repair_schema import (
+from agentenv.training.repairs.schema import (
     TRAINING_CANDIDATE_REPAIR_RECORD_SCHEMA_VERSION,
     RepairedTranscriptArtifact,
     TrainingCandidateRepairRecord,
@@ -114,9 +114,21 @@ def test_completed_repair_record_accepts_validated_derivative() -> None:
 def test_repaired_transcript_artifact_is_a_root_message_list() -> None:
     artifact = RepairedTranscriptArtifact.model_validate(
         [
-            {"role": "system", "content": "system"},
-            {"role": "user", "content": "task"},
-            {"role": "assistant", "content": '{"action":"final_answer"}'},
+            {
+                "message_id": "message_00000000000000000000000000000001",
+                "role": "system",
+                "content": "system",
+            },
+            {
+                "message_id": "message_00000000000000000000000000000002",
+                "role": "user",
+                "content": "task",
+            },
+            {
+                "message_id": "message_00000000000000000000000000000003",
+                "role": "assistant",
+                "content": '{"action":"final_answer"}',
+            },
         ]
     )
 

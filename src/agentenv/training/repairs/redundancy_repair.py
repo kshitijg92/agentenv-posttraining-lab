@@ -11,15 +11,15 @@ from agentenv.hashing import hash_file, hash_json
 from agentenv.models.schema import Message
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tools.schema import ToolResult
-from agentenv.training.mechanical_redundancy import (
+from agentenv.training.repairs.redundancy_detection import (
     assess_prompt_loop_mechanical_redundancy,
 )
-from agentenv.training.repair_schema import (
+from agentenv.training.repairs.schema import (
     RepairedTranscriptArtifact,
     TrainingCandidateRepairRecord,
     TrainingCandidateRepairReviewRecord,
 )
-from agentenv.training.schema import (
+from agentenv.training.candidates.schema import (
     MechanicalRedundancyAssessment,
     TrainingCandidateRecord,
 )

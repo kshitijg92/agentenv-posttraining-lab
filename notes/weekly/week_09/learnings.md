@@ -451,8 +451,8 @@ Training authorization is instead a conjunction of independently scoped
 claims. A repaired positive-SFT example still needs an eligible source
 candidate, a completed exact repair, an accepted review bound to that repair
 record, and valid transformed output. A downstream reviewer can validate its
-own layer but cannot erase an upstream split, leakage, task-outcome,
-reward-hack, or harness blocker.
+own layer but cannot erase an upstream split, leakage, reward-hack, or harness
+blocker.
 
 Binding the decision only to a stable ID is also insufficient when the record's
 content can change. The ID identifies which logical repair attempt is under
@@ -537,3 +537,37 @@ The reviewer identity and scope must remain visible and hash-pinned. Before a
 future dataset is used for training, the provisional decision must be ratified
 or replaced, and all dependent artifacts must be rebuilt. A numerical data
 target is not a reason to silently upgrade temporary review authority.
+
+### Task Failure And Evidence Failure Have Different Data Consequences
+
+A task failure says the policy did not complete the requested objective. It
+does not say every earlier assistant decision was wrong. By contrast, a
+harness, orchestration, leakage, or provenance failure says the evidence itself
+is not trustworthy enough to support a training claim.
+
+The distinction is:
+
+```text
+task failure     -> may still contain an approved positive prefix
+evidence failure -> cannot authorize positive training use
+```
+
+Task success is therefore useful for prioritizing scarce human review because
+successful runs are likely to have higher positive yield. It is not a sound
+schema-level requirement for positive SFT. A successful trajectory can contain
+bad actions, while a failed trajectory can contain good actions before its
+earliest causal mistake.
+
+### Positive Supervision Requires Objective-Specific Credit Assignment
+
+An assistant message is model-authored, but model authorship only makes it
+eligible to receive loss; it does not make it desirable to imitate. For clean-
+behavior SFT, an unrepaired trajectory can authorize only a contiguous prefix
+ending before the earliest causal error. Actions after that boundary are
+conditioned on the mistake and may teach recovery behavior instead.
+
+Recovery can be a legitimate separate objective with its own review and mask.
+The same trajectory may therefore be positive-prefix data for one objective,
+recovery data for another, a rejected preference branch, and full-fidelity
+analysis evidence. No general trajectory review can substitute for these
+use-specific decisions.

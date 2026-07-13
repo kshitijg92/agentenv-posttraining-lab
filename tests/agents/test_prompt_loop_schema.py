@@ -6,6 +6,7 @@ from agentenv.agents.prompts import (
     compute_agent_task_initial_prompt_builder_code_hash,
 )
 from agentenv.agents.schema import PromptLoopResult, TokenUsage
+from agentenv.ids import new_message_id
 from agentenv.models.schema import Message, ModelResponse
 from agentenv.tools.schema import ReadFileOutput, ToolResult
 
@@ -19,9 +20,18 @@ def _prompt_builder_fields() -> dict[str, str]:
 
 def _messages() -> list[Message]:
     return [
-        Message(role="system", content="Return one JSON action."),
-        Message(role="user", content="Fix the task."),
         Message(
+            message_id=new_message_id(),
+            role="system",
+            content="Return one JSON action.",
+        ),
+        Message(
+            message_id=new_message_id(),
+            role="user",
+            content="Fix the task.",
+        ),
+        Message(
+            message_id=new_message_id(),
             role="assistant",
             content='{"action": "final_answer", "text": "done"}',
             name="fake-scripted-v0",
@@ -57,6 +67,29 @@ def _tool_results() -> list[ToolResult]:
             duration_ms=1,
         )
     ]
+
+
+def test_prompt_loop_rejects_duplicate_message_ids() -> None:
+    messages = _messages()
+    messages[1] = messages[1].model_copy(
+        update={"message_id": messages[0].message_id}
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="prompt-loop message_ids must be unique",
+    ):
+        PromptLoopResult(
+            task_id="task_001",
+            **_prompt_builder_fields(),
+            status="completed",
+            turns_executed=1,
+            duration_ms=1,
+            token_usage=TokenUsage(),
+            messages=messages,
+            model_responses=_model_responses(),
+            tool_results=[],
+        )
 
 
 def test_token_usage_accepts_unknown_counts() -> None:

@@ -7,6 +7,7 @@ from typing import Any, TypedDict
 import httpx
 
 from agentenv.models.config_schema import OpenAICompatibleChatModelConfig
+from agentenv.ids import new_message_id
 from agentenv.models.schema import (
     DecodingConfig,
     Message,
@@ -194,7 +195,10 @@ def _adapt_messages_for_model(
             )
             return adapted_messages
 
-    return [Message(role="system", content=suffix), *adapted_messages]
+    return [
+        Message(message_id=new_message_id(), role="system", content=suffix),
+        *adapted_messages,
+    ]
 
 
 def _message_payload(message: Message) -> dict[str, object]:

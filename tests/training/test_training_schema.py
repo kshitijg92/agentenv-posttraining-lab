@@ -4,30 +4,32 @@ import pytest
 from pydantic import ValidationError
 
 from agentenv.agents.prompts import AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
-from agentenv.training.schema import (
-    POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
+from agentenv.training.candidates.schema import (
     TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
     MechanicalRedundancyAssessment,
     MechanicallyRedundantToolCallBlock,
+    TrainingCandidateRecord,
+    TrainingCandidateEligibility,
+)
+from agentenv.training.positive_sft.identity import build_positive_sft_example_id
+from agentenv.training.positive_sft.schema import (
+    POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
     PositiveSFTExampleRecord,
     PositiveSFTMessage,
     PositiveSFTTaskInput,
-    TrainingCandidateRecord,
-    TrainingEligibility,
-    build_positive_sft_example_id,
 )
 
 
 def _eligibility_payload(**updates: Any) -> dict[str, Any]:
     payload = {
-        "analysis_allowed": True,
+        "analysis_eligible": True,
         "analysis_reason": "trajectory is available for analysis",
-        "positive_sft_allowed": True,
-        "positive_sft_reason": "accepted successful agent trajectory",
-        "negative_example_allowed": False,
+        "positive_sft_review_eligible": True,
+        "positive_sft_review_reason": "accepted successful agent trajectory",
+        "negative_example_eligible": False,
         "negative_example_reason": "trajectory succeeded",
-        "preference_data_allowed": True,
-        "preference_data_reason": "accepted gradable trajectory",
+        "preference_pairing_eligible": True,
+        "preference_pairing_reason": "accepted gradable trajectory",
     }
     payload.update(updates)
     return payload
@@ -96,16 +98,19 @@ def _positive_sft_task_input_payload(**updates: Any) -> dict[str, Any]:
 def _positive_sft_messages_payload() -> list[dict[str, object]]:
     return [
         {
+            "message_id": "message_00000000000000000000000000000001",
             "role": "system",
             "content": "Historical persisted system prompt.",
             "name": "agentenv",
         },
         {
+            "message_id": "message_00000000000000000000000000000002",
             "role": "user",
             "content": "Historical persisted task prompt.",
             "name": "task_view",
         },
         {
+            "message_id": "message_00000000000000000000000000000003",
             "role": "assistant",
             "content": (
                 '{"action":"tool_call","tool_name":"run_tests","arguments":'
@@ -113,12 +118,14 @@ def _positive_sft_messages_payload() -> list[dict[str, object]]:
             ),
         },
         {
+            "message_id": "message_00000000000000000000000000000004",
             "role": "tool",
             "content": '{"status":"ok","output":"1 passed"}',
             "name": "run_tests",
             "tool_call_id": "tool_call_0001",
         },
         {
+            "message_id": "message_00000000000000000000000000000005",
             "role": "assistant",
             "content": '{"action":"final_answer","text":"done"}',
         },
@@ -173,6 +180,7 @@ def _positive_sft_example_id(source: dict[str, object]) -> str:
         source_type=source_type,
         source_training_candidate_record_hash=candidate_hash,
         source_artifact_content_hash=content_hash,
+        source_positive_sft_review_record_hash="xxh64:6666666666666666",
         source_training_candidate_repair_record_hash=repair_record_hash,
     )
 
@@ -196,6 +204,13 @@ def _positive_sft_payload(**updates: Any) -> dict[str, Any]:
             "prompt_builder_version": AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION,
             "prompt_builder_code_hash": "xxh64:promptbuilder",
         },
+        "review_provenance": {
+            "source_positive_sft_review_record_hash": "xxh64:6666666666666666",
+            "positive_sft_review_id": "positive_sft_review_001",
+            "last_approved_assistant_message_id": (
+                "message_00000000000000000000000000000005"
+            ),
+        },
         "source_provenance": source_provenance,
         "task_input": task_input.model_dump(mode="json"),
         "messages": _positive_sft_messages_payload(),
@@ -213,9 +228,9 @@ def test_training_candidate_record_accepts_reviewed_candidate() -> None:
     assert record.review_decision == "accepted"
     assert record.mechanical_redundancy_assessment.evaluation_status == "complete"
     assert record.mechanical_redundancy_assessment.blocks == []
-    assert record.training_eligibility.is_trainable
+    assert record.training_eligibility.has_training_use_path
     assert not record.training_eligibility.is_analysis_only
-    assert not record.training_eligibility.is_not_trainable
+    assert not record.training_eligibility.is_fully_ineligible
 
 
 def test_mechanically_redundant_tool_call_block_accepts_ordered_source_ids() -> None:
@@ -289,35 +304,35 @@ def test_mechanical_redundancy_assessment_rejects_overlapping_blocks() -> None:
 
 
 def test_training_eligibility_exposes_analysis_only_utility() -> None:
-    eligibility = TrainingEligibility.model_validate(
+    eligibility = TrainingCandidateEligibility.model_validate(
         _eligibility_payload(
-            positive_sft_allowed=False,
-            positive_sft_reason="not a positive SFT target",
-            preference_data_allowed=False,
-            preference_data_reason="not a preference candidate",
+            positive_sft_review_eligible=False,
+            positive_sft_review_reason="not a positive SFT target",
+            preference_pairing_eligible=False,
+            preference_pairing_reason="not a preference candidate",
         )
     )
 
-    assert not eligibility.is_trainable
+    assert not eligibility.has_training_use_path
     assert eligibility.is_analysis_only
-    assert not eligibility.is_not_trainable
+    assert not eligibility.is_fully_ineligible
 
 
-def test_training_eligibility_exposes_not_trainable_utility() -> None:
-    eligibility = TrainingEligibility.model_validate(
+def test_training_candidate_eligibility_exposes_fully_ineligible_utility() -> None:
+    eligibility = TrainingCandidateEligibility.model_validate(
         _eligibility_payload(
-            analysis_allowed=False,
+            analysis_eligible=False,
             analysis_reason="source artifact failed validation",
-            positive_sft_allowed=False,
-            positive_sft_reason="source artifact failed validation",
-            preference_data_allowed=False,
-            preference_data_reason="source artifact failed validation",
+            positive_sft_review_eligible=False,
+            positive_sft_review_reason="source artifact failed validation",
+            preference_pairing_eligible=False,
+            preference_pairing_reason="source artifact failed validation",
         )
     )
 
-    assert not eligibility.is_trainable
+    assert not eligibility.has_training_use_path
     assert not eligibility.is_analysis_only
-    assert eligibility.is_not_trainable
+    assert eligibility.is_fully_ineligible
 
 
 def test_training_candidate_rejects_training_paths_without_accepted_review() -> None:
@@ -328,7 +343,7 @@ def test_training_candidate_rejects_training_paths_without_accepted_review() -> 
 
     with pytest.raises(
         ValidationError,
-        match="training-eligible candidates require accepted human review",
+        match="candidates with a training-use path require accepted human review",
     ):
         TrainingCandidateRecord.model_validate(payload)
 
@@ -337,12 +352,12 @@ def test_training_candidate_accepts_rejected_analysis_only_candidate() -> None:
     payload = _candidate_payload(
         review_decision="rejected",
         training_eligibility=_eligibility_payload(
-            positive_sft_allowed=False,
-            positive_sft_reason="human review rejected trajectory",
-            negative_example_allowed=False,
+            positive_sft_review_eligible=False,
+            positive_sft_review_reason="human review rejected trajectory",
+            negative_example_eligible=False,
             negative_example_reason="human review rejected trajectory",
-            preference_data_allowed=False,
-            preference_data_reason="human review rejected trajectory",
+            preference_pairing_eligible=False,
+            preference_pairing_reason="human review rejected trajectory",
         ),
     )
 
@@ -359,12 +374,12 @@ def test_not_reviewed_candidate_cannot_include_review_details() -> None:
         reviewer_id=None,
         review_decision=None,
         training_eligibility=_eligibility_payload(
-            positive_sft_allowed=False,
-            positive_sft_reason="trajectory has not been reviewed",
-            negative_example_allowed=False,
+            positive_sft_review_eligible=False,
+            positive_sft_review_reason="trajectory has not been reviewed",
+            negative_example_eligible=False,
             negative_example_reason="trajectory has not been reviewed",
-            preference_data_allowed=False,
-            preference_data_reason="trajectory has not been reviewed",
+            preference_pairing_eligible=False,
+            preference_pairing_reason="trajectory has not been reviewed",
         ),
     )
 
@@ -393,12 +408,12 @@ def test_training_candidate_rejects_extra_fields() -> None:
 
 
 def test_training_eligibility_requires_path_reasons() -> None:
-    payload = _eligibility_payload(positive_sft_reason="")
+    payload = _eligibility_payload(positive_sft_review_reason="")
 
     with pytest.raises(
         ValidationError, match="String should have at least 1 character"
     ):
-        TrainingEligibility.model_validate(payload)
+        TrainingCandidateEligibility.model_validate(payload)
 
 
 def test_positive_sft_example_record_accepts_model_visible_row() -> None:
@@ -467,6 +482,7 @@ def test_positive_sft_message_rejects_metadata() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         PositiveSFTMessage.model_validate(
             {
+                "message_id": "message_00000000000000000000000000000006",
                 "role": "assistant",
                 "content": '{"action":"final_answer","text":"done"}',
                 "metadata": {"source": "private"},
@@ -478,6 +494,7 @@ def test_positive_sft_tool_message_requires_name_and_tool_call_id() -> None:
     with pytest.raises(ValidationError, match="tool messages require name"):
         PositiveSFTMessage.model_validate(
             {
+                "message_id": "message_00000000000000000000000000000007",
                 "role": "tool",
                 "content": '{"status":"ok"}',
                 "tool_call_id": "tool_call_0001",
@@ -487,6 +504,7 @@ def test_positive_sft_tool_message_requires_name_and_tool_call_id() -> None:
     with pytest.raises(ValidationError, match="tool messages require tool_call_id"):
         PositiveSFTMessage.model_validate(
             {
+                "message_id": "message_00000000000000000000000000000008",
                 "role": "tool",
                 "content": '{"status":"ok"}',
                 "name": "run_tests",
@@ -498,6 +516,7 @@ def test_positive_sft_system_and_user_messages_reject_tool_call_id() -> None:
     with pytest.raises(ValidationError, match="system messages cannot include"):
         PositiveSFTMessage.model_validate(
             {
+                "message_id": "message_00000000000000000000000000000009",
                 "role": "system",
                 "content": "Use JSON actions.",
                 "tool_call_id": "tool_call_0001",
@@ -507,6 +526,7 @@ def test_positive_sft_system_and_user_messages_reject_tool_call_id() -> None:
     with pytest.raises(ValidationError, match="user messages cannot include"):
         PositiveSFTMessage.model_validate(
             {
+                "message_id": "message_0000000000000000000000000000000a",
                 "role": "user",
                 "content": "Fix the task.",
                 "tool_call_id": "tool_call_0001",
@@ -517,6 +537,7 @@ def test_positive_sft_system_and_user_messages_reject_tool_call_id() -> None:
 def test_positive_sft_assistant_message_can_include_tool_call_id() -> None:
     message = PositiveSFTMessage.model_validate(
         {
+            "message_id": "message_0000000000000000000000000000000b",
             "role": "assistant",
             "content": '{"action":"tool_call","tool_name":"run_tests"}',
             "tool_call_id": "tool_call_0001",
@@ -552,11 +573,13 @@ def test_positive_sft_example_requires_assistant_message() -> None:
     payload = _positive_sft_payload(
         messages=[
             {
+                "message_id": "message_0000000000000000000000000000000c",
                 "role": "system",
                 "content": "Historical persisted system prompt.",
                 "name": "agentenv",
             },
             {
+                "message_id": "message_0000000000000000000000000000000d",
                 "role": "user",
                 "content": "Historical persisted task prompt.",
                 "name": "task_view",
@@ -574,6 +597,7 @@ def test_positive_sft_example_requires_assistant_message() -> None:
 def test_positive_sft_example_requires_system_then_user_start() -> None:
     payload = _positive_sft_payload()
     payload["messages"][0] = {
+        "message_id": "message_0000000000000000000000000000000e",
         "role": "user",
         "content": "Historical persisted task prompt.",
         "name": "task_view",

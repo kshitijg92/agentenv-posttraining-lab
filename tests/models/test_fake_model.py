@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from agentenv.agents.schema import ToolCallAction, parse_agent_action
+from agentenv.ids import new_message_id
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig, Message
 
@@ -20,8 +21,16 @@ def _decoding_config() -> DecodingConfig:
 
 def _messages() -> list[Message]:
     return [
-        Message(role="system", content="Return one JSON action."),
-        Message(role="user", content="Fix the task."),
+        Message(
+            message_id=new_message_id(),
+            role="system",
+            content="Return one JSON action.",
+        ),
+        Message(
+            message_id=new_message_id(),
+            role="user",
+            content="Fix the task.",
+        ),
     ]
 
 

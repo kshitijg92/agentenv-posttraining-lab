@@ -20,6 +20,7 @@ from agentenv.agents.schema import (
     parse_agent_action,
 )
 from agentenv.agents.tool_messages import render_tool_result_message
+from agentenv.ids import new_message_id
 from agentenv.models.client import ModelClient
 from agentenv.models.schema import DecodingConfig, Message, ModelResponse
 from agentenv.security.leakage import contains_hidden_validator_asset_reference
@@ -207,6 +208,7 @@ def run_prompt_loop(
 
 def _assistant_message(model_response: ModelResponse) -> Message:
     return Message(
+        message_id=new_message_id(),
         role="assistant",
         content=model_response.output_text,
         name=model_response.model_id,

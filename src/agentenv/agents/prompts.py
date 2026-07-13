@@ -4,6 +4,7 @@ from pathlib import Path
 import xxhash
 
 from agentenv.agents.schema import AgentTaskPromptInput
+from agentenv.ids import new_message_id
 from agentenv.models.schema import Message
 from agentenv.tools.schema import TOOL_REGISTRY
 
@@ -18,12 +19,14 @@ def compute_agent_task_initial_prompt_builder_code_hash() -> str:
 def build_initial_messages(prompt_input: AgentTaskPromptInput) -> list[Message]:
     return [
         Message(
+            message_id=new_message_id(),
             role="system",
             content=_system_prompt(prompt_input),
             name="agentenv",
             metadata={"source": "agentenv_protocol"},
         ),
         Message(
+            message_id=new_message_id(),
             role="user",
             content=_user_prompt(prompt_input),
             name="task_view",

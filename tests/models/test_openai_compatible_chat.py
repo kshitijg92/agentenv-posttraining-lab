@@ -8,6 +8,7 @@ from agentenv.models.config_schema import (
     OpenAICompatibleChatModelConfig,
     PromptAdapterConfig,
 )
+from agentenv.ids import new_message_id
 from agentenv.models.openai_compatible_chat import OpenAICompatibleChatModelClient
 from agentenv.models.schema import DecodingConfig, Message
 from agentenv.security.secrets import REDACTED_SECRET
@@ -55,9 +56,18 @@ def _decoding_config(**overrides: object) -> DecodingConfig:
 
 def _messages() -> list[Message]:
     return [
-        Message(role="system", content="Return one JSON action."),
-        Message(role="user", content="Fix the task."),
         Message(
+            message_id=new_message_id(),
+            role="system",
+            content="Return one JSON action.",
+        ),
+        Message(
+            message_id=new_message_id(),
+            role="user",
+            content="Fix the task.",
+        ),
+        Message(
+            message_id=new_message_id(),
             role="tool",
             name="read_file",
             tool_call_id="tool_001",

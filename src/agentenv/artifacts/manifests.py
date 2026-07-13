@@ -62,17 +62,21 @@ from agentenv.orchestrators.attempt import (
     validate_attempt_status_fields,
 )
 from agentenv.tasks.schema import TaskSplit
-from agentenv.training.schema import (
-    POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
+from agentenv.training.candidates.schema import (
     TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
-    PositiveSFTExampleRecordSchemaVersion,
     TrainingCandidateRecordSchemaVersion,
 )
-from agentenv.training.repair_schema import (
+from agentenv.training.repairs.schema import (
     TRAINING_CANDIDATE_REPAIR_REVIEW_RECORD_SCHEMA_VERSION,
     TRAINING_CANDIDATE_REPAIR_RECORD_SCHEMA_VERSION,
     TrainingCandidateRepairReviewRecordSchemaVersion,
     TrainingCandidateRepairRecordSchemaVersion,
+)
+from agentenv.training.positive_sft.schema import (
+    POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
+    POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION,
+    PositiveSFTExampleRecordSchemaVersion,
+    PositiveSFTReviewRecordSchemaVersion,
 )
 from agentenv.trajectories.schema import (
     TRAJECTORY_RECORD_SCHEMA_VERSION,
@@ -151,6 +155,10 @@ TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_REFS = {
     "reviews": "reviews.jsonl",
     "review_queue": "review_queue.md",
 }
+POSITIVE_SFT_REVIEW_ARTIFACT_REFS = {
+    "reviews": "reviews.jsonl",
+    "review_queue": "review_queue.md",
+}
 POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
     "positive_sft_examples": "positive_sft_examples.jsonl",
 }
@@ -188,6 +196,9 @@ TRAINING_CANDIDATE_REPAIR_EXPORT_REQUIRED_ARTIFACTS = frozenset(
 TRAINING_CANDIDATE_REPAIR_REVIEW_REQUIRED_ARTIFACTS = frozenset(
     TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_REFS
 )
+POSITIVE_SFT_REVIEW_REQUIRED_ARTIFACTS = frozenset(
+    POSITIVE_SFT_REVIEW_ARTIFACT_REFS
+)
 POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_REFS)
 REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS = frozenset(REWARD_HACK_AUDIT_ARTIFACT_REFS)
 SCORER_AUDIT_REQUIRED_ARTIFACTS = frozenset(SCORER_AUDIT_ARTIFACT_REFS)
@@ -212,6 +223,7 @@ TrainingCandidateRepairExportArtifactSchemaVersion = Literal[
 TrainingCandidateRepairReviewArtifactSchemaVersion = Literal[
     "training_candidate_repair_review_artifact_v0"
 ]
+PositiveSFTReviewArtifactSchemaVersion = Literal["positive_sft_review_artifact_v0"]
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v2"]
 ScorerAuditArtifactSchemaVersion = Literal["scorer_audit_artifact_v0"]
@@ -245,6 +257,9 @@ TRAJECTORY_REVIEW_ARTIFACT_SCHEMA_VERSION: TrajectoryReviewArtifactSchemaVersion
 TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateExportArtifactSchemaVersion = "training_candidate_export_artifact_v1"
 TRAINING_CANDIDATE_REPAIR_EXPORT_ARTIFACT_SCHEMA_VERSION: TrainingCandidateRepairExportArtifactSchemaVersion = "training_candidate_repair_export_artifact_v0"
 TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_SCHEMA_VERSION: TrainingCandidateRepairReviewArtifactSchemaVersion = "training_candidate_repair_review_artifact_v0"
+POSITIVE_SFT_REVIEW_ARTIFACT_SCHEMA_VERSION: PositiveSFTReviewArtifactSchemaVersion = (
+    "positive_sft_review_artifact_v0"
+)
 POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVersion = (
     "positive_sft_export_artifact_v0"
 )
@@ -1126,13 +1141,13 @@ class TrainingCandidateExportManifest(ArtifactManifest):
     training_candidate_record_schema_version: TrainingCandidateRecordSchemaVersion
     record_count: PositiveInt
     training_candidates_jsonl_hash: str = Field(min_length=1)
-    analysis_allowed_count: NonNegativeInt
-    positive_sft_allowed_count: NonNegativeInt
-    negative_example_allowed_count: NonNegativeInt
-    preference_data_allowed_count: NonNegativeInt
-    trainable_count: NonNegativeInt
+    analysis_eligible_count: NonNegativeInt
+    positive_sft_review_eligible_count: NonNegativeInt
+    negative_example_eligible_count: NonNegativeInt
+    preference_pairing_eligible_count: NonNegativeInt
+    any_training_use_eligible_count: NonNegativeInt
     analysis_only_count: NonNegativeInt
-    not_trainable_count: NonNegativeInt
+    fully_ineligible_count: NonNegativeInt
     artifacts: dict[str, str]
 
     @model_validator(mode="after")
@@ -1178,23 +1193,25 @@ class TrainingCandidateExportManifest(ArtifactManifest):
             )
 
         bounded_counts = (
-            self.analysis_allowed_count,
-            self.positive_sft_allowed_count,
-            self.negative_example_allowed_count,
-            self.preference_data_allowed_count,
-            self.trainable_count,
+            self.analysis_eligible_count,
+            self.positive_sft_review_eligible_count,
+            self.negative_example_eligible_count,
+            self.preference_pairing_eligible_count,
+            self.any_training_use_eligible_count,
             self.analysis_only_count,
-            self.not_trainable_count,
+            self.fully_ineligible_count,
         )
         if any(count > self.record_count for count in bounded_counts):
             raise ValueError("training candidate summary counts cannot exceed records")
         if (
-            self.trainable_count + self.analysis_only_count + self.not_trainable_count
+            self.any_training_use_eligible_count
+            + self.analysis_only_count
+            + self.fully_ineligible_count
             != self.record_count
         ):
             raise ValueError(
-                "trainable, analysis_only, and not_trainable counts must sum to "
-                "record_count"
+                "any_training_use_eligible, analysis_only, and fully_ineligible "
+                "counts must sum to record_count"
             )
         return self
 
@@ -1310,24 +1327,85 @@ class TrainingCandidateRepairReviewArtifactRef(BaseModel):
     reviews_jsonl_hash: ContentHash
 
 
-class PositiveSFTExportManifest(ArtifactManifest):
-    expected_artifact_type = ArtifactType.POSITIVE_SFT_EXPORT.value
-    expected_artifact_schema_version = POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION
+class PositiveSFTReviewManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.POSITIVE_SFT_REVIEW.value
+    expected_artifact_schema_version = POSITIVE_SFT_REVIEW_ARTIFACT_SCHEMA_VERSION
 
     created_at: str = Field(min_length=1)
-    source_training_candidate_export_dir: str = Field(min_length=1)
-    source_training_candidate_export_artifact_schema_version: (
-        TrainingCandidateExportArtifactSchemaVersion
-    )
-    source_training_candidate_export_manifest_hash: str = Field(min_length=1)
-    source_training_candidates_jsonl_hash: str = Field(min_length=1)
+    source_training_candidate_export: TrainingCandidateExportManifestRef
     source_training_candidate_repair_export: (
         TrainingCandidateRepairExportManifestRef | None
     ) = None
     source_training_candidate_repair_review: (
         TrainingCandidateRepairReviewArtifactRef | None
     ) = None
-    training_candidate_record_schema_version: TrainingCandidateRecordSchemaVersion
+    positive_sft_review_record_schema_version: PositiveSFTReviewRecordSchemaVersion
+    record_count: NonNegativeInt
+    original_record_count: NonNegativeInt
+    repaired_record_count: NonNegativeInt
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_positive_sft_review_contract(self) -> "PositiveSFTReviewManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=POSITIVE_SFT_REVIEW_ARTIFACT_REFS,
+            owner="positive-SFT review manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=POSITIVE_SFT_REVIEW_REQUIRED_ARTIFACTS,
+            owner="positive-SFT review manifests",
+        )
+        if (
+            self.positive_sft_review_record_schema_version
+            != POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "positive_sft_review_record_schema_version must be "
+                f"{POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.original_record_count + self.repaired_record_count != self.record_count:
+            raise ValueError(
+                "original and repaired positive-SFT review counts must sum to "
+                "record_count"
+            )
+        repair_sources = (
+            self.source_training_candidate_repair_export,
+            self.source_training_candidate_repair_review,
+        )
+        if self.repaired_record_count > 0 and any(
+            source is None for source in repair_sources
+        ):
+            raise ValueError(
+                "repaired positive-SFT reviews require repair export and review refs"
+            )
+        if self.repaired_record_count == 0 and any(
+            source is not None for source in repair_sources
+        ):
+            raise ValueError(
+                "positive-SFT review manifests without repaired sources cannot pin "
+                "unused repair artifacts"
+            )
+        return self
+
+
+class PositiveSFTReviewArtifactRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    reviews_jsonl_hash: ContentHash
+
+
+class PositiveSFTExportManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.POSITIVE_SFT_EXPORT.value
+    expected_artifact_schema_version = POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION
+
+    created_at: str = Field(min_length=1)
+    source_positive_sft_review: PositiveSFTReviewArtifactRef
+    positive_sft_review_record_schema_version: PositiveSFTReviewRecordSchemaVersion
     positive_sft_example_record_schema_version: PositiveSFTExampleRecordSchemaVersion
     record_count: NonNegativeInt
     original_record_count: NonNegativeInt
@@ -1349,20 +1427,12 @@ class PositiveSFTExportManifest(ArtifactManifest):
             owner="positive SFT export manifests",
         )
         if (
-            self.source_training_candidate_export_artifact_schema_version
-            != TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION
+            self.positive_sft_review_record_schema_version
+            != POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION
         ):
             raise ValueError(
-                "source_training_candidate_export_artifact_schema_version must be "
-                f"{TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION!r}"
-            )
-        if (
-            self.training_candidate_record_schema_version
-            != TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION
-        ):
-            raise ValueError(
-                "training_candidate_record_schema_version must be "
-                f"{TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION!r}"
+                "positive_sft_review_record_schema_version must be "
+                f"{POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION!r}"
             )
         if (
             self.positive_sft_example_record_schema_version
@@ -1375,23 +1445,6 @@ class PositiveSFTExportManifest(ArtifactManifest):
         if self.original_record_count + self.repaired_record_count != self.record_count:
             raise ValueError(
                 "original and repaired positive SFT counts must sum to record_count"
-            )
-        repair_sources = (
-            self.source_training_candidate_repair_export,
-            self.source_training_candidate_repair_review,
-        )
-        if self.repaired_record_count > 0 and any(
-            source is None for source in repair_sources
-        ):
-            raise ValueError(
-                "repaired positive SFT records require repair export and review refs"
-            )
-        if self.repaired_record_count == 0 and any(
-            source is not None for source in repair_sources
-        ):
-            raise ValueError(
-                "positive SFT manifests without repaired records cannot pin unused "
-                "repair sources"
             )
         return self
 
@@ -1709,6 +1762,10 @@ def load_training_candidate_repair_review_manifest(
     path: Path,
 ) -> TrainingCandidateRepairReviewManifest:
     return _validate_manifest(TrainingCandidateRepairReviewManifest, path)
+
+
+def load_positive_sft_review_manifest(path: Path) -> PositiveSFTReviewManifest:
+    return _validate_manifest(PositiveSFTReviewManifest, path)
 
 
 def load_positive_sft_export_manifest(path: Path) -> PositiveSFTExportManifest:

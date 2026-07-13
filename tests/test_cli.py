@@ -625,12 +625,12 @@ def test_trajectories_review_init_cli_writes_review_artifact(
     assert training_result.exit_code == 0, training_result.output
     assert "training candidate export complete" in training_result.output
     assert "records=1" in training_result.output
-    assert "trainable=0" in training_result.output
+    assert "training_use_eligible=0" in training_result.output
     assert "analysis_only=1" in training_result.output
-    assert "not_trainable=0" in training_result.output
-    assert "positive_sft=0" in training_result.output
+    assert "fully_ineligible=0" in training_result.output
+    assert "positive_sft_review=0" in training_result.output
     assert "negative_examples=0" in training_result.output
-    assert "preference_data=0" in training_result.output
+    assert "preference_pairing=0" in training_result.output
     assert "harness_audit=harness_audit_unit" in training_result.output
     assert "controls=controls_unit" in training_result.output
     assert "manifest.json" in training_result.output
@@ -638,7 +638,7 @@ def test_trajectories_review_init_cli_writes_review_artifact(
     training_manifest = json.loads((training_out / "manifest.json").read_text())
     assert training_manifest["artifact_type"] == "training_candidate_export"
     assert training_manifest["record_count"] == 1
-    assert training_manifest["trainable_count"] == 0
+    assert training_manifest["any_training_use_eligible_count"] == 0
     assert training_manifest["analysis_only_count"] == 1
     assert training_manifest["harness_audit_gate"] == (
         stub_training_export_gates.harness_audit_gate.model_dump(mode="json")
@@ -648,15 +648,34 @@ def test_trajectories_review_init_cli_writes_review_artifact(
     )
     assert (training_out / "training_candidates.jsonl").is_file()
 
+    sft_review_out = tmp_path / "positive_sft_review"
+    sft_review_result = runner.invoke(
+        app,
+        [
+            "training",
+            "positive-sft",
+            "review-init",
+            "--candidates",
+            str(training_out),
+            "--out",
+            str(sft_review_out),
+        ],
+    )
+    assert sft_review_result.exit_code == 0, sft_review_result.output
+    assert "positive SFT review initialized" in sft_review_result.output
+    assert "records=0" in sft_review_result.output
+
     sft_out = tmp_path / "positive_sft"
     sft_result = runner.invoke(
         app,
         [
             "training",
-            "sft",
+            "positive-sft",
             "export",
             "--candidates",
             str(training_out),
+            "--reviews",
+            str(sft_review_out),
             "--out",
             str(sft_out),
         ],
@@ -676,10 +695,12 @@ def test_trajectories_review_init_cli_writes_review_artifact(
         app,
         [
             "training",
-            "sft",
+            "positive-sft",
             "export",
             "--candidates",
             str(training_out),
+            "--reviews",
+            str(sft_review_out),
             "--out",
             str(sft_out),
             "--overwrite",

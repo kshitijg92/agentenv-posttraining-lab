@@ -23,6 +23,7 @@ def test_render_tool_result_message_for_success() -> None:
     message = render_tool_result_message(tool_result, "tool_call_0001")
 
     assert message == Message(
+        message_id=message.message_id,
         role="tool",
         name="read_file",
         tool_call_id="tool_call_0001",

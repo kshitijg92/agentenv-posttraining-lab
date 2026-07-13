@@ -1052,6 +1052,30 @@ focused Pyright: passed
 git diff --check: passed
 ```
 
+### Training Package Workflow Refactor
+
+Split the former flat `training/` package into ownership-aligned subsystems:
+
+```text
+candidates/    trajectory-review and harness/control gates, candidate records
+repairs/       redundancy detection, deletion repair, repair export and review
+positive_sft/  exact source selection, prefix review, example build and export
+```
+
+Removed the old top-level modules instead of leaving compatibility imports.
+Candidate-pinned trajectory and review validation now lives in
+`candidates/source_integrity.py`; positive-SFT original/repaired source selection
+lives in `positive_sft/source_selection.py`. This also removes the prior
+dependency from repair export code onto the positive-SFT builder. The CLI
+objective group is now `training positive-sft` rather than the ambiguous
+`training sft`.
+
+Added `training/README.md` and `trajectories/README.md` with Mermaid workflow
+diagrams and the evidence, repair, review, and export invariants. Focused
+candidate/repair/positive-SFT/CLI tests pass (`176 passed`), repository-wide
+Ruff passes, targeted Pyright reports zero errors, and `git diff --check`
+passes.
+
 ### Atomic Harness-Audit Artifact And Typed Consumer Migration
 
 #### Root Composition
@@ -1254,9 +1278,12 @@ at this boundary remains a separate decision.
 `TrainingCandidateRecord.training_eligibility` is the only persisted training-
 use decision. Candidate construction derives it from the pinned trajectory
 evidence plus the review decision, and only runs after harness-audit and
-control-calibration gates pass. The derivation enforces model-policy, split,
-leakage, orchestration, required-agent-evidence, task-success, gradability, and
-positive-SFT reward-hack conditions at the training boundary.
+control-calibration gates pass. The derivation at that checkpoint enforced
+model-policy, split, leakage, orchestration, required-agent-evidence,
+task-success, gradability, and positive-SFT reward-hack conditions at the
+training boundary. The later positive-SFT prefix-review checkpoint documented
+below removes task success and terminal scoring as review-eligibility
+requirements.
 
 The training-candidate artifact loader recomputes every candidate record from
 its pinned trajectories and reviews and requires exact equality with the
@@ -2092,3 +2119,55 @@ Qwen3 14B showed a different problem: provider timeouts, max-turn cycling, and
 repeated short behaviors. Its recorded responses did not exhaust the 4096-token
 limit, so increasing the per-turn budget is not the primary intervention for
 that model.
+
+### Positive-SFT Prefix Review And Message Identity
+
+Added required globally unique occurrence ids to persisted messages. Runtime
+creation assigns ids to system, user, assistant, and tool messages; provider
+payload serialization excludes them. Prompt-loop, repaired-transcript, and
+positive-SFT schemas reject duplicate ids, and deletion repair preserves ids
+for retained messages.
+
+Renamed candidate-level `TrainingEligibility` to
+`TrainingCandidateEligibility`. Its fields now describe downstream candidate
+paths rather than claiming that rows are already trainable:
+
+```text
+analysis_eligible
+positive_sft_review_eligible
+negative_example_eligible
+preference_pairing_eligible
+```
+
+Related manifest counts no longer use `trainable`. Positive-SFT review
+eligibility no longer requires task success or a scored terminal result. It
+retains the model-policy, split, leakage, orchestration, required-evidence, and
+reward-hack gates. This permits trustworthy failed trajectories to enter
+prefix review while keeping harness failures blocked.
+
+Added a standalone positive-SFT review artifact. Each record pins the exact
+candidate hash and original or accepted repaired transcript, then records the
+usual review authority plus `last_approved_assistant_message_id`. Accepted
+reviews require that boundary to exist exactly once and identify an assistant
+message. Rejected, pending, and follow-up reviews cannot authorize a boundary.
+
+Positive-SFT export now requires this review artifact. It exports only accepted
+records, truncates each transcript immediately after the approved assistant
+message, preserves message ids, and pins both the review artifact and exact
+review-record hash. Example identity includes the review-record hash so two
+approved boundaries over the same source cannot collide. The export manifest
+points to the positive-SFT review artifact as its direct source; candidate and
+repair provenance remain reachable through that artifact rather than being
+duplicated.
+
+Focused verification:
+
+```text
+message identity checkpoint: 131 passed
+positive-SFT/candidate/repair/CLI focused set: 102 passed
+expanded training/model/agent/security/reward set: 333 passed, 1 stale fixture
+corrected repaired-transcript schema file: 31 passed
+Ruff on changed source and tests: passed
+Pyright on changed source and tests: passed
+git diff --check: passed
+```

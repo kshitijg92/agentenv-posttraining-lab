@@ -48,9 +48,13 @@ from agentenv.tasks.validate import (
 )
 from agentenv.tasks.hashing import write_task_hash_report
 from agentenv.tasks.splits import check_splits_lock
-from agentenv.training.export import (
-    export_positive_sft_examples,
+from agentenv.training.candidates.export import (
     export_training_candidate_records,
+)
+from agentenv.training.positive_sft.export import export_positive_sft_examples
+from agentenv.training.positive_sft.review import (
+    initialize_positive_sft_review_artifact,
+    validate_positive_sft_review_artifact,
 )
 from agentenv.trajectories.export import export_trajectory_records_from_eval_artifact
 from agentenv.trajectories.review import (
@@ -68,7 +72,7 @@ eval_app = typer.Typer(no_args_is_help=False)
 trajectories_app = typer.Typer(no_args_is_help=True)
 training_app = typer.Typer(no_args_is_help=True)
 training_candidates_app = typer.Typer(no_args_is_help=True)
-training_sft_app = typer.Typer(no_args_is_help=True)
+training_positive_sft_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 harness_app = typer.Typer(no_args_is_help=True)
@@ -88,7 +92,7 @@ app.add_typer(harness_app, name="harness")
 app.add_typer(rewards_app, name="rewards")
 app.add_typer(local_model_app, name="local-model")
 training_app.add_typer(training_candidates_app, name="candidates")
-training_app.add_typer(training_sft_app, name="sft")
+training_app.add_typer(training_positive_sft_app, name="positive-sft")
 local_model_app.add_typer(ollama_app, name="ollama")
 
 console = Console()
@@ -799,12 +803,12 @@ def export_training_candidates(
     console.print(
         "[green]training candidate export complete[/green] "
         f"records={manifest.record_count} "
-        f"trainable={manifest.trainable_count} "
+        f"training_use_eligible={manifest.any_training_use_eligible_count} "
         f"analysis_only={manifest.analysis_only_count} "
-        f"not_trainable={manifest.not_trainable_count} "
-        f"positive_sft={manifest.positive_sft_allowed_count} "
-        f"negative_examples={manifest.negative_example_allowed_count} "
-        f"preference_data={manifest.preference_data_allowed_count} "
+        f"fully_ineligible={manifest.fully_ineligible_count} "
+        f"positive_sft_review={manifest.positive_sft_review_eligible_count} "
+        f"negative_examples={manifest.negative_example_eligible_count} "
+        f"preference_pairing={manifest.preference_pairing_eligible_count} "
         f"harness_audit={manifest.harness_audit_gate.harness_audit_run_id} "
         f"controls={manifest.control_calibration_gate.control_run_id}"
     )
@@ -815,12 +819,108 @@ def export_training_candidates(
     )
 
 
-@training_sft_app.command("export")
-def export_training_sft(
+@training_positive_sft_app.command("review-init")
+def initialize_training_positive_sft_review(
     candidates: Path = typer.Option(
         ...,
         "--candidates",
         help="Training candidate export artifact directory.",
+    ),
+    repairs: Path | None = typer.Option(
+        None,
+        "--repairs",
+        help="Optional training candidate repair export artifact directory.",
+    ),
+    repair_reviews: Path | None = typer.Option(
+        None,
+        "--repair-reviews",
+        help="Optional accepted repair review artifact directory.",
+    ),
+    repair_id: list[str] | None = typer.Option(
+        None,
+        "--repair-id",
+        help="Selected repair ID; repeat for multiple candidates.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for positive-SFT prefix review artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before exporting.",
+    ),
+    ) -> None:
+    try:
+        artifact = initialize_positive_sft_review_artifact(
+            candidates,
+            out,
+            repair_export_dir=repairs,
+            repair_review_dir=repair_reviews,
+            selected_repair_ids=tuple(repair_id or ()),
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--candidates") from exc
+
+    manifest = artifact.manifest
+    console.print(
+        "[green]positive SFT review initialized[/green] "
+        f"records={manifest.record_count} "
+        f"original={manifest.original_record_count} "
+        f"repaired={manifest.repaired_record_count}"
+    )
+    console.print(f"wrote {artifact.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['reviews']}",
+        soft_wrap=True,
+    )
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['review_queue']}",
+        soft_wrap=True,
+    )
+
+
+@training_positive_sft_app.command("review-validate")
+def validate_training_positive_sft_review(
+    reviews: Path = typer.Option(
+        ...,
+        "--reviews",
+        help="Positive-SFT prefix review artifact directory.",
+    ),
+) -> None:
+    try:
+        validation = validate_positive_sft_review_artifact(reviews)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--reviews") from exc
+    decisions = [
+        review.review_decision
+        for review in validation.review_artifact.reviews
+        if review.review_decision is not None
+    ]
+    console.print(
+        "[green]positive SFT review valid[/green] "
+        f"records={len(validation.review_artifact.reviews)} "
+        f"accepted={decisions.count('accepted')} "
+        f"rejected={decisions.count('rejected')} "
+        f"needs_followup={decisions.count('needs_followup')}"
+    )
+
+
+@training_positive_sft_app.command("export")
+def export_training_positive_sft(
+    candidates: Path = typer.Option(
+        ...,
+        "--candidates",
+        help="Training candidate export artifact directory.",
+    ),
+    reviews: Path = typer.Option(
+        ...,
+        "--reviews",
+        help="Validated positive-SFT prefix review artifact directory.",
     ),
     out: Path = typer.Option(
         ...,
@@ -836,13 +936,17 @@ def export_training_sft(
     try:
         export = export_positive_sft_examples(
             candidates,
+            reviews,
             out,
             overwrite=overwrite,
         )
     except ArtifactDirectoryError as exc:
         raise typer.BadParameter(str(exc), param_hint="--out") from exc
     except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--candidates") from exc
+        raise typer.BadParameter(
+            str(exc),
+            param_hint="--candidates/--reviews",
+        ) from exc
 
     manifest = export.manifest
     console.print(

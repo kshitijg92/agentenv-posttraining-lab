@@ -27,7 +27,7 @@ from agentenv.tools.schema import (
     ToolResult,
     validate_tool_input,
 )
-from agentenv.training.schema import (
+from agentenv.training.candidates.schema import (
     MechanicalRedundancyAssessment,
     MechanicallyRedundantToolCallBlock,
 )

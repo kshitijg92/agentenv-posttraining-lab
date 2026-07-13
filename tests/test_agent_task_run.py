@@ -13,6 +13,7 @@ from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSIO
 from agentenv.artifacts.payloads import load_agent_task_run_result
 from agentenv.artifacts.payloads import load_decoding_config_provenance
 from agentenv.controls.agent_control_scripts import AGENT_CONTROL_SCRIPT_SCHEMA_VERSION
+from agentenv.ids import new_message_id
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig, Message, ModelResponse
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
@@ -357,6 +358,7 @@ def test_write_agent_task_run_artifacts_redacts_secret_canary(
             token_usage=TokenUsage(),
             messages=[
                 Message(
+                    message_id=new_message_id(),
                     role="assistant",
                     content=f"assistant {CANARY}",
                     name="fake-model",

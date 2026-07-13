@@ -1,10 +1,11 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat
 from pydantic import StrictInt, StrictStr, field_validator, model_validator
 
 
 MessageRole = Literal["system", "user", "assistant", "tool"]
+MessageId = Annotated[str, Field(pattern=r"^message_[0-9a-f]{32}$", strict=True)]
 MessageMetadataValue = StrictStr | StrictBool | StrictInt | StrictFloat | None
 DecodingStrategy = Literal["greedy", "sampling"]
 ModelFinishReason = Literal[
@@ -18,6 +19,7 @@ ModelFinishReason = Literal[
 class MessageWithoutMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    message_id: MessageId
     role: MessageRole
     content: str
     name: str | None = Field(default=None, min_length=1)

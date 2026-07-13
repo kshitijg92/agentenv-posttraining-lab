@@ -6,19 +6,28 @@ import pytest
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.manifests import (
     POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION,
-    TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION,
     load_positive_sft_export_manifest,
     load_trajectory_export_manifest,
 )
 from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
 from agentenv.orchestrators.eval_run import run_eval_config
-from agentenv.training.export import (
-    export_positive_sft_examples,
+from agentenv.training.candidates.export import (
     export_training_candidate_records,
+)
+from agentenv.training.positive_sft.builder import build_positive_sft_examples
+from agentenv.training.positive_sft.export import (
+    export_positive_sft_examples,
     load_positive_sft_export_artifact,
 )
-from agentenv.training.schema import POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
-from agentenv.training.sft_builder import build_positive_sft_examples
+from agentenv.training.positive_sft.review import (
+    build_positive_sft_review_selections,
+    initialize_positive_sft_review_artifact,
+    validate_positive_sft_review_artifact,
+    write_positive_sft_review_records_jsonl,
+)
+from agentenv.training.positive_sft.schema import (
+    POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
+)
 from agentenv.trajectories.export import (
     export_trajectory_records_from_eval_artifact,
     hash_file,
@@ -50,8 +59,15 @@ def test_build_positive_sft_examples_from_training_candidate_export(
     tmp_path: Path,
 ) -> None:
     candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
 
-    examples = build_positive_sft_examples(candidate_export_dir)
+    examples = build_positive_sft_examples(
+        candidate_export_dir,
+        positive_sft_review_dir=sft_review.out_dir,
+    )
 
     assert len(examples) == 1
     example = examples[0]
@@ -82,42 +98,132 @@ def test_build_positive_sft_examples_skips_non_positive_candidates(
     tmp_path: Path,
 ) -> None:
     candidate_export_dir = build_control_training_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
 
-    examples = build_positive_sft_examples(candidate_export_dir)
+    examples = build_positive_sft_examples(
+        candidate_export_dir,
+        positive_sft_review_dir=sft_review.out_dir,
+    )
 
     assert examples == ()
+
+
+def test_positive_sft_materializes_only_human_approved_prefix(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    artifact = initialize_positive_sft_review_artifact(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
+    validation = validate_positive_sft_review_artifact(artifact.out_dir)
+    selections = build_positive_sft_review_selections(
+        validation.source_candidate_export,
+        repair_validation=None,
+        selected_repair_ids=(),
+    )
+    source_messages = selections[0].messages
+    first_assistant = next(
+        message for message in source_messages if message.role == "assistant"
+    )
+    accepted = artifact.reviews[0].model_copy(
+        update={
+            "review_status": "reviewed",
+            "review_id": "positive_sft_review_0001",
+            "reviewer_id": "reviewer",
+            "review_decision": "accepted",
+            "last_approved_assistant_message_id": first_assistant.message_id,
+        }
+    )
+    write_positive_sft_review_records_jsonl(
+        artifact.out_dir / artifact.manifest.artifacts["reviews"],
+        (accepted,),
+    )
+
+    examples = build_positive_sft_examples(
+        candidate_export_dir,
+        positive_sft_review_dir=artifact.out_dir,
+    )
+
+    assert len(examples) == 1
+    example = examples[0]
+    assert example.messages[-1].message_id == first_assistant.message_id
+    assert example.messages[-1].role == "assistant"
+    assert len(example.messages) < len(source_messages)
+    assert example.review_provenance.last_approved_assistant_message_id == (
+        first_assistant.message_id
+    )
+
+
+def test_positive_sft_reload_rejects_prefix_review_drift(tmp_path: Path) -> None:
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
+    export = export_positive_sft_examples(
+        candidate_export_dir,
+        sft_review.out_dir,
+        tmp_path / "positive-sft-export",
+    )
+    reviews_path = sft_review.out_dir / sft_review.manifest.artifacts["reviews"]
+    reviews_path.write_text(reviews_path.read_text() + "\n")
+
+    with pytest.raises(ValueError, match="source reviews JSONL hash mismatch"):
+        load_positive_sft_export_artifact(export.out_dir)
 
 
 def test_build_positive_sft_examples_rejects_source_trajectory_jsonl_drift(
     tmp_path: Path,
 ) -> None:
     candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
     manifest = json.loads((candidate_export_dir / MANIFEST_FILENAME).read_text())
     trajectory_export_dir = Path(manifest["source_trajectory_export_dir"])
     trajectories_path = trajectory_export_dir / "trajectories.jsonl"
     trajectories_path.write_text(trajectories_path.read_text() + "\n")
 
     with pytest.raises(ValueError, match="Trajectory JSONL hash mismatch"):
-        build_positive_sft_examples(candidate_export_dir)
+        build_positive_sft_examples(
+            candidate_export_dir,
+            positive_sft_review_dir=sft_review.out_dir,
+        )
 
 
 def test_build_positive_sft_examples_rejects_source_review_jsonl_drift(
     tmp_path: Path,
 ) -> None:
     candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
     manifest = json.loads((candidate_export_dir / MANIFEST_FILENAME).read_text())
     review_dir = Path(manifest["source_review_dir"])
     reviews_path = review_dir / "reviews.jsonl"
     reviews_path.write_text(reviews_path.read_text() + "\n")
 
     with pytest.raises(ValueError, match="Source reviews JSONL hash mismatch"):
-        build_positive_sft_examples(candidate_export_dir)
+        build_positive_sft_examples(
+            candidate_export_dir,
+            positive_sft_review_dir=sft_review.out_dir,
+        )
 
 
 def test_build_positive_sft_examples_rejects_prompt_loop_artifact_hash_mismatch(
     tmp_path: Path,
 ) -> None:
     candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
     manifest = json.loads((candidate_export_dir / MANIFEST_FILENAME).read_text())
     trajectory_export_dir = Path(manifest["source_trajectory_export_dir"])
     record = load_trajectory_record(trajectory_export_dir)
@@ -127,7 +233,10 @@ def test_build_positive_sft_examples_rejects_prompt_loop_artifact_hash_mismatch(
     prompt_loop_path.write_text(prompt_loop_path.read_text() + "\n")
 
     with pytest.raises(ValueError, match="Artifact hash mismatch"):
-        build_positive_sft_examples(candidate_export_dir)
+        build_positive_sft_examples(
+            candidate_export_dir,
+            positive_sft_review_dir=sft_review.out_dir,
+        )
 
 
 def test_build_positive_sft_examples_rejects_leaked_sft_payload(
@@ -137,12 +246,19 @@ def test_build_positive_sft_examples_rejects_leaked_sft_payload(
         tmp_path,
         leak_prompt_loop=True,
     )
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
 
     with pytest.raises(
         ValueError,
         match="Positive SFT example record failed leakage scan",
     ):
-        build_positive_sft_examples(candidate_export_dir)
+        build_positive_sft_examples(
+            candidate_export_dir,
+            positive_sft_review_dir=sft_review.out_dir,
+        )
 
 
 def test_build_positive_sft_examples_scans_full_record_not_only_messages(
@@ -152,21 +268,33 @@ def test_build_positive_sft_examples_scans_full_record_not_only_messages(
         tmp_path,
         leak_prompt_provenance=True,
     )
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
 
     with pytest.raises(
         ValueError,
         match="Positive SFT example record failed leakage scan",
     ):
-        build_positive_sft_examples(candidate_export_dir)
+        build_positive_sft_examples(
+            candidate_export_dir,
+            positive_sft_review_dir=sft_review.out_dir,
+        )
 
 
 def test_export_positive_sft_examples_writes_manifest_and_jsonl(
     tmp_path: Path,
 ) -> None:
     candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
 
     export = export_positive_sft_examples(
         candidate_export_dir,
+        sft_review.out_dir,
         tmp_path / "positive-sft-export",
     )
 
@@ -175,15 +303,11 @@ def test_export_positive_sft_examples_writes_manifest_and_jsonl(
     assert (
         manifest.artifact_schema_version == POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION
     )
-    assert manifest.source_training_candidate_export_dir == str(
-        candidate_export_dir.resolve()
+    assert manifest.source_positive_sft_review.artifact_dir == str(
+        sft_review.out_dir.resolve()
     )
-    assert (
-        manifest.source_training_candidate_export_artifact_schema_version
-        == TRAINING_CANDIDATE_EXPORT_ARTIFACT_SCHEMA_VERSION
-    )
-    assert manifest.source_training_candidate_export_manifest_hash.startswith("xxh64:")
-    assert manifest.source_training_candidates_jsonl_hash.startswith("xxh64:")
+    assert manifest.source_positive_sft_review.manifest_hash.startswith("xxh64:")
+    assert manifest.source_positive_sft_review.reviews_jsonl_hash.startswith("xxh64:")
     assert (
         manifest.positive_sft_example_record_schema_version
         == POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
@@ -191,8 +315,6 @@ def test_export_positive_sft_examples_writes_manifest_and_jsonl(
     assert manifest.record_count == 1
     assert manifest.original_record_count == 1
     assert manifest.repaired_record_count == 0
-    assert manifest.source_training_candidate_repair_export is None
-    assert manifest.source_training_candidate_repair_review is None
     assert manifest.positive_sft_examples_jsonl_hash.startswith("xxh64:")
     assert manifest.artifacts == {
         "positive_sft_examples": "positive_sft_examples.jsonl",
@@ -208,9 +330,14 @@ def test_export_positive_sft_examples_allows_empty_export(
     tmp_path: Path,
 ) -> None:
     candidate_export_dir = build_control_training_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
 
     export = export_positive_sft_examples(
         candidate_export_dir,
+        sft_review.out_dir,
         tmp_path / "positive-sft-export",
     )
 
@@ -225,8 +352,13 @@ def test_load_positive_sft_export_rejects_jsonl_hash_mismatch(
     tmp_path: Path,
 ) -> None:
     candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
     export = export_positive_sft_examples(
         candidate_export_dir,
+        sft_review.out_dir,
         tmp_path / "positive-sft-export",
     )
     examples_path = export.out_dir / export.manifest.artifacts["positive_sft_examples"]
@@ -234,6 +366,50 @@ def test_load_positive_sft_export_rejects_jsonl_hash_mismatch(
 
     with pytest.raises(ValueError, match="Positive SFT examples JSONL hash mismatch"):
         load_positive_sft_export_artifact(export.out_dir)
+
+
+def initialize_accepted_positive_sft_review(
+    candidate_export_dir: Path,
+    out_dir: Path,
+):
+    artifact = initialize_positive_sft_review_artifact(
+        candidate_export_dir,
+        out_dir,
+    )
+    validation = validate_positive_sft_review_artifact(artifact.out_dir)
+    selections = build_positive_sft_review_selections(
+        validation.source_candidate_export,
+        repair_validation=None,
+        selected_repair_ids=(),
+    )
+    selection_by_candidate = {
+        selection.candidate_hash: selection for selection in selections
+    }
+    accepted = tuple(
+        review.model_copy(
+            update={
+                "review_status": "reviewed",
+                "review_id": f"positive_sft_review_{index:04d}",
+                "reviewer_id": "reviewer",
+                "review_decision": "accepted",
+                "last_approved_assistant_message_id": next(
+                    message.message_id
+                    for message in reversed(
+                        selection_by_candidate[
+                            review.source_training_candidate_record_hash
+                        ].messages
+                    )
+                    if message.role == "assistant"
+                ),
+            }
+        )
+        for index, review in enumerate(artifact.reviews, start=1)
+    )
+    write_positive_sft_review_records_jsonl(
+        artifact.out_dir / artifact.manifest.artifacts["reviews"],
+        accepted,
+    )
+    return artifact
 
 
 def build_positive_sft_candidate_export(
