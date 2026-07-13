@@ -8,6 +8,7 @@ from agentenv.audits.schema import (
     CompletedScorerAuditRecord,
 )
 from agentenv.agents.schema import PromptLoopResult, TokenUsage
+from agentenv.ids import new_message_id
 from agentenv.models.schema import Message
 from agentenv.rewards.audit import (
     _source_has_authoritative_tool_results,
@@ -569,6 +570,7 @@ def test_prompt_loop_exposure_scan_skips_attack_payload_but_scans_tool_outputs()
         token_usage=TokenUsage(),
         messages=[
             Message(
+                message_id=new_message_id(),
                 role="assistant",
                 name="scripted-model",
                 content=(
@@ -577,6 +579,7 @@ def test_prompt_loop_exposure_scan_skips_attack_payload_but_scans_tool_outputs()
                 ),
             ),
             Message(
+                message_id=new_message_id(),
                 role="tool",
                 name="read_file",
                 tool_call_id="tool_call_0001",

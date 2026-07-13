@@ -77,6 +77,10 @@ class PromptLoopResult(BaseModel):
 
     @model_validator(mode="after")
     def validate_terminal_state(self) -> "PromptLoopResult":
+        message_ids = [message.message_id for message in self.messages]
+        if len(message_ids) != len(set(message_ids)):
+            raise ValueError("prompt-loop message_ids must be unique")
+
         if self.status == "completed":
             if self.error_class is not None or self.error_message is not None:
                 raise ValueError("completed prompt loops cannot include error fields")

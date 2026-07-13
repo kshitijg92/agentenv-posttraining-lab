@@ -1,6 +1,7 @@
 import json
 
 from agentenv.models import ModelClient
+from agentenv.ids import new_message_id
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.schema import DecodingConfig, Message, ModelResponse
 
@@ -17,8 +18,16 @@ def _decoding_config() -> DecodingConfig:
 
 def _messages() -> list[Message]:
     return [
-        Message(role="system", content="Return one JSON action."),
-        Message(role="user", content="Fix the task."),
+        Message(
+            message_id=new_message_id(),
+            role="system",
+            content="Return one JSON action.",
+        ),
+        Message(
+            message_id=new_message_id(),
+            role="user",
+            content="Fix the task.",
+        ),
     ]
 
 
@@ -32,10 +41,12 @@ def test_scripted_fake_model_satisfies_model_client_protocol() -> None:
         model_id="fake-scripted-v0",
         script=[
             FakeModelScriptStep(
-                output_text=json.dumps({
-                    "action": "final_answer",
-                    "text": "done",
-                }),
+                output_text=json.dumps(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
             )
         ],
     )

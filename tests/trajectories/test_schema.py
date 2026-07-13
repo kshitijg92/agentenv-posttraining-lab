@@ -191,8 +191,8 @@ def test_trajectory_record_accepts_scorer_only_attempt() -> None:
 def test_trajectory_record_rejects_embedded_training_eligibility() -> None:
     payload = _base_record_payload()
     payload["training_eligibility"] = {
-        "analysis_allowed": True,
-        "positive_sft_allowed": True,
+        "analysis_eligible": True,
+        "positive_sft_review_eligible": True,
     }
 
     with pytest.raises(

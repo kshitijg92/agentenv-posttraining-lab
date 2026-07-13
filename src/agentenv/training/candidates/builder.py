@@ -5,14 +5,14 @@ from agentenv.controls.public_check_idempotency_schema import (
     PublicCheckIdempotencyCalibration,
 )
 from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
-from agentenv.training.mechanical_redundancy import (
+from agentenv.training.repairs.redundancy_detection import (
     assess_trajectory_mechanical_redundancy,
 )
-from agentenv.training.schema import (
+from agentenv.training.candidates.schema import (
+    TrainingCandidateEligibility,
     TrainingCandidateRecord,
-    TrainingEligibility,
 )
-from agentenv.training.gates import (
+from agentenv.training.candidates.gates import (
     TrainingExportGateValidation,
     validate_training_export_gates,
 )
@@ -100,33 +100,36 @@ def build_training_candidate_record(
                 public_check_calibrations=public_check_calibrations,
             )
         ),
-        training_eligibility=build_training_eligibility(trajectory, review),
+        training_eligibility=build_training_candidate_eligibility(
+            trajectory,
+            review,
+        ),
     )
 
 
-def build_training_eligibility(
+def build_training_candidate_eligibility(
     trajectory: TrajectoryRecord,
     review: TrajectoryReviewRecord,
-) -> TrainingEligibility:
+) -> TrainingCandidateEligibility:
     if review.review_status != "reviewed" or review.review_decision != "accepted":
         review_block_reason = build_review_block_reason(review)
-        return TrainingEligibility(
-            analysis_allowed=True,
+        return TrainingCandidateEligibility(
+            analysis_eligible=True,
             analysis_reason=f"trajectory remains analysis-eligible; {review_block_reason}",
-            positive_sft_allowed=False,
-            positive_sft_reason=review_block_reason,
-            negative_example_allowed=False,
+            positive_sft_review_eligible=False,
+            positive_sft_review_reason=review_block_reason,
+            negative_example_eligible=False,
             negative_example_reason=review_block_reason,
-            preference_data_allowed=False,
-            preference_data_reason=review_block_reason,
+            preference_pairing_eligible=False,
+            preference_pairing_reason=review_block_reason,
         )
 
     common_block_reason = build_common_training_block_reason(
         trajectory
     ) or build_reward_hack_review_block_reason(trajectory, review)
-    positive_sft_block_reason = common_block_reason or build_positive_sft_block_reason(
-        trajectory,
-        review,
+    positive_sft_block_reason = (
+        common_block_reason
+        or build_positive_sft_review_block_reason(trajectory, review)
     )
     negative_example_block_reason = (
         common_block_reason or build_negative_example_block_reason(trajectory)
@@ -135,22 +138,22 @@ def build_training_eligibility(
         common_block_reason or build_preference_data_block_reason(trajectory)
     )
 
-    return TrainingEligibility(
-        analysis_allowed=True,
+    return TrainingCandidateEligibility(
+        analysis_eligible=True,
         analysis_reason="trajectory is available for analysis",
-        positive_sft_allowed=positive_sft_block_reason is None,
-        positive_sft_reason=build_training_path_reason(
-            path_label="positive SFT",
+        positive_sft_review_eligible=positive_sft_block_reason is None,
+        positive_sft_review_reason=build_training_path_reason(
+            path_label="positive-SFT review",
             block_reason=positive_sft_block_reason,
         ),
-        negative_example_allowed=negative_example_block_reason is None,
+        negative_example_eligible=negative_example_block_reason is None,
         negative_example_reason=build_training_path_reason(
             path_label="negative example",
             block_reason=negative_example_block_reason,
         ),
-        preference_data_allowed=preference_data_block_reason is None,
-        preference_data_reason=build_training_path_reason(
-            path_label="preference data",
+        preference_pairing_eligible=preference_data_block_reason is None,
+        preference_pairing_reason=build_training_path_reason(
+            path_label="preference pairing",
             block_reason=preference_data_block_reason,
         ),
     )
@@ -193,7 +196,7 @@ def list_missing_training_agent_evidence(
     return tuple(missing)
 
 
-def build_positive_sft_block_reason(
+def build_positive_sft_review_block_reason(
     trajectory: TrajectoryRecord,
     review: TrajectoryReviewRecord,
 ) -> str | None:
@@ -210,10 +213,6 @@ def build_positive_sft_block_reason(
         or review.reward_hack_review.review_decision != "cleared"
     ):
         return "ambiguous reward-hack evidence requires human clearance"
-    if not trajectory.statuses.task_success:
-        return "positive SFT requires task success"
-    if trajectory.statuses.agent_task_run_status != "scored":
-        return "positive SFT requires a scored agent trajectory"
     return None
 
 

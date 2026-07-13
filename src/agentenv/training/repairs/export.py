@@ -29,11 +29,17 @@ from agentenv.hashing import hash_bytes, hash_file
 from agentenv.security.secrets import redact_secrets
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
-from agentenv.training.export import (
+from agentenv.training.candidates.export import (
     TrainingCandidateExport,
     load_training_candidate_export_artifact,
 )
-from agentenv.training.repair import (
+from agentenv.training.candidates.source_integrity import (
+    build_trajectory_record_index,
+    load_pinned_candidate_trajectory_export,
+    resolve_trajectory_artifact_path,
+    validate_artifact_ref_hash,
+)
+from agentenv.training.repairs.redundancy_repair import (
     MECHANICAL_REDUNDANCY_REPAIRER_VERSION,
     MECHANICAL_REDUNDANCY_REPAIR_METHOD,
     MechanicalRedundancyRepairCannotComplete,
@@ -42,21 +48,15 @@ from agentenv.training.repair import (
     hash_training_candidate_record,
     repair_prompt_loop_mechanical_redundancy,
 )
-from agentenv.training.repair_schema import (
+from agentenv.training.repairs.schema import (
     TRAINING_CANDIDATE_REPAIR_RECORD_SCHEMA_VERSION,
     MechanicalRedundancyRepairDetails,
     RepairedTranscriptArtifact,
     TrainingCandidateRepairRecord,
 )
-from agentenv.training.schema import (
+from agentenv.training.candidates.schema import (
     MechanicalRedundancyAssessment,
     TrainingCandidateRecord,
-)
-from agentenv.training.sft_builder import (
-    build_trajectory_record_index,
-    load_pinned_source_trajectory_export,
-    resolve_trajectory_artifact_path,
-    validate_artifact_ref_hash,
 )
 from agentenv.trajectories.schema import ArtifactRef, TrajectoryRecord
 
@@ -83,7 +83,7 @@ def export_training_candidate_repairs(
     candidate_export = load_training_candidate_export_artifact(
         training_candidate_export_dir
     )
-    trajectory_export = load_pinned_source_trajectory_export(candidate_export)
+    trajectory_export = load_pinned_candidate_trajectory_export(candidate_export)
     trajectories_by_id = build_trajectory_record_index(trajectory_export.records)
     calibrations = _load_source_public_check_calibrations(candidate_export)
 
@@ -424,7 +424,7 @@ def _validate_repair_records_against_source(
     candidate_export: TrainingCandidateExport,
 ) -> None:
     candidates_by_identity = _index_training_candidates(candidate_export.records)
-    trajectory_export = load_pinned_source_trajectory_export(candidate_export)
+    trajectory_export = load_pinned_candidate_trajectory_export(candidate_export)
     trajectories_by_id = build_trajectory_record_index(trajectory_export.records)
     calibrations = _load_source_public_check_calibrations(candidate_export)
     current_repairer_hash = compute_mechanical_redundancy_repairer_code_hash()

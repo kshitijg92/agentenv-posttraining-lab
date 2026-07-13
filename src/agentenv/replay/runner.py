@@ -65,6 +65,7 @@ SCORER_ATTEMPT_ARTIFACTS = (
 )
 VOLATILE_JSON_KEYS = {
     "agent_attempt_id",
+    "message_id",
     "scorer_attempt_id",
     "started_at",
     "ended_at",

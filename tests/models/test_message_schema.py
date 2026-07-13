@@ -1,11 +1,33 @@
 import pytest
 from pydantic import ValidationError
 
+from agentenv.ids import new_message_id
 from agentenv.models.schema import Message, MessageWithoutMetadata
 
 
+def test_message_requires_message_id() -> None:
+    with pytest.raises(ValidationError, match="message_id"):
+        Message(  # type: ignore[call-arg]
+            role="system",
+            content="You are a coding agent.",
+        )
+
+
+def test_message_rejects_malformed_message_id() -> None:
+    with pytest.raises(ValidationError, match="message_id"):
+        Message(
+            message_id="message_not-a-uuid",
+            role="system",
+            content="You are a coding agent.",
+        )
+
+
 def test_message_accepts_plain_system_message() -> None:
-    message = Message(role="system", content="You are a coding agent.")
+    message = Message(
+        message_id=new_message_id(),
+        role="system",
+        content="You are a coding agent.",
+    )
 
     assert message.role == "system"
     assert message.content == "You are a coding agent."
@@ -16,6 +38,7 @@ def test_message_accepts_plain_system_message() -> None:
 
 def test_message_without_metadata_reuses_message_field_contract() -> None:
     message = MessageWithoutMetadata(
+        message_id=new_message_id(),
         role="tool",
         content="file contents",
         name="read_file",
@@ -31,6 +54,7 @@ def test_message_without_metadata_rejects_metadata() -> None:
     with pytest.raises(ValidationError):
         MessageWithoutMetadata.model_validate(
             {
+                "message_id": new_message_id(),
                 "role": "assistant",
                 "content": "{}",
                 "metadata": {"source": "runtime"},
@@ -40,6 +64,7 @@ def test_message_without_metadata_rejects_metadata() -> None:
 
 def test_message_accepts_task_user_metadata() -> None:
     message = Message(
+        message_id=new_message_id(),
         role="user",
         content="Fix the bug.",
         name="task_manifest",
@@ -60,14 +85,25 @@ def test_message_accepts_task_user_metadata() -> None:
 
 def test_tool_message_requires_name_and_tool_call_id() -> None:
     with pytest.raises(ValidationError, match="tool messages require name"):
-        Message(role="tool", content="contents", tool_call_id="tool_call_001")
+        Message(
+            message_id=new_message_id(),
+            role="tool",
+            content="contents",
+            tool_call_id="tool_call_001",
+        )
 
     with pytest.raises(ValidationError, match="tool messages require tool_call_id"):
-        Message(role="tool", content="contents", name="read_file")
+        Message(
+            message_id=new_message_id(),
+            role="tool",
+            content="contents",
+            name="read_file",
+        )
 
 
 def test_tool_message_accepts_name_and_tool_call_id() -> None:
     message = Message(
+        message_id=new_message_id(),
         role="tool",
         content="file contents",
         name="read_file",
@@ -88,6 +124,7 @@ def test_system_and_user_messages_reject_tool_call_id() -> None:
         match="system messages cannot include tool_call_id",
     ):
         Message(
+            message_id=new_message_id(),
             role="system",
             content="system prompt",
             tool_call_id="tool_call_001",
@@ -98,6 +135,7 @@ def test_system_and_user_messages_reject_tool_call_id() -> None:
         match="user messages cannot include tool_call_id",
     ):
         Message(
+            message_id=new_message_id(),
             role="user",
             content="task prompt",
             tool_call_id="tool_call_001",
@@ -106,16 +144,27 @@ def test_system_and_user_messages_reject_tool_call_id() -> None:
 
 def test_message_rejects_empty_name_and_tool_call_id() -> None:
     with pytest.raises(ValidationError):
-        Message(role="assistant", content="{}", name="")
+        Message(
+            message_id=new_message_id(),
+            role="assistant",
+            content="{}",
+            name="",
+        )
 
     with pytest.raises(ValidationError):
-        Message(role="assistant", content="{}", tool_call_id="")
+        Message(
+            message_id=new_message_id(),
+            role="assistant",
+            content="{}",
+            tool_call_id="",
+        )
 
 
 def test_message_rejects_nested_metadata() -> None:
     with pytest.raises(ValidationError):
         Message.model_validate(
             {
+                "message_id": new_message_id(),
                 "role": "user",
                 "content": "Fix the bug.",
                 "metadata": {"nested": {"hidden": "not allowed"}},
@@ -125,6 +174,7 @@ def test_message_rejects_nested_metadata() -> None:
     with pytest.raises(ValidationError):
         Message.model_validate(
             {
+                "message_id": new_message_id(),
                 "role": "user",
                 "content": "Fix the bug.",
                 "metadata": {"list": ["not", "allowed"]},
@@ -136,6 +186,7 @@ def test_message_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         Message.model_validate(
             {
+                "message_id": new_message_id(),
                 "role": "user",
                 "content": "Fix the bug.",
                 "timestamp_utc": "2026-06-24T00:00:00Z",

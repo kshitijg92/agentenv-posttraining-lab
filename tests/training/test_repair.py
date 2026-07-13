@@ -6,20 +6,21 @@ import pytest
 from agentenv.agents.schema import PromptLoopResult, TokenUsage, ToolCallAction
 from agentenv.agents.tool_messages import render_tool_result_message
 from agentenv.hashing import hash_file
+from agentenv.ids import new_message_id
 from agentenv.models.schema import Message
 from agentenv.tasks.validate import load_task_manifest
 from agentenv.tools.hashing import hash_tool_input
 from agentenv.tools.schema import ReadFileOutput, ToolResult, validate_tool_input
-from agentenv.training.mechanical_redundancy import (
+from agentenv.training.repairs.redundancy_detection import (
     assess_prompt_loop_mechanical_redundancy,
 )
-from agentenv.training.repair import (
+from agentenv.training.repairs.redundancy_repair import (
     MechanicalRedundancyRepairCannotComplete,
     build_training_candidate_repair_id,
     hash_training_candidate_record,
     repair_prompt_loop_mechanical_redundancy,
 )
-from agentenv.training.schema import TrainingCandidateRecord
+from agentenv.training.candidates.schema import TrainingCandidateRecord
 
 
 TASK_MANIFEST_PATH = Path(
@@ -32,6 +33,11 @@ TASK_MANIFEST_HASH = hash_file(TASK_MANIFEST_PATH)
 def test_deterministic_repair_removes_only_redundant_call_result_pairs() -> None:
     prompt_loop = _prompt_loop_result(read_count=3)
     original_assessment = _assess(prompt_loop)
+    retained_message_ids = [
+        message.message_id
+        for message in prompt_loop.messages
+        if message.tool_call_id not in {"tool_call_0002", "tool_call_0003"}
+    ]
 
     result = repair_prompt_loop_mechanical_redundancy(
         prompt_loop,
@@ -53,6 +59,9 @@ def test_deterministic_repair_removes_only_redundant_call_result_pairs() -> None
         "tool_call_0001",
         None,
     ]
+    assert [message.message_id for message in result.transcript.root] == (
+        retained_message_ids
+    )
     assert result.transcript.root[0] == prompt_loop.messages[0]
     assert result.transcript.root[1] == prompt_loop.messages[1]
     assert result.transcript.root[-1] == prompt_loop.messages[-1]
@@ -177,8 +186,8 @@ def test_repair_id_is_deterministic_and_source_specific() -> None:
 
 def _prompt_loop_result(*, read_count: int) -> PromptLoopResult:
     messages = [
-        Message(role="system", content="system"),
-        Message(role="user", content="task"),
+        Message(message_id=new_message_id(), role="system", content="system"),
+        Message(message_id=new_message_id(), role="user", content="task"),
     ]
     tool_results: list[ToolResult] = []
     for index in range(1, read_count + 1):
@@ -200,6 +209,7 @@ def _prompt_loop_result(*, read_count: int) -> PromptLoopResult:
         )
         messages.append(
             Message(
+                message_id=new_message_id(),
                 role="assistant",
                 content=action.model_dump_json(),
                 tool_call_id=tool_call_id,
@@ -209,6 +219,7 @@ def _prompt_loop_result(*, read_count: int) -> PromptLoopResult:
         tool_results.append(result)
     messages.append(
         Message(
+            message_id=new_message_id(),
             role="assistant",
             content='{"action":"final_answer","text":"done"}',
         )
@@ -248,13 +259,13 @@ def _candidate_payload() -> dict[str, Any]:
         "review_decision": "accepted",
         "mechanical_redundancy_assessment": _assess(prompt_loop),
         "training_eligibility": {
-            "analysis_allowed": True,
+            "analysis_eligible": True,
             "analysis_reason": "available",
-            "positive_sft_allowed": True,
-            "positive_sft_reason": "allowed",
-            "negative_example_allowed": False,
+            "positive_sft_review_eligible": True,
+            "positive_sft_review_reason": "allowed",
+            "negative_example_eligible": False,
             "negative_example_reason": "succeeded",
-            "preference_data_allowed": True,
-            "preference_data_reason": "gradable",
+            "preference_pairing_eligible": True,
+            "preference_pairing_reason": "gradable",
         },
     }

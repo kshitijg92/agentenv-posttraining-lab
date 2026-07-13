@@ -11,7 +11,7 @@ from agentenv.artifacts.manifests import (
     TrainingCandidateRepairExportManifest,
     load_training_candidate_repair_export_manifest,
 )
-from agentenv.training.repair_schema import (
+from agentenv.training.repairs.schema import (
     TRAINING_CANDIDATE_REPAIR_RECORD_SCHEMA_VERSION,
 )
 

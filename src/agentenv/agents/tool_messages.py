@@ -1,5 +1,6 @@
 import json
 
+from agentenv.ids import new_message_id
 from agentenv.models.schema import Message
 from agentenv.security.secrets import redact_jsonable
 from agentenv.tools.schema import ToolResult
@@ -31,6 +32,7 @@ def render_tool_result_message(
         }
 
     return Message(
+        message_id=new_message_id(),
         role="tool",
         name=tool_result.tool_name,
         tool_call_id=tool_call_id,

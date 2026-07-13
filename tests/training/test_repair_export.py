@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import agentenv.training.repair_export as repair_export_module
+import agentenv.training.repairs.export as repair_export_module
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.manifests import (
     TRAINING_CANDIDATE_REPAIR_EXPORT_ARTIFACT_SCHEMA_VERSION,
@@ -13,35 +13,42 @@ from agentenv.artifacts.manifests import (
     load_trajectory_export_manifest,
 )
 from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
+from agentenv.ids import new_message_id
 from agentenv.orchestrators.eval_run import run_eval_config
-from agentenv.training.export import (
-    export_positive_sft_examples,
+from agentenv.training.candidates.export import (
     export_training_candidate_records,
-    load_positive_sft_export_artifact,
     load_training_candidate_export_artifact,
 )
-from agentenv.training.repair_export import (
+from agentenv.training.positive_sft.export import (
+    export_positive_sft_examples,
+    load_positive_sft_export_artifact,
+)
+from agentenv.training.repairs.export import (
     export_training_candidate_repairs,
     load_repaired_transcript_artifact,
     load_training_candidate_repair_export_artifact,
 )
-from agentenv.training.repair import (
+from agentenv.training.repairs.redundancy_repair import (
     hash_training_candidate_repair_record,
     hash_training_candidate_repair_review_record,
 )
-from agentenv.training.repair_review import (
+from agentenv.training.repairs.review import (
     TrainingCandidateRepairReviewArtifact,
     initialize_training_candidate_repair_review_artifact,
     load_training_candidate_repair_review_artifact,
     validate_training_candidate_repair_review_artifact,
     write_training_candidate_repair_review_records_jsonl,
 )
-from agentenv.training.repair_schema import (
+from agentenv.training.repairs.schema import (
     TrainingCandidateRepairRecord,
     TrainingCandidateRepairReviewRecord,
 )
-from agentenv.training.sft_builder import (
-    build_positive_sft_examples_from_training_candidate_export,
+from agentenv.training.positive_sft.review import (
+    PositiveSFTReviewArtifact,
+    build_positive_sft_review_selections,
+    initialize_positive_sft_review_artifact,
+    validate_positive_sft_review_artifact,
+    write_positive_sft_review_records_jsonl,
 )
 from agentenv.trajectories.export import (
     export_trajectory_records_from_eval_artifact,
@@ -142,6 +149,151 @@ def test_export_training_candidate_repairs_allows_empty_noop_free_artifact(
     assert not (export.out_dir / "transcripts").exists()
 
 
+def test_positive_sft_review_initializes_exact_original_source(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = _build_candidate_export(
+        tmp_path,
+        add_redundancy=False,
+    )
+
+    artifact = initialize_positive_sft_review_artifact(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
+
+    assert artifact.manifest.artifact_type == "positive_sft_review"
+    assert artifact.manifest.record_count == 1
+    assert artifact.manifest.original_record_count == 1
+    assert artifact.manifest.repaired_record_count == 0
+    review = artifact.reviews[0]
+    assert review.review_status == "not_reviewed"
+    assert review.source.source_type == "original"
+    assert review.source.source_artifact_ref.content_hash is not None
+
+
+def test_positive_sft_review_accepts_existing_assistant_boundary(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = _build_candidate_export(
+        tmp_path,
+        add_redundancy=False,
+    )
+    artifact = initialize_positive_sft_review_artifact(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
+    initial_validation = validate_positive_sft_review_artifact(artifact.out_dir)
+    selections = build_positive_sft_review_selections(
+        initial_validation.source_candidate_export,
+        repair_validation=None,
+        selected_repair_ids=(),
+    )
+    assistant_ids = [
+        message.message_id
+        for message in selections[0].messages
+        if message.role == "assistant"
+    ]
+    accepted = artifact.reviews[0].model_copy(
+        update={
+            "review_status": "reviewed",
+            "review_id": "positive_sft_review_001",
+            "reviewer_id": "reviewer_001",
+            "review_decision": "accepted",
+            "last_approved_assistant_message_id": assistant_ids[-1],
+        }
+    )
+    write_positive_sft_review_records_jsonl(
+        artifact.out_dir / artifact.manifest.artifacts["reviews"],
+        (accepted,),
+    )
+
+    validation = validate_positive_sft_review_artifact(artifact.out_dir)
+
+    assert validation.review_artifact.reviews[0].review_decision == "accepted"
+    assert (
+        validation.review_artifact.reviews[0].last_approved_assistant_message_id
+        == assistant_ids[-1]
+    )
+
+
+def test_positive_sft_review_rejects_non_assistant_boundary(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = _build_candidate_export(
+        tmp_path,
+        add_redundancy=False,
+    )
+    artifact = initialize_positive_sft_review_artifact(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
+    initial_validation = validate_positive_sft_review_artifact(artifact.out_dir)
+    selections = build_positive_sft_review_selections(
+        initial_validation.source_candidate_export,
+        repair_validation=None,
+        selected_repair_ids=(),
+    )
+    user_message_id = next(
+        message.message_id
+        for message in selections[0].messages
+        if message.role == "user"
+    )
+    invalid = artifact.reviews[0].model_copy(
+        update={
+            "review_status": "reviewed",
+            "review_id": "positive_sft_review_001",
+            "reviewer_id": "reviewer_001",
+            "review_decision": "accepted",
+            "last_approved_assistant_message_id": user_message_id,
+        }
+    )
+    write_positive_sft_review_records_jsonl(
+        artifact.out_dir / artifact.manifest.artifacts["reviews"],
+        (invalid,),
+    )
+
+    with pytest.raises(ValueError, match="must identify an assistant message"):
+        validate_positive_sft_review_artifact(artifact.out_dir)
+
+
+def test_positive_sft_review_pins_selected_repaired_source(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = _build_candidate_export(
+        tmp_path,
+        add_redundancy=True,
+    )
+    repair_export = export_training_candidate_repairs(
+        candidate_export_dir,
+        tmp_path / "repair-export",
+    )
+    repair_review = _initialize_accepted_repair_review(
+        repair_export.out_dir,
+        tmp_path / "repair-review",
+    )
+    repair = repair_export.records[0]
+
+    artifact = initialize_positive_sft_review_artifact(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+        repair_export_dir=repair_export.out_dir,
+        repair_review_dir=repair_review.out_dir,
+        selected_repair_ids=(repair.repair_id,),
+    )
+
+    assert artifact.manifest.original_record_count == 0
+    assert artifact.manifest.repaired_record_count == 1
+    assert artifact.manifest.source_training_candidate_repair_export is not None
+    assert artifact.manifest.source_training_candidate_repair_review is not None
+    source = artifact.reviews[0].source
+    assert source.source_type == "repaired"
+    assert source.repair_id == repair.repair_id
+    assert source.source_artifact_ref == repair.repaired_artifact_ref
+    validation = validate_positive_sft_review_artifact(artifact.out_dir)
+    assert validation.repair_validation is not None
+
+
 def test_load_training_candidate_repair_export_rejects_transcript_tamper(
     tmp_path: Path,
 ) -> None:
@@ -226,33 +378,25 @@ def test_positive_sft_uses_explicit_accepted_completed_repair(
         tmp_path / "repair-review",
     )
     repair = repair_export.records[0]
-
-    sft_export = export_positive_sft_examples(
+    sft_review = _initialize_accepted_positive_sft_review(
         candidate_export_dir,
-        tmp_path / "positive-sft-export",
+        tmp_path / "positive-sft-review",
         repair_export_dir=repair_export.out_dir,
         repair_review_dir=repair_review.out_dir,
         selected_repair_ids=(repair.repair_id,),
     )
 
+    sft_export = export_positive_sft_examples(
+        candidate_export_dir,
+        sft_review.out_dir,
+        tmp_path / "positive-sft-export",
+    )
+
     assert sft_export.manifest.record_count == 1
     assert sft_export.manifest.original_record_count == 0
     assert sft_export.manifest.repaired_record_count == 1
-    assert sft_export.manifest.source_training_candidate_repair_export is not None
-    assert sft_export.manifest.source_training_candidate_repair_review is not None
-    assert (
-        sft_export.manifest.source_training_candidate_repair_export.manifest_hash
-        == hash_file(repair_export.out_dir / MANIFEST_FILENAME)
-    )
-    assert (
-        sft_export.manifest.source_training_candidate_repair_review.manifest_hash
-        == hash_file(repair_review.out_dir / MANIFEST_FILENAME)
-    )
-    assert (
-        sft_export.manifest.source_training_candidate_repair_review.reviews_jsonl_hash
-        == hash_file(
-            repair_review.out_dir / repair_review.manifest.artifacts["reviews"]
-        )
+    assert sft_export.manifest.source_positive_sft_review.manifest_hash == hash_file(
+        sft_review.out_dir / MANIFEST_FILENAME
     )
     example = sft_export.records[0]
     assert example.source_provenance.source_type == "repaired"
@@ -286,16 +430,19 @@ def test_positive_sft_skips_redundant_candidate_without_selected_repair(
         tmp_path,
         add_redundancy=True,
     )
+    sft_review = _initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
 
     sft_export = export_positive_sft_examples(
         candidate_export_dir,
+        sft_review.out_dir,
         tmp_path / "positive-sft-export",
     )
 
     assert sft_export.records == ()
     assert sft_export.manifest.record_count == 0
-    assert sft_export.manifest.source_training_candidate_repair_export is None
-    assert sft_export.manifest.source_training_candidate_repair_review is None
 
 
 def test_positive_sft_rejects_selected_repair_without_accepted_review(
@@ -315,9 +462,9 @@ def test_positive_sft_rejects_selected_repair_without_accepted_review(
     )
 
     with pytest.raises(ValueError, match="does not have an accepted review"):
-        export_positive_sft_examples(
+        initialize_positive_sft_review_artifact(
             candidate_export_dir,
-            tmp_path / "positive-sft-export",
+            tmp_path / "positive-sft-review",
             repair_export_dir=repair_export.out_dir,
             repair_review_dir=repair_review.out_dir,
             selected_repair_ids=(repair_export.records[0].repair_id,),
@@ -373,7 +520,7 @@ def test_positive_sft_rejects_accepted_cannot_complete_repair(
     )
 
     with pytest.raises(ValueError, match="selected repair is not completed"):
-        build_positive_sft_examples_from_training_candidate_export(
+        build_positive_sft_review_selections(
             candidate_export,
             repair_validation=synthetic_validation,
             selected_repair_ids=(cannot_complete.repair_id,),
@@ -395,9 +542,9 @@ def test_positive_sft_rejects_unknown_selected_repair_id(tmp_path: Path) -> None
     )
 
     with pytest.raises(ValueError, match="selected unknown repair_id"):
-        export_positive_sft_examples(
+        initialize_positive_sft_review_artifact(
             candidate_export_dir,
-            tmp_path / "positive-sft-export",
+            tmp_path / "positive-sft-review",
             repair_export_dir=repair_export.out_dir,
             repair_review_dir=repair_review.out_dir,
             selected_repair_ids=("repair_unknown",),
@@ -417,12 +564,17 @@ def test_positive_sft_reload_rejects_repair_review_drift(tmp_path: Path) -> None
         repair_export.out_dir,
         tmp_path / "repair-review",
     )
-    sft_export = export_positive_sft_examples(
+    sft_review = _initialize_accepted_positive_sft_review(
         candidate_export_dir,
-        tmp_path / "positive-sft-export",
+        tmp_path / "positive-sft-review",
         repair_export_dir=repair_export.out_dir,
         repair_review_dir=repair_review.out_dir,
         selected_repair_ids=(repair_export.records[0].repair_id,),
+    )
+    sft_export = export_positive_sft_examples(
+        candidate_export_dir,
+        sft_review.out_dir,
+        tmp_path / "positive-sft-export",
     )
     rejected_review = repair_review.reviews[0].model_copy(
         update={
@@ -437,7 +589,7 @@ def test_positive_sft_reload_rejects_repair_review_drift(tmp_path: Path) -> None
         (rejected_review,),
     )
 
-    with pytest.raises(ValueError, match="repair reviews JSONL hash mismatch"):
+    with pytest.raises(ValueError, match="source repair reviews hash mismatch"):
         load_positive_sft_export_artifact(sft_export.out_dir)
 
 
@@ -456,12 +608,17 @@ def test_positive_sft_reload_rejects_rebound_repair_review_record_hash(
         repair_export.out_dir,
         tmp_path / "repair-review",
     )
-    sft_export = export_positive_sft_examples(
+    sft_review = _initialize_accepted_positive_sft_review(
         candidate_export_dir,
-        tmp_path / "positive-sft-export",
+        tmp_path / "positive-sft-review",
         repair_export_dir=repair_export.out_dir,
         repair_review_dir=repair_review.out_dir,
         selected_repair_ids=(repair_export.records[0].repair_id,),
+    )
+    sft_export = export_positive_sft_examples(
+        candidate_export_dir,
+        sft_review.out_dir,
+        tmp_path / "positive-sft-export",
     )
     examples_path = (
         sft_export.out_dir / sft_export.manifest.artifacts["positive_sft_examples"]
@@ -509,6 +666,57 @@ def _initialize_accepted_repair_review(
         accepted,
     )
     return load_training_candidate_repair_review_artifact(artifact.out_dir)
+
+
+def _initialize_accepted_positive_sft_review(
+    candidate_export_dir: Path,
+    out_dir: Path,
+    *,
+    repair_export_dir: Path | None = None,
+    repair_review_dir: Path | None = None,
+    selected_repair_ids: tuple[str, ...] = (),
+) -> PositiveSFTReviewArtifact:
+    artifact = initialize_positive_sft_review_artifact(
+        candidate_export_dir,
+        out_dir,
+        repair_export_dir=repair_export_dir,
+        repair_review_dir=repair_review_dir,
+        selected_repair_ids=selected_repair_ids,
+    )
+    validation = validate_positive_sft_review_artifact(artifact.out_dir)
+    selections = build_positive_sft_review_selections(
+        validation.source_candidate_export,
+        repair_validation=validation.repair_validation,
+        selected_repair_ids=selected_repair_ids,
+    )
+    selection_by_candidate = {
+        selection.candidate_hash: selection for selection in selections
+    }
+    accepted = tuple(
+        review.model_copy(
+            update={
+                "review_status": "reviewed",
+                "review_id": f"positive_sft_review_{index:04d}",
+                "reviewer_id": "reviewer",
+                "review_decision": "accepted",
+                "last_approved_assistant_message_id": next(
+                    message.message_id
+                    for message in reversed(
+                        selection_by_candidate[
+                            review.source_training_candidate_record_hash
+                        ].messages
+                    )
+                    if message.role == "assistant"
+                ),
+            }
+        )
+        for index, review in enumerate(artifact.reviews, start=1)
+    )
+    write_positive_sft_review_records_jsonl(
+        artifact.out_dir / artifact.manifest.artifacts["reviews"],
+        accepted,
+    )
+    return artifact
 
 
 def _build_candidate_export(
@@ -596,8 +804,10 @@ def _add_redundant_read(trajectory: TrajectoryRecord) -> TrajectoryRecord:
 
     redundant_id = "tool_call_redundant_0001"
     redundant_assistant = copy.deepcopy(assistant_message)
+    redundant_assistant["message_id"] = new_message_id()
     redundant_assistant["tool_call_id"] = redundant_id
     redundant_tool = copy.deepcopy(tool_message)
+    redundant_tool["message_id"] = new_message_id()
     redundant_tool["tool_call_id"] = redundant_id
     payload["messages"][tool_index + 1 : tool_index + 1] = [
         redundant_assistant,

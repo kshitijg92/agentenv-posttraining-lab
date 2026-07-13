@@ -12,6 +12,7 @@ from agentenv.controls.public_check_idempotency_schema import (
     PublicCheckIdempotencyCalibration,
 )
 from agentenv.hashing import hash_file
+from agentenv.ids import new_message_id
 from agentenv.models.schema import Message
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.validate import load_task_manifest
@@ -24,7 +25,7 @@ from agentenv.tools.schema import (
     WriteFileOutput,
     validate_tool_input,
 )
-from agentenv.training.mechanical_redundancy import (
+from agentenv.training.repairs.redundancy_detection import (
     assess_prompt_loop_mechanical_redundancy,
 )
 
@@ -241,6 +242,7 @@ def _prompt_loop_result(
         tool_call_id = f"tool_call_{index:04d}"
         messages.append(
             Message(
+                message_id=new_message_id(),
                 role="assistant",
                 content=action.model_dump_json(),
                 tool_call_id=tool_call_id,

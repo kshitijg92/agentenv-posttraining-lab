@@ -730,3 +730,37 @@ same harness runtime + same full task inputs + same candidate patch
 
 Pinning only a task id or task manifest is too weak because referenced files can
 drift while those identifiers stay unchanged.
+
+### Task Failure And Evidence Failure Have Different Data Consequences
+
+A task failure says the policy did not complete the requested objective. It
+does not say every earlier assistant decision was wrong. By contrast, a
+harness, orchestration, leakage, or provenance failure says the evidence itself
+is not trustworthy enough to support a training claim.
+
+The distinction is:
+
+```text
+task failure     -> may still contain an approved positive prefix
+evidence failure -> cannot authorize positive training use
+```
+
+Task success is therefore useful for prioritizing scarce human review because
+successful runs are likely to have higher positive yield. It is not a sound
+schema-level requirement for positive SFT. A successful trajectory can contain
+bad actions, while a failed trajectory can contain good actions before its
+earliest causal mistake.
+
+### Positive Supervision Requires Objective-Specific Credit Assignment
+
+An assistant message is model-authored, but model authorship only makes it
+eligible to receive loss; it does not make it desirable to imitate. For clean-
+behavior SFT, an unrepaired trajectory can authorize only a contiguous prefix
+ending before the earliest causal error. Actions after that boundary are
+conditioned on the mistake and may teach recovery behavior instead.
+
+Recovery can be a legitimate separate objective with its own review and mask.
+The same trajectory may therefore be positive-prefix data for one objective,
+recovery data for another, a rejected preference branch, and full-fidelity
+analysis evidence. No general trajectory review can substitute for these
+use-specific decisions.

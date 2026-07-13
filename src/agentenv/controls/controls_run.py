@@ -63,6 +63,7 @@ _VOLATILE_JSON_KEYS = {
     "duration_ms",
     "ended_at",
     "latency_ms",
+    "message_id",
     "scorer_attempt_id",
     "started_at",
     "stderr_bytes",

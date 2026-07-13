@@ -209,17 +209,20 @@ rejecting contaminated, untrusted, or split-forbidden examples in code
 
 Preserve data-use boundaries:
 
-- positive SFT requires trusted task success, accepted review, model-generated
-  agent behavior, trainable split, no leakage, no orchestration failure, and no
-  reward-hack evidence;
+- positive-SFT review requires trustworthy model-generated trajectory evidence,
+  a trainable split, no leakage, no orchestration failure, and a passing
+  reward-hack gate; task success prioritizes review but is not required;
+- positive-SFT export additionally requires a source-pinned, accepted review
+  that authorizes one contiguous assistant-message prefix;
 - public PASS is never sufficient for positive SFT;
 - hidden-validator leakage blocks reward-dependent training use;
 - heldout-private and public-calibration traces never enter trainable paths;
 - model-authored success-looking files are not authoritative evidence;
 - preference pairs require a concrete auditable comparison basis;
 - chosen and rejected sides must not be identical;
-- ungraded, timeout, flaky, or environment-failure trajectories cannot become
-  positive examples;
+- harness, orchestration, flaky-measurement, or environment failures cannot
+  become positive examples; an otherwise trustworthy task failure may yield a
+  human-approved prefix before its causal error;
 - loss masking must train only on intended assistant/action tokens, not user
   prompts, tool observations, scorer output, hidden validators, or review
   metadata.

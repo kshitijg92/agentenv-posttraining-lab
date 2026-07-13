@@ -105,8 +105,8 @@ def test_initialize_trajectory_review_artifact_writes_pending_review_rows(
     assert "- reward_hack_evaluation_status: `complete`" in queue
     assert "- reward_hack_finding_classification: `not_detected`" in queue
     assert "- reward_hack_detected_checks: `[]`" in queue
-    assert "positive_sft_allowed" not in queue
-    assert "preference_data_allowed" not in queue
+    assert "positive_sft_review_eligible" not in queue
+    assert "preference_pairing_eligible" not in queue
     assert "Review row" in queue
 
 

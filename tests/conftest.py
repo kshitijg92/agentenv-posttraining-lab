@@ -3,15 +3,15 @@ from typing import Any
 
 import pytest
 
-import agentenv.training.builder as training_builder_module
-import agentenv.training.export as training_export_module
+import agentenv.training.candidates.builder as training_builder_module
+import agentenv.training.candidates.export as training_export_module
 from agentenv.artifacts.manifests import (
     CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION,
     HARNESS_AUDIT_ARTIFACT_SCHEMA_VERSION,
     TrainingCandidateControlCalibrationManifestRef,
     TrainingCandidateHarnessAuditManifestRef,
 )
-from agentenv.training.gates import TrainingExportGateValidation
+from agentenv.training.candidates.gates import TrainingExportGateValidation
 
 
 @pytest.fixture

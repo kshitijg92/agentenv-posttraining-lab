@@ -39,3 +39,7 @@ def new_harness_audit_run_id() -> str:
 
 def new_replay_run_id() -> str:
     return _new_id("replay_run")
+
+
+def new_message_id() -> str:
+    return _new_id("message")

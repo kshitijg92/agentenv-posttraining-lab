@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
 from agentenv.models.schema import Message
-from agentenv.training.schema import MechanicalRedundancyAssessment
+from agentenv.training.candidates.schema import MechanicalRedundancyAssessment
 from agentenv.trajectories.schema import ArtifactRef, ReviewDecision, ReviewStatus
 
 
@@ -26,6 +26,9 @@ class RepairedTranscriptArtifact(RootModel[list[Message]]):
     def validate_non_empty_transcript(self) -> "RepairedTranscriptArtifact":
         if not self.root:
             raise ValueError("repaired transcript artifacts must not be empty")
+        message_ids = [message.message_id for message in self.root]
+        if len(message_ids) != len(set(message_ids)):
+            raise ValueError("repaired transcript message_ids must be unique")
         return self
 
 

@@ -2104,6 +2104,58 @@ branch: codex/acquisition-foundation
 
 No commit was created.
 
+### Positive-SFT Prefix Review And Message Identity
+
+Added required globally unique occurrence ids to persisted messages. Runtime
+creation assigns ids to system, user, assistant, and tool messages; provider
+payload serialization excludes them. Prompt-loop, repaired-transcript, and
+positive-SFT schemas reject duplicate ids, and deletion repair preserves ids
+for retained messages.
+
+Renamed candidate-level `TrainingEligibility` to
+`TrainingCandidateEligibility`. Its fields now describe downstream candidate
+paths rather than claiming that rows are already trainable:
+
+```text
+analysis_eligible
+positive_sft_review_eligible
+negative_example_eligible
+preference_pairing_eligible
+```
+
+Related manifest counts no longer use `trainable`. Positive-SFT review
+eligibility no longer requires task success or a scored terminal result. It
+retains the model-policy, split, leakage, orchestration, required-evidence, and
+reward-hack gates. This permits trustworthy failed trajectories to enter
+prefix review while keeping harness failures blocked.
+
+Added a standalone positive-SFT review artifact. Each record pins the exact
+candidate hash and original or accepted repaired transcript, then records the
+usual review authority plus `last_approved_assistant_message_id`. Accepted
+reviews require that boundary to exist exactly once and identify an assistant
+message. Rejected, pending, and follow-up reviews cannot authorize a boundary.
+
+Positive-SFT export now requires this review artifact. It exports only accepted
+records, truncates each transcript immediately after the approved assistant
+message, preserves message ids, and pins both the review artifact and exact
+review-record hash. Example identity includes the review-record hash so two
+approved boundaries over the same source cannot collide. The export manifest
+points to the positive-SFT review artifact as its direct source; candidate and
+repair provenance remain reachable through that artifact rather than being
+duplicated.
+
+Focused verification on the source branch:
+
+```text
+message identity checkpoint: 131 passed
+positive-SFT/candidate/repair/CLI focused set: 102 passed
+expanded training/model/agent/security/reward set: 333 passed, 1 stale fixture
+corrected repaired-transcript schema file: 31 passed
+Ruff on changed source and tests: passed
+Pyright on changed source and tests: passed
+git diff --check: passed
+```
+
 ### Current-Runtime Rescore, Clustering, Taxonomy, And Privacy Checkpoint
 
 This checkpoint supersedes the replay counts and review-packet state in the

@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-import agentenv.training.gates as gates_module
+import agentenv.training.candidates.gates as gates_module
 from agentenv.audits.runner import load_harness_audit_artifact
 from agentenv.audits.runner import run_harness_audit
 from agentenv.audits.schema import derive_harness_runtime_hash
 from agentenv.controls.controls_run import run_controls
 from agentenv.orchestrators.eval_run import run_eval_config
-from agentenv.training.export import (
+from agentenv.training.candidates.export import (
     export_training_candidate_records,
     load_training_candidate_export_artifact,
 )
@@ -247,9 +247,7 @@ def test_training_candidate_export_rejects_single_control_repeat(
 ) -> None:
     manifest_path = real_training_gates.control_calibration_dir / "manifest.json"
     manifest = gates_module.load_control_calibration_manifest(manifest_path)
-    weak_flake_detection = manifest.flake_detection.model_copy(
-        update={"repeats": 1}
-    )
+    weak_flake_detection = manifest.flake_detection.model_copy(update={"repeats": 1})
     weak_manifest = manifest.model_copy(
         update={
             "repeats": 1,

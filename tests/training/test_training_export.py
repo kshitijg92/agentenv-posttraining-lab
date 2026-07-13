@@ -10,11 +10,13 @@ from agentenv.artifacts.manifests import (
     load_training_candidate_export_manifest,
 )
 from agentenv.orchestrators.eval_run import run_eval_config
-from agentenv.training.export import (
+from agentenv.training.candidates.export import (
     export_training_candidate_records,
     load_training_candidate_export_artifact,
 )
-from agentenv.training.schema import TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION
+from agentenv.training.candidates.schema import (
+    TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
+)
 from agentenv.trajectories.export import (
     export_trajectory_records_from_eval_artifact,
     hash_file,
@@ -79,13 +81,13 @@ def test_export_training_candidate_records_writes_pending_review_artifact(
         == TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION
     )
     assert manifest.record_count == 1
-    assert manifest.analysis_allowed_count == 1
-    assert manifest.positive_sft_allowed_count == 0
-    assert manifest.negative_example_allowed_count == 0
-    assert manifest.preference_data_allowed_count == 0
-    assert manifest.trainable_count == 0
+    assert manifest.analysis_eligible_count == 1
+    assert manifest.positive_sft_review_eligible_count == 0
+    assert manifest.negative_example_eligible_count == 0
+    assert manifest.preference_pairing_eligible_count == 0
+    assert manifest.any_training_use_eligible_count == 0
     assert manifest.analysis_only_count == 1
-    assert manifest.not_trainable_count == 0
+    assert manifest.fully_ineligible_count == 0
     assert manifest.artifacts == {
         "training_candidates": "training_candidates.jsonl",
     }
@@ -114,13 +116,13 @@ def test_export_training_candidate_records_keeps_accepted_controls_analysis_only
     )
 
     assert export.manifest.record_count == 1
-    assert export.manifest.analysis_allowed_count == 1
-    assert export.manifest.positive_sft_allowed_count == 0
-    assert export.manifest.negative_example_allowed_count == 0
-    assert export.manifest.preference_data_allowed_count == 0
-    assert export.manifest.trainable_count == 0
+    assert export.manifest.analysis_eligible_count == 1
+    assert export.manifest.positive_sft_review_eligible_count == 0
+    assert export.manifest.negative_example_eligible_count == 0
+    assert export.manifest.preference_pairing_eligible_count == 0
+    assert export.manifest.any_training_use_eligible_count == 0
     assert export.manifest.analysis_only_count == 1
-    assert export.manifest.not_trainable_count == 0
+    assert export.manifest.fully_ineligible_count == 0
     assert export.records[0].training_eligibility.is_analysis_only
 
 
@@ -163,12 +165,12 @@ def test_load_training_candidate_export_rejects_summary_count_mismatch(
     )
     manifest_path = export.out_dir / MANIFEST_FILENAME
     manifest = json.loads(manifest_path.read_text())
-    manifest["analysis_allowed_count"] = 0
+    manifest["analysis_eligible_count"] = 0
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
     with pytest.raises(
         ValueError,
-        match="Training candidate manifest analysis_allowed_count mismatch",
+        match="Training candidate manifest analysis_eligible_count mismatch",
     ):
         load_training_candidate_export_artifact(export.out_dir)
 

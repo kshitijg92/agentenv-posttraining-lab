@@ -4,6 +4,7 @@ from typing import Any, cast
 
 import pytest
 
+from agentenv.ids import new_message_id
 from agentenv.models.schema import Message
 from agentenv.security.leakage import (
     LEAKAGE_CHECK_VERSION,
@@ -261,13 +262,25 @@ def test_scan_texts_for_leakage_rejects_empty_refs() -> None:
 def test_scan_messages_for_leakage_accepts_model_visible_messages() -> None:
     manifest = load_task_manifest(TOY_TASK_MANIFEST)
     messages = (
-        Message(role="system", name="agentenv", content="Use JSON actions only."),
-        Message(role="user", name="task_view", content="Fix src/mathlib.py."),
         Message(
+            message_id=new_message_id(),
+            role="system",
+            name="agentenv",
+            content="Use JSON actions only.",
+        ),
+        Message(
+            message_id=new_message_id(),
+            role="user",
+            name="task_view",
+            content="Fix src/mathlib.py.",
+        ),
+        Message(
+            message_id=new_message_id(),
             role="assistant",
             content='{"action": "tool_call", "tool_name": "run_tests"}',
         ),
         Message(
+            message_id=new_message_id(),
             role="tool",
             name="run_tests",
             tool_call_id="tool_call_0001",
@@ -291,10 +304,12 @@ def test_scan_messages_for_leakage_scans_content_and_metadata() -> None:
     manifest = load_task_manifest(TOY_TASK_MANIFEST)
     messages = (
         Message(
+            message_id=new_message_id(),
             role="assistant",
             content=f"I saw {manifest.leakage_canary}",
         ),
         Message(
+            message_id=new_message_id(),
             role="tool",
             name="run_tests",
             tool_call_id="tool_call_0001",
@@ -302,6 +317,7 @@ def test_scan_messages_for_leakage_scans_content_and_metadata() -> None:
             metadata={"controls": "private field key leaked"},
         ),
         Message(
+            message_id=new_message_id(),
             role="tool",
             name="read_file",
             tool_call_id="tool_call_0002",

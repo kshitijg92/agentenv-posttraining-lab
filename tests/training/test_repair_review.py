@@ -3,21 +3,23 @@ from pathlib import Path
 
 import pytest
 
-import agentenv.training.repair_review as repair_review_module
+import agentenv.training.repairs.review as repair_review_module
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.manifests import (
     TRAINING_CANDIDATE_REPAIR_REVIEW_ARTIFACT_SCHEMA_VERSION,
     TrainingCandidateRepairExportManifest,
     load_training_candidate_repair_review_manifest,
 )
-from agentenv.training.repair_export import TrainingCandidateRepairExport
-from agentenv.training.repair import hash_training_candidate_repair_record
-from agentenv.training.repair_review import (
+from agentenv.training.repairs.export import TrainingCandidateRepairExport
+from agentenv.training.repairs.redundancy_repair import (
+    hash_training_candidate_repair_record,
+)
+from agentenv.training.repairs.review import (
     initialize_training_candidate_repair_review_artifact,
     validate_training_candidate_repair_review_artifact,
     write_training_candidate_repair_review_records_jsonl,
 )
-from agentenv.training.repair_schema import (
+from agentenv.training.repairs.schema import (
     TRAINING_CANDIDATE_REPAIR_REVIEW_RECORD_SCHEMA_VERSION,
     TrainingCandidateRepairRecord,
     TrainingCandidateRepairReviewRecord,

@@ -19,12 +19,14 @@ from agentenv.artifacts.manifests import (
     load_training_candidate_repair_review_manifest,
 )
 from agentenv.hashing import hash_file
-from agentenv.training.repair import hash_training_candidate_repair_record
-from agentenv.training.repair_export import (
+from agentenv.training.repairs.redundancy_repair import (
+    hash_training_candidate_repair_record,
+)
+from agentenv.training.repairs.export import (
     TrainingCandidateRepairExport,
     load_training_candidate_repair_export_artifact,
 )
-from agentenv.training.repair_schema import (
+from agentenv.training.repairs.schema import (
     TRAINING_CANDIDATE_REPAIR_REVIEW_RECORD_SCHEMA_VERSION,
     TrainingCandidateRepairRecord,
     TrainingCandidateRepairReviewRecord,
