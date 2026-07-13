@@ -67,10 +67,12 @@ def test_prompt_loop_completes_on_final_answer(tmp_path: Path) -> None:
         _agent_task_view(workspace),
         _fake_model(
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "final_answer",
-                    "text": "done",
-                }),
+                output_text=_action(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
             )
         ),
         _decoding_config(),
@@ -118,10 +120,12 @@ def test_prompt_loop_treats_max_new_tokens_as_model_error_after_recording_output
         _agent_task_view(workspace),
         _fake_model(
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "final_answer",
-                    "text": "done",
-                }),
+                output_text=_action(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
                 finish_reason="max_new_tokens_reached",
             )
         ),
@@ -176,17 +180,21 @@ def test_prompt_loop_continues_after_recoverable_tool_error(
         _agent_task_view(workspace),
         _fake_model(
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "read_file",
-                    "arguments": {},
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "read_file",
+                        "arguments": {},
+                    }
+                ),
             ),
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "final_answer",
-                    "text": "done",
-                }),
+                output_text=_action(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
             ),
         ),
         _decoding_config(),
@@ -205,6 +213,42 @@ def test_prompt_loop_continues_after_recoverable_tool_error(
     ]
     assert result.messages[2].tool_call_id == "tool_call_0001"
     assert result.messages[3].tool_call_id == "tool_call_0001"
+
+
+def test_prompt_loop_hides_workspace_path_in_recoverable_tool_error(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    result = run_prompt_loop(
+        _agent_task_view(workspace),
+        _fake_model(
+            FakeModelScriptStep(
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "read_file",
+                        "arguments": {"path": "missing.py"},
+                    }
+                ),
+            ),
+            FakeModelScriptStep(
+                output_text=_action(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
+            ),
+        ),
+        _decoding_config(),
+    )
+
+    assert result.status == "completed"
+    assert result.tool_results[0].error_class == "ToolExecutionError"
+    assert str(workspace) not in result.messages[3].content
+    assert "<WORKSPACE>/missing.py" in result.messages[3].content
 
 
 def test_prompt_loop_preserves_partial_transcript_when_workspace_hashing_fails(
@@ -232,11 +276,13 @@ def test_prompt_loop_preserves_partial_transcript_when_workspace_hashing_fails(
     monkeypatch.setattr(prompt_loop_module, "execute_tool", fail_second_tool_call)
 
     read_action = FakeModelScriptStep(
-        output_text=_action({
-            "action": "tool_call",
-            "tool_name": "read_file",
-            "arguments": {"path": "src.py"},
-        }),
+        output_text=_action(
+            {
+                "action": "tool_call",
+                "tool_name": "read_file",
+                "arguments": {"path": "src.py"},
+            }
+        ),
     )
     result = run_prompt_loop(
         _agent_task_view(workspace),
@@ -267,17 +313,21 @@ def test_prompt_loop_stops_after_terminal_tool_error(tmp_path: Path) -> None:
         _agent_task_view(workspace, allowed_tools=["read_file"]),
         _fake_model(
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "delete_file",
-                    "arguments": {"path": "src.py"},
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "delete_file",
+                        "arguments": {"path": "src.py"},
+                    }
+                ),
             ),
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "final_answer",
-                    "text": "done",
-                }),
+                output_text=_action(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
             ),
         ),
         _decoding_config(),
@@ -357,11 +407,13 @@ def test_prompt_loop_reports_max_turns_after_recoverable_tool_error(
         _agent_task_view(workspace, max_turns=1),
         _fake_model(
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "read_file",
-                    "arguments": {},
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "read_file",
+                        "arguments": {},
+                    }
+                ),
             )
         ),
         _decoding_config(),

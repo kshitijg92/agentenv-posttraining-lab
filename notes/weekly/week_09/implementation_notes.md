@@ -2618,3 +2618,53 @@ git diff --check: passed
 ```
 
 No commit was created.
+
+### Week9 Merge, Historical Matrix Inventory, And Tool-Path Sanitization
+
+Merged the `week9` branch into the acquisition-foundation worktree. Conflict
+resolution retained the 13-task pack, finite-duration overflow contract,
+Ollama digest probing, and natural-model budget matrix while incorporating the
+message-identity and positive-SFT prefix-review package from `week9`.
+
+Fresh message ids initially made agent control repeats and replays appear to
+drift. Added `message_id` to the volatile comparison fields for controls and
+replay. Message count, order, role, content, tool-call identity, observations,
+and all nonvolatile artifact fields remain compared. The merged tree passed:
+
+```text
+focused merge regressions: 532 passed after the comparison correction
+full repository suite: 1005 passed
+repository Ruff: passed
+repository Pyright: passed
+changed-file Ruff formatting: passed
+```
+
+The earlier 312-attempt natural-model matrix predates required persisted
+message occurrence ids. It was not mutated or passed through a compatibility
+shim. It remains analysis-only historical evidence. A raw, non-authorizing
+inventory was written to:
+
+```text
+experiments/analysis/natural_model_full_dev_budget_matrix_evidence.json
+experiments/analysis/natural_model_full_dev_budget_matrix_evidence.md
+```
+
+The inventory found 320 raw pass-versus-scored-failure comparison
+opportunities, 267 after action-plus-patch behavioral clustering, and 14
+same-model cross-decoding opportunities. All 312 mechanical-redundancy checks
+completed; seven attempts contained redundant blocks. The current reward-hack
+catalogue produced 235 ambiguous findings, three confirmed public-check
+tampering findings, and 74 not-detected findings. These are review signals, not
+preference decisions.
+
+Configured transcript scanning found zero canary, private-marker, or secret-
+pattern matches. It did find scratch/workspace paths in 23 transcripts, all
+outside the 17 passing trajectories. The source was model-visible tool errors
+and public-check output. Centralized model-visible tool-result sanitization now
+replaces the active workspace root with `<WORKSPACE>` and external agentenv temp
+paths with `<AGENTENV_TEMP>` in tool error messages, stdout, and stderr. File
+contents and relative workspace paths remain unchanged. Tool, prompt-loop,
+control, replay, and trajectory regressions passed 93 tests after this change.
+
+Final harness audit and control calibration were intentionally deferred until
+after current-runtime reacquisition is complete.

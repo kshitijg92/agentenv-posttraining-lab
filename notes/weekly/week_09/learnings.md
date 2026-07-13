@@ -764,3 +764,39 @@ The same trajectory may therefore be positive-prefix data for one objective,
 recovery data for another, a rejected preference branch, and full-fidelity
 analysis evidence. No general trajectory review can substitute for these
 use-specific decisions.
+
+### Occurrence Identity Is Not Behavioral Drift
+
+Globally unique message ids distinguish two persisted occurrences even when
+their semantic content is identical. A fresh replay should therefore generate
+new ids. Comparing those values as if they were model behavior makes a correct
+replay look flaky.
+
+The correct invariant is:
+
+```text
+fresh occurrence ids may differ
+message count + order + role + content + tool linkage must still match
+```
+
+Normalizing an occurrence id does not mean discarding provenance. Each artifact
+retains its real ids; only the behavioral comparison projects them away. The
+self-deception trap is either demanding byte equality from intentionally fresh
+identity or, in the opposite direction, normalizing so broadly that meaningful
+trajectory changes disappear.
+
+### Missing Historical Provenance Cannot Be Invented Retroactively
+
+When a new required field records evidence that the old runtime never captured,
+backfilling a syntactically valid value does not recreate that evidence. An
+invented message id may make an old JSON object parse, but it cannot prove that
+the id existed, was unique, or was preserved through the original execution.
+
+```text
+old artifact + invented required fields != artifact produced under new invariant
+```
+
+Such traces can remain useful for explicitly labeled historical analysis. They
+must not silently enter the new training pipeline. Training eligibility needs
+current-runtime reacquisition or an explicit, separately reviewed
+transformation whose weaker claim remains visible.

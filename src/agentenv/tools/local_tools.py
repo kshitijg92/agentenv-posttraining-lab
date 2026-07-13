@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from subprocess import TimeoutExpired
 from time import perf_counter
 
@@ -30,6 +31,9 @@ from agentenv.tools.schema import (
 
 class WorkspaceStateHashError(RuntimeError):
     pass
+
+
+_AGENTENV_TEMP_PATH_RE = re.compile(r"(?:/private)?/(?:var/)?tmp/agentenv-[^\s'\"<>]+")
 
 
 @dataclass(frozen=True)
@@ -67,12 +71,25 @@ def execute_tool(
         canonical_workspace_hash_after=workspace_hash_after,
         status=outcome.status,
         output=outcome.output,
-        stdout=outcome.stdout,
-        stderr=outcome.stderr,
+        stdout=_sanitize_model_visible_tool_text(
+            outcome.stdout,
+            workspace_path=agent_task_view.workspace_path,
+        ),
+        stderr=_sanitize_model_visible_tool_text(
+            outcome.stderr,
+            workspace_path=agent_task_view.workspace_path,
+        ),
         exit_code=outcome.exit_code,
         duration_ms=outcome.duration_ms,
         error_class=outcome.error_class,
-        error_message=outcome.error_message,
+        error_message=(
+            _sanitize_model_visible_tool_text(
+                outcome.error_message,
+                workspace_path=agent_task_view.workspace_path,
+            )
+            if outcome.error_message is not None
+            else None
+        ),
     )
 
 
@@ -486,6 +503,12 @@ def _stream_text(stream: object) -> str:
     if isinstance(stream, bytes):
         return stream.decode(errors="replace")
     return str(stream)
+
+
+def _sanitize_model_visible_tool_text(text: str, *, workspace_path: Path) -> str:
+    sanitized = redact_secrets(text)
+    sanitized = sanitized.replace(str(workspace_path.resolve()), "<WORKSPACE>")
+    return _AGENTENV_TEMP_PATH_RE.sub("<AGENTENV_TEMP>", sanitized)
 
 
 def _duration_ms(started: float) -> int:
