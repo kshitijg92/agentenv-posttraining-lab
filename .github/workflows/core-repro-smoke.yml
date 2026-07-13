@@ -1,0 +1,32 @@
+name: Core reproduction smoke
+
+"on":
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.10.4"
+          enable-cache: true
+      - name: Install Python
+        run: uv python install
+      - name: Sync locked environment
+        run: uv sync --locked
+      - name: Lint
+        run: uv run --frozen ruff check .
+      - name: Type check
+        run: uv run --frozen pyright
+      - name: Test
+        run: uv run --frozen pytest -n auto
+      - name: Reproduce deterministic core
+        run: scripts/reproduce_core_smoke.sh "$RUNNER_TEMP/agentenv-core-repro"

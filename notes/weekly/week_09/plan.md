@@ -468,22 +468,31 @@ Do not claim model improvement from this week.
 
 ## Current Acquisition Checkpoint (2026-07-13)
 
-The current-runtime anchor/contrast acquisition now provides:
+Two current-runtime acquisition suites now cover all 13 dev tasks:
 
 ```text
-60 trajectories
-18 hidden PASS
-30 scored non-PASS
-12 unscored model-loop failures
-39 scored PASS-vs-non-PASS combinations with matching logical initial context
-31 such combinations after exact assistant-behavior deduplication
-27 such combinations after exact patch deduplication
+156 trajectories
+20 hidden PASS
+116 scored test failures plus one blocked INVALID_SHORTCUT
+19 unscored model-loop failures
+49 PASS-vs-non-PASS combinations with matching logical initial context
+41 such combinations after exact assistant-behavior distinction
+36 such combinations after exact patch distinction
 ```
+
+Seven of thirteen dev tasks have at least one trusted positive anchor. The
+second acquisition added the first passes for `repair_query_encoding` and
+`repair_template_expansion`; six harder tasks still have no pass.
 
 The aggregate harness audit passes, control calibration is stable at three
 repeats, and all 14 declared public checks are idempotent across two seed-state
-runs. All 60 trajectory reviews remain `not_reviewed`, so all 60 training
+runs. All 156 trajectory reviews remain `not_reviewed`, so all 156 training
 candidates remain analysis-only.
+
+Newer-model practice gates did not justify further acquisition: `gpt-oss:20b`
+used an unsupported provider-native tool-call channel, and Qwen3.5-27B ended
+three of three repeated smokes in invalid model output. Neither model was
+admitted by weakening the existing action contract.
 
 This satisfies the acquisition-groundwork objective for later review of at
 least 20 comparison candidates. It does not satisfy Checkpoint 3: no

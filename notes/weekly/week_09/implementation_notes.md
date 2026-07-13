@@ -2773,3 +2773,130 @@ experiments/analysis/natural_model_anchor_contrast_acquisition_behavior_clusters
 experiments/analysis/natural_model_anchor_contrast_acquisition_privacy_audit.json
 experiments/analysis/natural_model_anchor_contrast_acquisition_review_packet.md
 ```
+
+### Full-Dev Current-Runtime Coverage And Reproduction Foundation
+
+Added the cadence-neutral complement config:
+
+```text
+configs/eval/natural_model_dev_coverage_acquisition.yaml
+```
+
+It ran the eight dev tasks omitted from the preceding five-task acquisition
+with the same four models, decoding config, and three attempts per model/task.
+The run completed under the same trusted harness runtime:
+
+```text
+run: experiments/runs/natural_model_dev_coverage_acquisition
+eval suite id: eval_suite_c675663ebdb14b6989f790593c642c4f
+config hash: xxh64:4c62a2444e7832dd
+harness runtime: xxh64:b899f465ef82ddef
+attempts: 96
+
+PASS: 2
+HIDDEN_TEST_FAIL: 70
+PUBLIC_TEST_FAIL: 16
+INVALID_SHORTCUT: 1
+unscored model-loop failures: 7
+orchestration failures: 0
+```
+
+Both passes were Devstral trajectories, providing the first trusted positive
+anchors for `repair_query_encoding` and `repair_template_expansion`. The
+`INVALID_SHORTCUT` row was a natural Qwen3 public-test modification correctly
+blocked as `PublicTestModified` before hidden scoring.
+
+Exported all four policy runs to trajectory artifacts, initialized 96
+`not_reviewed` review rows, and passed all four exports through the existing
+harness-audit/control-calibration trust gate. The result remains deliberately:
+
+```text
+records: 96
+analysis-only: 96
+positive-SFT review eligible: 0
+negative-example eligible: 0
+preference-pairing eligible: 0
+```
+
+Joined these records with the earlier 60-row acquisition without merging or
+rewriting the source manifests. The unified current-runtime inventory is:
+
+```text
+trajectories: 156
+dev tasks: 13/13
+PASS: 20
+HIDDEN_TEST_FAIL: 92
+PUBLIC_TEST_FAIL: 24
+INVALID_SHORTCUT: 1
+unscored: 19
+tasks with at least one pass: 7/13
+exact behavior clusters: 143
+distinct task/patch combinations: 122
+```
+
+Comparison-ingredient accounting now finds 49 logical-initial-context-matched
+PASS/non-PASS combinations, 41 after exact assistant-behavior distinction, 36
+after exact patch distinction, and 10 within one policy. These remain review
+inputs, not preference records.
+
+Unified ignored analysis artifacts:
+
+```text
+experiments/analysis/natural_model_full_dev_current_runtime_evidence.json
+experiments/analysis/natural_model_full_dev_current_runtime_evidence.md
+experiments/analysis/natural_model_full_dev_current_runtime_behavior_clusters.json
+experiments/analysis/natural_model_full_dev_current_runtime_privacy_audit.json
+experiments/analysis/natural_model_full_dev_current_runtime_review_packet.md
+```
+
+The privacy audit found 27 user-host paths in 14 trajectories, all within
+audit-only raw tool-result evidence. It found no configured sensitive match in
+semantic messages or candidate patches and conservatively retained
+`NORMALIZATION_REQUIRED`.
+
+Tested two newer local models behind practice-only compatibility gates:
+
+```text
+gpt-oss:20b
+  digest: sha256:17052f91a42e97930aa6e28a6c6c06a983e6a58dbb00434885a0cf5313e376f7
+  result: emitted provider-native tool_calls / finish_reason=tool_calls
+  decision: unsupported by the current JSON-content adapter
+
+qwen3.5:27b
+  digest: sha256:7653528ba5cba4dd8e19da24aaddc7f4d0b5ecd93571c0825dfd4137958ec06e
+  result: three of three repeated practice runs ended in invalid model output
+  decision: do not promote to dev acquisition
+```
+
+No parser relaxation or provider-native tool translation was added.
+
+Added a design-neutral reproduction foundation:
+
+```text
+scripts/reproduce_core_smoke.sh
+docs/reproducibility.md
+.github/workflows/core-repro-smoke.yml
+```
+
+The script validates tasks and splits, runs the deterministic six-policy eval
+quality gate with 18 attempts and 6 replays, regenerates its report from
+persisted artifacts, and requires byte-identical reports. Its output directory
+must be new, and all `uv run` calls use `--frozen`. The CI workflow uses the
+locked environment, runs Ruff, Pyright, the full test suite, and then the same
+model-free reproduction smoke.
+
+Local verification:
+
+```text
+core reproduction smoke: passed
+focused eval/report/CLI/training-gate regressions: 59 passed
+Ruff: passed
+Pyright: 0 errors
+uv sync --locked --dry-run: no changes
+bash syntax: passed
+git diff --check: passed
+```
+
+The full 1005-test suite was not repeated because no `src/agentenv`, dependency,
+task, or schema bytes changed after its previous passing run. The new CI
+workflow is configured to run the full suite in a clean environment.

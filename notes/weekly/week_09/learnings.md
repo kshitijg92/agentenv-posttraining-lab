@@ -862,3 +862,44 @@ consumer that embeds raw tool results must normalize or review those fields.
 Privacy audits should therefore report artifact scope and keep conservative
 overall status, rather than collapsing every finding into either harmlessness
 or universal leakage.
+
+### Model Capability Claims Do Not Establish Harness Compatibility
+
+A provider may advertise structured outputs, tool use, or agentic coding while
+still speaking a different action protocol from the evaluator. Compatibility
+must be measured across the full loop, not inferred from a feature label or one
+valid first response.
+
+```text
+valid first action != compatible multi-turn policy
+native tool call    != harness-defined typed action
+JSON-shaped output != schema-valid action
+```
+
+A model can emit native provider `tool_calls` when the harness expects JSON in
+assistant content, or it can follow the schema for two turns and violate it on
+the first write. Silently translating those behaviors or loosening validation
+to increase model coverage changes the policy interface being evaluated.
+
+The conservative acquisition gate is an end-to-end repeated smoke under the
+same adapter and action contract. An incompatible model should remain a
+documented integration result until the interface translation is deliberately
+designed and audited.
+
+### Task Count And Positive-Anchor Coverage Are Different Dataset Properties
+
+A task pack can contain enough tasks while the acquisition pool still has
+success evidence for only a narrow subset. Counting tasks alone hides whether
+positive data spans the intended construct distribution.
+
+```text
+task exists in pack        -> potential measurement support
+task has trusted failures  -> negative and analysis support
+task has trusted successes -> possible positive-anchor support
+```
+
+This distinction matters before post-training. If all positive rows come from
+the easiest task family, a dataset can be numerically large while teaching a
+much narrower behavior than the eval suite claims to measure. Acquisition
+reports should therefore show per-task outcome support and retain zero-positive
+tasks instead of smoothing them into an aggregate pass count.
