@@ -507,3 +507,64 @@ Which differences between two trajectories with the same logical initial
 context are allowed before a human preference judgment becomes too confounded
 to support one chosen/rejected label?
 ```
+
+## Review And Downstream-Readiness Checkpoint (2026-07-13)
+
+The `not_reviewed` counts above describe the acquisition checkpoint before the
+AI-proxy review pass. They are superseded by this later state:
+
+```text
+trajectory reviews:
+  accepted for objective-specific consideration: 101
+  needs_followup: 55
+
+rebuilt training-candidate eligibility:
+  positive-SFT prefix review: 100
+  negative-example use: 81
+  preference pairing: 82
+
+positive-SFT-specific reviews:
+  accepted: 18
+  needs_followup: 80
+  rejected: 2
+
+positive-SFT source-level exports: 18 examples
+```
+
+The reviewer identity is explicitly recorded as an AI proxy acting on the
+user's behalf. General trajectory acceptance permits only objective-specific
+consideration. It is not an approval to imitate the entire transcript, and it
+does not establish a preference direction.
+
+The two rejected successful trajectories each contained a failed tool action
+in the contiguous history before recovery. This is expected evidence that task
+success alone does not make a transcript a clean positive target.
+
+The acquisition foundation is now sufficient for the remaining SFT and
+preference design. A separate downstream-readiness audit found that additional
+natural-model acquisition is not the next blocker. The pre-training foundations
+still missing are:
+
+```text
+an exact trainable base checkpoint and tokenizer
+a minimal training runtime
+a same-stack path for evaluating the base model and trained adapter
+an exact pre-training baseline
+an untouched evaluation slice if the experiment intends to measure anything
+  beyond in-sample plumbing, memorization, or trained-example regression
+```
+
+The current environment has a 16 GiB RTX 4080 SUPER and enough host memory and
+disk for a small smoke, but contains none of the expected PyTorch/Hugging Face/
+PEFT training packages. `agentenv training` currently constructs data
+artifacts; it does not train a model.
+
+Do not solve these gaps by selecting a checkpoint, serving architecture, or
+heldout task distribution without the corresponding guided design decision.
+In particular, do not relabel any of the 13 inspected dev tasks as heldout.
+
+Readiness audit:
+
+```text
+experiments/analysis/downstream_foundation_readiness.md
+```

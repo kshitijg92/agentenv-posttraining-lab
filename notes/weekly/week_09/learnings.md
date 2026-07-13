@@ -903,3 +903,69 @@ the easiest task family, a dataset can be numerically large while teaching a
 much narrower behavior than the eval suite claims to measure. Acquisition
 reports should therefore show per-task outcome support and retain zero-positive
 tasks instead of smoothing them into an aggregate pass count.
+
+### Data Availability, Trainability, And Evaluability Are Separate Gates
+
+Having candidate examples does not mean the project can train them, and having
+a trained adapter does not mean the project can measure its effect.
+
+```text
+data availability -> reviewed source examples or comparison ingredients exist
+trainability      -> exact tokenizer, serialization, loss mask, model weights,
+                     objective, and runtime can consume them
+evaluability      -> the exact base and adapted policies can be compared on a
+                     split whose relationship to training is declared
+```
+
+These gates fail independently. A lab can have dozens of potential preference
+comparisons but no trainable checkpoint. It can complete a tiny SFT run yet
+have no way to serve the adapter through the evaluator. It can evaluate the
+adapter on its training tasks yet have no evidence about heldout behavior.
+
+The self-deception trap is to treat completion of the most visible stage as
+proof that the whole experimental loop exists. Downstream readiness should be
+audited from the intended claim backward: what comparison makes that claim
+meaningful, how will both policies be served, what training artifact produces
+one of them, and what authorized data feeds that artifact?
+
+### A Recovered Successful Trajectory Can Still Be A Bad SFT Target
+
+Task success validates the final task outcome, not every action in the path to
+that outcome. A model can issue an invalid tool call, recover, and eventually
+pass the hidden validator. Imitating the full contiguous transcript would then
+teach both the avoidable error and its recovery.
+
+This creates an objective-specific distinction:
+
+```text
+successful endpoint                         -> trustworthy outcome evidence
+clean successful path                       -> possible direct SFT target
+successful path containing an earlier error -> repair, truncate before the
+                                                 error, use for a recovery
+                                                 objective, or reject
+```
+
+Masking only the failed action is not automatically sufficient because later
+assistant behavior remains conditioned on that action and its tool response.
+For a clean-behavior SFT objective, the context itself can be contaminated even
+when the bad action carries no loss.
+
+### An In-Sample Post-Training Eval Has A Narrow But Valid Meaning
+
+Training on dev-task trajectories does not make later evaluation on those same
+tasks worthless. It can still test whether the training loop runs, whether the
+adapter can be served, whether trained examples regress, and whether expected
+behaviors were memorized.
+
+It changes the permissible claim:
+
+```text
+evaluation on training tasks -> plumbing, memorization, and regression evidence
+evaluation on a frozen unseen slice -> possible generalization evidence,
+                                        subject to the rest of the protocol
+```
+
+Relabeling already inspected or trained-on tasks as heldout does not restore
+the missing counterfactual. If the final claim needs unseen-task evidence, the
+slice must be frozen before training and before its outcomes are used to tune
+the data, prompt, decoding, or scorer.

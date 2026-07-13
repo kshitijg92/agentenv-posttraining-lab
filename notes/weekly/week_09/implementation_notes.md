@@ -2900,3 +2900,99 @@ git diff --check: passed
 The full 1005-test suite was not repeated because no `src/agentenv`, dependency,
 task, or schema bytes changed after its previous passing run. The new CI
 workflow is configured to run the full suite in a clean environment.
+
+### AI-Proxy Review And Source-Level SFT Export
+
+Applied an explicitly identified AI-proxy review to the 156 current-runtime
+trajectories. The proxy acted on the user's behalf; the artifacts do not claim
+independent human review. It validated source hashes and privacy evidence,
+accepted trustworthy rows for objective-specific consideration, and retained
+ambiguous hidden failures on the six tasks without any positive anchor as
+`needs_followup`.
+
+```text
+trajectory reviews:
+  accepted: 101
+  needs_followup: 55
+  rejected: 0
+
+ambiguous reward-hack reviews cleared after source-only patch inspection: 37
+```
+
+Rebuilt all eight training-candidate exports from the reviewed bytes under the
+matching harness-audit and control-calibration gates:
+
+```text
+records: 156
+analysis eligible: 156
+positive-SFT prefix review eligible: 100
+negative-example eligible: 81
+preference-pairing eligible: 82
+```
+
+The logical-context comparison inventory remained 49 PASS/non-PASS
+combinations, 41 after exact behavior distinction, and 36 after exact patch
+distinction. Eligibility review did not turn these ingredients into preference
+pairs.
+
+Initialized and completed a separate positive-SFT review for all 100 eligible
+source candidates:
+
+```text
+accepted: 18
+needs_followup: 80
+rejected: 2
+```
+
+Failed trajectories remained `needs_followup`; the proxy did not infer a good
+prefix without a causal-error review. Two successful trajectories were
+rejected because their required contiguous history contained a failed tool
+action before recovery. All eight positive-SFT exports validate and contain 18
+unique source-level examples in total. The examples span six tasks and have 18
+distinct behavior hashes and 18 distinct patch hashes.
+
+Review summaries:
+
+```text
+experiments/analysis/natural_model_full_dev_ai_proxy_review_summary.json
+experiments/analysis/natural_model_full_dev_ai_proxy_positive_sft_review_summary.json
+```
+
+### Downstream Foundation Audit
+
+Audited Weeks 9-12 for non-design prerequisites. The acquisition/data
+foundation is sufficient; the execution foundation is not.
+
+Concrete findings:
+
+```text
+training packages absent:
+  torch, transformers, peft, trl, accelerate, datasets, bitsandbytes
+
+training CLI:
+  candidate and positive-SFT artifact export only
+
+split lock:
+  1 practice, 13 dev, 0 heldout-private, 0 public-calibration
+
+available hardware during audit:
+  RTX 4080 SUPER, 16,376 MiB VRAM
+  30 GiB RAM
+  approximately 777 GiB free disk
+```
+
+The evaluator expects an OpenAI-compatible endpoint, while the likely output
+of a small local SFT run is a Hugging Face/PEFT adapter. No same-stack
+base-versus-adapter serving path exists. All dev tasks have also been inspected
+and used for acquisition, so they cannot provide an untouched generalization
+measurement after training.
+
+The full audit is recorded at:
+
+```text
+experiments/analysis/downstream_foundation_readiness.md
+```
+
+No training dependency, trainer, checkpoint, serving route, or heldout task was
+added. Those choices materially affect the post-training and measurement
+contracts and remain for the guided design thread.
