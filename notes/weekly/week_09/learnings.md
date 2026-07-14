@@ -571,3 +571,482 @@ The same trajectory may therefore be positive-prefix data for one objective,
 recovery data for another, a rejected preference branch, and full-fidelity
 analysis evidence. No general trajectory review can substitute for these
 use-specific decisions.
+
+## SFT Data Preparation
+
+### A Causal-LM Sequence Contains Many Supervised Predictions
+
+One serialized training sequence is not one indivisible prediction target. In
+teacher-forced causal-language-model training, the model receives the complete
+token sequence in one forward pass, but causal attention prevents each
+position from seeing tokens to its right. Every loss-bearing position therefore
+defines its own next-token prediction from the prefix available at that
+position.
+
+For a conceptual token sequence:
+
+```text
+b e c c a
+```
+
+one causal forward pass can train predictions equivalent to:
+
+```text
+predict e from b
+predict c from b e
+predict c from b e c
+predict a from b e c c
+```
+
+The prefixes do not need to be materialized as four independent dataset rows.
+They are evaluated in parallel under the causal mask and combined into the
+training loss. Actual BPE tokens need not correspond to individual characters;
+the same reasoning applies to whatever token sequence the tokenizer produces.
+
+This clarifies an initially confusing use of the word `example`. A logical
+reviewed trajectory, a physical dataset row, an optimizer unit, an assistant
+decision, and an individual next-token target are different units. Counting
+rows alone does not measure how many prediction targets the trainer receives.
+
+### Causal Attention And Loss Masking Answer Different Questions
+
+Two masks participate in agent SFT and should not be conflated:
+
+```text
+causal attention mask -> which preceding tokens a position may use as context
+loss/label mask       -> which next-token predictions contribute direct loss
+```
+
+In an aggregated agent trajectory, system, user, assistant, and tool tokens can
+all be present in the causal context. Labels for system, user, and tool spans
+can be set to the ignore index while approved assistant spans remain
+loss-bearing. An assistant token can therefore attend to the task instruction,
+earlier assistant actions, and tool observations without training the policy
+to generate the environment's observations.
+
+Ignored context positions have no direct next-token target loss. They are not
+computationally absent: the model still learns how to represent and use them
+through gradients from later loss-bearing assistant positions. Likewise, the
+presence of later turns in the same physical sequence does not leak future
+information into an earlier assistant target, because causal attention blocks
+that path.
+
+### Transition Aggregation Creates More Rows, Not More Unique Targets
+
+Consider a trajectory with three assistant responses:
+
+```text
+S          = system message
+U          = user message
+A1, A2, A3 = successive assistant messages, including any assistant tool calls
+T1, T2     = successive tool-result or tool-observation messages
+```
+
+```text
+S, U, A1, T1, A2, T2, A3
+```
+
+Trajectory aggregation can serialize it once:
+
+```text
+input:  S U A1 T1 A2 T2 A3
+loss:   - - A1  - A2  - A3
+```
+
+Transition aggregation can instead construct:
+
+```text
+record 1: S U A1                 -> loss on A1
+record 2: S U A1 T1 A2          -> loss on A2
+record 3: S U A1 T1 A2 T2 A3    -> loss on A3
+```
+
+If each approved assistant token receives loss exactly once, both forms contain
+the same unique conditional targets. The transition form duplicates preceding
+context and creates more independently addressable optimizer records; it does
+not automatically create additional behavioral evidence.
+
+Trajectory aggregation already presents different effective context lengths.
+`A1` is predicted from the short prefix before it, `A2` from a longer prefix,
+and `A3` from a longer one still. The total padded length of a batch row is not
+the same thing as the causal context length available to each prediction.
+
+Transition records can nevertheless be useful because individual decisions can
+be filtered, reviewed, sampled, weighted, or salvaged independently. They can
+also make batching by length easier. Those are data-management and optimization
+advantages, not new next-token targets.
+
+The two forms are not automatically optimization-equivalent. Equivalence at
+the conditional-likelihood level requires the same serialization, the same
+context for each target, exact-once label coverage, and compatible token-level
+weighting. Per-record averaging can give a short response and a long response
+equal weight, whereas a token-level trajectory mean gives the long response
+more influence. Long trajectories also create more transition rows and may be
+sampled more often. Dropout, minibatch composition, and optimizer scheduling
+can introduce further differences even when the intended conditional targets
+match.
+
+The durable lesson is:
+
+```text
+more physical rows != more unique supervision
+aggregation policy also defines sampling and weighting policy
+```
+
+### Pretraining Chunks And Agent Decisions Have Different Semantic Risks
+
+Fixed-length pretraining blocks are primarily a physical way to expose a long
+token stream to a bounded-context model. Every position inside a block still
+contributes a local next-token target. Losing distant context at an arbitrary
+block boundary can be tolerable for broad language modeling because the goal is
+to learn statistical continuation across a large corpus.
+
+For example, suppose a simplified stream contains these conceptual tokens and
+the physical block length is six:
+
+```text
+original stream:
+  The | rain | stopped | . | Becca | opened | the | window | .
+
+block 1:
+  The | rain | stopped | . | Becca | opened
+
+block 2:
+  the | window | .
+```
+
+Inside block 1, causal training still produces several targets: predict
+`rain` from `The`, predict `stopped` from `The rain`, and so on. Inside block 2,
+however, predicting `window` may use only `the`; it no longer has the narrative
+prefix saying that Becca opened it. That is a real context loss, but broad
+pretraining can still obtain useful local continuation signal from enormous
+amounts of text. The physical blocks are not a claim that every continuation
+has retained all of its document-level meaning.
+
+An agent action has a more explicit state dependency. A tool call or final
+answer may depend on the original task, system constraints, tool definitions,
+an early file observation, and several subsequent results. Cutting immediately
+before that action can turn a valid demonstration into a different claim:
+
+```text
+original claim: choose this action after seeing the actual preceding state
+chunked claim:  choose this action from only the surviving token suffix
+```
+
+Those are not interchangeable training examples. A chunk boundary can remove
+the evidence that justified the action while leaving the action loss-bearing.
+The resulting row may look syntactically valid and still teach an unjustified
+decision.
+
+For example, consider this approved agent history:
+
+```text
+S:  Edit implementation files only; never modify tests.
+U:  Fix the parser so quoted fields may contain newlines.
+A1: read_file("src/parser.py")
+T1: The parser resets its in_quotes state at every physical line.
+A2: read_file("tests/test_parser.py")
+T2: The failing case expects a quoted newline to remain inside one field.
+A3: edit_file("src/parser.py", preserve in_quotes across physical lines)
+```
+
+In the full trajectory, `A3` is justified by the user request, the source-code
+observation in `T1`, the expected behavior in `T2`, and the system constraint
+against changing tests. An arbitrary later chunk might instead contain only:
+
+```text
+T2: The failing case expects a quoted newline to remain inside one field.
+A3: edit_file("src/parser.py", preserve in_quotes across physical lines)
+```
+
+The edited file happens to be correct, but the training claim has changed. The
+model is now rewarded for making that edit without seeing the task constraint
+or the source evidence that localized the defect. If the boundary lands inside
+the structured tool call, it can be worse still:
+
+```text
+chunk begins: "replacement": "preserve in_quotes ..." }
+```
+
+Loss on that suffix would teach a serialization fragment without the assistant
+role marker, tool name, or preceding arguments that give it meaning.
+
+Sequence packing is also different from arbitrary trajectory chunking. Packing
+places several already-valid sequences into a physical batch representation
+while preserving attention boundaries. It improves utilization; it does not
+repair an overlength semantic example or authorize removal of its context.
+
+For example, two independently valid short examples can share one physical
+allocation:
+
+```text
+example X: [Sx, Ux, Ax]
+example Y: [Sy, Uy, Ay]
+
+packed storage: [Sx, Ux, Ax] [Sy, Uy, Ay]
+attention rule: Ax attends only within X; Ay attends only within Y
+```
+
+Neither example is missing its own required prefix, and `Ay` is prevented from
+treating example X as context. Packing saves padding and compute; chunking the
+middle or end of one overlength trajectory would change what its actions are
+conditioned on.
+
+### Overlapping Windows Are A Context Policy, Not A Free Repair
+
+Overlapping windows initially appear to solve overlength trajectories: repeat
+some preceding tokens in each window, mask repeated labels, and supervise later
+assistant actions once. This can avoid duplicate direct loss, but it does not
+establish that the surviving context is sufficient or faithful.
+
+For example, use messages as simplified window units and suppose an approved
+trajectory is:
+
+```text
+S:  Edit implementation files only; never modify tests.
+U:  Fix quoted-newline parsing.
+A1: read_file("src/parser.py")
+T1: The parser incorrectly resets in_quotes at each physical line.
+A2: read_file("tests/test_parser.py")
+T2: The expected result preserves a newline inside the quoted field.
+A3: edit_file("src/parser.py", preserve in_quotes across lines)
+T3: Edit completed.
+A4: run_tests()
+T4: All public tests passed.
+```
+
+With a six-message window and a two-message overlap, materialization might
+produce:
+
+```text
+window 1: [S, U, A1, T1, A2, T2]
+window 2: [A2, T2, A3, T3, A4, T4]
+```
+
+This creates two separate problems. First, `A2` appears in both windows. If its
+labels remain active twice, the read action is silently given twice the weight.
+Masking the second copy restores exact-once direct supervision, but it does not
+solve the second problem: when `A3` receives loss in window 2, it cannot see the
+system prohibition against editing tests, the original task wording, or `T1`'s
+source-level evidence that identified the defect. The real rollout chose `A3`
+after seeing all of those facts.
+
+Always prepending `S` and `U` would preserve some constraints, but it would
+consume window capacity and still omit `T1`; choosing which older messages to
+retain would itself become a context-selection policy. A larger overlap only
+delays the same decision. By contrast, if the deployed agent also generated
+`A3` from exactly `[A2, T2]` plus a pinned system/task prefix, then training on
+that same window could be faithful to its runtime context policy.
+
+For a later action, an overlapping window may omit:
+
+```text
+the original task or system instruction
+an early observation that constrains the correct action
+the reason a file or tool result should be trusted
+an earlier error whose consequences remain in the workspace
+```
+
+Increasing the overlap merely moves the arbitrary boundary. It does not prove
+that discarded information is causally irrelevant. Repeating selected headers
+or synthesizing a summary changes the context again and requires its own
+validity argument.
+
+Overlapping windows become principled only when they reproduce a declared
+model-visible context policy, such as the same sliding-window or context-
+compression mechanism used during inference, or when a review establishes
+that the retained state is sufficient for the supervised decision. Otherwise
+they train the action under a counterfactual context that the rollout model did
+not actually use.
+
+They also require an exact-once supervision invariant. If a loss-bearing token
+appears in two overlapping windows, it is silently upweighted unless one copy
+is masked. Even with that accounting fixed, the two copies may occupy different
+positions or see different histories, so they are not semantically identical.
+
+The conservative initial policy is therefore:
+
+```text
+aggregate the approved trajectory once when it fits
+reject it when canonical serialization exceeds max_sequence_length
+do not silently crop, split, summarize, or overlap it
+```
+
+This policy preserves semantic clarity but sacrifices data yield. It will also
+bias the accepted dataset toward shorter trajectories and potentially easier
+tasks. Overlength rejection must remain an explicit, measured exclusion reason,
+with length and outcome distributions reported. Otherwise a clean-looking SFT
+dataset can conceal the fact that it excludes the long-horizon behavior the
+agent ultimately needs to learn.
+
+### A Rollout Is A Series Of Tokenized Inference Calls
+
+`Rollout token` and `training token` describe provenance, not different token
+types.
+
+During an agent rollout, every assistant turn normally involves a new inference
+request:
+
+```text
+P1 = exact prompt token ids for system, task, tools, and current history
+G1 = token ids sampled for the first assistant response
+
+P2 = newly serialized and tokenized prompt including response 1 and tool result 1
+G2 = token ids sampled for the second assistant response
+```
+
+The token-level rollout is consequently a sequence of `(prompt, generation)`
+pairs, not necessarily one contiguous token array. Later prompts repeat much of
+the earlier history. Concatenating `P1, G1, P2, G2` would duplicate context and
+would not produce the desired trajectory-aggregated SFT sequence.
+
+Rollout tokens are the exact ids the behavior model consumed and emitted in
+those calls. They are tied to the rollout model, tokenizer revision, chat
+template, tool serialization, special-token policy, and provider behavior. If
+the provider exposes only text rather than token ids, exact rollout-token
+provenance is unavailable and must not be reconstructed by assertion.
+
+Training tokens are the ids actually passed to the model during a later
+gradient update. For trajectory aggregation, the approved structured messages
+are serialized once with the pinned training tokenizer and chat template. The
+resulting `input_ids` and aligned labels are a model-specific derivative of the
+reviewed message-level example.
+
+The durable boundary is:
+
+```text
+reviewed messages -> behavioral training source
+canonical training serialization -> model-specific input_ids and labels
+per-turn rollout ids -> evidence of what the behavior policy actually saw and emitted
+```
+
+A message-level example can therefore remain meaningful across training models
+while each tokenizer/template combination produces a different training-token
+artifact. Persisting the final training ids and labels, together with pinned
+tokenizer and serializer provenance, makes the actual gradient input auditable.
+
+### Deterministic Tokenization Does Not Make Decoding One-To-One
+
+A pinned BPE encoder is deterministic: one input string and one set of encoder
+options produce one canonical token-id sequence. That does not make the decoder
+injective. BPE vocabularies contain both smaller pieces and merged pieces, so
+several valid token sequences can concatenate to the same bytes.
+
+For a toy vocabulary:
+
+```text
+token 10 -> "be"
+token 11 -> "c"
+token 42 -> "bec"
+```
+
+both of these decode to the same visible text:
+
+```text
+decode([10, 11]) = "bec"
+decode([42])     = "bec"
+```
+
+The deterministic encoder may choose the canonical merged form:
+
+```text
+encode("bec") = [42]
+```
+
+Therefore the usual lossless-text property can hold:
+
+```text
+decode(encode(text)) == text
+```
+
+while exact token-id recovery does not:
+
+```text
+encode(decode([10, 11])) != [10, 11]
+```
+
+Generation makes this distinction operational. A language model chooses token
+ids directly and is not constrained to emit the encoder's canonical
+segmentation of the eventual decoded text. It may generate `[10, 11]` even
+though retokenizing the resulting text yields `[42]`.
+
+Tokenization also does not generally distribute over concatenation:
+
+```text
+encode(text_a) + encode(text_b) != encode(text_a + text_b)
+```
+
+A merge may become available across the boundary. Chat-template separators,
+whitespace, tool-call wrappers, normalization, and special tokens add further
+boundary effects. An assistant response can consequently have one id sequence
+when it is originally generated and another when its decoded text is
+retokenized as history in the next rollout prompt.
+
+The phrase `reconstructed rollout tokens` is therefore dangerous. Retokenized
+text may be a perfectly valid canonical training representation, but it is not
+proof of the ids sampled by the rollout model.
+
+### SFT Can Use Canonical Training Tokens Without Claiming Exact Replay
+
+Positive SFT learns from an approved behavioral demonstration. It does not
+normally require the training sequence to reproduce every token boundary from
+the original inference calls. Canonical retokenization is valid when the
+training tokenizer, chat template, tool representation, assistant-span
+boundaries, and label policy are explicitly pinned and the resulting sequence
+is inspected as the artifact that will receive loss.
+
+This tolerance must not be generalized to objectives that depend on the
+behavior policy's exact action probabilities. Policy-gradient calculations,
+off-policy corrections, and some KL or log-probability comparisons need the
+actual rollout action ids and their original boundaries. Canonical training
+tokens cannot retroactively establish those quantities.
+
+There is also a semantic limit to message reconstruction. If the rollout
+provider inserted hidden formatting, if tool definitions were omitted from the
+record, or if a runtime context manager summarized or dropped history, then
+serializing the apparent full transcript does not recreate the context the
+model saw. A canonical SFT rendering can still be deliberately chosen, but it
+must be described as a training representation rather than exact rollout
+replay.
+
+For the initial positive-SFT path, the clean claim is:
+
+```text
+one approved message-level example
+-> one pinned canonical trajectory serialization
+-> assistant-only loss labels
+-> one persisted training record if it fits max_sequence_length
+-> explicit exclusion if it does not fit
+```
+
+This keeps the current experiment small while preserving the distinctions
+needed to introduce transition aggregation or a runtime-aligned context manager
+later without pretending that arbitrary chunking was already valid.
+
+### Public Agent-Training Systems Use Several Aggregation Policies
+
+There is no single public industry convention that makes every agent trace one
+row or every assistant turn one row. The durable pattern is that the physical
+representation should preserve the context required by each supervised action:
+
+```text
+full-trajectory aggregation -> efficient when the approved trace fits
+transition aggregation      -> independently addressable decisions with real prefixes
+overlength exclusion        -> conservative when context cannot be preserved
+runtime-aligned compression -> appropriate when the deployed agent uses the same policy
+```
+
+[Agent Lightning's aggregation discussion](https://agent-lightning.github.io/posts/trajectory_level_aggregation/)
+explicitly contrasts trajectory and transition aggregation and documents
+retokenization and chat-template drift. [NVIDIA's multi-turn agent SFT
+recipe](https://docs.nvidia.com/nemo/automodel/recipes-e2e-examples/agent-sft)
+supervises assistant/tool-call spans while masking user and tool observations
+and exposes explicit truncation behavior. [ms-swift's training
+parameters](https://github.com/modelscope/ms-swift/blob/main/docs/source_en/Instruction/Command-line-parameters.md)
+distinguish pretraining split behavior from SFT overlength handling. These are
+examples of design choices rather than proof that one layout is universally
+correct.
+
+The self-deception trap is to copy the row format of a public system without
+also copying the context policy, loss reduction, weighting, and runtime
+assumptions that make that format meaningful.
