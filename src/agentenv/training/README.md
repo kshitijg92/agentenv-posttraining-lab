@@ -44,7 +44,10 @@ flowchart TD
     RP --> SR
     SR -->|accepted + last approved assistant message id| SE[Positive-SFT export]
     SE --> P[Contiguous approved message prefix]
-    P --> TS[Future tokenizer/chat-template serialization<br/>and loss-mask construction]
+    P --> IP[Pinned target-model input protocol]
+    IP --> TM[Planned tokenizer and label materialization]
+    TM -->|canonical sequence fits| TS[Persisted input_ids + trainer labels]
+    TM -->|exceeds max sequence length| OE[Explicit overlength exclusion]
 ```
 
 Clean candidates bypass repair. Candidates with a selected repair must pin both
@@ -70,10 +73,14 @@ stand in for the other.
 6. Message IDs identify occurrences, not content. Retained messages preserve
    their IDs through deletion-only repair, allowing review boundaries to remain
    auditable.
-7. Token-level loss assignment is a later serialization boundary. The intended
-   positive-SFT rule is that system, user, and tool-observation tokens are context
-   only; eligible assistant-generated spans receive loss after the exact chat
-   template is verified.
+7. The target-model input protocol pins the checkpoint, tokenizer artifacts,
+   exact chat-template bytes, serialization operations, message projection, and
+   tool representation. Token-level loss assignment remains downstream. System,
+   user, and tool-observation tokens are context only; approved
+   assistant-generated spans receive loss.
+8. The initial materializer uses one trajectory-aggregated sequence per source
+   example. An overlength sequence is explicitly excluded whole; it is not
+   truncated, arbitrarily chunked, overlapped, or summarized.
 
 ## What an exported positive-SFT record means
 
@@ -82,3 +89,30 @@ was allowed to enter positive-SFT review, the exact original or repaired source
 was pinned, and a human accepted a contiguous assistant-action prefix. It does
 not mean the whole task succeeded, the full original trajectory was optimal, or
 the record is already a tokenizer-ready trainer batch.
+
+## Next boundary: canonical tokenization and labels
+
+The next positive-SFT artifact will be a model-specific derivative of the
+source export:
+
+```text
+PositiveSFTExampleRecord
+-> pinned target-model input protocol
+-> target checkpoint's compatible tokenizer
+-> one trajectory-aggregated input_ids sequence
+-> labels equal input_ids on approved assistant spans
+-> labels equal -100 on system, user, and tool-observation spans
+```
+
+Canonical training tokens need not equal the exact ids emitted during the
+original rollout. They must instead be reproducible for the target training
+checkpoint and match the interface intended at deployment. Examples exceeding
+the configured maximum sequence length remain explicit exclusions so dataset
+coverage is not overstated.
+
+The first protocol record is
+`configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml`. It applies
+the exact pinned upstream Qwen template for generation and completed-transcript
+serialization. It projects only message `role` and `content`, retains the
+AgentEnv content-level JSON action protocol, and does not authorize
+provider-native tool serialization.

@@ -1,0 +1,41 @@
+schema_version: model_input_protocol_v0
+protocol_id: qwen2_5_coder_3b_agentenv_json
+model_checkpoint:
+  repository_id: Qwen/Qwen2.5-Coder-3B-Instruct
+  revision: 89fe5444e8baf5736e70f528f1edcc79e6616ef6
+tokenizer:
+  source:
+    repository_id: Qwen/Qwen2.5-Coder-3B-Instruct
+    revision: 89fe5444e8baf5736e70f528f1edcc79e6616ef6
+  upstream_files:
+    - repository_path: tokenizer_config.json
+      sha256: sha256:959e7f1d9a1b7641a6d6ce05ca97b75c7894fcb66cbe5a040406458fb1128ee4
+    - repository_path: tokenizer.json
+      sha256: sha256:c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539
+    - repository_path: vocab.json
+      sha256: sha256:ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910
+    - repository_path: merges.txt
+      sha256: sha256:599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3
+  required_special_tokens:
+    message_start:
+      token: <|im_start|>
+      token_id: 151644
+    end_of_turn:
+      token: <|im_end|>
+      token_id: 151645
+    padding:
+      token: <|endoftext|>
+      token_id: 151643
+chat_template:
+  source_repository_path: tokenizer_config.json
+  source_field: chat_template
+  local_snapshot_ref: templates/qwen2_5_coder_3b_chat_template.jinja
+  sha256: sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f
+supported_serialization_modes:
+  - generation
+  - completed_transcript
+message_fields:
+  - role
+  - content
+tool_serialization: agentenv_json_content
+native_tool_serialization: unsupported

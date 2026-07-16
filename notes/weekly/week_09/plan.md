@@ -101,83 +101,80 @@ training eligibility is separate from task success, and reward-hack evidence
 must never become a positive training example by accident
 ```
 
-Current Week 7/8 artifact state:
+Historical Qwen artifacts remain useful acquisition and failure-analysis
+evidence, but several predate the current harness runtime pins and the
+objective-specific positive-SFT prefix review. They are not the current
+training-data trust root and their old row counts must not be treated as current
+eligibility claims.
+
+Current implemented data flow:
 
 ```text
-eval suite:
-  experiments/runs/qwen_model_eval_suite_sampling_4096
-
-trajectory export:
-  experiments/runs/qwen_model_eval_suite_sampling_4096_trajectory_export
-
-trajectory review:
-  experiments/runs/qwen_model_eval_suite_sampling_4096_trajectory_review
-
-training candidates:
-  experiments/runs/qwen_model_eval_suite_sampling_4096_training_candidates
-
-positive SFT export:
-  experiments/runs/qwen_model_eval_suite_sampling_4096_positive_sft
-
-reward-hack audit:
-  experiments/runs/reward_hack_audit_week_08_v1
+trajectory export
+-> trajectory review
+-> training candidate export
+-> optional deterministic repair and repair review
+-> positive-SFT prefix review
+-> source-level PositiveSFTExampleRecord export
 ```
 
-Current training-candidate summary:
+The checkpoint-specific serialization authority is now implemented under
+`src/agentenv/models/input_protocol*.py`. The Qwen2.5-Coder-3B protocol pins an
+immutable model revision, the exact tokenizer artifacts, the exact upstream
+chat-template bytes, the `role/content` projection, the generation and
+completed-transcript operations, and the current AgentEnv JSON-content tool
+protocol. Provider-native tool serialization is explicitly unsupported.
+
+The next missing boundary is target-model tokenization and label
+materialization. A source-level positive-SFT example is not yet a trainer-ready
+batch.
+
+The selected target checkpoint's Qwen2.5 protocol no longer injects the
+Qwen3-specific `/no_think` soft switch. Fresh no-suffix Qwen2.5-Coder-3B
+acquisition and trajectory artifacts now live at:
 
 ```text
-records: 21
-trainable: 3
-positive_sft: 0
-negative_examples: 3
-preference_data: 2
-analysis_only: 18
+experiments/runs/week_09_qwen2_5_coder_3b_no_suffix_eval_v1
+experiments/runs/week_09_qwen2_5_coder_3b_no_suffix_trajectory_export_v0
 ```
 
-Current positive SFT summary:
-
-```text
-record_count: 0
-```
-
-This is expected. The current Qwen model trajectories include public-pass /
-hidden-fail and cannot-grade failures, not successful hidden-pass agent
-trajectories.
+The seven prompt loops completed and were scored, although all seven hidden
+checks failed. They are therefore potential prefix-review sources, not claimed
+successful demonstrations. Older Qwen2.5 records remain historical evidence
+conditioned on the removed suffix.
 
 ## Existing Implementation Surface
 
-Week 7 already created part of the Week 9 surface:
+The current training package is organized by contract ownership:
 
 ```text
-src/agentenv/training/schema.py
-src/agentenv/training/builder.py
-src/agentenv/training/export.py
-src/agentenv/training/sft_builder.py
-tests/training/test_training_schema.py
-tests/training/test_training_builder.py
-tests/training/test_training_export.py
-tests/training/test_sft_builder.py
+src/agentenv/training/candidates/
+src/agentenv/training/repairs/
+src/agentenv/training/positive_sft/
+src/agentenv/training/README.md
+tests/training/
 ```
 
 Existing CLI:
 
 ```text
 agentenv training candidates export
-agentenv training sft export
+agentenv training positive-sft review-init
+agentenv training positive-sft review-validate
+agentenv training positive-sft export
 ```
 
-Manual artifacts still missing or incomplete:
+Remaining major artifacts or boundaries:
 
 ```text
-docs/post_training_data_contract.md
+persisted target-model positive-SFT token records
+explicit token-materialization exclusion outcomes
 preference dataset schema/builder/export
 negative-example export boundary
-tool-call serialization and loss-masking tests
-configs/train/week09_sft_smoke.yaml
-configs/train/week09_dpo_deferred.yaml
+tokenizer-conformance and loss-masking tests
+configs/train/positive_sft_smoke.yaml
+configs/train/dpo_deferred.yaml
 docs/dpo_deferred_note.md
-notes/weekly/week_09/implementation_notes.md
-notes/weekly/week_09/learnings.md
 ```
 
 Repo-native placement should be decided deliberately. The manual names
@@ -227,18 +224,29 @@ Preserve data-use boundaries:
   prompts, tool observations, scorer output, hidden validators, or review
   metadata.
 
-## First Design Question
+## Resolved Positive-SFT Design Boundary
 
-Before implementing new schemas or builders, decide:
+The source-level and token-level units are now distinct:
 
 ```text
-What should count as one trainable SFT example in this repo, and which evidence
-must make it ineligible even if the task succeeded?
+PositiveSFTExampleRecord
+  = reviewed, hash-pinned, model-independent message prefix
+
+trainer-ready positive-SFT record
+  = target-model-specific input_ids, labels, and materialization provenance
 ```
 
-Do not implement the full SFT/preference pipeline before answering this. The
-answer controls source provenance, split rules, review gates, reward-hack
-exclusion, leakage checks, and loss-masking expectations.
+Task success is not required for the source record. The objective-specific
+review selects a contiguous prefix ending at an approved assistant message.
+For the initial token materialization, use one trajectory-aggregated sequence,
+the exact tokenizer compatible with the target checkpoint, and the implemented
+pinned model-input protocol. System, user, and tool-observation tokens are
+context only; approved assistant tokens receive loss.
+
+Examples exceeding `max_sequence_length` are excluded whole. Do not truncate,
+arbitrarily chunk, overlap, or summarize them. The remaining open design
+question is how a materialization attempt persists successful output versus an
+explicit policy exclusion or an untrustworthy materialization failure.
 
 ## Planned Outputs
 
@@ -250,28 +258,26 @@ notes/weekly/week_09/implementation_notes.md
 notes/weekly/week_09/learnings.md
 docs/post_training_data_contract.md
 docs/dpo_deferred_note.md
-configs/train/week09_sft_smoke.yaml
-configs/train/week09_dpo_deferred.yaml
+configs/train/positive_sft_smoke.yaml
+configs/train/dpo_deferred.yaml
 ```
 
-Likely code/test artifacts, after design:
+Remaining code/test boundaries, after design:
 
 ```text
-src/agentenv/training/preference_schema.py
-src/agentenv/training/preference_builder.py
-tests/training/test_preference_pairs.py
-tests/training/test_tool_call_serialization.py
+target-model token materialization under training/positive_sft/
+tests/training/test_token_materialization.py
 tests/training/test_loss_masking.py
+preference schema/builder/export under training/
+tests/training/test_preference_pairs.py
 ```
 
-Possible code/test artifacts, depending on design:
+Possible later boundaries:
 
 ```text
-src/agentenv/training/negative_examples.py
-src/agentenv/training/sft_schema.py
-src/agentenv/training/serialization.py
-src/agentenv/training/loss_masking.py
-configs/data/post_training_week09.yaml
+negative-example dataset/export objective
+runtime-aligned context management for overlength examples
+configs/data/post_training.yaml
 ```
 
 Only create these if they clarify the boundary. Do not split files just to match
@@ -329,7 +335,10 @@ Current state:
 - repaired rows require an explicit completed, accepted repair selection;
 - the repair/review source chain is hash-pinned and rebuilt on load;
 - current deterministic deletion has a narrow task-outcome inheritance rule;
-- repair-selection CLI wiring remains before a real repaired artifact smoke.
+- positive-SFT review records bind an exact accepted assistant-message boundary;
+- source export materializes only that contiguous approved prefix;
+- repair selection and positive-SFT review/export CLI wiring are implemented;
+- target-model token materialization remains before any training smoke.
 
 Self-deception trap:
 
@@ -338,7 +347,42 @@ Passing public checks or emitting a plausible final answer does not create an
 SFT target.
 ```
 
-### Checkpoint 3: Preference-Pair Boundary
+### Checkpoint 3: Canonical Positive-SFT Token Materialization
+
+Purpose:
+
+```text
+Turn approved source-level message prefixes into auditable trainer-ready tokens.
+```
+
+Settled policy:
+
+- use the exact tokenizer compatible with the target base checkpoint;
+- pin the tokenizer revision, chat template, and tool-call serialization;
+- serialize each approved prefix once using trajectory aggregation;
+- give loss only to approved assistant-produced spans;
+- keep system, user, and tool-observation spans as context with ignored labels;
+- reject the whole example when it exceeds `max_sequence_length`;
+- do not truncate, chunk, overlap, or summarize overlength examples.
+
+Done when:
+
+- the materialization outcome preserves exact source-record provenance;
+- successful token ids and trainer-style labels are persisted;
+- explicit overlength exclusions remain countable;
+- tokenizer/template failures cannot be mistaken for policy exclusions;
+- tests verify assistant-only loss, tool-call boundaries, EOS handling, and no
+  hidden validator, scorer, or review metadata;
+- persisted records are rebuilt or validated against their pinned inputs.
+
+Self-deception trap:
+
+```text
+A source-level JSONL row is not trainer-ready, and silently dropping every long
+trajectory can make the resulting dataset look cleaner than its coverage is.
+```
+
+### Checkpoint 4: Preference-Pair Boundary
 
 Purpose:
 
@@ -346,9 +390,8 @@ Purpose:
 Define preference data only where the comparison basis is auditable.
 ```
 
-Start with the current two eligible public-pass/hidden-fail Qwen trajectories
-as possible rejected sides. Do not assume a chosen side exists until the
-contract says what can validly be chosen.
+Start with eligible gradable trajectories as possible rejected sides. Do not
+assume a chosen side exists until the contract says what can validly be chosen.
 
 Done when:
 
@@ -363,38 +406,6 @@ Self-deception trap:
 A failed model trace plus an oracle patch is not automatically a preference
 pair unless the chosen response is represented in the same trainable format and
 its provenance is allowed.
-```
-
-### Checkpoint 4: Tool-Call Serialization And Loss Masking
-
-Purpose:
-
-```text
-Specify how prompt-loop transcripts become trainable token sequences.
-```
-
-Tests should cover:
-
-- chat template formatting;
-- EOS handling;
-- assistant/action loss masking;
-- masking user prompts;
-- masking tool observations;
-- malformed tool-call rejection;
-- no inclusion of hidden validator or review metadata.
-
-Done when:
-
-- the intended mask policy is written down;
-- tests encode the policy;
-- any missing tokenizer/model dependency is isolated from pure serialization
-  tests.
-
-Self-deception trap:
-
-```text
-A valid JSONL row is not necessarily trainable if the loss mask teaches the
-model to imitate user prompts, tool outputs, or evaluator metadata.
 ```
 
 ### Checkpoint 5: Smoke Training Decision
@@ -443,8 +454,17 @@ uv run agentenv training candidates export \
   --out experiments/runs/week_09_training_gate_smoke_candidates \
   --overwrite
 
-uv run agentenv training sft export \
+uv run agentenv training positive-sft review-init \
   --candidates experiments/runs/week_09_training_gate_smoke_candidates \
+  --out experiments/runs/week_09_training_gate_smoke_positive_sft_review \
+  --overwrite
+
+uv run agentenv training positive-sft review-validate \
+  --reviews experiments/runs/week_09_training_gate_smoke_positive_sft_review
+
+uv run agentenv training positive-sft export \
+  --candidates experiments/runs/week_09_training_gate_smoke_candidates \
+  --reviews experiments/runs/week_09_training_gate_smoke_positive_sft_review \
   --out experiments/runs/week_09_training_gate_smoke_positive_sft \
   --overwrite
 ```

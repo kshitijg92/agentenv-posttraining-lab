@@ -2171,3 +2171,136 @@ Ruff on changed source and tests: passed
 Pyright on changed source and tests: passed
 git diff --check: passed
 ```
+
+### Positive-SFT Token-Materialization Contract Sync
+
+Synchronized the reusable post-training contract, weekly plan, and training
+package README with the implemented positive-SFT prefix-review flow and the
+settled next checkpoint.
+
+The documentation now uses the current candidate eligibility fields, records
+that task failure does not itself block an approved positive prefix, marks
+repair-selection and prefix-review CLI support as implemented, and describes
+`PositiveSFTExampleRecord` as a source-level rather than trainer-ready record.
+The plan now places target-model token materialization before preference-pair
+design.
+
+The next planned materializer uses the target checkpoint's compatible pinned
+tokenizer and chat template, trajectory aggregation, assistant-only trainer
+labels, and whole-example overlength exclusion. No runtime schema or source
+implementation changed in this documentation checkpoint.
+
+## 2026-07-14
+
+### Qwen2.5 Prompt-Protocol Correction And Fresh Trajectories
+
+Corrected the Qwen2.5-Coder acquisition configuration after token-level
+conformance work showed that `/no_think` was not an Ollama-side control.
+AgentEnv appended it to system-message content, so Ollama serialized it as
+ordinary model-visible input. Qwen3 documents this prompt-level soft switch;
+Qwen2.5-Coder does not.
+
+Removed the prompt adapter from the 3B, 7B, and 14B Qwen2.5 model configs. The
+generic prompt-adapter implementation and Qwen3 configs remain unchanged. A
+focused regression test now requires every Qwen2.5 config to load with
+`prompt_adapter: null`.
+
+The pinned Qwen2.5-Coder-3B tokenizer/template and a live request through
+Ollama's OpenAI-compatible endpoint both reported 78 prompt tokens for the
+AgentEnv-style system/user/custom-action/tool-result generation fixture. The
+canonical rendering contained no `/no_think`.
+
+The first acquisition invocation was sandboxed from the local Ollama socket
+and produced seven explicit `ProviderRequestError` records under:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_no_suffix_eval_v0
+```
+
+Those records are orchestration-failure evidence and were not exported as the
+fresh training source. The approved local-network rerun produced seven
+harness-clean, scored attempts under:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_no_suffix_eval_v1
+```
+
+All seven completed the prompt loop and passed public checks; all seven failed
+hidden checks. This is not task success, but the trajectories may still contain
+human-approvable positive prefixes under the current positive-SFT contract.
+The new trajectory artifact is:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_no_suffix_trajectory_export_v0
+source eval run: eval_run_d9fd9e4fe11149428324537d15c46292
+records: 7
+trajectories JSONL: xxh64:841f6308679b3830
+```
+
+Every attempt pins a model config with `prompt_adapter: null`. Historical
+Qwen2.5 trajectories remain honest evidence of suffix-conditioned acquisition;
+they were not relabeled or overwritten.
+
+Focused verification:
+
+```text
+model config and OpenAI-compatible client tests: 25 passed
+Ruff on the changed test: passed
+Qwen2.5 no-suffix prompt-token count conformance: passed (78 == 78)
+fresh eval: 7/7 prompt loops completed and scored
+trajectory export: 7 records
+git diff --check: passed before notes sync
+```
+
+## 2026-07-15
+
+### Pinned Qwen2.5 Model-Input Protocol
+
+Added the first target-model input-protocol record:
+
+```text
+configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
+```
+
+It pins `Qwen/Qwen2.5-Coder-3B-Instruct` and its tokenizer at immutable commit
+`89fe5444e8baf5736e70f528f1edcc79e6616ef6`, including SHA-256 pins for
+`tokenizer_config.json`, `tokenizer.json`, `vocab.json`, and `merges.txt`. It
+also records the Qwen message-start, end-of-turn, and padding token ids.
+
+Vendored the exact `chat_template` field from that revision's
+`tokenizer_config.json`. Its 2,507 UTF-8 bytes hash to
+`sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f`.
+The protocol loader verifies that hash before returning a usable protocol.
+
+The v0 protocol intentionally supports only:
+
+```text
+generation serialization
+completed-transcript serialization
+message fields: role, content
+tool serialization: AgentEnv JSON content
+native provider tool serialization: unsupported
+```
+
+Generation rejects a final assistant message rather than silently interpreting
+it as assistant prefill. Completed-transcript serialization requires a final
+assistant message. Message ids, names, tool-call ids, and metadata remain source
+provenance and do not enter the Qwen rendering.
+
+Pinned `transformers==4.57.3` and `jinja2==3.1.6` and used Transformers' chat
+template application utility rather than creating a second Qwen template
+interpreter. This checkpoint produces deterministic rendered text only; target
+token ids, loss labels, Ollama raw transport, and final trust-artifact
+regeneration remain downstream.
+
+Focused verification:
+
+```text
+model-input protocol tests: 8 passed
+focused protocol/model-client regression: 33 passed
+Ruff on protocol source and tests: passed
+targeted Ruff format check: passed
+Pyright on protocol source and tests: passed
+vendored template bytes equal the pinned upstream field: passed
+git diff --check: passed
+```

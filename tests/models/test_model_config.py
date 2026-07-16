@@ -16,6 +16,11 @@ from agentenv.orchestrators.agent_task_run import (
 
 MODEL_CONFIG = Path("configs/models/openai_compatible_chat_placeholder.yaml")
 DECODING_CONFIG = Path("configs/decoding/greedy_1024.yaml")
+QWEN2_5_MODEL_CONFIGS = (
+    Path("configs/models/ollama_qwen2_5_coder_3b.yaml"),
+    Path("configs/models/ollama_qwen2_5_coder_7b.yaml"),
+    Path("configs/models/ollama_qwen2_5_coder_14b.yaml"),
+)
 
 
 def test_load_model_config_reads_openai_compatible_chat_config() -> None:
@@ -32,6 +37,15 @@ def test_load_model_config_reads_openai_compatible_chat_config() -> None:
     assert config.capabilities.supports_top_k is False
     assert config.prompt_adapter is None
     assert config.agent_action_format == "prompt_only"
+
+
+@pytest.mark.parametrize("config_path", QWEN2_5_MODEL_CONFIGS)
+def test_qwen2_5_configs_do_not_inject_qwen3_thinking_switch(
+    config_path: Path,
+) -> None:
+    config = load_model_config(config_path)
+
+    assert config.prompt_adapter is None
 
 
 def test_load_decoding_config_reads_generation_config() -> None:

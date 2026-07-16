@@ -1023,6 +1023,400 @@ This keeps the current experiment small while preserving the distinctions
 needed to introduce transition aggregation or a runtime-aligned context manager
 later without pretending that arbitrary chunking was already valid.
 
+### The Target Checkpoint Owns The Training Tokenizer
+
+A tokenizer is not interchangeable preprocessing placed in front of an LLM. A
+token id selects one row of the model's input embedding table and one output
+class in its language-model head. The vocabulary-to-id mapping is therefore
+part of the checkpoint's parameter interface.
+
+If SFT updates Model A, the default contract is to use the exact tokenizer
+artifacts compatible with Model A's starting checkpoint: vocabulary, merge
+rules, normalizer, special-token mapping, configuration, and pinned revision.
+Rollout token ids from Model B cannot be fed directly to Model A merely because
+both models decoded them into the same text. The same integer id may identify
+unrelated byte strings in the two vocabularies.
+
+This is why the message-level positive-SFT source remains upstream of token
+materialization:
+
+```text
+trajectory collected from Model B
+-> reviewed structured messages
+-> canonical serialization with Model A's tokenizer
+-> Model A input_ids and labels
+```
+
+Changing Model A's token-id mapping while retaining its existing embedding and
+output-head rows would be a severe interface error. Adding vocabulary entries
+is technically possible only with an explicit model change such as resizing
+and initializing new embedding/output rows, followed by enough training to
+learn them. That is a tokenizer-and-architecture adaptation experiment, not an
+ordinary small SFT run. Even changing merge or normalization rules while ids
+remain compatible alters sequence lengths and the token distributions seen by
+the pretrained model, so it should be deliberate rather than incidental.
+
+The chat template is related but distinct. It determines how roles, tool calls,
+tool results, separators, and end-of-turn markers are arranged using the
+available vocabulary. A model can in principle be fine-tuned onto a new chat
+template without replacing its tokenizer, but that teaches a new interaction
+format. The training and deployment serializers must then agree, and a small
+dataset may be insufficient to overcome the checkpoint's existing format
+priors. Reusing the checkpoint's native pinned template is therefore the
+conservative starting point unless the intended agent interface requires a
+deliberate change.
+
+Two kinds of drift should not be conflated:
+
+```text
+rollout-to-training retokenization drift
+  = the reviewed text is canonically represented for the target model
+  = acceptable for SFT when declared and pinned
+
+training-to-deployment tokenizer/template drift
+  = the model is invoked through a different token or formatting interface
+  = an invalid or at least separately untested deployment contract
+```
+
+For exact behavior-policy probability calculations, canonical Model A training
+tokens still cannot replace Model B's original rollout action ids. For positive
+SFT, however, the target checkpoint's compatible tokenizer is authoritative
+because those are the parameters receiving the gradient.
+
+### The Model Input Protocol, Not The Serving Vendor, Should Be The Training Contract
+
+A chat API accepts structured objects such as `system`, `user`, `assistant`,
+and `tool` messages, but a causal language model does not consume those
+objects. It consumes one sequence of token ids. A serializer must decide how
+roles, message boundaries, tools, and generation boundaries appear in that
+sequence:
+
+```text
+structured messages
+-> model input protocol / chat template
+-> checkpoint-compatible tokenizer
+-> token ids
+-> causal language model
+```
+
+The tokenizer and the chat template are related but separate contracts. The
+tokenizer defines the mapping between text or special symbols and embedding
+rows. The template decides which symbols and text are arranged around each
+message. A provider's HTTP schema is another separate layer: two servers can
+both accept an OpenAI-compatible `messages` array while producing different
+model-visible token sequences.
+
+For example, these three simplified serializations express roughly the same
+conversation using materially different token protocols:
+
+```text
+Messages:
+  system: You are concise.
+  user: What is 2 + 2?
+  assistant: 4
+
+ChatML-like:
+  <|im_start|>system
+  You are concise.<|im_end|>
+  <|im_start|>user
+  What is 2 + 2?<|im_end|>
+  <|im_start|>assistant
+  4<|im_end|>
+
+Llama-header-like:
+  <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+  You are concise.<|eot_id|>
+  <|start_header_id|>user<|end_header_id|>
+  What is 2 + 2?<|eot_id|>
+  <|start_header_id|>assistant<|end_header_id|>
+  4<|eot_id|>
+
+Instruction-wrapper-like:
+  <s>[INST] You are concise. What is 2 + 2? [/INST] 4</s>
+```
+
+These are not cosmetic alternatives. The model was trained to interpret
+particular control tokens and boundaries. The same base architecture can even
+have instruction-tuned descendants that expect different formats. Hugging
+Face's [chat-template documentation](https://huggingface.co/docs/transformers/chat_templating)
+shows this explicitly and recommends applying the intended template during
+training.
+
+For open-weight models, the durable industry pattern is consequently to treat
+the model-native input protocol as part of the model artifact. It is commonly
+distributed beside the tokenizer in the model repository. A serving engine is
+then configured to implement that protocol:
+
+```text
+                         +-> Ollama implementation --+
+pinned model protocol ---+-> vLLM implementation ----+-> equivalent model-visible ids
+                         +-> another server adapter --+
+```
+
+For example, vLLM normally reads a chat template from the tokenizer
+configuration and also permits an explicit template override; it does not
+require a separately trained model for each server. See the
+[vLLM chat-template contract](https://docs.vllm.ai/en/latest/serving/openai_compatible_server/#chat-template).
+Ollama packages a model-specific Go-syntax `TEMPLATE` in its Modelfile, which
+it describes as the full prompt sent to the model. See the
+[Ollama Modelfile template contract](https://docs.ollama.com/modelfile#template).
+
+Calling a template a `Hugging Face template` can therefore obscure ownership.
+For a Qwen checkpoint, the template stored in its Hugging Face tokenizer
+artifacts is better understood as a Qwen model-interface artifact distributed
+through Hugging Face. Hugging Face need not be the inference provider. An
+Ollama template for the same checkpoint should ideally be a different
+implementation of the same model protocol rather than a new training target.
+
+Provider defaults must still not be assumed equivalent. Differences often
+appear precisely in agentic cases:
+
+```text
+Canonical tool result:
+  <|im_start|>tool
+  {"result":"ok"}<|im_end|>
+
+Possible provider rewrite:
+  <|im_start|>user
+  <tool_response>{"result":"ok"}</tool_response><|im_end|>
+```
+
+A model may handle one representation much better because it saw that form in
+instruction tuning. Other possible drift includes moving the system prompt
+into the first user message, changing tool-schema placement, injecting a
+reasoning directive, omitting empty content, using a different assistant
+generation header, or treating the final assistant message as a prefill.
+
+The correct portability invariant is token-level conformance on the semantic
+cases the agent uses:
+
+```text
+canonical_ids(messages, tools, generation_mode)
+==
+provider_ids(messages, tools, generation_mode)
+```
+
+Checking only a plain user-assistant exchange is insufficient. Conformance
+fixtures must cover system messages, multiple turns, tool definitions, tool
+calls, tool results, generation prompts, completed assistant turns, and any
+adapter-level prompt transformations. An API adapter that appends a directive
+such as `/no_think` changes the model-visible prompt even if the chat template
+itself is unchanged.
+
+Prompt text, template controls, and provider controls are three different
+interventions even when their names suggest the same intent:
+
+```text
+model-visible soft switch:  append "/no_think" to a message
+template-level hard switch: render a non-thinking template branch
+provider request control:   send a structured option outside the messages
+```
+
+The first becomes ordinary input tokens. It is valid only when the checkpoint
+was trained to interpret that token sequence as a control. The second changes
+serialization before tokenization. The third delegates the decision to the
+serving backend, which may select a template branch, set generation behavior,
+or reject the option. They cannot be treated as interchangeable without
+observing the final model-visible token sequence and generation semantics.
+
+The Qwen2.5 acquisition exposed this boundary concretely. AgentEnv's generic
+prompt adapter appended `/no_think` to the system message, and Ollama passed it
+through as literal text. Qwen3 documents that text as a soft thinking switch,
+but the selected Qwen2.5-Coder checkpoint does not document such a protocol.
+The fact that a provider accepted the request did not make the directive a
+valid checkpoint control; it merely meant the model received extra tokens.
+
+This also reveals a provenance requirement. A stored logical transcript can
+omit a suffix that a request adapter injected at rollout time. Reconstructing
+training data from only that logical transcript then misstates the context
+under which the assistant actions were sampled. When an accidental
+model-visible adapter is removed, silently deleting it from old trajectories
+is not a repair: it changes their causal context. The clean response is to
+retain the old records as historical evidence and regenerate acquisition under
+the intended protocol.
+
+If a provider implementation differs, the preferred response for an
+open-weight model is usually to configure the provider to use the canonical
+model protocol. Training provider-specific weights is necessary only when the
+provider cannot reproduce that protocol, or when the different interface is an
+intentional deployment target. Training on several implicit formats without
+recording which one each example uses can instead teach conflicting boundary
+semantics.
+
+Closed hosted fine-tuning has a different ownership boundary. The customer
+usually supplies structured messages, while the provider privately owns
+serialization, tokenization, weights, and serving. The resulting custom model
+is already tied to that provider and model version. For example, OpenAI's
+[fine-tuning API](https://platform.openai.com/docs/api-reference/fine-tuning)
+accepts message-form training records rather than customer-materialized token
+arrays. Provider coupling is expected there because the resulting weights are
+not an independently deployable artifact.
+
+The self-deception trap is to infer token portability from request-schema
+portability. `OpenAI-compatible` says that two servers accept similarly shaped
+JSON; it does not say that the model sees the same tokens. For an open-weight
+training lab, the clean contract is:
+
+```text
+training pins the target checkpoint's model input protocol
+deployment backends demonstrate conformance to that protocol
+provider-specific behavior is recorded as an explicit divergence
+```
+
+### Loss Ownership Follows Who Must Produce A Token At Inference
+
+Assistant-only SFT does not simply assign loss to every token physically found
+inside an `assistant` message string, nor does it mask every token inserted by
+the serializer. The relevant question is:
+
+> Given the prompt available when generation begins, which tokens must the
+> model produce as its action?
+
+Consider a simplified Qwen/ChatML rendering:
+
+```text
+<|im_start|>system
+Answer using the required JSON protocol.<|im_end|>
+<|im_start|>user
+What is 6 * 7?<|im_end|>
+<|im_start|>assistant
+{"final_answer":"42"}<|im_end|>
+```
+
+For ordinary assistant generation, the runtime serializer supplies everything
+through the assistant header. The model begins generation after:
+
+```text
+<|im_start|>assistant\n
+```
+
+The intended ownership is therefore:
+
+```text
+Rendered span: <|im_start|>system\n
+  produced by: runtime/template
+  label:       -100
+
+Rendered span: Answer using the required JSON protocol.
+  produced by: runtime/template
+  label:       -100
+
+Rendered span: <|im_end|>\n
+  produced by: runtime/template
+  label:       -100
+
+Rendered span: <|im_start|>user\n
+  produced by: runtime/template
+  label:       -100
+
+Rendered span: What is 6 * 7?
+  produced by: runtime/template
+  label:       -100
+
+Rendered span: <|im_end|>\n
+  produced by: runtime/template
+  label:       -100
+
+Rendered span: <|im_start|>assistant\n
+  produced by: runtime/template
+  label:       -100
+
+Rendered span: {"final_answer":"42"}
+  produced by: model
+  label:       corresponding token ids
+
+Rendered span: <|im_end|>
+  produced by: model
+  label:       <|im_end|> token id
+
+Rendered span: \n after the assistant <|im_end|>
+  produced by: runtime/template when the completed turn becomes context
+  label:       -100
+```
+
+The repeated appearance of `<|im_end|>` does not imply repeated ownership.
+The system and user end markers describe context constructed before inference,
+so they are masked. The assistant end marker is the model's end-of-turn action,
+so it receives loss.
+
+This can initially feel backwards because the API response normally contains
+only the visible assistant text:
+
+```json
+{"final_answer":"42"}
+```
+
+The serving layer may consume or strip the generated end-of-turn token before
+returning that text. Its absence from the response transcript does not prove
+that the model was not expected to generate it. Conversely, a training
+materializer may append `<|im_end|>` while constructing labels even though the
+literal transcript omitted it. Physical insertion by the materializer does
+not determine loss ownership; deployment generation semantics do.
+
+With causal-language-model shifting, the prediction after the final `}` is the
+assistant `<|im_end|>` token:
+
+```text
+context ending in: ... "42" }
+next supervised target: <|im_end|>
+```
+
+Giving that target loss teaches the model when the assistant action is
+complete and when control should return to the harness. Masking it supplies no
+new positive pressure for correct termination. The model might still stop due
+to its earlier training, an external stop string, a constrained-decoding
+engine, or the maximum generation length, but the SFT example would not teach
+the desired boundary directly.
+
+In an agent, termination tokens are behavioral rather than decorative. Failing
+to close an assistant turn can cause the model to append unrelated text, merge
+two protocol actions, exceed a parser's accepted payload, or run until a token
+limit. Correct content followed by incorrect termination can therefore become
+an orchestration failure.
+
+The same ownership rule applies to tool syntax. Suppose a deployment protocol
+expects the model to emit:
+
+```text
+<tool_call>{"name":"read_file","arguments":{"path":"a.txt"}}</tool_call><|im_end|>
+```
+
+If the model must generate the `<tool_call>` wrappers, JSON, and end-of-turn
+marker, all of those tokens are part of the supervised assistant action. If a
+provider instead asks the model for only JSON and inserts the wrappers after
+generation, the inserted wrappers are not model targets. Tool-result wrappers
+are normally produced by the environment when the next prompt is serialized,
+so they remain context-only even though the model must learn how to react to
+them.
+
+For a multi-turn approved trajectory, the pattern repeats:
+
+```text
+system/user/tool context       -> visible through attention, labels = -100
+assistant content              -> labels = token ids
+assistant end-of-turn          -> labels = end-of-turn token id
+next tool observation          -> visible through attention, labels = -100
+next assistant content         -> labels = token ids
+next assistant end-of-turn     -> labels = end-of-turn token id
+```
+
+There is one important qualification: an end marker should receive loss only
+if the chosen deployment protocol actually expects the model to emit it. If a
+server stops generation through an external mechanism before that token and
+the model never owns it, training it as an action would create a mismatch.
+This is another reason to pin generation semantics alongside the template
+rather than inferring them from visible transcript text.
+
+The durable loss-mask invariant is:
+
+```text
+loss-bearing tokens = the approved token actions the deployed model must generate
+context-only tokens = everything supplied to the model before or between those actions
+```
+
+Message role is a useful first approximation, but exact ownership is defined
+by the model input and generation protocol.
+
 ### Public Agent-Training Systems Use Several Aggregation Policies
 
 There is no single public industry convention that makes every agent trace one

@@ -207,21 +207,35 @@ The current `PositiveSFTExampleRecord` is a source-level message record. Until
 tool-call serialization and loss masking are implemented and tested, it must
 not be described as trainer-ready.
 
+The initial trainer-ready representation will use trajectory aggregation: one
+approved message prefix is serialized once, rather than expanded into one row
+per assistant turn. Causal attention still gives every approved assistant token
+its actual preceding prefix inside that sequence.
+
 ### Required Eligibility
 
-A source candidate may enter the positive-SFT builder only when:
+A source candidate may enter positive-SFT prefix review only when:
 
 - every common source and trust gate passes;
-- `training_eligibility.positive_sft_allowed` is true;
+- `training_eligibility.positive_sft_review_eligible` is true;
 - the trajectory review is accepted;
-- the task outcome is trusted success: `task_success=true` and
-  `agent_task_run_status=scored`;
 - confirmed reward hacking is absent;
-- any ambiguous reward-hack finding has an explicit human `cleared` decision;
+- any ambiguous reward-hack finding has an explicit human `cleared` decision.
+
+It may produce a `PositiveSFTExampleRecord` only when:
+
+- an objective-specific positive-SFT review accepts a contiguous prefix ending
+  at one exact assistant message id;
 - the output record passes a fresh leakage scan after transformation.
 
 Public-check success, prompt-loop completion, a plausible final answer, or a
 successful-looking patch is insufficient.
+
+Task success is not a positive-SFT requirement. A trustworthy failed trajectory
+may contain an accepted prefix before its earliest causal error, while a
+successful trajectory may contain actions that should not be imitated. Task
+outcome may prioritize scarce review effort, but the objective-specific prefix
+review determines which assistant behavior is authorized for positive loss.
 
 ### Mechanical Redundancy
 
@@ -296,27 +310,29 @@ accurate; it never supplies a repaired artifact or authorizes training use.
 `not_reviewed`, `rejected`, and `needs_followup` do not satisfy the
 repair-specific positive-SFT gate.
 
-Consequently, a selected repaired transcript may enter positive SFT only when
-the source candidate is independently positive-SFT eligible, the exact selected
-repair record is `completed`, its repair review is accepted and bound to that
-record hash, and the transformed output passes its downstream validations. A
-repair review cannot clear source-level split, leakage, harness, task-outcome,
-reward-hack, or trajectory-review blockers.
+Consequently, a selected repaired transcript may enter positive-SFT review only
+when the source candidate is independently positive-SFT-review eligible, the
+exact selected repair record is `completed`, its repair review is accepted and
+bound to that record hash, and the transformed output passes its downstream
+validations. A repair review cannot clear source-level split, leakage, harness,
+reward-hack, or trajectory-review blockers, and it cannot substitute for the
+objective-specific positive-SFT prefix review.
 
-One candidate may have multiple completed repairs. A positive-SFT export must
-select a specific `repair_id`; it must not choose implicitly based on directory
-order, recency, or whichever record loads first. That selection belongs to the
-dataset export and is pinned in its manifest, not recorded as a globally
-preferred repair in the repair artifact.
+One candidate may have multiple completed repairs. Positive-SFT review
+initialization must select a specific `repair_id`; it must not choose implicitly
+based on directory order, recency, or whichever record loads first. That
+selection is pinned in the positive-SFT review source, not recorded as a
+globally preferred repair in the repair artifact.
 
 Each positive-SFT row distinguishes an `original` source from a `repaired`
 source. Both forms pin the exact training-candidate record and transcript
 artifact. A repaired row additionally pins the selected repair record and
 repair-review record and records the accepted repair-review id. Its example id
 is derived from the exact selected source rather than from `trajectory_id`
-alone. The positive-SFT manifest pins the repair-export manifest, the
-repair-review manifest, and the editable repair-review JSONL snapshot; its hash
-of the output JSONL transitively pins each row's repair selection.
+alone. The positive-SFT review manifest directly pins the candidate export and,
+when used, the repair export and repair-review artifact. The positive-SFT export
+manifest directly pins that review artifact and the output JSONL; the candidate
+and repair chain remains transitively reachable rather than being redeclared.
 
 A completed repair proves only that the declared deterministic transformation
 was reproduced and validated. It does not change task outcome, human-review
@@ -324,12 +340,14 @@ state, reward-hack evidence, split, or candidate eligibility, and therefore
 cannot upgrade an otherwise ineligible candidate into positive SFT.
 
 For the current `mechanical_redundancy_deletion` method only, a positive-SFT
-consumer may inherit the source trajectory's already trusted task-success
-claim. This is valid because the repair deletes only a call/result pair whose
-workspace state and normalized observation were proven equivalent to a
-retained baseline, while every subsequent action remains unchanged. The repair
-does not create a new success claim; it preserves the authority of the source
-claim under a narrowly state-and-observation-preserving transformation.
+consumer may inherit the source trajectory's already trusted task-outcome
+claim, whether pass or fail. This is valid because the repair deletes only a
+call/result pair whose workspace state and normalized observation were proven
+equivalent to a retained baseline, while every subsequent action remains
+unchanged. The repair does not create a new outcome claim; it preserves the
+authority of the source claim under a narrowly state-and-observation-preserving
+transformation. That inherited outcome is provenance, not positive-SFT
+authorization.
 
 This inheritance is not a general property of `completed` repairs. Future
 human, model, hybrid, or behavior-changing repairs require their own outcome
@@ -345,12 +363,13 @@ An auditable preference comparison may separately use the original redundant
 action as rejected behavior. That is a different objective and does not make
 the unmodified transcript a positive-SFT example.
 
-The positive-SFT builder now implements this policy. A positive-eligible
-candidate with a complete zero-block assessment uses its original transcript.
-A candidate with blocks produces no row unless the caller explicitly selects a
-repair id. An explicit invalid selection is a hard error rather than a silent
-exclusion. Loading a persisted positive-SFT export revalidates its pinned
-candidate, repair, and review sources and deterministically rebuilds the rows.
+The positive-SFT builder now implements this policy. A positive-SFT-review-
+eligible candidate with a complete zero-block assessment uses its original
+transcript. A candidate with blocks produces no review row unless the caller
+explicitly selects a repair id. An explicit invalid selection is a hard error
+rather than a silent exclusion. Loading a persisted positive-SFT export
+revalidates its pinned candidate, repair, and review sources and
+deterministically rebuilds the rows.
 
 ### Loss-Bearing Tokens
 
@@ -366,9 +385,62 @@ The intended default mask is:
 | Detector-identified redundant call and result | No; removed by deterministic repair | No |
 | Scorer output, hidden validator, review metadata | No | No |
 
-Whether every assistant span in a successful trajectory is a valid target must
-be tested rather than assumed. Malformed tool calls and unhandled mechanical
-redundancy must fail closed during serialization.
+The positive-SFT prefix review, not task success, establishes which contiguous
+assistant-message prefix is intended for imitation. The exported source record
+ends at the accepted assistant-message boundary, so rejected or recovery
+behavior after that boundary is absent rather than merely masked. Malformed
+tool calls inside the accepted prefix and unhandled mechanical redundancy must
+fail closed during serialization.
+
+### Canonical Token Materialization
+
+For SFT on a target checkpoint, tokenization must use that checkpoint's exact
+compatible tokenizer artifacts and pinned revision. Token ids are the interface
+to the model's embedding and output-head rows; ids produced by a different
+model's tokenizer are not interchangeable. A trajectory collected from another
+behavior model may still be used as message-level evidence, but its structured
+messages must be canonically serialized for the target model.
+
+The chat template and tool representation are a separate, also-pinned policy.
+They should match the intended training and deployment interface. Deliberately
+teaching a new template is possible, but it is a behavioral-format change and
+must not be confused with swapping the tokenizer vocabulary.
+
+For the initial Qwen2.5 target, the model-input protocol pins the immutable
+checkpoint and tokenizer revision, tokenizer file hashes, exact upstream
+chat-template bytes, required special-token assertions, and the message fields
+that reach serialization. It defines two operations:
+
+```text
+generation serialization          -> append the assistant generation header
+completed-transcript serialization -> include assistant content and end of turn
+```
+
+Assistant prefill and provider-native tool serialization are unsupported. The
+current tool actions remain assistant JSON content, while tool observations are
+structured messages projected through the pinned Qwen template.
+
+The initial materialization policy is:
+
+```text
+one approved PositiveSFTExampleRecord
+-> one canonical target-model chat serialization
+-> one trajectory-aggregated input_ids sequence
+-> labels equal input_ids on approved assistant spans
+-> labels equal -100 on system, user, and tool-observation spans
+```
+
+If the canonical sequence exceeds `max_sequence_length`, the whole example is
+excluded under an explicit overlength reason. It is not truncated, split into
+arbitrary chunks, placed into overlapping windows, or summarized. Such
+transformations would define a different context policy and require a separate
+contract. Overlength exclusions must remain countable so the resulting bias
+toward shorter trajectories is visible.
+
+Canonical training tokens are not claimed to reproduce the exact per-turn
+rollout token ids. They are a pinned model-specific derivative of the reviewed
+message source. Exact rollout ids remain a different evidence type and are
+required for objectives that depend on behavior-policy action probabilities.
 
 ## Negative-Example Contract
 
@@ -383,7 +455,7 @@ The current candidate policy permits a negative example when:
 
 - every common source and trust gate passes;
 - the trajectory review is accepted;
-- `training_eligibility.negative_example_allowed` is true;
+- `training_eligibility.negative_example_eligible` is true;
 - the trajectory is unsuccessful.
 
 This pool may contain gradable task failures, model-caused terminal tool
@@ -404,14 +476,14 @@ unmasked. Standard cross-entropy would increase their likelihood. Applying a
 negative scalar to ordinary cross-entropy is also not the default contract;
 that objective requires separate stability and token-credit justification.
 
-`negative_example_allowed` therefore means "permitted as labeled negative
+`negative_example_eligible` therefore means "permitted as labeled negative
 source evidence," not "ready for any trainer."
 
 ### Action-Level Negative Evidence
 
 A mechanically redundant action in an otherwise successful trajectory is not
 the same thing as a negative full trajectory. It may support an action-level
-preference comparison even when `negative_example_allowed` is false because
+preference comparison even when `negative_example_eligible` is false because
 the task succeeded.
 
 Negative action supervision should branch from the same model-visible prefix
@@ -437,7 +509,7 @@ One preference pair contains:
 - source ids, hashes, splits, scorer/reward versions, and known risks for both
   sides.
 
-Candidate-level `preference_data_allowed` only permits a trajectory to be
+Candidate-level `preference_pairing_eligible` only permits a trajectory to be
 considered as one side. It does not prove that a valid counterpart or pair
 exists.
 
@@ -521,46 +593,42 @@ denied. At minimum the reason must distinguish:
 | Actual leakage | Deny every trainable use and never copy leaked bytes |
 | Orchestration failure | Deny every trainable use |
 | Reward-hack evaluation incomplete | Deny every trainable use |
-| Review not accepted | Analysis only |
+| Trajectory review not accepted | Analysis only; no objective-specific training path |
+| Positive-SFT prefix review not accepted | Emit no positive-SFT source example |
 | Confirmed reward hack | Deny positive SFT; allow only explicitly labeled negative/adversarial consideration when otherwise safe |
 | Ambiguous reward hack without adjudication | Block trainable use pending review |
-| Task failure | Deny positive SFT; possibly negative or preference-rejected consideration |
-| Cannot grade | Deny positive SFT and preference pairing; possibly labeled negative evidence |
+| Task failure | Does not by itself deny an accepted positive-SFT prefix; may also support negative or preference-rejected consideration |
+| Cannot grade | Does not invalidate an earlier accepted positive prefix; deny preference pairing under the current policy; possibly retain labeled negative evidence |
 | Mechanical redundancy unhandled | Deny raw full-transcript positive SFT; retain assessment for deterministic repair or pairing |
 | Preference basis unauditable | Deny pair construction even if both sides are individually eligible |
+| Canonical sequence exceeds `max_sequence_length` | Exclude the initial trajectory-aggregated training row and preserve an explicit overlength reason |
 | Serialization or leakage scan failure | Deny the constructed dataset row |
 
 Zero positive examples, zero preference pairs, or zero examples of any other
 use is a valid result. Empty output is preferable to weakening a boundary to
 make a training command run.
 
-## Current Qwen Artifact Example
+## Historical Qwen Artifact Note
 
-The Week 9 Qwen artifact chain provides a concrete negative-path example:
+Earlier Qwen exports were useful acquisition and failure-analysis evidence, but
+they predate the current harness runtime pins and the objective-specific
+positive-SFT prefix-review artifact. Their provisional accepted trajectory
+reviews validate artifact plumbing only and are not production-quality human
+review.
 
-```text
-harness audit:        PASS
-control calibration: PASS, stable
-model trajectories:  3
-task success:         0
-terminal behavior:    CommandNotAllowed in all 3
-accepted smoke review: 3
-reward-hack finding:  not_detected in all 3
-mechanical assessment: complete, zero blocks in all 3
-```
+Those artifacts must not be used to infer a current positive-SFT count. In
+particular, their task failures do not prove that they contain no usable
+positive prefix. They lack current-runtime trust binding and an accepted
+positive-SFT message boundary, either of which is sufficient to block current
+export. Fresh artifacts must pass the current gates and review workflow before
+they are materialized for training.
 
-The three trajectories are permitted as labeled negative examples because the
-model behavior was recorded under a trusted harness and the smoke reviews were
-explicitly accepted. They are not positive-SFT eligible because the tasks did
-not succeed. They are not preference-data eligible because the terminal tool
-errors left them ungradable. The accepted smoke reviews validate artifact
-plumbing only and are not a claim of production-quality human review.
-
-This result demonstrates both directions of the boundary:
+The durable lesson from the historical runs is narrower:
 
 ```text
-failed task can still yield permitted negative evidence
-real, valid trajectory does not have to yield a positive training row
+failed task can still yield interpretable negative evidence
+failed task may also contain a separately reviewed positive prefix
+historical artifact count != current training-data eligibility
 ```
 
 ## Current Enforcement Status
@@ -579,8 +647,10 @@ real, valid trajectory does not have to yield a positive training row
 | Fail-closed repair source traversal and deterministic reload | Implemented |
 | Repair-review record, exact-row binding, and review artifact | Implemented |
 | Explicit positive-SFT repair selection and builder/export integration | Implemented |
-| Positive-SFT repair selection CLI | Not implemented |
+| Positive-SFT repair selection and prefix-review CLI | Implemented |
+| Positive-SFT contiguous-prefix review and source export | Implemented |
 | Deterministic tool-call serialization and token loss masks | Not implemented |
+| Persisted target-model token records and explicit overlength outcomes | Not implemented |
 | Negative-example dataset/export objective | Not implemented |
 | Preference-pair schema, pair validation, and export | Not implemented |
 | Human-repair provenance contract | Not implemented |
