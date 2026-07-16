@@ -14,7 +14,11 @@ from agentenv.evals.schema import (
     SCORER_CONTROL_PATCH_POLICY_TYPE,
     EvalConfig,
 )
-from agentenv.models.config import load_decoding_config, load_model_config
+from agentenv.models.config import (
+    load_decoding_config,
+    load_model_config,
+    load_referenced_model_input_protocol,
+)
 from agentenv.tasks.validate import validate_task_manifest_paths
 
 
@@ -50,13 +54,13 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
     for policy in config.policies.values():
         if policy.type != AGENT_MODEL_POLICY_TYPE:
             continue
-        load_model_config(
-            resolve_config_file_ref(
-                config_path,
-                policy.model_config_path,
-                field_name="model_config",
-            )
+        model_config_path = resolve_config_file_ref(
+            config_path,
+            policy.model_config_path,
+            field_name="model_config",
         )
+        model_config = load_model_config(model_config_path)
+        load_referenced_model_input_protocol(model_config, model_config_path)
         load_decoding_config(
             resolve_config_file_ref(
                 config_path,

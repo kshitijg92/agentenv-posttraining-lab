@@ -116,3 +116,10 @@ the exact pinned upstream Qwen template for generation and completed-transcript
 serialization. It projects only message `role` and `content`, retains the
 AgentEnv content-level JSON action protocol, and does not authorize
 provider-native tool serialization.
+
+The Qwen2.5-Coder-3B Ollama runtime consumes this same record before every
+generation. AgentEnv renders the full generation prompt and sends it through
+Ollama's native generate endpoint with raw templating mode mandatory. The
+OpenAI-compatible client remains a separate provider-owned serialization path;
+the 7B and 14B Qwen2.5 configs remain on that path until they have their own
+pinned input-protocol records.

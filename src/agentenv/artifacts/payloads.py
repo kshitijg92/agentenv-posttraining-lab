@@ -17,7 +17,8 @@ from agentenv.controls.public_check_idempotency_schema import (
     PublicCheckIdempotencyCalibration,
 )
 from agentenv.evals.schema import SCORER_CONTROL_LAYER, ControlLayer
-from agentenv.models.config_schema import ModelConfig
+from agentenv.models.config_schema import ModelConfig, OllamaGenerateModelConfig
+from agentenv.models.input_protocol_schema import ModelInputProtocol
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunStatus
@@ -609,6 +610,14 @@ class ReplayComparisonRecord(BaseModel):
         return self
 
 
+class ModelInputProtocolProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str = Field(min_length=1)
+    source_hash: str = Field(pattern=r"^xxh64:[0-9a-f]{16}$", strict=True)
+    protocol: ModelInputProtocol
+
+
 class ModelConfigProvenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -616,6 +625,30 @@ class ModelConfigProvenance(BaseModel):
     source_path: str = Field(min_length=1)
     source_hash: str = Field(min_length=1)
     config: ModelConfig
+    model_input_protocol: ModelInputProtocolProvenance | None
+
+    @model_validator(mode="after")
+    def validate_model_input_protocol_provenance(self) -> "ModelConfigProvenance":
+        if isinstance(self.config, OllamaGenerateModelConfig):
+            if self.model_input_protocol is None:
+                raise ValueError(
+                    "ollama_generate provenance requires model_input_protocol"
+                )
+            if (
+                self.model_input_protocol.source_hash
+                != self.config.model_input_protocol.content_hash
+            ):
+                raise ValueError(
+                    "model input protocol provenance hash must match the model "
+                    "config pin"
+                )
+            return self
+
+        if self.model_input_protocol is not None:
+            raise ValueError(
+                "openai_compatible_chat provenance cannot include model_input_protocol"
+            )
+        return self
 
 
 class DecodingConfigProvenance(BaseModel):

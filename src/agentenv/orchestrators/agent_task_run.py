@@ -31,8 +31,10 @@ from agentenv.artifacts.payloads import (
 from agentenv.controls.agent_control_scripts import AgentControlScriptCase
 from agentenv.envs.local_repo_env import prepare_agent_workspace
 from agentenv.ids import new_agent_attempt_id
+from agentenv.hashing import hash_file
 from agentenv.models.client import ModelClient
 from agentenv.models.config_schema import ModelConfig
+from agentenv.models.input_protocol import LoadedModelInputProtocol
 from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_schema import (
     AgentTaskRunResult,
@@ -417,13 +419,24 @@ def model_config_provenance_artifact(
     model_config: ModelConfig,
     model_config_path: Path,
     model_config_hash: str,
+    model_input_protocol: LoadedModelInputProtocol | None = None,
 ) -> ModelConfigProvenance:
+    input_protocol_provenance = (
+        {
+            "source_path": str(model_input_protocol.source_path),
+            "source_hash": hash_file(model_input_protocol.source_path),
+            "protocol": model_input_protocol.record.model_dump(mode="json"),
+        }
+        if model_input_protocol is not None
+        else None
+    )
     return ModelConfigProvenance.model_validate(
         {
             "schema_version": MODEL_CONFIG_PROVENANCE_SCHEMA_VERSION,
             "source_path": str(model_config_path),
             "source_hash": model_config_hash,
             "config": redact_jsonable(json.loads(model_config.model_dump_json())),
+            "model_input_protocol": input_protocol_provenance,
         }
     )
 

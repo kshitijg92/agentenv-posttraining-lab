@@ -420,6 +420,15 @@ Assistant prefill and provider-native tool serialization are unsupported. The
 current tool actions remain assistant JSON content, while tool observations are
 structured messages projected through the pinned Qwen template.
 
+For Qwen2.5-Coder-3B acquisition through Ollama, deployment serialization now
+uses the same protocol record: AgentEnv renders the generation form and sends
+the complete prompt through Ollama's native generate transport with provider
+templating disabled. The protocol YAML is a hash-pinned transitive dependency
+of the model config, and each model-run provenance artifact embeds the resolved
+protocol record, source path, and observed source hash. This parity claim is
+specific to the 3B protocol-backed path; it does not extend to model configs
+that still use provider-owned OpenAI-compatible chat serialization.
+
 The initial materialization policy is:
 
 ```text

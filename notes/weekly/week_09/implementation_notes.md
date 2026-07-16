@@ -2304,3 +2304,51 @@ Pyright on protocol source and tests: passed
 vendored template bytes equal the pinned upstream field: passed
 git diff --check: passed
 ```
+
+### Qwen2.5-Coder-3B Ollama Raw Generation Transport
+
+Added an `ollama_generate` model-config variant and a native Ollama generate
+client. This path requires a hash-pinned model-input-protocol reference,
+renders the generation prompt through that protocol, and sends the complete
+prompt to `/api/generate` with `raw: true` and `stream: false`. The raw setting
+is a transport invariant rather than a configurable option.
+
+Ollama decoding options now receive the repository's temperature, top-p,
+maximum-new-token, stop, seed, and top-k settings. The client maps Ollama's
+native response text, done reason, and prompt/completion token counts back into
+the shared `ModelResponse` contract. The AgentEnv action JSON schema was moved
+to one shared source used by both the OpenAI-compatible and Ollama-native
+transports.
+
+Only `qwen2.5-coder:3b` moved to the new transport. The 7B and 14B configs were
+not pointed at the 3B protocol because its checkpoint identity is explicitly
+3B, even though family members may share tokenizer or template bytes. The 3B
+config now uses `AGENTENV_OLLAMA_BASE_URL`, whose value is the Ollama server
+root rather than the OpenAI-compatible `/v1` base.
+
+The protocol YAML is now a pinned transitive model-config dependency. Eval
+preflight resolves it and verifies its xxh64 content hash. Persisted model
+config provenance for an Ollama run contains the resolved protocol record,
+source path, and observed hash, and schema validation requires that observed
+hash to equal the model-config pin.
+
+Focused verification:
+
+```text
+model protocol/config/factory/OpenAI/Ollama tests: 46 passed
+multi-policy eval preflight with pinned protocol: 1 passed
+artifact, agent-attempt, and eval-run integration: 58 passed, 1 replay failure
+Ruff on changed source and tests: passed
+Pyright on changed source and tests: passed
+```
+
+The replay failure is outside the new transport path and affects scripted agent
+controls. Replay normalization currently compares newly generated `message_id`
+values literally inside `prompt_loop_result.json`; source and replay ids differ
+even when behavior matches. Fixing that needs identity-aware canonicalization
+that preserves equality relationships, rather than masking every message id to
+one undifferentiated placeholder.
+
+A live native-endpoint smoke was not run in this checkpoint because no Ollama
+server was listening on `127.0.0.1:11434`; the local probe failed before any
+request reached a model.

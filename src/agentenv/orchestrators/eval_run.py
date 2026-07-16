@@ -55,7 +55,11 @@ from agentenv.ids import (
     new_eval_run_id,
     new_eval_suite_id,
 )
-from agentenv.models.config import load_decoding_config, load_model_config
+from agentenv.models.config import (
+    load_decoding_config,
+    load_model_config,
+    load_referenced_model_input_protocol,
+)
 from agentenv.models.factory import build_model_client
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
@@ -746,7 +750,14 @@ def _run_agent_model_eval_attempt(
 ) -> EvalAttemptRecord:
     model_config = load_model_config(model_config_path)
     decoding_config = load_decoding_config(decoding_config_path)
-    model_client = build_model_client(model_config)
+    model_input_protocol = load_referenced_model_input_protocol(
+        model_config,
+        model_config_path,
+    )
+    model_client = build_model_client(
+        model_config,
+        model_input_protocol=model_input_protocol,
+    )
     agent_task_run = run_and_persist_agent_task_attempt_to_dir(
         task.manifest_path,
         model_client,
@@ -756,6 +767,7 @@ def _run_agent_model_eval_attempt(
             model_config=model_config,
             model_config_path=model_config_path,
             model_config_hash=_hash_file(model_config_path),
+            model_input_protocol=model_input_protocol,
         ),
         decoding_config_provenance=decoding_config_provenance_artifact(
             decoding_config=decoding_config,

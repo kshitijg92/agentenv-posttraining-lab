@@ -29,6 +29,9 @@ AGENT_MODEL_DEV_QWEN_EVAL_CONFIG = Path(
 AGENT_MODEL_DEV_DEEPSEEK_R1_DISTILL_QWEN_EVAL_CONFIG = Path(
     "configs/eval/agent_model_dev_ollama_deepseek_r1_distill_qwen_14b.yaml"
 )
+AGENT_MODEL_MULTI_POLICY_ACQUISITION_CONFIG = Path(
+    "configs/eval/agent_model_dev_multi_policy_acquisition.yaml"
+)
 
 
 def _write_agent_model_eval_config(path: Path) -> None:
@@ -126,6 +129,16 @@ def test_agent_model_dev_deepseek_eval_config_paths_are_valid() -> None:
     validate_eval_config_paths(
         config,
         AGENT_MODEL_DEV_DEEPSEEK_R1_DISTILL_QWEN_EVAL_CONFIG,
+    )
+
+
+def test_agent_model_multi_policy_config_resolves_pinned_input_protocol() -> None:
+    config = load_eval_config(AGENT_MODEL_MULTI_POLICY_ACQUISITION_CONFIG)
+
+    assert config.policies["qwen2-5-coder-3b"].type == "agent_model"
+    validate_eval_config_paths(
+        config,
+        AGENT_MODEL_MULTI_POLICY_ACQUISITION_CONFIG,
     )
 
 

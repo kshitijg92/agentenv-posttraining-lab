@@ -338,6 +338,8 @@ Current state:
 - positive-SFT review records bind an exact accepted assistant-message boundary;
 - source export materializes only that contiguous approved prefix;
 - repair selection and positive-SFT review/export CLI wiring are implemented;
+- Qwen2.5-Coder-3B inference now consumes the pinned model-input protocol via
+  AgentEnv rendering and Ollama native raw generation;
 - target-model token materialization remains before any training smoke.
 
 Self-deception trap:

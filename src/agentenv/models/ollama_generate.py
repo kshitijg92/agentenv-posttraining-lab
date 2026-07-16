@@ -2,13 +2,16 @@ import json
 import os
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import httpx
 
-from agentenv.models.agent_action_schema import openai_agent_action_response_format
-from agentenv.models.config_schema import OpenAICompatibleChatModelConfig
-from agentenv.ids import new_message_id
+from agentenv.models.agent_action_schema import agent_action_json_schema
+from agentenv.models.config_schema import OllamaGenerateModelConfig
+from agentenv.models.input_protocol import (
+    LoadedModelInputProtocol,
+    render_model_input,
+)
 from agentenv.models.schema import (
     DecodingConfig,
     Message,
@@ -18,20 +21,21 @@ from agentenv.models.schema import (
 from agentenv.security.secrets import redact_secrets
 
 
-_DEFAULT_BASE_URL = "https://api.openai.com/v1"
+_DEFAULT_BASE_URL = "http://localhost:11434"
 _RAW_RESPONSE_REF = "provider_response/not_persisted"
 _NOT_STARTED_RAW_RESPONSE_REF = "provider_response/not_started"
 
 
 class TokenUsage(TypedDict):
-    prompt_tokens: int | None
-    completion_tokens: int | None
-    total_tokens: int | None
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
 
 
 @dataclass
-class OpenAICompatibleChatModelClient:
-    config: OpenAICompatibleChatModelConfig
+class OllamaGenerateModelClient:
+    config: OllamaGenerateModelConfig
+    model_input_protocol: LoadedModelInputProtocol
     http_client: httpx.Client | None = None
 
     @property
@@ -62,8 +66,13 @@ class OpenAICompatibleChatModelClient:
                 raw_response_ref=_NOT_STARTED_RAW_RESPONSE_REF,
             )
 
+        prompt = render_model_input(
+            self.model_input_protocol,
+            messages,
+            mode="generation",
+        )
         try:
-            response = self._post_chat_completion(messages, decoding_config)
+            response = self._post_generate(prompt, decoding_config)
         except httpx.TimeoutException:
             return _timeout_response(self.model_id, started, "ProviderTimeout")
         except httpx.RequestError as exc:
@@ -91,24 +100,19 @@ class OpenAICompatibleChatModelClient:
             self.model_id,
             started,
             payload,
-            decoding_config,
         )
 
-    def _post_chat_completion(
+    def _post_generate(
         self,
-        messages: list[Message],
+        prompt: str,
         decoding_config: DecodingConfig,
     ) -> httpx.Response:
-        base_url = _base_url(self.config)
+        payload = _request_payload(self.config, prompt, decoding_config)
+        request_url = f"{_base_url(self.config)}/api/generate"
         headers = {"Content-Type": "application/json"}
-        api_key = _api_key(self.config)
-        if api_key is not None:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        payload = _request_payload(self.config, messages, decoding_config)
         if self.http_client is not None:
             return self.http_client.post(
-                f"{base_url}/chat/completions",
+                request_url,
                 headers=headers,
                 json=payload,
                 timeout=decoding_config.timeout_seconds,
@@ -116,7 +120,7 @@ class OpenAICompatibleChatModelClient:
 
         with httpx.Client() as http_client:
             return http_client.post(
-                f"{base_url}/chat/completions",
+                request_url,
                 headers=headers,
                 json=payload,
                 timeout=decoding_config.timeout_seconds,
@@ -124,63 +128,31 @@ class OpenAICompatibleChatModelClient:
 
 
 def _request_payload(
-    config: OpenAICompatibleChatModelConfig,
-    messages: list[Message],
+    config: OllamaGenerateModelConfig,
+    prompt: str,
     decoding_config: DecodingConfig,
 ) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "model": config.model_id,
-        "messages": [
-            _message_payload(message)
-            for message in _adapt_messages_for_model(config, messages)
-        ],
+    options: dict[str, object] = {
         "temperature": decoding_config.temperature,
         "top_p": decoding_config.top_p,
-        "max_tokens": decoding_config.max_new_tokens,
+        "num_predict": decoding_config.max_new_tokens,
     }
     if decoding_config.stop:
-        payload["stop"] = decoding_config.stop
+        options["stop"] = decoding_config.stop
     if decoding_config.seed is not None:
-        payload["seed"] = decoding_config.seed
+        options["seed"] = decoding_config.seed
     if decoding_config.top_k is not None:
-        payload["top_k"] = decoding_config.top_k
-    if config.agent_action_format == "json_schema":
-        payload["response_format"] = openai_agent_action_response_format()
-    return payload
+        options["top_k"] = decoding_config.top_k
 
-
-def _adapt_messages_for_model(
-    config: OpenAICompatibleChatModelConfig,
-    messages: list[Message],
-) -> list[Message]:
-    prompt_adapter = config.prompt_adapter
-    if prompt_adapter is None or prompt_adapter.system_suffix is None:
-        return messages
-
-    suffix = prompt_adapter.system_suffix
-    adapted_messages = list(messages)
-    for index, message in enumerate(adapted_messages):
-        if message.role == "system":
-            adapted_messages[index] = message.model_copy(
-                update={"content": f"{message.content}\n\n{suffix}"}
-            )
-            return adapted_messages
-
-    return [
-        Message(message_id=new_message_id(), role="system", content=suffix),
-        *adapted_messages,
-    ]
-
-
-def _message_payload(message: Message) -> dict[str, object]:
     payload: dict[str, object] = {
-        "role": message.role,
-        "content": message.content,
+        "model": config.model_id,
+        "prompt": prompt,
+        "raw": True,
+        "stream": False,
+        "options": options,
     }
-    if message.name is not None:
-        payload["name"] = message.name
-    if message.role == "tool":
-        payload["tool_call_id"] = message.tool_call_id
+    if config.agent_action_format == "json_schema":
+        payload["format"] = agent_action_json_schema()
     return payload
 
 
@@ -188,20 +160,23 @@ def _model_response_from_payload(
     model_id: str,
     started: float,
     payload: object,
-    decoding_config: DecodingConfig,
 ) -> ModelResponse:
     if not isinstance(payload, dict):
         return _error_response(model_id, started, "MalformedProviderResponse")
-
-    choice = _single_choice(payload, decoding_config)
-    if choice is None:
+    if payload.get("done") is not True:
         return _error_response(model_id, started, "MalformedProviderResponse")
 
-    output_text = redact_secrets(_choice_output_text(choice))
-    provider_finish_reason = choice.get("finish_reason")
-    finish_reason = _local_finish_reason(provider_finish_reason)
+    output_text = payload.get("response")
+    if not isinstance(output_text, str):
+        return _error_response(model_id, started, "MalformedProviderResponse")
+
+    finish_reason = _local_finish_reason(payload.get("done_reason"))
     if finish_reason is None:
-        return _error_response(model_id, started, "UnsupportedProviderFinishReason")
+        return _error_response(
+            model_id,
+            started,
+            "UnsupportedProviderFinishReason",
+        )
 
     token_usage = _token_usage(payload)
     if token_usage is None:
@@ -209,7 +184,7 @@ def _model_response_from_payload(
 
     return ModelResponse(
         model_id=model_id,
-        output_text=output_text,
+        output_text=redact_secrets(output_text),
         finish_reason=finish_reason,
         latency_ms=_latency_ms(started),
         prompt_tokens=token_usage["prompt_tokens"],
@@ -219,92 +194,44 @@ def _model_response_from_payload(
     )
 
 
-def _single_choice(
-    payload: dict[str, object],
-    decoding_config: DecodingConfig,
-) -> dict[str, Any] | None:
-    choices = payload.get("choices")
-    if not isinstance(choices, list):
-        return None
-    if len(choices) != decoding_config.num_return_sequences:
-        return None
-    if decoding_config.num_return_sequences != 1:
-        return None
-    choice = choices[0]
-    if not isinstance(choice, dict):
-        return None
-    return choice
-
-
-def _choice_output_text(choice: dict[str, Any]) -> str:
-    message = choice.get("message")
-    if not isinstance(message, dict):
-        return ""
-    content = message.get("content")
-    return content if isinstance(content, str) else ""
-
-
-def _local_finish_reason(provider_finish_reason: object) -> ModelFinishReason | None:
-    if provider_finish_reason == "stop":
+def _local_finish_reason(done_reason: object) -> ModelFinishReason | None:
+    if done_reason == "stop":
         return "stop_criteria_met"
-    if provider_finish_reason == "length":
+    if done_reason == "length":
         return "max_new_tokens_reached"
     return None
 
 
-def _token_usage(
-    payload: dict[str, object],
-) -> TokenUsage | None:
-    usage = payload.get("usage")
-    if usage is None:
-        return {
-            "prompt_tokens": None,
-            "completion_tokens": None,
-            "total_tokens": None,
-        }
-    if not isinstance(usage, dict):
-        return None
-
+def _token_usage(payload: dict[str, object]) -> TokenUsage | None:
     try:
-        prompt_tokens = _optional_int(usage.get("prompt_tokens"))
-        completion_tokens = _optional_int(usage.get("completion_tokens"))
-        total_tokens = _optional_int(usage.get("total_tokens"))
+        prompt_tokens = _non_negative_int(payload.get("prompt_eval_count"))
+        completion_tokens = _non_negative_int(payload.get("eval_count"))
     except ValueError:
         return None
-
-    if prompt_tokens is not None and completion_tokens is not None:
-        expected_total_tokens = prompt_tokens + completion_tokens
-        if total_tokens is None:
-            total_tokens = expected_total_tokens
-        elif total_tokens != expected_total_tokens:
-            return None
-
     return {
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
-        "total_tokens": total_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
     }
 
 
+def _non_negative_int(value: object) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    raise ValueError("Expected non-negative integer")
+
+
 def _provider_http_error_message(response: httpx.Response) -> str:
-    parts = [f"HTTP {response.status_code}"]
+    message = f"HTTP {response.status_code}"
     try:
         payload = response.json()
     except ValueError:
-        return " ".join(parts)
-
-    if not isinstance(payload, dict):
-        return " ".join(parts)
-    error = payload.get("error")
-    if not isinstance(error, dict):
-        return " ".join(parts)
-
-    for field_name in ("type", "code", "param", "message"):
-        field_value = _clean_error_fragment(error.get(field_name))
-        if field_value is not None:
-            parts.append(f"{field_name}={field_value}")
-
-    return redact_secrets(_truncate_error_message(" ".join(parts)))
+        return message
+    if isinstance(payload, dict):
+        error = _clean_error_fragment(payload.get("error"))
+        if error is not None:
+            message = f"{message} error={error}"
+    return redact_secrets(_truncate_error_message(message))
 
 
 def _provider_request_error_message(exc: httpx.RequestError) -> str:
@@ -319,11 +246,8 @@ def _provider_request_error_message(exc: httpx.RequestError) -> str:
 def _clean_error_fragment(value: object) -> str | None:
     if value is None:
         return None
-    text = str(value)
-    text = " ".join(text.split())
-    if not text:
-        return None
-    return text
+    text = " ".join(str(value).split())
+    return text or None
 
 
 def _truncate_error_message(message: str) -> str:
@@ -333,16 +257,8 @@ def _truncate_error_message(message: str) -> str:
     return f"{message[: max_length - 3]}..."
 
 
-def _optional_int(value: object) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, int) and value >= 0:
-        return value
-    raise ValueError("Expected non-negative integer or null")
-
-
 def _unsupported_decoding_error(
-    config: OpenAICompatibleChatModelConfig,
+    config: OllamaGenerateModelConfig,
     decoding_config: DecodingConfig,
 ) -> str | None:
     if decoding_config.seed is not None and not config.capabilities.supports_seed:
@@ -354,25 +270,21 @@ def _unsupported_decoding_error(
     return None
 
 
-def _missing_env_error(config: OpenAICompatibleChatModelConfig) -> str | None:
+def _missing_env_error(config: OllamaGenerateModelConfig) -> str | None:
     if config.base_url_env is not None and os.getenv(config.base_url_env) is None:
         return "MissingModelBaseUrlEnvVar"
-    if config.api_key_env is not None and os.getenv(config.api_key_env) is None:
-        return "MissingModelApiKeyEnvVar"
     return None
 
 
-def _base_url(config: OpenAICompatibleChatModelConfig) -> str:
+def _base_url(config: OllamaGenerateModelConfig) -> str:
     if config.base_url_env is None:
         return _DEFAULT_BASE_URL
-    value = os.environ[config.base_url_env]
-    return value.rstrip("/")
-
-
-def _api_key(config: OpenAICompatibleChatModelConfig) -> str | None:
-    if config.api_key_env is None:
-        return None
-    return os.environ[config.api_key_env]
+    value = os.environ[config.base_url_env].rstrip("/")
+    if value.endswith("/v1"):
+        raise ValueError(
+            "ollama_generate base URL must be the Ollama server root, not /v1"
+        )
+    return value
 
 
 def _timeout_response(

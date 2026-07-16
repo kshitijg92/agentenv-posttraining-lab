@@ -5,8 +5,15 @@ from pydantic import ValidationError
 
 from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
 from agentenv.artifacts.payloads import MODEL_CONFIG_PROVENANCE_SCHEMA_VERSION
-from agentenv.models.config import load_decoding_config, load_model_config
-from agentenv.models.config_schema import OpenAICompatibleChatModelConfig
+from agentenv.models.config import (
+    load_decoding_config,
+    load_model_config,
+    load_referenced_model_input_protocol,
+)
+from agentenv.models.config_schema import (
+    OllamaGenerateModelConfig,
+    OpenAICompatibleChatModelConfig,
+)
 from agentenv.orchestrators.agent_task_run import (
     decoding_config_provenance_artifact,
     generated_decoding_config_provenance_artifact,
@@ -16,8 +23,8 @@ from agentenv.orchestrators.agent_task_run import (
 
 MODEL_CONFIG = Path("configs/models/openai_compatible_chat_placeholder.yaml")
 DECODING_CONFIG = Path("configs/decoding/greedy_1024.yaml")
-QWEN2_5_MODEL_CONFIGS = (
-    Path("configs/models/ollama_qwen2_5_coder_3b.yaml"),
+QWEN2_5_3B_MODEL_CONFIG = Path("configs/models/ollama_qwen2_5_coder_3b.yaml")
+QWEN2_5_OPENAI_COMPATIBLE_MODEL_CONFIGS = (
     Path("configs/models/ollama_qwen2_5_coder_7b.yaml"),
     Path("configs/models/ollama_qwen2_5_coder_14b.yaml"),
 )
@@ -39,13 +46,51 @@ def test_load_model_config_reads_openai_compatible_chat_config() -> None:
     assert config.agent_action_format == "prompt_only"
 
 
-@pytest.mark.parametrize("config_path", QWEN2_5_MODEL_CONFIGS)
+@pytest.mark.parametrize("config_path", QWEN2_5_OPENAI_COMPATIBLE_MODEL_CONFIGS)
 def test_qwen2_5_configs_do_not_inject_qwen3_thinking_switch(
     config_path: Path,
 ) -> None:
     config = load_model_config(config_path)
 
+    assert isinstance(config, OpenAICompatibleChatModelConfig)
     assert config.prompt_adapter is None
+
+
+def test_qwen2_5_3b_config_pins_agentenv_owned_input_protocol() -> None:
+    config = load_model_config(QWEN2_5_3B_MODEL_CONFIG)
+
+    assert isinstance(config, OllamaGenerateModelConfig)
+    assert config.provider == "ollama_generate"
+    assert config.base_url_env == "AGENTENV_OLLAMA_BASE_URL"
+    assert config.model_input_protocol.path == (
+        "../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
+    )
+    assert config.model_input_protocol.content_hash == ("xxh64:eb0a73b2d5c4174a")
+    assert config.capabilities.supports_seed is True
+    assert config.capabilities.supports_stop is True
+    assert config.capabilities.supports_top_k is True
+
+    protocol = load_referenced_model_input_protocol(
+        config,
+        QWEN2_5_3B_MODEL_CONFIG,
+    )
+    assert protocol is not None
+    assert protocol.record.protocol_id == "qwen2_5_coder_3b_agentenv_json"
+
+
+def test_referenced_model_input_protocol_rejects_hash_drift() -> None:
+    config = load_model_config(QWEN2_5_3B_MODEL_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
+    drifted_ref = config.model_input_protocol.model_copy(
+        update={"content_hash": "xxh64:0000000000000000"}
+    )
+    drifted_config = config.model_copy(update={"model_input_protocol": drifted_ref})
+
+    with pytest.raises(ValueError, match="Model input protocol hash mismatch"):
+        load_referenced_model_input_protocol(
+            drifted_config,
+            QWEN2_5_3B_MODEL_CONFIG,
+        )
 
 
 def test_load_decoding_config_reads_generation_config() -> None:
@@ -89,6 +134,48 @@ def test_model_config_provenance_artifact_records_sanitized_config() -> None:
         "provider": "openai_compatible_chat",
         "version": "model_config_v0",
     }
+    assert artifact["model_input_protocol"] is None
+
+
+def test_ollama_model_config_provenance_persists_resolved_input_protocol() -> None:
+    config = load_model_config(QWEN2_5_3B_MODEL_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
+    protocol = load_referenced_model_input_protocol(
+        config,
+        QWEN2_5_3B_MODEL_CONFIG,
+    )
+    assert protocol is not None
+
+    artifact = model_config_provenance_artifact(
+        model_config=config,
+        model_config_path=QWEN2_5_3B_MODEL_CONFIG,
+        model_config_hash="xxh64:modelconfig000",
+        model_input_protocol=protocol,
+    ).model_dump(mode="json")
+
+    protocol_provenance = artifact["model_input_protocol"]
+    assert protocol_provenance is not None
+    assert protocol_provenance["source_path"] == str(protocol.source_path)
+    assert protocol_provenance["source_hash"] == (
+        config.model_input_protocol.content_hash
+    )
+    assert protocol_provenance["protocol"]["protocol_id"] == (
+        "qwen2_5_coder_3b_agentenv_json"
+    )
+
+
+def test_ollama_model_config_provenance_requires_resolved_input_protocol() -> None:
+    config = load_model_config(QWEN2_5_3B_MODEL_CONFIG)
+
+    with pytest.raises(
+        ValidationError,
+        match="ollama_generate provenance requires model_input_protocol",
+    ):
+        model_config_provenance_artifact(
+            model_config=config,
+            model_config_path=QWEN2_5_3B_MODEL_CONFIG,
+            model_config_hash="xxh64:modelconfig000",
+        )
 
 
 def test_file_backed_decoding_config_provenance_artifact_records_source() -> None:
