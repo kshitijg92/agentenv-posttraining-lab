@@ -18,7 +18,6 @@ from agentenv.artifacts.manifests import (
     TRAINING_CANDIDATE_REPAIR_EXPORT_ARTIFACT_SCHEMA_VERSION,
     TrainingCandidateExportManifestRef,
     TrainingCandidateRepairExportManifest,
-    load_control_calibration_manifest,
     load_training_candidate_repair_export_manifest,
 )
 from agentenv.artifacts.payloads import load_prompt_loop_result
@@ -85,7 +84,7 @@ def export_training_candidate_repairs(
     )
     trajectory_export = load_pinned_candidate_trajectory_export(candidate_export)
     trajectories_by_id = build_trajectory_record_index(trajectory_export.records)
-    calibrations = _load_source_public_check_calibrations(candidate_export)
+    calibrations = ()
 
     pending_records = tuple(
         _build_pending_repair_record(
@@ -426,7 +425,7 @@ def _validate_repair_records_against_source(
     candidates_by_identity = _index_training_candidates(candidate_export.records)
     trajectory_export = load_pinned_candidate_trajectory_export(candidate_export)
     trajectories_by_id = build_trajectory_record_index(trajectory_export.records)
-    calibrations = _load_source_public_check_calibrations(candidate_export)
+    calibrations = ()
     current_repairer_hash = compute_mechanical_redundancy_repairer_code_hash()
 
     for record in records:
@@ -570,22 +569,6 @@ def _load_source_task_manifest(
     if observed_hash != trajectory.source_provenance.task_manifest_hash:
         raise ValueError("Repair source task manifest hash mismatch")
     return load_task_manifest(task_manifest_path), observed_hash
-
-
-def _load_source_public_check_calibrations(
-    candidate_export: TrainingCandidateExport,
-) -> tuple[PublicCheckIdempotencyCalibration, ...]:
-    gate = candidate_export.manifest.control_calibration_gate
-    artifact_dir = Path(gate.artifact_dir)
-    if not artifact_dir.is_absolute():
-        artifact_dir = candidate_export.out_dir / artifact_dir
-    artifact_dir = artifact_dir.resolve()
-    manifest_path = artifact_dir / MANIFEST_FILENAME
-    observed_hash = hash_file(manifest_path)
-    if observed_hash != gate.manifest_hash:
-        raise ValueError("Repair source control-calibration manifest hash mismatch")
-    manifest = load_control_calibration_manifest(manifest_path)
-    return tuple(manifest.flake_detection.public_check_idempotency)
 
 
 def _require_candidate_trajectory(

@@ -35,13 +35,10 @@ from agentenv.trajectories.schema import (
 
 
 AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
-HARNESS_AUDIT_DIR = Path("/unit/harness-audit")
-CONTROL_CALIBRATION_DIR = Path("/unit/control-calibration")
 
 
 def test_export_training_candidate_records_writes_pending_review_artifact(
     tmp_path: Path,
-    stub_training_export_gates,
 ) -> None:
     trajectory_export_dir, review_dir, _review_artifact = build_review_fixture(
         tmp_path,
@@ -52,8 +49,6 @@ def test_export_training_candidate_records_writes_pending_review_artifact(
         trajectory_export_dir,
         review_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
 
     manifest = load_training_candidate_export_manifest(
@@ -68,12 +63,7 @@ def test_export_training_candidate_records_writes_pending_review_artifact(
     assert manifest.source_trajectories_jsonl_hash.startswith("xxh64:")
     assert manifest.source_review_manifest_hash.startswith("xxh64:")
     assert manifest.source_reviews_jsonl_hash.startswith("xxh64:")
-    assert manifest.harness_audit_gate == (
-        stub_training_export_gates.harness_audit_gate
-    )
-    assert manifest.control_calibration_gate == (
-        stub_training_export_gates.control_calibration_gate
-    )
+    assert manifest.training_authorization == "not_authorized"
     assert manifest.trajectory_record_schema_version == TRAJECTORY_RECORD_SCHEMA_VERSION
     assert manifest.trajectory_review_schema_version == TRAJECTORY_REVIEW_SCHEMA_VERSION
     assert (
@@ -85,7 +75,7 @@ def test_export_training_candidate_records_writes_pending_review_artifact(
     assert manifest.positive_sft_review_eligible_count == 0
     assert manifest.negative_example_eligible_count == 0
     assert manifest.preference_pairing_eligible_count == 0
-    assert manifest.any_training_use_eligible_count == 0
+    assert manifest.any_objective_use_eligible_count == 0
     assert manifest.analysis_only_count == 1
     assert manifest.fully_ineligible_count == 0
     assert manifest.artifacts == {
@@ -93,13 +83,12 @@ def test_export_training_candidate_records_writes_pending_review_artifact(
     }
 
     assert len(export.records) == 1
-    assert export.records[0].training_eligibility.is_analysis_only
+    assert export.records[0].content_eligibility.is_analysis_only
     assert (export.out_dir / "training_candidates.jsonl").is_file()
 
 
 def test_export_training_candidate_records_keeps_accepted_controls_analysis_only(
     tmp_path: Path,
-    stub_training_export_gates,
 ) -> None:
     trajectory_export_dir, review_dir, review_artifact = build_review_fixture(
         tmp_path,
@@ -111,8 +100,6 @@ def test_export_training_candidate_records_keeps_accepted_controls_analysis_only
         trajectory_export_dir,
         review_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
 
     assert export.manifest.record_count == 1
@@ -120,15 +107,14 @@ def test_export_training_candidate_records_keeps_accepted_controls_analysis_only
     assert export.manifest.positive_sft_review_eligible_count == 0
     assert export.manifest.negative_example_eligible_count == 0
     assert export.manifest.preference_pairing_eligible_count == 0
-    assert export.manifest.any_training_use_eligible_count == 0
+    assert export.manifest.any_objective_use_eligible_count == 0
     assert export.manifest.analysis_only_count == 1
     assert export.manifest.fully_ineligible_count == 0
-    assert export.records[0].training_eligibility.is_analysis_only
+    assert export.records[0].content_eligibility.is_analysis_only
 
 
 def test_load_training_candidate_export_rejects_jsonl_hash_mismatch(
     tmp_path: Path,
-    stub_training_export_gates,
 ) -> None:
     trajectory_export_dir, review_dir, _review_artifact = build_review_fixture(
         tmp_path,
@@ -138,8 +124,6 @@ def test_load_training_candidate_export_rejects_jsonl_hash_mismatch(
         trajectory_export_dir,
         review_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     candidates_path = export.out_dir / export.manifest.artifacts["training_candidates"]
     candidates_path.write_text(candidates_path.read_text() + "\n")
@@ -150,7 +134,6 @@ def test_load_training_candidate_export_rejects_jsonl_hash_mismatch(
 
 def test_load_training_candidate_export_rejects_summary_count_mismatch(
     tmp_path: Path,
-    stub_training_export_gates,
 ) -> None:
     trajectory_export_dir, review_dir, _review_artifact = build_review_fixture(
         tmp_path,
@@ -160,8 +143,6 @@ def test_load_training_candidate_export_rejects_summary_count_mismatch(
         trajectory_export_dir,
         review_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     manifest_path = export.out_dir / MANIFEST_FILENAME
     manifest = json.loads(manifest_path.read_text())
@@ -177,7 +158,6 @@ def test_load_training_candidate_export_rejects_summary_count_mismatch(
 
 def test_load_training_candidate_export_rejects_rehashed_eligibility_tamper(
     tmp_path: Path,
-    stub_training_export_gates,
 ) -> None:
     trajectory_export_dir, review_dir, _review_artifact = build_review_fixture(
         tmp_path,
@@ -187,12 +167,10 @@ def test_load_training_candidate_export_rejects_rehashed_eligibility_tamper(
         trajectory_export_dir,
         review_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     candidates_path = export.out_dir / export.manifest.artifacts["training_candidates"]
     candidate = json.loads(candidates_path.read_text())
-    candidate["training_eligibility"]["analysis_reason"] = "tampered decision"
+    candidate["content_eligibility"]["analysis_reason"] = "tampered decision"
     candidates_path.write_text(json.dumps(candidate, sort_keys=True) + "\n")
 
     manifest_path = export.out_dir / MANIFEST_FILENAME
@@ -207,9 +185,8 @@ def test_load_training_candidate_export_rejects_rehashed_eligibility_tamper(
         load_training_candidate_export_artifact(export.out_dir)
 
 
-def test_training_candidate_manifest_requires_both_trust_gates(
+def test_training_candidate_manifest_requires_non_authorized_status(
     tmp_path: Path,
-    stub_training_export_gates,
 ) -> None:
     trajectory_export_dir, review_dir, _review_artifact = build_review_fixture(
         tmp_path,
@@ -219,21 +196,18 @@ def test_training_candidate_manifest_requires_both_trust_gates(
         trajectory_export_dir,
         review_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     manifest_path = export.out_dir / MANIFEST_FILENAME
     manifest = json.loads(manifest_path.read_text())
-    del manifest["harness_audit_gate"]
+    del manifest["training_authorization"]
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
-    with pytest.raises(ValidationError, match="harness_audit_gate"):
+    with pytest.raises(ValidationError, match="training_authorization"):
         load_training_candidate_export_artifact(export.out_dir)
 
 
-def test_training_candidate_manifest_requires_one_gate_runtime(
+def test_training_candidate_manifest_cannot_claim_training_authorization(
     tmp_path: Path,
-    stub_training_export_gates,
 ) -> None:
     trajectory_export_dir, review_dir, _review_artifact = build_review_fixture(
         tmp_path,
@@ -243,17 +217,13 @@ def test_training_candidate_manifest_requires_one_gate_runtime(
         trajectory_export_dir,
         review_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     manifest_path = export.out_dir / MANIFEST_FILENAME
     manifest = json.loads(manifest_path.read_text())
-    manifest["control_calibration_gate"]["harness_runtime_hash"] = (
-        "xxh64:ffffffffffffffff"
-    )
+    manifest["training_authorization"] = "authorized"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
-    with pytest.raises(ValidationError, match="must use the same harness runtime"):
+    with pytest.raises(ValidationError, match="Input should be 'not_authorized'"):
         load_training_candidate_export_artifact(export.out_dir)
 
 

@@ -18,6 +18,10 @@ from agentenv.models.schema import DecodingConfig, Message
 PROTOCOL_PATH = Path(
     "configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
 )
+MODEL_MANIFEST_DIGEST = (
+    "sha256:f72c60cabf6237b07f6e632b2c48d533"
+    "cef25eda2efbd34bed21c5e9c01e6225"
+)
 
 
 def _model_config(
@@ -30,6 +34,7 @@ def _model_config(
         version="model_config_v0",
         provider="ollama_generate",
         model_id="qwen2.5-coder:3b",
+        model_manifest_digest=MODEL_MANIFEST_DIGEST,
         base_url_env="AGENTENV_OLLAMA_BASE_URL",
         capabilities=ModelCapabilities(
             token_usage="native",
@@ -76,10 +81,28 @@ def _messages() -> list[Message]:
 
 
 def _client(handler: httpx.MockTransport) -> OllamaGenerateModelClient:
+    def identity_pinned_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(
+                200,
+                json={
+                    "models": [
+                        {
+                            "name": "qwen2.5-coder:3b",
+                            "model": "qwen2.5-coder:3b",
+                            "digest": MODEL_MANIFEST_DIGEST.removeprefix("sha256:"),
+                        }
+                    ]
+                },
+            )
+        return handler.handle_request(request)
+
     return OllamaGenerateModelClient(
         config=_model_config(),
         model_input_protocol=load_model_input_protocol(PROTOCOL_PATH),
-        http_client=httpx.Client(transport=handler),
+        http_client=httpx.Client(
+            transport=httpx.MockTransport(identity_pinned_handler)
+        ),
     )
 
 
@@ -258,4 +281,57 @@ def test_ollama_generate_rejects_unsupported_decoding_before_request(
 
     assert response.finish_reason == "error"
     assert response.error_class == "UnsupportedDecodingTopK"
+    assert response.raw_response_ref == "provider_response/not_started"
+
+
+def test_ollama_generate_rejects_model_manifest_digest_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_OLLAMA_BASE_URL", "http://ollama.test")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/tags"
+        return httpx.Response(
+            200,
+            json={
+                "models": [
+                    {
+                        "name": "qwen2.5-coder:3b",
+                        "digest": "0" * 64,
+                    }
+                ]
+            },
+        )
+
+    client = OllamaGenerateModelClient(
+        config=_model_config(),
+        model_input_protocol=load_model_input_protocol(PROTOCOL_PATH),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    response = client.generate(_messages(), _decoding_config())
+
+    assert response.finish_reason == "error"
+    assert response.error_class == "ProviderModelDigestMismatch"
+    assert response.raw_response_ref == "provider_response/not_started"
+    assert MODEL_MANIFEST_DIGEST in (response.error_message or "")
+
+
+def test_ollama_generate_rejects_unresolved_model_tag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTENV_OLLAMA_BASE_URL", "http://ollama.test")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/tags"
+        return httpx.Response(200, json={"models": []})
+
+    client = OllamaGenerateModelClient(
+        config=_model_config(),
+        model_input_protocol=load_model_input_protocol(PROTOCOL_PATH),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    response = client.generate(_messages(), _decoding_config())
+
+    assert response.finish_reason == "error"
+    assert response.error_class == "ProviderModelNotFound"
     assert response.raw_response_ref == "provider_response/not_started"

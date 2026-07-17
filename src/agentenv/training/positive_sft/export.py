@@ -245,6 +245,7 @@ def build_positive_sft_export_manifest(
             "artifact_type": ArtifactType.POSITIVE_SFT_EXPORT,
             "artifact_schema_version": POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION,
             "created_at": _utc_now(),
+            "training_authorization": "not_authorized",
             "source_positive_sft_review": {
                 "artifact_dir": str(review_artifact.out_dir),
                 "manifest_hash": hash_file(source_manifest_path),

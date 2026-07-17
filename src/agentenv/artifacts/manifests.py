@@ -1096,7 +1096,7 @@ class TrajectoryReviewManifest(ArtifactManifest):
         return self
 
 
-class TrainingCandidateHarnessAuditManifestRef(BaseModel):
+class TrainingReleaseHarnessAuditManifestRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact_type: Literal["harness_audit"]
@@ -1108,7 +1108,7 @@ class TrainingCandidateHarnessAuditManifestRef(BaseModel):
     status: Literal["PASS"]
 
 
-class TrainingCandidateControlCalibrationManifestRef(BaseModel):
+class TrainingReleaseControlCalibrationManifestRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact_type: Literal["control_calibration"]
@@ -1134,8 +1134,7 @@ class TrainingCandidateExportManifest(ArtifactManifest):
     source_review_dir: str = Field(min_length=1)
     source_review_manifest_hash: str = Field(min_length=1)
     source_reviews_jsonl_hash: str = Field(min_length=1)
-    harness_audit_gate: TrainingCandidateHarnessAuditManifestRef
-    control_calibration_gate: TrainingCandidateControlCalibrationManifestRef
+    training_authorization: Literal["not_authorized"]
     trajectory_record_schema_version: TrajectoryRecordSchemaVersion
     trajectory_review_schema_version: TrajectoryReviewSchemaVersion
     training_candidate_record_schema_version: TrainingCandidateRecordSchemaVersion
@@ -1145,7 +1144,7 @@ class TrainingCandidateExportManifest(ArtifactManifest):
     positive_sft_review_eligible_count: NonNegativeInt
     negative_example_eligible_count: NonNegativeInt
     preference_pairing_eligible_count: NonNegativeInt
-    any_training_use_eligible_count: NonNegativeInt
+    any_objective_use_eligible_count: NonNegativeInt
     analysis_only_count: NonNegativeInt
     fully_ineligible_count: NonNegativeInt
     artifacts: dict[str, str]
@@ -1183,34 +1182,25 @@ class TrainingCandidateExportManifest(ArtifactManifest):
                 "training_candidate_record_schema_version must be "
                 f"{TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION!r}"
             )
-        if (
-            self.harness_audit_gate.harness_runtime_hash
-            != self.control_calibration_gate.harness_runtime_hash
-        ):
-            raise ValueError(
-                "harness audit and control calibration gates must use the same "
-                "harness runtime"
-            )
-
         bounded_counts = (
             self.analysis_eligible_count,
             self.positive_sft_review_eligible_count,
             self.negative_example_eligible_count,
             self.preference_pairing_eligible_count,
-            self.any_training_use_eligible_count,
+            self.any_objective_use_eligible_count,
             self.analysis_only_count,
             self.fully_ineligible_count,
         )
         if any(count > self.record_count for count in bounded_counts):
             raise ValueError("training candidate summary counts cannot exceed records")
         if (
-            self.any_training_use_eligible_count
+            self.any_objective_use_eligible_count
             + self.analysis_only_count
             + self.fully_ineligible_count
             != self.record_count
         ):
             raise ValueError(
-                "any_training_use_eligible, analysis_only, and fully_ineligible "
+                "any_objective_use_eligible, analysis_only, and fully_ineligible "
                 "counts must sum to record_count"
             )
         return self
@@ -1404,6 +1394,7 @@ class PositiveSFTExportManifest(ArtifactManifest):
     expected_artifact_schema_version = POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION
 
     created_at: str = Field(min_length=1)
+    training_authorization: Literal["not_authorized"]
     source_positive_sft_review: PositiveSFTReviewArtifactRef
     positive_sft_review_record_schema_version: PositiveSFTReviewRecordSchemaVersion
     positive_sft_example_record_schema_version: PositiveSFTExampleRecordSchemaVersion

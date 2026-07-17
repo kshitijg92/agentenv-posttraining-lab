@@ -2349,6 +2349,133 @@ even when behavior matches. Fixing that needs identity-aware canonicalization
 that preserves equality relationships, rather than masking every message id to
 one undifferentiated placeholder.
 
-A live native-endpoint smoke was not run in this checkpoint because no Ollama
-server was listening on `127.0.0.1:11434`; the local probe failed before any
-request reached a model.
+A live native-endpoint smoke then started Ollama 0.30.11 as a detached host
+process and exercised the repository's actual `OllamaGenerateModelClient`
+against `qwen2.5-coder:3b` (local Ollama digest
+`f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225`).
+The protocol-backed request returned a valid `final_answer` action containing
+`pong`, `stop_criteria_met`, 32 prompt tokens, 18 completion tokens, and 50
+total tokens in 4,265 ms. Independently encoding the exact rendered prompt with
+the pinned Hugging Face tokenizer revision also produced 32 tokens. This is a
+live prompt-token parity check for the exercised prompt, not a general proof
+that every possible rendering or Ollama model tag remains conformant. A second
+health probe succeeded after the smoke; the detached server remains available
+at `127.0.0.1:11434`, with logs in `/tmp/agentenv-ollama-server.log`.
+
+### Digest-Pinned Practice Acquisition
+
+The native Ollama config now pins the mutable `qwen2.5-coder:3b` tag to its
+exact Ollama manifest digest:
+
+```text
+sha256:f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225
+```
+
+Before each native generation request, the client resolves the tag through
+`/api/tags` and fails before generation if the tag is missing or its observed
+digest differs. This pin is distinct from both the GGUF layer digest and the
+hash-pinned AgentEnv input-protocol record.
+
+Added the reusable one-task practice config
+`configs/eval/qwen2_5_coder_3b_practice_smoke.yaml`. The first invocation was
+sandboxed from the local Ollama socket and correctly persisted a
+`ProviderModelIdentityRequestError` under:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_eval_v0
+```
+
+The approved host-network rerun produced one scored practice attempt under:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_eval_v1
+```
+
+The model listed the workspace, read `src/mathlib.py`, replaced that file, and
+returned `final_answer`. The prompt loop completed in four model turns; public
+and hidden scoring both passed. The trajectory was exported and provisionally
+accepted under the user's review authorization:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_trajectory_export_v1
+experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_trajectory_review_v1
+```
+
+The production mechanical-redundancy detector completed with zero blocks. No
+repair artifact was manufactured: the repair export contract skips candidates
+that do not require a transformation.
+
+An initial candidate-export attempt against the newest available audit and
+control pair failed because those artifacts pin runtime
+`xxh64:2e228ddac2b3c29f`, while the fresh eval pinned runtime
+`xxh64:ec76891edda728d7`. That failure exposed that candidate construction and
+final training authorization were sharing one gate even though they answer
+different questions.
+
+### Pre-Release Construction And Final Authorization Split
+
+Moved harness-audit and control-calibration validation out of candidate
+construction and into `training/release/trust.py`. The validator remains
+fail-closed and still verifies current runtime, task hashes, audit cases,
+control outcomes, flake status, idempotency artifacts, and source-eval
+provenance. It is now a building block for the future final dataset release
+rather than a prerequisite for development-time curation.
+
+Renamed candidate `training_eligibility` to `content_eligibility` and the
+summary property/count from `training use` to `objective use`. Candidate and
+positive-SFT export manifests now require:
+
+```text
+training_authorization: not_authorized
+```
+
+Neither schema permits an `authorized` value. The candidate CLI no longer
+accepts harness-audit or control-calibration arguments. Positive-SFT review,
+repair, and export can therefore be developed from exact pinned trajectory
+sources without repeatedly regenerating trust artifacts. A later release
+manifest will be the only trainer-consumable authority.
+
+The practice source now produced:
+
+```text
+candidate export:
+  experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_candidates_v1
+  records: 1
+  positive-SFT-review eligible: 1
+  training authorization: not_authorized
+
+repair export:
+  experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_repairs_v1
+  records: 0
+
+positive-SFT review:
+  experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_positive_sft_review_v1
+  accepted: 1
+  approved boundary: message_9ef2d56931c7439baeec7eea5287d35f
+
+positive-SFT source export:
+  experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_positive_sft_v1
+  records: 1
+  training authorization: not_authorized
+```
+
+The accepted example contains the complete clean four-action assistant prefix.
+It is now a concrete source for the tokenizer/loss-label materializer, but it is
+not yet a trainer batch and is not authorized for training.
+
+Focused verification:
+
+```text
+model package: 100 passed
+trajectory review validation: 1 reviewed, 1 accepted
+mechanical redundancy assessment: complete, 0 blocks
+candidate/builder/export focused set: 54 passed
+repair export: 16 passed
+positive-SFT/CLI focused set: 13 passed
+combined candidate/repair/positive-SFT workflow slice: 156 passed
+message-schema regression slice: 12 passed
+release-trust integration suite: 8 tests collected; execution intentionally deferred
+Ruff repository-wide: passed
+Pyright repository-wide: passed
+git diff --check: passed
+```

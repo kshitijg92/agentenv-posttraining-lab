@@ -759,16 +759,6 @@ def export_training_candidates(
         "--reviews",
         help="Trajectory review artifact directory.",
     ),
-    harness_audit: Path = typer.Option(
-        ...,
-        "--harness-audit",
-        help="PASS aggregate harness-audit artifact directory.",
-    ),
-    control_calibration: Path = typer.Option(
-        ...,
-        "--control-calibration",
-        help="Successful matching control-calibration artifact directory.",
-    ),
     out: Path = typer.Option(
         ...,
         "--out",
@@ -785,8 +775,6 @@ def export_training_candidates(
             trajectories,
             reviews,
             out,
-            harness_audit_dir=harness_audit,
-            control_calibration_dir=control_calibration,
             overwrite=overwrite,
         )
     except ArtifactDirectoryError as exc:
@@ -794,23 +782,20 @@ def export_training_candidates(
     except ValueError as exc:
         raise typer.BadParameter(
             str(exc),
-            param_hint=(
-                "--trajectories/--reviews/--harness-audit/--control-calibration"
-            ),
+            param_hint="--trajectories/--reviews",
         ) from exc
 
     manifest = export.manifest
     console.print(
         "[green]training candidate export complete[/green] "
         f"records={manifest.record_count} "
-        f"training_use_eligible={manifest.any_training_use_eligible_count} "
+        f"training_authorization={manifest.training_authorization} "
+        f"objective_use_eligible={manifest.any_objective_use_eligible_count} "
         f"analysis_only={manifest.analysis_only_count} "
         f"fully_ineligible={manifest.fully_ineligible_count} "
         f"positive_sft_review={manifest.positive_sft_review_eligible_count} "
         f"negative_examples={manifest.negative_example_eligible_count} "
-        f"preference_pairing={manifest.preference_pairing_eligible_count} "
-        f"harness_audit={manifest.harness_audit_gate.harness_audit_run_id} "
-        f"controls={manifest.control_calibration_gate.control_run_id}"
+        f"preference_pairing={manifest.preference_pairing_eligible_count}"
     )
     console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
     console.print(
@@ -950,7 +935,9 @@ def export_training_positive_sft(
 
     manifest = export.manifest
     console.print(
-        f"[green]positive SFT export complete[/green] records={manifest.record_count}"
+        "[green]positive SFT export complete[/green] "
+        f"records={manifest.record_count} "
+        f"training_authorization={manifest.training_authorization}"
     )
     console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
     console.print(

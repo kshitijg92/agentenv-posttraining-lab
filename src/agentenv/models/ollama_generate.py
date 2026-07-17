@@ -66,6 +66,19 @@ class OllamaGenerateModelClient:
                 raw_response_ref=_NOT_STARTED_RAW_RESPONSE_REF,
             )
 
+        identity_error = self._verify_model_manifest_digest(
+            timeout_seconds=decoding_config.timeout_seconds
+        )
+        if identity_error is not None:
+            error_class, error_message = identity_error
+            return _error_response(
+                self.model_id,
+                started,
+                error_class,
+                error_message=error_message,
+                raw_response_ref=_NOT_STARTED_RAW_RESPONSE_REF,
+            )
+
         prompt = render_model_input(
             self.model_input_protocol,
             messages,
@@ -126,6 +139,55 @@ class OllamaGenerateModelClient:
                 timeout=decoding_config.timeout_seconds,
             )
 
+    def _verify_model_manifest_digest(
+        self,
+        *,
+        timeout_seconds: int,
+    ) -> tuple[str, str | None] | None:
+        request_url = f"{_base_url(self.config)}/api/tags"
+        try:
+            if self.http_client is not None:
+                response = self.http_client.get(
+                    request_url,
+                    timeout=timeout_seconds,
+                )
+            else:
+                with httpx.Client() as http_client:
+                    response = http_client.get(
+                        request_url,
+                        timeout=timeout_seconds,
+                    )
+        except httpx.TimeoutException:
+            return "ProviderModelIdentityTimeout", None
+        except httpx.RequestError as exc:
+            return "ProviderModelIdentityRequestError", (
+                _provider_request_error_message(exc)
+            )
+
+        if response.status_code >= 400:
+            return "ProviderModelIdentityHTTPError", _provider_http_error_message(
+                response
+            )
+        try:
+            payload = response.json()
+        except json.JSONDecodeError:
+            return "MalformedProviderModelIdentityResponse", None
+
+        observed_digest = _model_manifest_digest_from_tags(payload, self.model_id)
+        if observed_digest is None:
+            return (
+                "ProviderModelNotFound",
+                f"Model {self.model_id!r} was not present in /api/tags",
+            )
+        if observed_digest != self.config.model_manifest_digest:
+            return (
+                "ProviderModelDigestMismatch",
+                "Ollama model manifest digest mismatch: "
+                f"expected {self.config.model_manifest_digest}, "
+                f"observed {observed_digest}",
+            )
+        return None
+
 
 def _request_payload(
     config: OllamaGenerateModelConfig,
@@ -154,6 +216,27 @@ def _request_payload(
     if config.agent_action_format == "json_schema":
         payload["format"] = agent_action_json_schema()
     return payload
+
+
+def _model_manifest_digest_from_tags(
+    payload: object,
+    model_id: str,
+) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    models = payload.get("models")
+    if not isinstance(models, list):
+        return None
+    for model in models:
+        if not isinstance(model, dict):
+            continue
+        if model.get("name") != model_id and model.get("model") != model_id:
+            continue
+        digest = model.get("digest")
+        if not isinstance(digest, str):
+            return None
+        return f"sha256:{digest}"
+    return None
 
 
 def _model_response_from_payload(

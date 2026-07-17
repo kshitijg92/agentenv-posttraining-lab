@@ -25,10 +25,6 @@ from agentenv.artifacts.manifests import (
 from agentenv.training.candidates.builder import (
     build_training_candidate_records_from_review_validation,
 )
-from agentenv.training.candidates.gates import (
-    TrainingExportGateValidation,
-    validate_training_export_gates,
-)
 from agentenv.training.candidates.schema import (
     TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION,
     TrainingCandidateRecord,
@@ -54,7 +50,7 @@ class TrainingCandidateRecordCounts:
     positive_sft_review_eligible_count: int
     negative_example_eligible_count: int
     preference_pairing_eligible_count: int
-    any_training_use_eligible_count: int
+    any_objective_use_eligible_count: int
     analysis_only_count: int
     fully_ineligible_count: int
 
@@ -68,8 +64,8 @@ class TrainingCandidateRecordCounts:
             "preference_pairing_eligible_count": (
                 self.preference_pairing_eligible_count
             ),
-            "any_training_use_eligible_count": (
-                self.any_training_use_eligible_count
+            "any_objective_use_eligible_count": (
+                self.any_objective_use_eligible_count
             ),
             "analysis_only_count": self.analysis_only_count,
             "fully_ineligible_count": self.fully_ineligible_count,
@@ -81,23 +77,13 @@ def export_training_candidate_records(
     review_dir: Path,
     out_dir: Path,
     *,
-    harness_audit_dir: Path,
-    control_calibration_dir: Path,
     overwrite: bool = False,
 ) -> TrainingCandidateExport:
     validation = validate_trajectory_review_artifact(
         trajectory_export_dir,
         review_dir,
     )
-    gate_validation = validate_training_export_gates(
-        validation,
-        harness_audit_dir=harness_audit_dir,
-        control_calibration_dir=control_calibration_dir,
-    )
-    records = build_training_candidate_records_from_review_validation(
-        validation,
-        gate_validation=gate_validation,
-    )
+    records = build_training_candidate_records_from_review_validation(validation)
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
     candidates_path = (
@@ -109,7 +95,6 @@ def export_training_candidate_records(
         out_dir=out_dir,
         trajectory_export_dir=validation.source_export.out_dir,
         review_dir=validation.review_artifact.out_dir,
-        gate_validation=gate_validation,
         candidates_path=candidates_path,
         records=records,
     )
@@ -128,17 +113,6 @@ def load_training_candidate_export_artifact(
         Path(manifest.source_trajectory_export_dir),
         Path(manifest.source_review_dir),
     )
-    observed_gates = validate_training_export_gates(
-        source_validation,
-        harness_audit_dir=Path(manifest.harness_audit_gate.artifact_dir),
-        control_calibration_dir=Path(manifest.control_calibration_gate.artifact_dir),
-    )
-    if observed_gates.harness_audit_gate != manifest.harness_audit_gate:
-        raise ValueError("Training candidate harness-audit gate provenance drifted")
-    if observed_gates.control_calibration_gate != manifest.control_calibration_gate:
-        raise ValueError(
-            "Training candidate control-calibration gate provenance drifted"
-        )
     candidates_path = resolve_relative_artifact_ref(
         export_dir,
         manifest.artifacts["training_candidates"],
@@ -157,8 +131,7 @@ def load_training_candidate_export_artifact(
             f"{len(records)} != {manifest.record_count}"
         )
     expected_records = build_training_candidate_records_from_review_validation(
-        source_validation,
-        gate_validation=observed_gates,
+        source_validation
     )
     if records != expected_records:
         raise ValueError(
@@ -205,7 +178,6 @@ def build_training_candidate_export_manifest(
     out_dir: Path,
     trajectory_export_dir: Path,
     review_dir: Path,
-    gate_validation: TrainingExportGateValidation,
     candidates_path: Path,
     records: tuple[TrainingCandidateRecord, ...],
 ) -> TrainingCandidateExportManifest:
@@ -242,8 +214,7 @@ def build_training_candidate_export_manifest(
             "source_review_dir": str(review_dir),
             "source_review_manifest_hash": hash_file(review_manifest_path),
             "source_reviews_jsonl_hash": hash_file(reviews_path),
-            "harness_audit_gate": gate_validation.harness_audit_gate,
-            "control_calibration_gate": gate_validation.control_calibration_gate,
+            "training_authorization": "not_authorized",
             "trajectory_record_schema_version": TRAJECTORY_RECORD_SCHEMA_VERSION,
             "trajectory_review_schema_version": TRAJECTORY_REVIEW_SCHEMA_VERSION,
             "training_candidate_record_schema_version": (
@@ -280,28 +251,28 @@ def count_training_candidate_records(
 ) -> TrainingCandidateRecordCounts:
     return TrainingCandidateRecordCounts(
         analysis_eligible_count=sum(
-            record.training_eligibility.analysis_eligible for record in records
+            record.content_eligibility.analysis_eligible for record in records
         ),
         positive_sft_review_eligible_count=sum(
-            record.training_eligibility.positive_sft_review_eligible
+            record.content_eligibility.positive_sft_review_eligible
             for record in records
         ),
         negative_example_eligible_count=sum(
-            record.training_eligibility.negative_example_eligible
+            record.content_eligibility.negative_example_eligible
             for record in records
         ),
         preference_pairing_eligible_count=sum(
-            record.training_eligibility.preference_pairing_eligible
+            record.content_eligibility.preference_pairing_eligible
             for record in records
         ),
-        any_training_use_eligible_count=sum(
-            record.training_eligibility.has_training_use_path for record in records
+        any_objective_use_eligible_count=sum(
+            record.content_eligibility.has_objective_use_path for record in records
         ),
         analysis_only_count=sum(
-            record.training_eligibility.is_analysis_only for record in records
+            record.content_eligibility.is_analysis_only for record in records
         ),
         fully_ineligible_count=sum(
-            record.training_eligibility.is_fully_ineligible for record in records
+            record.content_eligibility.is_fully_ineligible for record in records
         ),
     )
 

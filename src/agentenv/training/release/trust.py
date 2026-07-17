@@ -1,4 +1,4 @@
-"""Fail-closed trust gates for training-candidate construction."""
+"""Fail-closed trust validation for final training-data release."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,8 +11,8 @@ from agentenv.artifacts.manifests import (
     ControlCalibrationManifest,
     EvalRunManifest,
     EvalSuiteManifest,
-    TrainingCandidateControlCalibrationManifestRef,
-    TrainingCandidateHarnessAuditManifestRef,
+    TrainingReleaseControlCalibrationManifestRef,
+    TrainingReleaseHarnessAuditManifestRef,
     load_control_calibration_manifest,
     load_eval_artifact_manifest,
 )
@@ -39,18 +39,18 @@ from agentenv.trajectories.review import TrajectoryReviewValidation
 
 
 @dataclass(frozen=True)
-class TrainingExportGateValidation:
-    harness_audit_gate: TrainingCandidateHarnessAuditManifestRef
-    control_calibration_gate: TrainingCandidateControlCalibrationManifestRef
+class TrainingReleaseTrustValidation:
+    harness_audit: TrainingReleaseHarnessAuditManifestRef
+    control_calibration: TrainingReleaseControlCalibrationManifestRef
     public_check_idempotency_calibrations: tuple[PublicCheckIdempotencyCalibration, ...]
 
 
-def validate_training_export_gates(
+def validate_training_release_trust(
     validation: TrajectoryReviewValidation,
     *,
     harness_audit_dir: Path,
     control_calibration_dir: Path,
-) -> TrainingExportGateValidation:
+) -> TrainingReleaseTrustValidation:
     """Validate both suite-level trust artifacts against the trajectory source."""
     harness_audit_dir = harness_audit_dir.resolve()
     control_calibration_dir = control_calibration_dir.resolve()
@@ -102,8 +102,8 @@ def validate_training_export_gates(
     )
 
     runtime_hash = current_runtime.harness_runtime_hash
-    return TrainingExportGateValidation(
-        harness_audit_gate=TrainingCandidateHarnessAuditManifestRef(
+    return TrainingReleaseTrustValidation(
+        harness_audit=TrainingReleaseHarnessAuditManifestRef(
             artifact_type="harness_audit",
             artifact_schema_version=HARNESS_AUDIT_ARTIFACT_SCHEMA_VERSION,
             artifact_dir=str(harness_audit_dir),
@@ -112,7 +112,7 @@ def validate_training_export_gates(
             harness_runtime_hash=runtime_hash,
             status="PASS",
         ),
-        control_calibration_gate=TrainingCandidateControlCalibrationManifestRef(
+        control_calibration=TrainingReleaseControlCalibrationManifestRef(
             artifact_type="control_calibration",
             artifact_schema_version=CONTROL_CALIBRATION_ARTIFACT_SCHEMA_VERSION,
             artifact_dir=str(control_calibration_dir),
@@ -135,7 +135,7 @@ def validate_training_export_gates(
 def _require_successful_harness_audit(artifact: HarnessAuditArtifact) -> None:
     if artifact.manifest.status != "PASS":
         raise ValueError(
-            "Training-candidate export requires harness audit status PASS; "
+            "Training-data release requires harness audit status PASS; "
             f"observed {artifact.manifest.status}"
         )
 
@@ -146,11 +146,11 @@ def _require_successful_control_calibration(
 ) -> None:
     if not manifest.overall_match:
         raise ValueError(
-            "Training-candidate export requires control calibration overall_match=true"
+            "Training-data release requires control calibration overall_match=true"
         )
     if manifest.flake_detection.status != "stable":
         raise ValueError(
-            "Training-candidate export requires stable control flake detection; "
+            "Training-data release requires stable control flake detection; "
             f"observed {manifest.flake_detection.status}"
         )
     results_path = resolve_relative_artifact_ref(

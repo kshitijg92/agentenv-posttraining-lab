@@ -138,7 +138,7 @@ def test_trajectory_record_accepts_successful_agent_attempt() -> None:
     assert record.source_provenance.scoring_contract == "scoring_contract_v0"
     assert record.statuses.task_success is True
     assert record.reward_components.reward_version == "reward_components_v0"
-    assert "training_eligibility" not in record.model_dump(mode="json")
+    assert "content_eligibility" not in record.model_dump(mode="json")
 
 
 def test_reward_component_signal_field_names_are_derived_from_schema() -> None:
@@ -188,9 +188,9 @@ def test_trajectory_record_accepts_scorer_only_attempt() -> None:
     assert record.statuses.task_success is True
 
 
-def test_trajectory_record_rejects_embedded_training_eligibility() -> None:
+def test_trajectory_record_rejects_embedded_content_eligibility() -> None:
     payload = _base_record_payload()
-    payload["training_eligibility"] = {
+    payload["content_eligibility"] = {
         "analysis_eligible": True,
         "positive_sft_review_eligible": True,
     }

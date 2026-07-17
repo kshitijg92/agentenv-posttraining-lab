@@ -7,7 +7,9 @@ from agentenv.models.schema import Message, MessageWithoutMetadata
 
 def test_message_requires_message_id() -> None:
     with pytest.raises(ValidationError, match="message_id"):
-        Message(role="system", content="You are a coding agent.")
+        Message.model_validate(
+            {"role": "system", "content": "You are a coding agent."}
+        )
 
 
 def test_message_rejects_malformed_message_id() -> None:

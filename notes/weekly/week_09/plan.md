@@ -97,8 +97,9 @@ prompt-loop completion = not task success
 Week 8 added the training-data invariant:
 
 ```text
-training eligibility is separate from task success, and reward-hack evidence
-must never become a positive training example by accident
+candidate content eligibility is separate from task success, final training
+authorization is separate from both, and reward-hack evidence must never become
+a positive training example by accident
 ```
 
 Historical Qwen artifacts remain useful acquisition and failure-analysis
@@ -112,10 +113,12 @@ Current implemented data flow:
 ```text
 trajectory export
 -> trajectory review
--> training candidate export
+-> non-authorized training candidate export
 -> optional deterministic repair and repair review
 -> positive-SFT prefix review
--> source-level PositiveSFTExampleRecord export
+-> non-authorized source-level PositiveSFTExampleRecord export
+-> target-model token materialization
+-> final dataset release gate
 ```
 
 The checkpoint-specific serialization authority is now implemented under
@@ -198,17 +201,18 @@ Week 9 must not claim:
 The strongest acceptable claim is:
 
 ```text
-the repo can define, validate, and export post-training data candidates while
-rejecting contaminated, untrusted, or split-forbidden examples in code
+the repo can define, validate, and export non-authorized post-training data
+candidates while reserving actual training authorization for a fail-closed final
+release boundary
 ```
 
 ## Design Priority
 
 Preserve data-use boundaries:
 
-- positive-SFT review requires trustworthy model-generated trajectory evidence,
-  a trainable split, no leakage, no orchestration failure, and a passing
-  reward-hack gate; task success prioritizes review but is not required;
+- positive-SFT review requires model-generated trajectory evidence, a trainable
+  split, no leakage, no orchestration failure, and a passing reward-hack gate;
+  task success prioritizes review but is not required;
 - positive-SFT export additionally requires a source-pinned, accepted review
   that authorizes one contiguous assistant-message prefix;
 - public PASS is never sufficient for positive SFT;
@@ -223,6 +227,9 @@ Preserve data-use boundaries:
 - loss masking must train only on intended assistant/action tokens, not user
   prompts, tool observations, scorer output, hidden validators, or review
   metadata.
+- candidate construction, repair, prefix review, and token materialization remain
+  explicitly non-authorized development artifacts; final release alone requires
+  matching harness-audit and control-calibration evidence.
 
 ## Resolved Positive-SFT Design Boundary
 
@@ -451,8 +458,6 @@ uv run agentenv trajectories review-validate \
 uv run agentenv training candidates export \
   --trajectories experiments/runs/week_09_training_gate_smoke_trajectory_export \
   --reviews experiments/runs/week_09_training_gate_smoke_trajectory_review \
-  --harness-audit experiments/harness_audit/week_09_harness_audit_v1 \
-  --control-calibration experiments/runs/week_09_control_calibration_v0 \
   --out experiments/runs/week_09_training_gate_smoke_candidates \
   --overwrite
 
@@ -471,9 +476,9 @@ uv run agentenv training positive-sft export \
   --overwrite
 ```
 
-The historical Qwen trajectory export predates the current task hashes and is
-expected to fail this gate. It must not be silently re-exported with current
-calibration evidence.
+Historical Qwen trajectories may exercise the non-authorized development
+pipeline, but a later release finalizer must reject any source whose exact eval
+runtime and task hashes do not match its pinned trust artifacts.
 
 ## Fallback
 

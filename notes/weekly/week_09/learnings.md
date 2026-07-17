@@ -1444,3 +1444,69 @@ correct.
 The self-deception trap is to copy the row format of a public system without
 also copying the context policy, loss reduction, weighting, and runtime
 assumptions that make that format meaningful.
+
+### Data Construction And Training Authorization Need Different Gates
+
+An expensive harness calibration should not be required merely to exercise
+candidate construction, deterministic repair, human prefix review, or tokenizer
+and loss-mask plumbing. Those operations answer questions about data shape and
+content. Calibration answers a later and stronger question: whether the exact
+source runtime and task measurements are trusted enough to authorize those bytes
+for a real training run.
+
+Conflating the two decisions creates an inefficient loop:
+
+```text
+edit downstream tokenization code
+-> whole-repository runtime hash changes
+-> candidate export is blocked
+-> rerun harness audit and controls
+-> make another downstream edit
+-> repeat
+```
+
+The repeated work does not increase confidence when the changed code could not
+have affected trajectory acquisition or scoring. It also encourages a dangerous
+shortcut: treating a stale calibration as "close enough" merely to keep pipeline
+development moving.
+
+The cleaner boundary is:
+
+```text
+reviewed trajectory
+-> content eligibility
+-> repair and objective-specific review
+-> model-specific token materialization
+-> final release validation
+-> training authorization
+```
+
+Pre-release artifacts remain useful and fully provenance-pinned, but they state
+that they are not authorized for training. A final release manifest is the only
+object allowed to combine materialized examples with matching harness-audit and
+control-calibration evidence. Trainer entrypoints should require that manifest,
+not accept a bare candidate, positive-SFT JSONL, or token file.
+
+Missing calibration and failed calibration also have different meanings. Missing
+calibration means development may continue but release has not been evaluated. A
+failed calibration is positive evidence that the measurement system or task
+controls are not trustworthy; release must remain blocked and the failure should
+be investigated. Neither state should be disguised as a passing gate.
+
+There is one temporal qualification: a calibration performed later validates
+only the exact runtime it exercised. It cannot retroactively bless a trajectory
+from a different runtime hash. Near release, either calibrate and acquire under a
+frozen matching runtime or preserve an executable snapshot that can be calibrated
+honestly. Scoping runtime hashes to an enforced harness package boundary can make
+calibration reuse efficient, but arbitrarily excluding files without an import
+boundary would weaken trust.
+
+The durable invariant is:
+
+```text
+construction eligibility permits further curation work
+training authorization permits trainer consumption
+```
+
+Treating the first as the second is a data-governance error, even when the
+underlying trajectory happened to pass every task test.

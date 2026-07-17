@@ -9,6 +9,7 @@ TokenUsageCapability = Literal["native", "unavailable"]
 AgentActionFormat = Literal["prompt_only", "json_schema"]
 _ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _CONTENT_HASH_RE = re.compile(r"^xxh64:[0-9a-f]{16}$")
+_SHA256_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 class ModelCapabilities(BaseModel):
@@ -82,8 +83,18 @@ class OpenAICompatibleChatModelConfig(BaseModelConfig):
 
 class OllamaGenerateModelConfig(BaseModelConfig):
     provider: Literal["ollama_generate"]
+    model_manifest_digest: str = Field(min_length=1)
     model_input_protocol: PinnedModelInputProtocolRef
     agent_action_format: AgentActionFormat = "prompt_only"
+
+    @field_validator("model_manifest_digest")
+    @classmethod
+    def validate_model_manifest_digest(cls, value: str) -> str:
+        if not _SHA256_DIGEST_RE.fullmatch(value):
+            raise ValueError(
+                "model_manifest_digest must use the sha256:<64 lowercase hex> form"
+            )
+        return value
 
 
 ModelConfig: TypeAlias = Annotated[

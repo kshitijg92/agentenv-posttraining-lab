@@ -62,6 +62,10 @@ def test_qwen2_5_3b_config_pins_agentenv_owned_input_protocol() -> None:
     assert isinstance(config, OllamaGenerateModelConfig)
     assert config.provider == "ollama_generate"
     assert config.base_url_env == "AGENTENV_OLLAMA_BASE_URL"
+    assert config.model_manifest_digest == (
+        "sha256:f72c60cabf6237b07f6e632b2c48d533"
+        "cef25eda2efbd34bed21c5e9c01e6225"
+    )
     assert config.model_input_protocol.path == (
         "../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
     )

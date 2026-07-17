@@ -172,7 +172,7 @@ def build_selected_positive_sft_repair_index(
                 "Positive SFT selected repair references an unknown training "
                 f"candidate: {repair_id}"
             )
-        if not candidate.training_eligibility.positive_sft_review_eligible:
+        if not candidate.content_eligibility.positive_sft_review_eligible:
             raise ValueError(
                 "Positive SFT selected repair belongs to an ineligible candidate: "
                 f"{repair_id}"

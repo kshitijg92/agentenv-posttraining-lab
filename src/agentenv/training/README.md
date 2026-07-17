@@ -1,15 +1,16 @@
 # Training-data workflow
 
-This package owns the decisions and transformations that turn trusted trajectory
-evidence into objective-specific training records. It does not own eval execution
-or the immutable trajectory evidence itself.
+This package owns the decisions and transformations that turn reviewed trajectory
+evidence into objective-specific, pre-release data artifacts. It does not own eval
+execution or the immutable trajectory evidence itself, and no artifact before a
+final release manifest is authorized for training.
 
 ## Package ownership
 
-- `candidates/` validates the trajectory-review, harness-audit, and control-
-  calibration gates and emits `TrainingCandidateRecord` objects. Candidate
-  eligibility describes allowed downstream uses; it does not claim that every
-  allowed use is automatically good training data.
+- `candidates/` validates pinned trajectory and review evidence and emits
+  `TrainingCandidateRecord` objects. `content_eligibility` describes which
+  objective-specific construction workflows may inspect a candidate; it is not
+  training authorization.
 - `repairs/` detects mechanical redundancy, performs source-preserving transcript
   repair, exports repair records, and runs a separate repair review. A repair is
   an optional transformation of a candidate source, never a mutation of the
@@ -17,6 +18,9 @@ or the immutable trajectory evidence itself.
 - `positive_sft/` selects an exact original or accepted repaired source, runs the
   objective-specific prefix review, and exports approved positive-SFT prefixes.
   It owns positive-SFT semantics rather than generic “SFT” semantics.
+- `release/` owns fail-closed harness-audit and control-calibration validation for
+  the eventual final dataset release. The release manifest itself remains a
+  downstream boundary after token materialization.
 
 Shared validation of the trajectory and review artifacts pinned by a candidate
 lives in `candidates/source_integrity.py`. Positive-SFT source choice and repair
@@ -31,10 +35,8 @@ flowchart TD
     T[Trajectory export<br/>immutable evidence] --> TR[Trajectory review]
     T --> C
     TR --> C[Candidate construction]
-    HA[Harness audit] --> C
-    CC[Control calibration] --> C
 
-    C --> TC[TrainingCandidateRecord<br/>use eligibility + redundancy assessment]
+    C --> TC[TrainingCandidateRecord<br/>content eligibility + redundancy assessment]
     TC -->|no repair needed| O[Original transcript source]
     TC -->|mechanical redundancy detected| RE[Repair export]
     RE --> RR[Repair review]
@@ -48,6 +50,10 @@ flowchart TD
     IP --> TM[Planned tokenizer and label materialization]
     TM -->|canonical sequence fits| TS[Persisted input_ids + trainer labels]
     TM -->|exceeds max sequence length| OE[Explicit overlength exclusion]
+    TS --> DR[Planned final dataset release]
+    HA[Harness audit] --> DR
+    CC[Control calibration] --> DR
+    DR -->|all trust checks pass| AU[Training-authorized manifest]
 ```
 
 Clean candidates bypass repair. Candidates with a selected repair must pin both
@@ -59,8 +65,10 @@ stand in for the other.
 ## Core invariants
 
 1. A `TrajectoryRecord` is never rewritten to make it trainable.
-2. Candidate construction is blocked when its pinned harness or control evidence
-   is missing, failed, or has drifted.
+2. Candidate construction and objective-specific review may proceed without a
+   current calibration artifact, but their manifests are explicitly
+   `not_authorized`. Only final dataset release may combine materialized examples
+   with matching harness and control evidence and authorize trainer consumption.
 3. Task success is not required for positive-SFT review. A failed task may contain
    a useful prefix; a successful task may still contain behavior that should not
    receive positive supervision.
@@ -84,11 +92,12 @@ stand in for the other.
 
 ## What an exported positive-SFT record means
 
-An exported record means that the harness evidence was trusted, the candidate
-was allowed to enter positive-SFT review, the exact original or repaired source
-was pinned, and a human accepted a contiguous assistant-action prefix. It does
-not mean the whole task succeeded, the full original trajectory was optimal, or
-the record is already a tokenizer-ready trainer batch.
+An exported record means that content checks allowed the candidate to enter
+positive-SFT review, the exact original or repaired source was pinned, and a
+human accepted a contiguous assistant-action prefix. It does not mean that the
+harness has been calibrated, the whole task succeeded, the full original
+trajectory was optimal, or the record is authorized for training. Candidate and
+positive-SFT export manifests both state `training_authorization: not_authorized`.
 
 ## Next boundary: canonical tokenization and labels
 
@@ -109,6 +118,11 @@ original rollout. They must instead be reproducible for the target training
 checkpoint and match the interface intended at deployment. Examples exceeding
 the configured maximum sequence length remain explicit exclusions so dataset
 coverage is not overstated.
+
+After token materialization, a separate final release manifest will pin the
+materialized artifact plus matching harness-audit and control-calibration
+artifacts. Trainer entrypoints must accept that release manifest rather than a
+candidate, review, positive-SFT source export, or bare token JSONL.
 
 The first protocol record is
 `configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml`. It applies

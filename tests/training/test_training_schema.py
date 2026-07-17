@@ -9,7 +9,7 @@ from agentenv.training.candidates.schema import (
     MechanicalRedundancyAssessment,
     MechanicallyRedundantToolCallBlock,
     TrainingCandidateRecord,
-    TrainingCandidateEligibility,
+    TrainingCandidateContentEligibility,
 )
 from agentenv.training.positive_sft.identity import build_positive_sft_example_id
 from agentenv.training.positive_sft.schema import (
@@ -47,7 +47,7 @@ def _candidate_payload(**updates: Any) -> dict[str, Any]:
         "reviewer_id": "kshitij",
         "review_decision": "accepted",
         "mechanical_redundancy_assessment": _mechanical_assessment_payload(),
-        "training_eligibility": _eligibility_payload(),
+        "content_eligibility": _eligibility_payload(),
     }
     payload.update(updates)
     return payload
@@ -228,9 +228,9 @@ def test_training_candidate_record_accepts_reviewed_candidate() -> None:
     assert record.review_decision == "accepted"
     assert record.mechanical_redundancy_assessment.evaluation_status == "complete"
     assert record.mechanical_redundancy_assessment.blocks == []
-    assert record.training_eligibility.has_training_use_path
-    assert not record.training_eligibility.is_analysis_only
-    assert not record.training_eligibility.is_fully_ineligible
+    assert record.content_eligibility.has_objective_use_path
+    assert not record.content_eligibility.is_analysis_only
+    assert not record.content_eligibility.is_fully_ineligible
 
 
 def test_mechanically_redundant_tool_call_block_accepts_ordered_source_ids() -> None:
@@ -303,8 +303,8 @@ def test_mechanical_redundancy_assessment_rejects_overlapping_blocks() -> None:
         )
 
 
-def test_training_eligibility_exposes_analysis_only_utility() -> None:
-    eligibility = TrainingCandidateEligibility.model_validate(
+def test_content_eligibility_exposes_analysis_only_utility() -> None:
+    eligibility = TrainingCandidateContentEligibility.model_validate(
         _eligibility_payload(
             positive_sft_review_eligible=False,
             positive_sft_review_reason="not a positive SFT target",
@@ -313,13 +313,13 @@ def test_training_eligibility_exposes_analysis_only_utility() -> None:
         )
     )
 
-    assert not eligibility.has_training_use_path
+    assert not eligibility.has_objective_use_path
     assert eligibility.is_analysis_only
     assert not eligibility.is_fully_ineligible
 
 
-def test_training_candidate_eligibility_exposes_fully_ineligible_utility() -> None:
-    eligibility = TrainingCandidateEligibility.model_validate(
+def test_content_eligibility_exposes_fully_ineligible_utility() -> None:
+    eligibility = TrainingCandidateContentEligibility.model_validate(
         _eligibility_payload(
             analysis_eligible=False,
             analysis_reason="source artifact failed validation",
@@ -330,12 +330,12 @@ def test_training_candidate_eligibility_exposes_fully_ineligible_utility() -> No
         )
     )
 
-    assert not eligibility.has_training_use_path
+    assert not eligibility.has_objective_use_path
     assert not eligibility.is_analysis_only
     assert eligibility.is_fully_ineligible
 
 
-def test_training_candidate_rejects_training_paths_without_accepted_review() -> None:
+def test_training_candidate_rejects_objective_paths_without_accepted_review() -> None:
     payload = _candidate_payload(
         review_status="reviewed",
         review_decision="rejected",
@@ -343,7 +343,7 @@ def test_training_candidate_rejects_training_paths_without_accepted_review() -> 
 
     with pytest.raises(
         ValidationError,
-        match="candidates with a training-use path require accepted human review",
+        match="candidates with an objective-use path require accepted human review",
     ):
         TrainingCandidateRecord.model_validate(payload)
 
@@ -351,7 +351,7 @@ def test_training_candidate_rejects_training_paths_without_accepted_review() -> 
 def test_training_candidate_accepts_rejected_analysis_only_candidate() -> None:
     payload = _candidate_payload(
         review_decision="rejected",
-        training_eligibility=_eligibility_payload(
+        content_eligibility=_eligibility_payload(
             positive_sft_review_eligible=False,
             positive_sft_review_reason="human review rejected trajectory",
             negative_example_eligible=False,
@@ -364,7 +364,7 @@ def test_training_candidate_accepts_rejected_analysis_only_candidate() -> None:
     record = TrainingCandidateRecord.model_validate(payload)
 
     assert record.review_decision == "rejected"
-    assert record.training_eligibility.is_analysis_only
+    assert record.content_eligibility.is_analysis_only
 
 
 def test_not_reviewed_candidate_cannot_include_review_details() -> None:
@@ -373,7 +373,7 @@ def test_not_reviewed_candidate_cannot_include_review_details() -> None:
         review_id="review_001",
         reviewer_id=None,
         review_decision=None,
-        training_eligibility=_eligibility_payload(
+        content_eligibility=_eligibility_payload(
             positive_sft_review_eligible=False,
             positive_sft_review_reason="trajectory has not been reviewed",
             negative_example_eligible=False,
@@ -407,13 +407,13 @@ def test_training_candidate_rejects_extra_fields() -> None:
         TrainingCandidateRecord.model_validate(payload)
 
 
-def test_training_eligibility_requires_path_reasons() -> None:
+def test_content_eligibility_requires_path_reasons() -> None:
     payload = _eligibility_payload(positive_sft_review_reason="")
 
     with pytest.raises(
         ValidationError, match="String should have at least 1 character"
     ):
-        TrainingCandidateEligibility.model_validate(payload)
+        TrainingCandidateContentEligibility.model_validate(payload)
 
 
 def test_positive_sft_example_record_accepts_model_visible_row() -> None:

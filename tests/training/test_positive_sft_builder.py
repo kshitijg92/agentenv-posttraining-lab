@@ -46,13 +46,6 @@ from agentenv.trajectories.schema import (
 
 
 AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
-HARNESS_AUDIT_DIR = Path("/unit/harness-audit")
-CONTROL_CALIBRATION_DIR = Path("/unit/control-calibration")
-
-
-@pytest.fixture(autouse=True)
-def _use_stub_training_export_gates(stub_training_export_gates) -> None:
-    assert stub_training_export_gates.harness_audit_gate.status == "PASS"
 
 
 def test_build_positive_sft_examples_from_training_candidate_export(
@@ -316,6 +309,7 @@ def test_export_positive_sft_examples_writes_manifest_and_jsonl(
     assert manifest.original_record_count == 1
     assert manifest.repaired_record_count == 0
     assert manifest.positive_sft_examples_jsonl_hash.startswith("xxh64:")
+    assert manifest.training_authorization == "not_authorized"
     assert manifest.artifacts == {
         "positive_sft_examples": "positive_sft_examples.jsonl",
     }
@@ -432,8 +426,6 @@ def build_positive_sft_candidate_export(
         trajectory_export_dir,
         review_artifact.out_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     return candidate_export.out_dir
 
@@ -457,8 +449,6 @@ def build_control_training_candidate_export(tmp_path: Path) -> Path:
         trajectory_export.out_dir,
         review_artifact.out_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     return candidate_export.out_dir
 

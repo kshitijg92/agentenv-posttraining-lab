@@ -210,7 +210,7 @@ def build_positive_sft_review_selections(
     )
     selections: list[PositiveSFTReviewSelection] = []
     for candidate in candidate_export.records:
-        if not candidate.training_eligibility.positive_sft_review_eligible:
+        if not candidate.content_eligibility.positive_sft_review_eligible:
             continue
         assessment = candidate.mechanical_redundancy_assessment
         if assessment.evaluation_status != "complete":

@@ -258,7 +258,7 @@ def _candidate_payload() -> dict[str, Any]:
         "reviewer_id": "reviewer",
         "review_decision": "accepted",
         "mechanical_redundancy_assessment": _assess(prompt_loop),
-        "training_eligibility": {
+        "content_eligibility": {
             "analysis_eligible": True,
             "analysis_reason": "available",
             "positive_sft_review_eligible": True,
