@@ -252,8 +252,11 @@ context only; approved assistant tokens receive loss.
 
 Examples exceeding `max_sequence_length` are excluded whole. Do not truncate,
 arbitrarily chunk, overlap, or summarize them. The remaining open design
-question is how a materialization attempt persists successful output versus an
-explicit policy exclusion or an untrustworthy materialization failure.
+boundary is resolved: every accepted source example produces exactly one
+materialization-result record. Completed records persist tokens and labels;
+failed records preserve either an explicit overlength exclusion or an
+untrustworthy materialization error. No source example may disappear silently
+from accounting.
 
 ## Planned Outputs
 
@@ -347,6 +350,9 @@ Current state:
 - repair selection and positive-SFT review/export CLI wiring are implemented;
 - Qwen2.5-Coder-3B inference now consumes the pinned model-input protocol via
   AgentEnv rendering and Ollama native raw generation;
+- the materialization result union now represents completed token/label output,
+  explicit overlength failures, and other materialization failures with exact
+  source, protocol, sequence-policy, and materializer provenance;
 - target-model token materialization remains before any training smoke.
 
 Self-deception trap:

@@ -16,8 +16,9 @@ final release manifest is authorized for training.
   an optional transformation of a candidate source, never a mutation of the
   source trajectory.
 - `positive_sft/` selects an exact original or accepted repaired source, runs the
-  objective-specific prefix review, and exports approved positive-SFT prefixes.
-  It owns positive-SFT semantics rather than generic “SFT” semantics.
+  objective-specific prefix review, exports approved positive-SFT prefixes, and
+  owns their target-model materialization contract. It owns positive-SFT
+  semantics rather than generic “SFT” semantics.
 - `release/` owns fail-closed harness-audit and control-calibration validation for
   the eventual final dataset release. The release manifest itself remains a
   downstream boundary after token materialization.
@@ -47,7 +48,7 @@ flowchart TD
     SR -->|accepted + last approved assistant message id| SE[Positive-SFT export]
     SE --> P[Contiguous approved message prefix]
     P --> IP[Pinned target-model input protocol]
-    IP --> TM[Planned tokenizer and label materialization]
+    IP --> TM[Tokenizer and label materialization]
     TM -->|canonical sequence fits| TS[Persisted input_ids + trainer labels]
     TM -->|exceeds max sequence length| OE[Explicit overlength exclusion]
     TS --> DR[Planned final dataset release]
@@ -89,6 +90,9 @@ stand in for the other.
 8. The initial materializer uses one trajectory-aggregated sequence per source
    example. An overlength sequence is explicitly excluded whole; it is not
    truncated, arbitrarily chunked, overlapped, or summarized.
+9. Every accepted source example must produce exactly one materialization result.
+   Completed and failed outcomes are both persisted so exclusions and runtime
+   failures cannot silently disappear from dataset accounting.
 
 ## What an exported positive-SFT record means
 

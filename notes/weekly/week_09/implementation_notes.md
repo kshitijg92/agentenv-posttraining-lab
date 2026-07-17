@@ -2463,6 +2463,29 @@ The accepted example contains the complete clean four-action assistant prefix.
 It is now a concrete source for the tokenizer/loss-label materializer, but it is
 not yet a trainer batch and is not authorized for training.
 
+### Positive-SFT Materialization Result Schema
+
+Added a discriminated `PositiveSFTMaterializationRecord` union under
+`training/positive_sft/materialization/`. A completed record persists
+`input_ids`, trainer-style `labels`, sequence length, and supervised/ignored
+token counts. A failed record distinguishes `sequence_length_exceeded` from
+`materialization_error` and always persists `error_class` and `error_message`.
+Overlength failures also persist the observed sequence length.
+
+Every result pins the source positive-SFT example id and record hash, the model
+input protocol id and hash, `max_sequence_length`, and the materializer version
+and code hash. Completed records enforce equal token/label lengths, labels of
+either `-100` or the corresponding input token id, at least one supervised
+token, exact summary counts, and a sequence no longer than the declared maximum.
+There is intentionally no separate materialization id: the eventual export
+manifest plus source example id identifies the logical result, and its record
+hash identifies the exact persisted bytes.
+
+The later materialization exporter must enforce total accounting against its
+pinned source export: exactly one completed or failed result per accepted
+`PositiveSFTExampleRecord`. The record schema establishes the possible outcomes;
+the cross-record coverage invariant belongs to the exporter/manifest checkpoint.
+
 Focused verification:
 
 ```text
@@ -2474,6 +2497,7 @@ repair export: 16 passed
 positive-SFT/CLI focused set: 13 passed
 combined candidate/repair/positive-SFT workflow slice: 156 passed
 message-schema regression slice: 12 passed
+positive-SFT materialization schema: 9 passed
 release-trust integration suite: 8 tests collected; execution intentionally deferred
 Ruff repository-wide: passed
 Pyright repository-wide: passed
