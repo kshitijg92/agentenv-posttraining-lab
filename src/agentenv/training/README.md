@@ -84,9 +84,10 @@ stand in for the other.
    auditable.
 7. The target-model input protocol pins the checkpoint, tokenizer artifacts,
    exact chat-template bytes, serialization operations, message projection, and
-   tool representation. Token-level loss assignment remains downstream. System,
-   user, and tool-observation tokens are context only; approved
-   assistant-generated spans receive loss.
+   tool representation. It also pins a generation-ownership annotation whose
+   render must remain byte-identical to the canonical template. Token-level loss
+   assignment remains downstream. System, user, and tool-observation tokens are
+   context only; approved assistant-generated spans receive loss.
 8. The initial materializer uses one trajectory-aggregated sequence per source
    example. An overlength sequence is explicitly excluded whole; it is not
    truncated, arbitrarily chunked, overlapped, or summarized.
@@ -133,7 +134,10 @@ The first protocol record is
 the exact pinned upstream Qwen template for generation and completed-transcript
 serialization. It projects only message `role` and `content`, retains the
 AgentEnv content-level JSON action protocol, and does not authorize
-provider-native tool serialization.
+provider-native tool serialization. A separately hash-pinned annotated template
+adds non-rendering Jinja generation blocks. Every ownership-aware render is
+compared with the canonical render byte for byte before its model-generated
+Python Unicode-string spans are accepted.
 
 The Qwen2.5-Coder-3B Ollama runtime consumes this same record before every
 generation. AgentEnv renders the full generation prompt and sends it through

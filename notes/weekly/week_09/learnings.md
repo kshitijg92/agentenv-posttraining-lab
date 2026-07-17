@@ -1417,6 +1417,206 @@ context-only tokens = everything supplied to the model before or between those a
 Message role is a useful first approximation, but exact ownership is defined
 by the model input and generation protocol.
 
+### Character-Level Ownership Bridges Rendering And Token Loss
+
+Loss is applied to tokens, but the information needed to decide ownership
+exists before tokenization. The renderer still knows which output fragments
+represent supplied context, template scaffolding, or model-generated actions.
+After rendering, the tokenizer sees only one flat string; role and provenance
+are no longer intrinsic properties of its characters.
+
+Character-level ownership preserves that information across the boundary. It
+does not require storing one flag for every character. A compact sequence of
+non-overlapping spans is enough:
+
+```text
+rendered text:
+<|im_start|>assistant\n{"final_answer":"42"}<|im_end|>\n
+
+ownership spans:
+context -> <|im_start|>assistant\n
+model   -> {"final_answer":"42"}
+model   -> <|im_end|>
+context -> \n after the completed assistant turn
+```
+
+This granularity matters because a rendered assistant turn mixes ownership.
+The runtime supplies the assistant header, the model produces the response and
+end-of-turn action, and the completed-turn serializer supplies the following
+separator. Labeling the whole assistant message would supervise runtime-owned
+scaffolding. Labeling only the original message content would omit the
+model-owned end-of-turn token.
+
+Token identity alone also cannot recover ownership. The same Qwen
+`<|im_end|>` token id can occur after system, user, assistant, and tool content:
+
+```text
+system <|im_end|>       -> context-only occurrence
+user <|im_end|>         -> context-only occurrence
+assistant <|im_end|>    -> model-generated occurrence
+tool context <|im_end|> -> context-only occurrence
+```
+
+The token id says what symbol occurred, not who was responsible for producing
+that particular occurrence. Ownership must remain attached to its position in
+the rendered transcript.
+
+Tokenizing each rendered fragment separately is not a safe substitute. BPE is
+deterministic for a fixed string, but tokenization is not generally
+compositional. In a hypothetical vocabulary containing token `ab`:
+
+```text
+tokenize("ab")              -> ["ab"]
+tokenize("a") + tokenize("b") -> ["a", "b"]
+```
+
+Therefore this transformation is not guaranteed to preserve the canonical
+model input:
+
+```text
+tokenize(context fragment) + tokenize(model fragment)
+```
+
+The correct sequence is to render the entire approved transcript once,
+associate ownership spans with that exact rendering, and tokenize the complete
+string once. A tokenizer that exposes offsets can then map each token back to
+the characters it covers:
+
+```text
+token lies wholly in a model span   -> label is the token id
+token lies wholly in context spans  -> label is -100
+token crosses an ownership boundary -> materialization is ambiguous
+```
+
+For example, imagine one token covered both the newline at the end of the
+runtime-supplied assistant header and the first character of the assistant
+answer:
+
+```text
+token characters: "\nF"
+ownership:         context + model
+```
+
+A token is atomic. Supervising it would apply positive pressure to some
+runtime-owned text; masking it would discard supervision for some model-owned
+text. Silently choosing either label hides a protocol/tokenizer mismatch. A
+conservative materializer should reject the example unless the ownership can
+be aligned unambiguously. Explicit Qwen special tokens and separators may make
+such crossings unlikely, but that is an invariant to test rather than assume.
+
+Character spans are intermediate audit evidence, not necessarily permanent
+trainer payload. The final trainer record may contain only `input_ids`,
+`labels`, counts, and pinned provenance, provided the ownership spans can be
+deterministically re-derived and the persisted labels can be validated against
+them.
+
+The self-deception trap is to build a plausible-looking assistant mask by
+tokenizing messages or fragments independently. The labels may have the right
+length and still describe a token sequence different from the canonical full
+prompt. Character ownership keeps the semantic origin of the text intact until
+the exact full-sequence tokens and loss labels have been established.
+
+### Span Coordinate Systems Are Part Of The Training Contract
+
+A span written as `(start=1, end=2)` is not meaningful until its coordinate
+system is named. The numbers might count Python Unicode-string positions,
+UTF-8 bytes, UTF-16 code units, or tokenizer tokens. These systems coincide on
+simple ASCII, which makes an offset bug easy to miss in apparently convincing
+tests.
+
+Consider the string:
+
+```text
+AΩB
+```
+
+Its representations differ:
+
+| Representation | Length | Range selecting `Ω` |
+| --- | ---: | --- |
+| Python Unicode string | 3 positions | `[1, 2)` |
+| UTF-8 bytes | 4 bytes | `[1, 3)` |
+| Model tokens | tokenizer-dependent | tokenizer-dependent |
+
+`Ω` is Unicode code point `U+03A9`. Python indexes it as one string position,
+but UTF-8 encodes it as two bytes, `CE A9`. Therefore:
+
+```python
+text = "AΩB"
+
+len(text)                  # 3 Python Unicode-string positions
+len(text.encode("utf-8"))  # 4 bytes
+text[1:2]                  # "Ω"
+```
+
+The same distinction appeared in a rendered agent transcript containing two
+`Ω` symbols:
+
+```text
+complete rendering: 131 Python string positions, 133 UTF-8 bytes
+model-owned range:  [100, 130) in Python string indices
+selected text:      {"final_answer":"Ω"}<|im_end|>
+```
+
+One `Ω` occurred before the owned range and another inside it. Consequently,
+the corresponding UTF-8 byte range was `[101, 132)`, not `[100, 130)`. Applying
+the Python indices directly to encoded bytes would select the wrong boundary.
+
+Even “character” is too imprecise as a unit. A displayed `é` may be represented
+as one Unicode code point:
+
+```text
+U+00E9                 -> é
+```
+
+or as two code points that render as one visual glyph:
+
+```text
+U+0065 U+0301          -> e + combining acute accent -> é
+```
+
+Likewise, some emoji that appear as one glyph consist of several code points.
+Visual glyph counts are therefore unsuitable for machine-auditable ownership
+spans.
+
+Render equality and span coordinates answer different questions:
+
+```text
+UTF-8 byte equality
+-> did canonical and annotated templates produce exactly the same model input?
+
+Python Unicode-string indices
+-> which substring did the ownership renderer mark as model-generated?
+
+token offsets
+-> which final training tokens cover that substring?
+```
+
+The token materializer may map ownership to loss only after proving that the
+tokenizer's offsets refer to the same original text and after explicitly
+converting coordinate systems when they differ. A token wholly inside a
+model-owned range can receive its token id as a label; a token wholly outside
+receives `-100`; an unresolvable crossing must not be guessed.
+
+This also creates a cross-language portability concern. Python indexes Unicode
+strings by code point, while JavaScript indexes strings by UTF-16 code unit.
+An emoji outside the Basic Multilingual Plane can occupy one Python position
+but two JavaScript positions. Persisting bare integers without their coordinate
+system makes an otherwise hash-pinned artifact ambiguous to another consumer.
+
+The durable invariant is:
+
+```text
+every persisted or exchanged span names its coordinate system
+every ownership-to-token mapping proves or performs the required conversion
+ASCII-only conformance tests are insufficient
+```
+
+The self-deception trap is to validate offset logic only on ASCII transcripts.
+On ASCII, code-point, UTF-8-byte, and UTF-16-unit offsets often have identical
+numbers, so a fundamentally incorrect mapping can appear perfect until a real
+task contains non-ASCII paths, source code, tool output, or user text.
+
 ### Public Agent-Training Systems Use Several Aggregation Policies
 
 There is no single public industry convention that makes every agent trace one

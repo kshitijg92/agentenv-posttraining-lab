@@ -106,6 +106,28 @@ class ChatTemplatePin(BaseModel):
         return value
 
 
+class GenerationOwnershipAnnotationPin(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    annotation_format: Literal["transformers_jinja_generation_blocks"]
+    annotated_template_ref: str = Field(min_length=1)
+    sha256: str = Field(min_length=1)
+    span_coordinate_system: Literal["python_unicode_string_indices"]
+    canonical_render_equivalence: Literal["exact"]
+
+    @field_validator("annotated_template_ref")
+    @classmethod
+    def validate_relative_path(cls, value: str) -> str:
+        return validate_relative_artifact_ref(value)
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_sha256(cls, value: str) -> str:
+        if not _SHA256_RE.fullmatch(value):
+            raise ValueError("sha256 must use the sha256:<64 lowercase hex> form")
+        return value
+
+
 class ModelInputProtocol(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -114,6 +136,7 @@ class ModelInputProtocol(BaseModel):
     model_checkpoint: HuggingFaceRevisionPin
     tokenizer: TokenizerPin
     chat_template: ChatTemplatePin
+    generation_ownership: GenerationOwnershipAnnotationPin
     supported_serialization_modes: tuple[ModelInputSerializationMode, ...] = Field(
         min_length=1
     )
@@ -141,5 +164,13 @@ class ModelInputProtocol(BaseModel):
             raise ValueError(
                 "chat-template source_repository_path must name a pinned "
                 "upstream tokenizer file"
+            )
+        if (
+            self.generation_ownership.annotated_template_ref
+            == self.chat_template.local_snapshot_ref
+        ):
+            raise ValueError(
+                "generation-ownership annotation must be a distinct pinned "
+                "derivative of the canonical chat template"
             )
         return self

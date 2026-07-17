@@ -350,6 +350,8 @@ Current state:
 - repair selection and positive-SFT review/export CLI wiring are implemented;
 - Qwen2.5-Coder-3B inference now consumes the pinned model-input protocol via
   AgentEnv rendering and Ollama native raw generation;
+- the same protocol now pins a generation-ownership annotation and rejects any
+  ownership-aware render whose bytes differ from the canonical Qwen render;
 - the materialization result union now represents completed token/label output,
   explicit overlength failures, and other materialization failures with exact
   source, protocol, sequence-policy, and materializer provenance;
@@ -375,6 +377,8 @@ Settled policy:
 - use the exact tokenizer compatible with the target base checkpoint;
 - pin the tokenizer revision, chat template, and tool-call serialization;
 - serialize each approved prefix once using trajectory aggregation;
+- derive model-generated Python Unicode-string spans from the pinned ownership
+  annotation while requiring exact canonical-render parity;
 - give loss only to approved assistant-produced spans;
 - keep system, user, and tool-observation spans as context with ignored labels;
 - reject the whole example when it exceeds `max_sequence_length`;

@@ -10,5 +10,5 @@ capabilities:
   supports_top_k: true
 model_input_protocol:
   path: ../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
-  content_hash: xxh64:eb0a73b2d5c4174a
+  content_hash: xxh64:9b9eba719de618f1
 agent_action_format: json_schema

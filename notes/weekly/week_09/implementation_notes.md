@@ -2486,6 +2486,28 @@ pinned source export: exactly one completed or failed result per accepted
 `PositiveSFTExampleRecord`. The record schema establishes the possible outcomes;
 the cross-record coverage invariant belongs to the exporter/manifest checkpoint.
 
+### Pinned Generation-Ownership Rendering
+
+Extended `ModelInputProtocol` with a hash-pinned generation-ownership annotation
+for the existing canonical Qwen template. The new local derivative uses Jinja
+`generation` blocks to mark assistant content together with its `<|im_end|>`
+token. System, user, and tool regions, assistant headers, and following
+separators remain outside those blocks.
+
+The protocol loader verifies both the canonical and ownership-template hashes.
+Ownership-aware rendering runs both templates for the exact transcript and
+rejects the result unless their UTF-8 bytes are identical. Accepted model spans
+use Python Unicode-string indices over that shared text. This checkpoint does
+not yet tokenize or construct trainer labels.
+
+Renamed the ownership metadata to make its semantics explicit:
+`annotation_format: transformers_jinja_generation_blocks` and
+`span_coordinate_system: python_unicode_string_indices`. These are declarations
+about how to interpret the pinned annotation, not provider or tokenizer knobs.
+The protocol YAML content hash is now `xxh64:9b9eba719de618f1`; the Qwen model
+config and focused assertions pin that value. The Ollama model manifest digest
+remains unchanged because the model artifact did not change.
+
 Focused verification:
 
 ```text
@@ -2498,6 +2520,7 @@ positive-SFT/CLI focused set: 13 passed
 combined candidate/repair/positive-SFT workflow slice: 156 passed
 message-schema regression slice: 12 passed
 positive-SFT materialization schema: 9 passed
+model-input protocol and provider integration slice: 40 passed
 release-trust integration suite: 8 tests collected; execution intentionally deferred
 Ruff repository-wide: passed
 Pyright repository-wide: passed

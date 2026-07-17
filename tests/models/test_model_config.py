@@ -69,7 +69,7 @@ def test_qwen2_5_3b_config_pins_agentenv_owned_input_protocol() -> None:
     assert config.model_input_protocol.path == (
         "../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
     )
-    assert config.model_input_protocol.content_hash == ("xxh64:eb0a73b2d5c4174a")
+    assert config.model_input_protocol.content_hash == ("xxh64:9b9eba719de618f1")
     assert config.capabilities.supports_seed is True
     assert config.capabilities.supports_stop is True
     assert config.capabilities.supports_top_k is True

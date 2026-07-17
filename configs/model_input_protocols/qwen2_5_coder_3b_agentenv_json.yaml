@@ -31,6 +31,12 @@ chat_template:
   source_field: chat_template
   local_snapshot_ref: templates/qwen2_5_coder_3b_chat_template.jinja
   sha256: sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f
+generation_ownership:
+  annotation_format: transformers_jinja_generation_blocks
+  annotated_template_ref: templates/qwen2_5_coder_3b_generation_ownership.jinja
+  sha256: sha256:17e0db6a1cec28960d3838f2e9a49c00234abcce860621a7a656c02d7e33f5dc
+  span_coordinate_system: python_unicode_string_indices
+  canonical_render_equivalence: exact
 supported_serialization_modes:
   - generation
   - completed_transcript

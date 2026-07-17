@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 import shutil
 
@@ -8,6 +9,7 @@ from pydantic import ValidationError
 from agentenv.models.input_protocol import (
     load_model_input_protocol,
     render_model_input,
+    render_model_input_with_generation_ownership,
 )
 from agentenv.models.input_protocol_schema import ModelInputProtocol
 from agentenv.models.schema import Message
@@ -51,6 +53,13 @@ def test_load_qwen2_5_protocol_pins_model_tokenizer_and_template() -> None:
     assert record.chat_template.local_snapshot_ref == (
         "templates/qwen2_5_coder_3b_chat_template.jinja"
     )
+    ownership = record.generation_ownership
+    assert ownership.annotation_format == "transformers_jinja_generation_blocks"
+    assert ownership.annotated_template_ref == (
+        "templates/qwen2_5_coder_3b_generation_ownership.jinja"
+    )
+    assert ownership.span_coordinate_system == "python_unicode_string_indices"
+    assert ownership.canonical_render_equivalence == "exact"
     assert record.supported_serialization_modes == (
         "generation",
         "completed_transcript",
@@ -106,6 +115,98 @@ def test_completed_serialization_includes_assistant_end_of_turn() -> None:
         "<|im_start|>assistant\n"
         '{"action":"final_answer","text":"42"}<|im_end|>\n'
     )
+
+
+def test_completed_serialization_marks_only_model_generated_characters() -> None:
+    protocol = load_model_input_protocol(PROTOCOL_PATH)
+    messages = [
+        _message("0", role="system", content="Follow the JSON protocol."),
+        _message("1", role="user", content="What is 6 * 7?"),
+        _message(
+            "2",
+            role="assistant",
+            content='{"action":"final_answer","text":"42"}',
+        ),
+    ]
+
+    canonical = render_model_input(
+        protocol,
+        messages,
+        mode="completed_transcript",
+    )
+    owned = render_model_input_with_generation_ownership(
+        protocol,
+        messages,
+        mode="completed_transcript",
+    )
+
+    assert owned.text.encode("utf-8") == canonical.encode("utf-8")
+    assert [
+        owned.text[span.start : span.end]
+        for span in owned.model_generated_spans
+    ] == ['{"action":"final_answer","text":"42"}<|im_end|>']
+    assert "<|im_start|>assistant\n" not in owned.text[
+        owned.model_generated_spans[0].start : owned.model_generated_spans[0].end
+    ]
+
+
+def test_generation_ownership_handles_multiturn_repetition_and_unicode() -> None:
+    protocol = load_model_input_protocol(PROTOCOL_PATH)
+    repeated_content = 'same Ω {"path":"x.py"}'
+    messages = [
+        _message("0", role="system", content="Use one JSON action."),
+        _message("1", role="user", content=repeated_content),
+        _message("2", role="assistant", content=repeated_content),
+        _message(
+            "3",
+            role="tool",
+            content=repeated_content,
+            name="read_file",
+            tool_call_id="tool_call_001",
+        ),
+        _message("4", role="assistant", content='{"final_answer":"Ω"}'),
+    ]
+
+    owned = render_model_input_with_generation_ownership(
+        protocol,
+        messages,
+        mode="completed_transcript",
+    )
+
+    assert [
+        owned.text[span.start : span.end]
+        for span in owned.model_generated_spans
+    ] == [
+        repeated_content + "<|im_end|>",
+        '{"final_answer":"Ω"}<|im_end|>',
+    ]
+
+
+def test_generation_mode_does_not_own_current_assistant_header() -> None:
+    protocol = load_model_input_protocol(PROTOCOL_PATH)
+
+    owned = render_model_input_with_generation_ownership(
+        protocol,
+        [
+            _message("0", role="system", content="Use one JSON action."),
+            _message("1", role="user", content="Read x.py."),
+            _message("2", role="assistant", content='{"tool":"read_file"}'),
+            _message(
+                "3",
+                role="tool",
+                content='{"status":"ok"}',
+                name="read_file",
+                tool_call_id="tool_call_001",
+            ),
+        ],
+        mode="generation",
+    )
+
+    assert owned.text.endswith("<|im_start|>assistant\n")
+    assert [
+        owned.text[span.start : span.end]
+        for span in owned.model_generated_spans
+    ] == ['{"tool":"read_file"}<|im_end|>']
 
 
 def test_generation_serialization_uses_agentenv_content_level_tool_protocol() -> None:
@@ -193,6 +294,53 @@ def test_protocol_load_rejects_chat_template_drift(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Chat-template hash mismatch"):
         load_model_input_protocol(copied_dir / PROTOCOL_PATH.name)
+
+
+def test_protocol_load_rejects_generation_ownership_template_drift(
+    tmp_path: Path,
+) -> None:
+    source_dir = PROTOCOL_PATH.parent
+    copied_dir = tmp_path / "model_input_protocols"
+    shutil.copytree(source_dir, copied_dir)
+    copied_template = (
+        copied_dir
+        / "templates"
+        / "qwen2_5_coder_3b_generation_ownership.jinja"
+    )
+    copied_template.write_text(copied_template.read_text() + "{# drift #}\n")
+
+    with pytest.raises(ValueError, match="Generation-ownership template hash mismatch"):
+        load_model_input_protocol(copied_dir / PROTOCOL_PATH.name)
+
+
+def test_generation_ownership_rejects_rendering_drift(tmp_path: Path) -> None:
+    source_dir = PROTOCOL_PATH.parent
+    copied_dir = tmp_path / "model_input_protocols"
+    shutil.copytree(source_dir, copied_dir)
+    copied_template = (
+        copied_dir
+        / "templates"
+        / "qwen2_5_coder_3b_generation_ownership.jinja"
+    )
+    copied_template.write_text(copied_template.read_text() + "DRIFT")
+    payload = yaml.safe_load((copied_dir / PROTOCOL_PATH.name).read_text())
+    template_hash = hashlib.sha256(copied_template.read_bytes()).hexdigest()
+    payload["generation_ownership"]["sha256"] = f"sha256:{template_hash}"
+    (copied_dir / PROTOCOL_PATH.name).write_text(yaml.safe_dump(payload))
+    protocol = load_model_input_protocol(copied_dir / PROTOCOL_PATH.name)
+
+    with pytest.raises(
+        ValueError,
+        match="Generation-ownership rendering differs from canonical model input",
+    ):
+        render_model_input_with_generation_ownership(
+            protocol,
+            [
+                _message("0", role="user", content="What is 6 * 7?"),
+                _message("1", role="assistant", content="42"),
+            ],
+            mode="completed_transcript",
+        )
 
 
 def test_protocol_schema_rejects_native_tool_serialization() -> None:
