@@ -2465,7 +2465,7 @@ not yet a trainer batch and is not authorized for training.
 
 ### Positive-SFT Materialization Result Schema
 
-Added a discriminated `PositiveSFTMaterializationRecord` union under
+Added a discriminated `PositiveSFTTrainingMaterializationRecord` union under
 `training/positive_sft/materialization/`. A completed record persists
 `input_ids`, trainer-style `labels`, sequence length, and supervised/ignored
 token counts. A failed record distinguishes `sequence_length_exceeded` from

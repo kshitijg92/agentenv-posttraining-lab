@@ -4,11 +4,11 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from agentenv.training.positive_sft.materialization.schema import (
-    PositiveSFTMaterializationRecord,
+    PositiveSFTTrainingMaterializationRecord,
 )
 
 
-MATERIALIZATION_ADAPTER = TypeAdapter(PositiveSFTMaterializationRecord)
+MATERIALIZATION_ADAPTER = TypeAdapter(PositiveSFTTrainingMaterializationRecord)
 
 
 def _record(**updates: Any) -> dict[str, Any]:

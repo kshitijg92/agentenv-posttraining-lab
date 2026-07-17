@@ -3,17 +3,17 @@ from typing import Annotated, Literal, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-PositiveSFTMaterializationRecordSchemaVersion = Literal[
-    "positive_sft_materialization_record_v0"
+PositiveSFTTrainingMaterializationRecordSchemaVersion = Literal[
+    "positive_sft_training_materialization_record_v0"
 ]
-PositiveSFTMaterializationFailureKind = Literal[
+PositiveSFTTrainingMaterializationFailureKind = Literal[
     "sequence_length_exceeded",
     "materialization_error",
 ]
 
-POSITIVE_SFT_MATERIALIZATION_RECORD_SCHEMA_VERSION: (
-    PositiveSFTMaterializationRecordSchemaVersion
-) = "positive_sft_materialization_record_v0"
+POSITIVE_SFT_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION: (
+    PositiveSFTTrainingMaterializationRecordSchemaVersion
+) = "positive_sft_training_materialization_record_v0"
 TRAINER_IGNORE_INDEX = -100
 
 PositiveInt = Annotated[int, Field(gt=0, strict=True)]
@@ -22,11 +22,11 @@ TokenId = Annotated[int, Field(ge=0, strict=True)]
 TrainerLabel = Annotated[int, Field(strict=True)]
 
 
-class _PositiveSFTMaterializationRecord(BaseModel):
+class _PositiveSFTTrainingMaterializationRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: PositiveSFTMaterializationRecordSchemaVersion = (
-        POSITIVE_SFT_MATERIALIZATION_RECORD_SCHEMA_VERSION
+    schema_version: PositiveSFTTrainingMaterializationRecordSchemaVersion = (
+        POSITIVE_SFT_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION
     )
     source_positive_sft_example_id: str = Field(min_length=1)
     source_positive_sft_example_record_hash: str = Field(
@@ -50,8 +50,8 @@ class _PositiveSFTMaterializationRecord(BaseModel):
     )
 
 
-class CompletedPositiveSFTMaterializationRecord(
-    _PositiveSFTMaterializationRecord
+class CompletedPositiveSFTTrainingMaterializationRecord(
+    _PositiveSFTTrainingMaterializationRecord
 ):
     status: Literal["completed"]
     input_ids: list[TokenId] = Field(min_length=1)
@@ -63,7 +63,7 @@ class CompletedPositiveSFTMaterializationRecord(
     @model_validator(mode="after")
     def validate_completed_materialization(
         self,
-    ) -> "CompletedPositiveSFTMaterializationRecord":
+    ) -> "CompletedPositiveSFTTrainingMaterializationRecord":
         if len(self.input_ids) != len(self.labels):
             raise ValueError("input_ids and labels must have the same length")
         if self.sequence_length != len(self.input_ids):
@@ -99,9 +99,11 @@ class CompletedPositiveSFTMaterializationRecord(
         return self
 
 
-class FailedPositiveSFTMaterializationRecord(_PositiveSFTMaterializationRecord):
+class FailedPositiveSFTTrainingMaterializationRecord(
+    _PositiveSFTTrainingMaterializationRecord
+):
     status: Literal["failed"]
-    failure_kind: PositiveSFTMaterializationFailureKind
+    failure_kind: PositiveSFTTrainingMaterializationFailureKind
     observed_sequence_length: PositiveInt | None = None
     error_class: str = Field(min_length=1)
     error_message: str = Field(min_length=1)
@@ -109,7 +111,7 @@ class FailedPositiveSFTMaterializationRecord(_PositiveSFTMaterializationRecord):
     @model_validator(mode="after")
     def validate_failed_materialization(
         self,
-    ) -> "FailedPositiveSFTMaterializationRecord":
+    ) -> "FailedPositiveSFTTrainingMaterializationRecord":
         if self.failure_kind == "sequence_length_exceeded":
             if self.observed_sequence_length is None:
                 raise ValueError(
@@ -123,8 +125,8 @@ class FailedPositiveSFTMaterializationRecord(_PositiveSFTMaterializationRecord):
         return self
 
 
-PositiveSFTMaterializationRecord: TypeAlias = Annotated[
-    CompletedPositiveSFTMaterializationRecord
-    | FailedPositiveSFTMaterializationRecord,
+PositiveSFTTrainingMaterializationRecord: TypeAlias = Annotated[
+    CompletedPositiveSFTTrainingMaterializationRecord
+    | FailedPositiveSFTTrainingMaterializationRecord,
     Field(discriminator="status"),
 ]
