@@ -3065,5 +3065,506 @@ heldout public-check idempotency: 6/6 IDEMPOTENT
 core model-free reproduction smoke: passed with 20-task split validation
 Ruff: passed
 Pyright: 0 errors
+### Positive-SFT Token-Materialization Contract Sync
+
+Synchronized the reusable post-training contract, weekly plan, and training
+package README with the implemented positive-SFT prefix-review flow and the
+settled next checkpoint.
+
+The documentation now uses the current candidate eligibility fields, records
+that task failure does not itself block an approved positive prefix, marks
+repair-selection and prefix-review CLI support as implemented, and describes
+`PositiveSFTExampleRecord` as a source-level rather than trainer-ready record.
+The plan now places target-model token materialization before preference-pair
+design.
+
+The next planned materializer uses the target checkpoint's compatible pinned
+tokenizer and chat template, trajectory aggregation, assistant-only trainer
+labels, and whole-example overlength exclusion. No runtime schema or source
+implementation changed in this documentation checkpoint.
+
+## 2026-07-14
+
+### Qwen2.5 Prompt-Protocol Correction And Fresh Trajectories
+
+Corrected the Qwen2.5-Coder acquisition configuration after token-level
+conformance work showed that `/no_think` was not an Ollama-side control.
+AgentEnv appended it to system-message content, so Ollama serialized it as
+ordinary model-visible input. Qwen3 documents this prompt-level soft switch;
+Qwen2.5-Coder does not.
+
+Removed the prompt adapter from the 3B, 7B, and 14B Qwen2.5 model configs. The
+generic prompt-adapter implementation and Qwen3 configs remain unchanged. A
+focused regression test now requires every Qwen2.5 config to load with
+`prompt_adapter: null`.
+
+The pinned Qwen2.5-Coder-3B tokenizer/template and a live request through
+Ollama's OpenAI-compatible endpoint both reported 78 prompt tokens for the
+AgentEnv-style system/user/custom-action/tool-result generation fixture. The
+canonical rendering contained no `/no_think`.
+
+The first acquisition invocation was sandboxed from the local Ollama socket
+and produced seven explicit `ProviderRequestError` records under:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_no_suffix_eval_v0
+```
+
+Those records are orchestration-failure evidence and were not exported as the
+fresh training source. The approved local-network rerun produced seven
+harness-clean, scored attempts under:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_no_suffix_eval_v1
+```
+
+All seven completed the prompt loop and passed public checks; all seven failed
+hidden checks. This is not task success, but the trajectories may still contain
+human-approvable positive prefixes under the current positive-SFT contract.
+The new trajectory artifact is:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_no_suffix_trajectory_export_v0
+source eval run: eval_run_d9fd9e4fe11149428324537d15c46292
+records: 7
+trajectories JSONL: xxh64:841f6308679b3830
+```
+
+Every attempt pins a model config with `prompt_adapter: null`. Historical
+Qwen2.5 trajectories remain honest evidence of suffix-conditioned acquisition;
+they were not relabeled or overwritten.
+
+Focused verification:
+
+```text
+model config and OpenAI-compatible client tests: 25 passed
+Ruff on the changed test: passed
+Qwen2.5 no-suffix prompt-token count conformance: passed (78 == 78)
+fresh eval: 7/7 prompt loops completed and scored
+trajectory export: 7 records
+git diff --check: passed before notes sync
+```
+
+## 2026-07-15
+
+### Pinned Qwen2.5 Model-Input Protocol
+
+Added the first target-model input-protocol record:
+
+```text
+configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
+```
+
+It pins `Qwen/Qwen2.5-Coder-3B-Instruct` and its tokenizer at immutable commit
+`89fe5444e8baf5736e70f528f1edcc79e6616ef6`, including SHA-256 pins for
+`tokenizer_config.json`, `tokenizer.json`, `vocab.json`, and `merges.txt`. It
+also records the Qwen message-start, end-of-turn, and padding token ids.
+
+Vendored the exact `chat_template` field from that revision's
+`tokenizer_config.json`. Its 2,507 UTF-8 bytes hash to
+`sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f`.
+The protocol loader verifies that hash before returning a usable protocol.
+
+The v0 protocol intentionally supports only:
+
+```text
+generation serialization
+completed-transcript serialization
+message fields: role, content
+tool serialization: AgentEnv JSON content
+native provider tool serialization: unsupported
+```
+
+Generation rejects a final assistant message rather than silently interpreting
+it as assistant prefill. Completed-transcript serialization requires a final
+assistant message. Message ids, names, tool-call ids, and metadata remain source
+provenance and do not enter the Qwen rendering.
+
+Pinned `transformers==4.57.3` and `jinja2==3.1.6` and used Transformers' chat
+template application utility rather than creating a second Qwen template
+interpreter. This checkpoint produces deterministic rendered text only; target
+token ids, loss labels, Ollama raw transport, and final trust-artifact
+regeneration remain downstream.
+
+Focused verification:
+
+```text
+model-input protocol tests: 8 passed
+focused protocol/model-client regression: 33 passed
+Ruff on protocol source and tests: passed
+targeted Ruff format check: passed
+Pyright on protocol source and tests: passed
+vendored template bytes equal the pinned upstream field: passed
 git diff --check: passed
+```
+
+### Qwen2.5-Coder-3B Ollama Raw Generation Transport
+
+Added an `ollama_generate` model-config variant and a native Ollama generate
+client. This path requires a hash-pinned model-input-protocol reference,
+renders the generation prompt through that protocol, and sends the complete
+prompt to `/api/generate` with `raw: true` and `stream: false`. The raw setting
+is a transport invariant rather than a configurable option.
+
+Ollama decoding options now receive the repository's temperature, top-p,
+maximum-new-token, stop, seed, and top-k settings. The client maps Ollama's
+native response text, done reason, and prompt/completion token counts back into
+the shared `ModelResponse` contract. The AgentEnv action JSON schema was moved
+to one shared source used by both the OpenAI-compatible and Ollama-native
+transports.
+
+Only `qwen2.5-coder:3b` moved to the new transport. The 7B and 14B configs were
+not pointed at the 3B protocol because its checkpoint identity is explicitly
+3B, even though family members may share tokenizer or template bytes. The 3B
+config now uses `AGENTENV_OLLAMA_BASE_URL`, whose value is the Ollama server
+root rather than the OpenAI-compatible `/v1` base.
+
+The protocol YAML is now a pinned transitive model-config dependency. Eval
+preflight resolves it and verifies its xxh64 content hash. Persisted model
+config provenance for an Ollama run contains the resolved protocol record,
+source path, and observed hash, and schema validation requires that observed
+hash to equal the model-config pin.
+
+Focused verification:
+
+```text
+model protocol/config/factory/OpenAI/Ollama tests: 46 passed
+multi-policy eval preflight with pinned protocol: 1 passed
+artifact, agent-attempt, and eval-run integration: 58 passed, 1 replay failure
+Ruff on changed source and tests: passed
+Pyright on changed source and tests: passed
+```
+
+The replay failure is outside the new transport path and affects scripted agent
+controls. Replay normalization currently compares newly generated `message_id`
+values literally inside `prompt_loop_result.json`; source and replay ids differ
+even when behavior matches. Fixing that needs identity-aware canonicalization
+that preserves equality relationships, rather than masking every message id to
+one undifferentiated placeholder.
+
+A live native-endpoint smoke then started Ollama 0.30.11 as a detached host
+process and exercised the repository's actual `OllamaGenerateModelClient`
+against `qwen2.5-coder:3b` (local Ollama digest
+`f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225`).
+The protocol-backed request returned a valid `final_answer` action containing
+`pong`, `stop_criteria_met`, 32 prompt tokens, 18 completion tokens, and 50
+total tokens in 4,265 ms. Independently encoding the exact rendered prompt with
+the pinned Hugging Face tokenizer revision also produced 32 tokens. This is a
+live prompt-token parity check for the exercised prompt, not a general proof
+that every possible rendering or Ollama model tag remains conformant. A second
+health probe succeeded after the smoke; the detached server remains available
+at `127.0.0.1:11434`, with logs in `/tmp/agentenv-ollama-server.log`.
+
+### Digest-Pinned Practice Acquisition
+
+The native Ollama config now pins the mutable `qwen2.5-coder:3b` tag to its
+exact Ollama manifest digest:
+
+```text
+sha256:f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225
+```
+
+Before each native generation request, the client resolves the tag through
+`/api/tags` and fails before generation if the tag is missing or its observed
+digest differs. This pin is distinct from both the GGUF layer digest and the
+hash-pinned AgentEnv input-protocol record.
+
+Added the reusable one-task practice config
+`configs/eval/qwen2_5_coder_3b_practice_smoke.yaml`. The first invocation was
+sandboxed from the local Ollama socket and correctly persisted a
+`ProviderModelIdentityRequestError` under:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_eval_v0
+```
+
+The approved host-network rerun produced one scored practice attempt under:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_eval_v1
+```
+
+The model listed the workspace, read `src/mathlib.py`, replaced that file, and
+returned `final_answer`. The prompt loop completed in four model turns; public
+and hidden scoring both passed. The trajectory was exported and provisionally
+accepted under the user's review authorization:
+
+```text
+experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_trajectory_export_v1
+experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_trajectory_review_v1
+```
+
+The production mechanical-redundancy detector completed with zero blocks. No
+repair artifact was manufactured: the repair export contract skips candidates
+that do not require a transformation.
+
+An initial candidate-export attempt against the newest available audit and
+control pair failed because those artifacts pin runtime
+`xxh64:2e228ddac2b3c29f`, while the fresh eval pinned runtime
+`xxh64:ec76891edda728d7`. That failure exposed that candidate construction and
+final training authorization were sharing one gate even though they answer
+different questions.
+
+### Pre-Release Construction And Final Authorization Split
+
+Moved harness-audit and control-calibration validation out of candidate
+construction and into `training/release/trust.py`. The validator remains
+fail-closed and still verifies current runtime, task hashes, audit cases,
+control outcomes, flake status, idempotency artifacts, and source-eval
+provenance. It is now a building block for the future final dataset release
+rather than a prerequisite for development-time curation.
+
+Renamed candidate `training_eligibility` to `content_eligibility` and the
+summary property/count from `training use` to `objective use`. Candidate and
+positive-SFT export manifests now require:
+
+```text
+training_authorization: not_authorized
+```
+
+Neither schema permits an `authorized` value. The candidate CLI no longer
+accepts harness-audit or control-calibration arguments. Positive-SFT review,
+repair, and export can therefore be developed from exact pinned trajectory
+sources without repeatedly regenerating trust artifacts. A later release
+manifest will be the only trainer-consumable authority.
+
+The practice source now produced:
+
+```text
+candidate export:
+  experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_candidates_v1
+  records: 1
+  positive-SFT-review eligible: 1
+  training authorization: not_authorized
+
+repair export:
+  experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_repairs_v1
+  records: 0
+
+positive-SFT review:
+  experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_positive_sft_review_v1
+  accepted: 1
+  approved boundary: message_9ef2d56931c7439baeec7eea5287d35f
+
+positive-SFT source export:
+  experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_positive_sft_v1
+  records: 1
+  training authorization: not_authorized
+```
+
+The accepted example contains the complete clean four-action assistant prefix.
+It is now a concrete source for the tokenizer/loss-label materializer, but it is
+not yet a trainer batch and is not authorized for training.
+
+### Positive-SFT Materialization Result Schema
+
+Added a discriminated `PositiveSFTTrainingMaterializationRecord` union under
+`training/positive_sft/materialization/`. A completed record persists
+`input_ids`, trainer-style `labels`, sequence length, and supervised/ignored
+token counts. A failed record distinguishes `sequence_length_exceeded` from
+`materialization_error` and always persists `error_class` and `error_message`.
+Overlength failures also persist the observed sequence length.
+
+Every result pins the source positive-SFT example id and record hash, the model
+input protocol id and hash, `max_sequence_length`, and the materializer version
+and code hash. Completed records enforce equal token/label lengths, labels of
+either `-100` or the corresponding input token id, at least one supervised
+token, exact summary counts, and a sequence no longer than the declared maximum.
+There is intentionally no separate materialization id: the eventual export
+manifest plus source example id identifies the logical result, and its record
+hash identifies the exact persisted bytes.
+
+The later materialization exporter must enforce total accounting against its
+pinned source export: exactly one completed or failed result per accepted
+`PositiveSFTExampleRecord`. The record schema establishes the possible outcomes;
+the cross-record coverage invariant belongs to the exporter/manifest checkpoint.
+
+### Pinned Generation-Ownership Rendering
+
+Extended `ModelInputProtocol` with a hash-pinned generation-ownership annotation
+for the existing canonical Qwen template. The new local derivative uses Jinja
+`generation` blocks to mark assistant content together with its `<|im_end|>`
+token. System, user, and tool regions, assistant headers, and following
+separators remain outside those blocks.
+
+The protocol loader verifies both the canonical and ownership-template hashes.
+Ownership-aware rendering runs both templates for the exact transcript and
+rejects the result unless their UTF-8 bytes are identical. Accepted model spans
+use Python Unicode-string indices over that shared text. This checkpoint does
+not yet tokenize or construct trainer labels.
+
+Renamed the ownership metadata to make its semantics explicit:
+`annotation_format: transformers_jinja_generation_blocks` and
+`span_coordinate_system: python_unicode_string_indices`. These are declarations
+about how to interpret the pinned annotation, not provider or tokenizer knobs.
+The protocol YAML content hash is now `xxh64:9b9eba719de618f1`; the Qwen model
+config and focused assertions pin that value. The Ollama model manifest digest
+remains unchanged because the model artifact did not change.
+
+### Qwen Tokenizer Offset Conformance Probe
+
+Loaded the fast tokenizer for `Qwen/Qwen2.5-Coder-3B-Instruct` at pinned revision
+`89fe5444e8baf5736e70f528f1edcc79e6616ef6` from the local Hugging Face cache.
+The cached `tokenizer_config.json`, `tokenizer.json`, `vocab.json`, and
+`merges.txt` SHA-256 values exactly matched the protocol pins.
+
+The tokenizer reports an `NFC()` normalizer. Full-transcript probes used
+`add_special_tokens=false`, offset mappings, and the literal Qwen special tokens
+already present in the canonical render. Observed behavior:
+
+```text
+ASCII                         exact decode, complete offsets
+precomposed é                 exact decode, complete offsets
+Ω                             exact decode, complete offsets
+😀                             exact decode, complete offsets
+decomposed e + U+0301 accent  NFC-normalized decode, incomplete source coverage
+```
+
+The multi-turn Unicode/tool fixture produced 326 Python string positions, 351
+UTF-8 bytes, and 87 tokens. Assistant spans were `[127, 175)` and `[290, 325)`.
+All token offsets stayed wholly within one ownership class; no zero-width or
+ownership-crossing token appeared. Literal `<|im_start|>` and `<|im_end|>`
+tokens had meaningful source offsets. `special_tokens_mask` remained zero for
+them because they were present in the input text rather than added by the
+tokenizer, so special-token identity must come from the pinned token ids rather
+than that mask.
+
+For decomposed `e` plus combining acute accent, decoding the ids produced the
+NFC-composed `é`. The token offset covered the base `e` but left `U+0301`
+uncovered. Thus raw offset containment can still classify the token when both
+code points share ownership, but it cannot prove lossless coverage of the
+original rendered string.
+
+The v0 materialization policy rejects an example when the pinned tokenizer's
+normalizer changes the canonical rendered text. Added a content-safe guard that
+compares the strings before tokenization and raises a structured error carrying
+only lengths, SHA-256 hashes, and the first differing Python-string index. It
+does not include transcript content in the exception. The materialization
+builder still needs to catch this error and persist one failed result for the
+source example; the guard alone does not yet implement export accounting.
+
+Focused verification:
+
+```text
+model package: 100 passed
+trajectory review validation: 1 reviewed, 1 accepted
+mechanical redundancy assessment: complete, 0 blocks
+candidate/builder/export focused set: 54 passed
+repair export: 16 passed
+positive-SFT/CLI focused set: 13 passed
+combined candidate/repair/positive-SFT workflow slice: 156 passed
+message-schema regression slice: 12 passed
+positive-SFT materialization schema: 9 passed
+positive-SFT tokenizer normalization guard: 7 passed
+model-input protocol and provider integration slice: 40 passed
+release-trust integration suite: 8 tests collected; execution intentionally deferred
+Ruff repository-wide: passed
+Pyright repository-wide: passed
+git diff --check: passed
+```
+
+### Positive-SFT Training Materialization Artifact
+
+Implemented the target-model materializer under
+`training/positive_sft/materialization/`. It renders each approved message
+prefix once with the pinned completed-transcript protocol, requires the
+tokenizer normalizer and decoder to preserve that exact text, tokenizes once
+with offsets, and maps tokens wholly inside model-generated spans to their token
+ids. Context tokens receive `-100`. Empty or uncovered offsets and tokens that
+cross an ownership boundary produce content-safe materialization errors.
+
+The builder always returns one result per source example in source order.
+Overlength sequences become explicit `sequence_length_exceeded` records;
+normalization, rendering, decode, and offset failures become
+`materialization_error` records. Unknown exception strings are not persisted,
+preventing an exception from copying transcript content into diagnostics.
+
+Added `PositiveSFTTrainingMaterializationManifest` and the
+`positive_sft_training_materialization` artifact type. The manifest pins the
+source positive-SFT export, model-input protocol, maximum length, materializer
+version and source-tree hash, outcome counts, record schema, and JSONL hash.
+Loading requires exact source-order ID and record-hash coverage, validates all
+record provenance against the manifest, and deterministically rebuilds every
+record from the pinned inputs and tokenizer.
+
+Added `agentenv training positive-sft materialize` with explicit source,
+protocol, sequence-length, tokenizer-cache/offline, output, and overwrite
+arguments. The artifact remains `training_authorization: not_authorized`.
+
+Materialized the accepted Qwen2.5-Coder-3B practice prefix using the locally
+cached tokenizer at revision
+`89fe5444e8baf5736e70f528f1edcc79e6616ef6` and `max_sequence_length=32768`.
+The first runtime artifact produced:
+
+```text
+artifact: experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_positive_sft_training_materialization_v1
+records: 1 completed, 0 failed
+sequence length: 843
+supervised tokens: 166
+ignored tokens: 677
+end-of-turn occurrences: 9 total, 4 supervised assistant occurrences
+supervised message-start occurrences: 0
+training authorization: not_authorized
+```
+
+Focused implementation verification at this checkpoint:
+
+```text
+final materialization/protocol/manifest/CLI focused slice: 56 passed
+Ruff: passed
+Pyright: passed
+git diff --check: passed
+```
+
+### Foundation-Branch Merge And Catch-Up Audit
+
+Merged the Week 9 model-input and positive-SFT materialization work into the
+acquisition-foundation branch. Conflict resolution retained both provenance
+dimensions for the native Ollama path: the Qwen2.5-Coder-3B input-protocol pin
+and the observed Ollama server/model identity. The native provider now probes
+the Ollama root, requires the observed model digest to match the config pin,
+and persists both records in model-config provenance. OpenAI-compatible Ollama
+configs retain their explicit provider-runtime probe.
+
+Retained the acquisition branch's minimum of two control repeats at the new
+final-release trust boundary. Candidate construction now writes only
+`content_eligibility` and `training_authorization: not_authorized`; it no longer
+embeds harness-audit or control-calibration gates.
+
+Compatibility was checked against both current-runtime acquisition chains:
+
+```text
+trajectory exports and reviews: 8/8 chains validate, 156/156 records
+old candidate exports:           0/8 load under the current manifest
+old positive-SFT reviews:        pinned to those stale candidate exports
+old positive-SFT exports:        missing training_authorization
+scratch candidate rebuild:       156/156 records, 100 positive-SFT review rows
+```
+
+The old candidate manifests contain the removed gate fields and
+`any_training_use_eligible_count`; the current contract requires
+`any_objective_use_eligible_count` and explicit non-authorization. The old
+positive-SFT decisions remain useful review evidence because their source
+transcripts and message boundaries are unchanged, but new review artifacts must
+rebind those decisions to the rebuilt candidate-record hashes.
+
+The source evals pin harness runtime `xxh64:b899f465ef82ddef`; the merged tree
+currently derives `xxh64:3dbf2ec8ca7c6220`. Therefore rebuilt development
+artifacts cannot pass strict final-release trust. Expensive acquisition should
+wait until the remaining release/trainer and preference-contract code is stable,
+then run once under the final runtime followed by current audit and calibration.
+
+Pyright intermittently failed to discover the uv interpreter and reported every
+installed dependency missing. Pinned its project environment to `./.venv` in
+`pyproject.toml`; the ordinary `uv run --frozen pyright` command then passed.
+
+Merge verification at this checkpoint:
+
+```text
+focused model/eval/training integration: 67 passed
+full repository suite: 1090 passed, 1 stale control-task expectation failed
+corrected full-pack control expectation: 1 passed
+Ruff: passed
+Pyright: passed
+artifact compatibility audit: completed
 ```

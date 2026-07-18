@@ -6,6 +6,7 @@ from typing import Any, TypedDict
 
 import httpx
 
+from agentenv.models.agent_action_schema import openai_agent_action_response_format
 from agentenv.models.config_schema import OpenAICompatibleChatModelConfig
 from agentenv.ids import new_message_id
 from agentenv.models.schema import (
@@ -20,36 +21,6 @@ from agentenv.security.secrets import redact_secrets
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _RAW_RESPONSE_REF = "provider_response/not_persisted"
 _NOT_STARTED_RAW_RESPONSE_REF = "provider_response/not_started"
-_AGENT_ACTION_RESPONSE_FORMAT: dict[str, object] = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "agent_action",
-        "strict": True,
-        "schema": {
-            "oneOf": [
-                {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "const": "tool_call"},
-                        "tool_name": {"type": "string", "minLength": 1},
-                        "arguments": {"type": "object"},
-                    },
-                    "required": ["action", "tool_name", "arguments"],
-                    "additionalProperties": False,
-                },
-                {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "const": "final_answer"},
-                        "text": {"type": "string", "minLength": 1},
-                    },
-                    "required": ["action", "text"],
-                    "additionalProperties": False,
-                },
-            ]
-        },
-    },
-}
 
 
 class TokenUsage(TypedDict):
@@ -174,7 +145,7 @@ def _request_payload(
     if decoding_config.top_k is not None:
         payload["top_k"] = decoding_config.top_k
     if config.agent_action_format == "json_schema":
-        payload["response_format"] = _AGENT_ACTION_RESPONSE_FORMAT
+        payload["response_format"] = openai_agent_action_response_format()
     return payload
 
 

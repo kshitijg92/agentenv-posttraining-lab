@@ -14,7 +14,7 @@ TRAINING_CANDIDATE_RECORD_SCHEMA_VERSION: TrainingCandidateRecordSchemaVersion =
 )
 
 
-class TrainingCandidateEligibility(BaseModel):
+class TrainingCandidateContentEligibility(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     analysis_eligible: bool
@@ -27,7 +27,7 @@ class TrainingCandidateEligibility(BaseModel):
     preference_pairing_reason: str = Field(min_length=1)
 
     @property
-    def has_training_use_path(self) -> bool:
+    def has_objective_use_path(self) -> bool:
         return (
             self.positive_sft_review_eligible
             or self.negative_example_eligible
@@ -36,11 +36,11 @@ class TrainingCandidateEligibility(BaseModel):
 
     @property
     def is_analysis_only(self) -> bool:
-        return self.analysis_eligible and not self.has_training_use_path
+        return self.analysis_eligible and not self.has_objective_use_path
 
     @property
     def is_fully_ineligible(self) -> bool:
-        return not self.analysis_eligible and not self.has_training_use_path
+        return not self.analysis_eligible and not self.has_objective_use_path
 
 
 class MechanicallyRedundantToolCallBlock(BaseModel):
@@ -135,7 +135,7 @@ class TrainingCandidateRecord(BaseModel):
     reviewer_id: str | None = Field(default=None, min_length=1)
     review_decision: ReviewDecision | None = None
     mechanical_redundancy_assessment: MechanicalRedundancyAssessment
-    training_eligibility: TrainingCandidateEligibility
+    content_eligibility: TrainingCandidateContentEligibility
 
     @model_validator(mode="after")
     def validate_review_gate(self) -> "TrainingCandidateRecord":
@@ -159,10 +159,10 @@ class TrainingCandidateRecord(BaseModel):
             if self.review_decision is None:
                 raise ValueError("reviewed training candidates require review_decision")
 
-        if self.training_eligibility.has_training_use_path and (
+        if self.content_eligibility.has_objective_use_path and (
             self.review_status != "reviewed" or self.review_decision != "accepted"
         ):
             raise ValueError(
-                "candidates with a training-use path require accepted human review"
+                "candidates with an objective-use path require accepted human review"
             )
         return self

@@ -54,8 +54,9 @@ These are the boundaries this project is designed to make explicit:
 - Every eval/training artifact needs provenance: source config, task hashes,
   schema version, and output hashes.
 - Reward-hack detection is separate from task success.
-- Positive training eligibility requires task success plus review/data-use
-  gates; it should not be inferred from a passing-looking transcript alone.
+- Positive-SFT use requires an explicitly approved, clean assistant prefix and
+  objective-specific review; task success alone is neither sufficient nor
+  necessary.
 - Model-authored files are not authoritative scorer, tool, or run provenance.
 - Reports must include limitations and non-claims.
 

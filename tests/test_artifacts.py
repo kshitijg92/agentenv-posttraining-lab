@@ -23,6 +23,10 @@ def test_artifact_type_values_are_stable_json_strings() -> None:
     )
     assert ArtifactType.POSITIVE_SFT_REVIEW == "positive_sft_review"
     assert ArtifactType.POSITIVE_SFT_EXPORT == "positive_sft_export"
+    assert (
+        ArtifactType.POSITIVE_SFT_TRAINING_MATERIALIZATION
+        == "positive_sft_training_materialization"
+    )
     assert ArtifactType.SCORER_AUDIT == "scorer_audit"
     assert ArtifactType.AGENT_TASK_AUDIT == "agent_task_audit"
     assert ArtifactType.HARNESS_AUDIT == "harness_audit"

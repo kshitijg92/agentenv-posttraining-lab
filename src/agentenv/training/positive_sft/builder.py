@@ -121,7 +121,7 @@ def build_positive_sft_examples_from_training_candidate_export(
             or positive_sft_review.review_decision != "accepted"
         ):
             continue
-        if not candidate.training_eligibility.positive_sft_review_eligible:
+        if not candidate.content_eligibility.positive_sft_review_eligible:
             raise ValueError(
                 "Accepted positive-SFT review references an ineligible candidate: "
                 f"{candidate.trajectory_id}"
@@ -168,7 +168,7 @@ def build_positive_sft_example_record(
     positive_sft_review: PositiveSFTReviewRecord,
 ) -> PositiveSFTExampleRecord:
     validate_positive_sft_candidate_matches_trajectory(candidate, trajectory)
-    if not candidate.training_eligibility.positive_sft_review_eligible:
+    if not candidate.content_eligibility.positive_sft_review_eligible:
         raise ValueError(
             "Training candidate is not positive-SFT eligible: "
             f"{candidate.trajectory_id}"

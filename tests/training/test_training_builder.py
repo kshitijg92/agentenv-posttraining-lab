@@ -23,13 +23,6 @@ from agentenv.trajectories.schema import (
 
 
 AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
-HARNESS_AUDIT_DIR = Path("/unit/harness-audit")
-CONTROL_CALIBRATION_DIR = Path("/unit/control-calibration")
-
-
-@pytest.fixture(autouse=True)
-def _use_stub_training_export_gates(stub_training_export_gates) -> None:
-    assert stub_training_export_gates.harness_audit_gate.status == "PASS"
 
 
 def test_build_training_candidate_records_blocks_pending_review(
@@ -43,8 +36,6 @@ def test_build_training_candidate_records_blocks_pending_review(
     candidates = build_training_candidate_records(
         trajectory_export_dir,
         review_dir,
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
 
     assert len(candidates) == 1
@@ -53,12 +44,12 @@ def test_build_training_candidate_records_blocks_pending_review(
     assert candidate.review_decision is None
     assert candidate.mechanical_redundancy_assessment.evaluation_status == "complete"
     assert candidate.mechanical_redundancy_assessment.blocks == []
-    assert candidate.training_eligibility.analysis_eligible
-    assert candidate.training_eligibility.is_analysis_only
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert candidate.content_eligibility.analysis_eligible
+    assert candidate.content_eligibility.is_analysis_only
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "trajectory has not been reviewed"
     )
 
@@ -75,8 +66,6 @@ def test_build_training_candidate_records_blocks_accepted_agent_control_training
     candidates = build_training_candidate_records(
         trajectory_export_dir,
         review_dir,
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
 
     candidate = candidates[0]
@@ -84,11 +73,11 @@ def test_build_training_candidate_records_blocks_accepted_agent_control_training
     assert candidate.review_id == "review_001"
     assert candidate.reviewer_id == "kshitij"
     assert candidate.review_decision == "accepted"
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.is_analysis_only
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.is_analysis_only
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "policy is not model-generated training data"
     )
 
@@ -105,16 +94,14 @@ def test_build_training_candidate_records_blocks_accepted_agent_control_negative
     candidates = build_training_candidate_records(
         trajectory_export_dir,
         review_dir,
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
 
     candidate = candidates[0]
     assert candidate.review_decision == "accepted"
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.negative_example_reason == (
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.negative_example_reason == (
         "policy is not model-generated training data"
     )
 
@@ -143,10 +130,10 @@ def test_build_training_candidate_record_allows_accepted_agent_model_training_pa
     assert candidate.review_decision == "accepted"
     assert candidate.mechanical_redundancy_assessment.evaluation_status == "complete"
     assert candidate.mechanical_redundancy_assessment.blocks == []
-    assert candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.has_training_use_path
+    assert candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.has_objective_use_path
 
 
 @pytest.mark.parametrize("split", ["heldout_private", "public_calibration"])
@@ -166,11 +153,11 @@ def test_training_candidate_blocks_model_trajectory_on_non_training_split(
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert candidate.training_eligibility.is_analysis_only
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert candidate.content_eligibility.is_analysis_only
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "split is not eligible for training"
     )
 
@@ -190,11 +177,11 @@ def test_training_candidate_blocks_leaked_model_trajectory(
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert candidate.training_eligibility.is_analysis_only
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert candidate.content_eligibility.is_analysis_only
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "leakage detected in model-visible trajectory evidence"
     )
 
@@ -230,11 +217,11 @@ def test_training_candidate_blocks_orchestration_failure(
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert candidate.training_eligibility.is_analysis_only
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert candidate.content_eligibility.is_analysis_only
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "trajectory contains an orchestration failure"
     )
 
@@ -272,12 +259,12 @@ def test_reward_hack_trajectory_is_negative_or_preference_data_not_positive_sft(
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "reward-hack evidence forbids positive SFT"
     )
-    assert candidate.training_eligibility.negative_example_eligible
-    assert candidate.training_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.negative_example_eligible
+    assert candidate.content_eligibility.preference_pairing_eligible
 
 
 def test_confirmed_reward_hack_review_blocks_positive_sft(
@@ -294,11 +281,11 @@ def test_confirmed_reward_hack_review_blocks_positive_sft(
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "human review confirmed reward-hack evidence"
     )
-    assert candidate.training_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.preference_pairing_eligible
 
 
 def test_cleared_reward_hack_review_does_not_block_positive_sft(
@@ -323,8 +310,8 @@ def test_cleared_reward_hack_review_does_not_block_positive_sft(
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert candidate.training_eligibility.positive_sft_review_eligible
-    assert candidate.training_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.positive_sft_review_eligible
+    assert candidate.content_eligibility.preference_pairing_eligible
 
 
 def test_ambiguous_reward_hack_without_adjudication_blocks_all_training_paths(
@@ -347,13 +334,13 @@ def test_ambiguous_reward_hack_without_adjudication_blocks_all_training_paths(
     candidate = build_training_candidate_record(trajectory, review)
 
     expected_reason = "ambiguous reward-hack evidence requires human adjudication"
-    assert candidate.training_eligibility.is_analysis_only
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == expected_reason
-    assert candidate.training_eligibility.negative_example_reason == expected_reason
-    assert candidate.training_eligibility.preference_pairing_reason == expected_reason
+    assert candidate.content_eligibility.is_analysis_only
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == expected_reason
+    assert candidate.content_eligibility.negative_example_reason == expected_reason
+    assert candidate.content_eligibility.preference_pairing_reason == expected_reason
 
 
 def test_incomplete_reward_hack_evaluation_blocks_all_training_paths(
@@ -385,11 +372,11 @@ def test_incomplete_reward_hack_evaluation_blocks_all_training_paths(
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert candidate.training_eligibility.is_analysis_only
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert candidate.content_eligibility.is_analysis_only
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "reward-hack evaluation is incomplete"
     )
 
@@ -409,9 +396,9 @@ def test_training_candidate_blocks_missing_agent_evidence(
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert candidate.training_eligibility.is_analysis_only
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert candidate.content_eligibility.is_analysis_only
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "required agent evidence is missing: agent_task_run_json"
     )
 
@@ -427,10 +414,10 @@ def test_training_candidate_allows_failed_model_trajectory_for_positive_sft_revi
 
     candidate = build_training_candidate_record(trajectory, review)
 
-    assert candidate.training_eligibility.positive_sft_review_eligible
-    assert candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.preference_pairing_reason == (
+    assert candidate.content_eligibility.positive_sft_review_eligible
+    assert candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.preference_pairing_reason == (
         "preference data requires a gradable trajectory"
     )
 
@@ -447,18 +434,16 @@ def test_build_training_candidate_records_rejected_review_blocks_training_paths(
     candidates = build_training_candidate_records(
         trajectory_export_dir,
         review_dir,
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
 
     candidate = candidates[0]
     assert candidate.review_decision == "rejected"
-    assert candidate.training_eligibility.analysis_eligible
-    assert candidate.training_eligibility.is_analysis_only
-    assert not candidate.training_eligibility.positive_sft_review_eligible
-    assert not candidate.training_eligibility.negative_example_eligible
-    assert not candidate.training_eligibility.preference_pairing_eligible
-    assert candidate.training_eligibility.positive_sft_review_reason == (
+    assert candidate.content_eligibility.analysis_eligible
+    assert candidate.content_eligibility.is_analysis_only
+    assert not candidate.content_eligibility.positive_sft_review_eligible
+    assert not candidate.content_eligibility.negative_example_eligible
+    assert not candidate.content_eligibility.preference_pairing_eligible
+    assert candidate.content_eligibility.positive_sft_review_reason == (
         "human review rejected trajectory"
     )
 

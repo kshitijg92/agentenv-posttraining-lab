@@ -1,7 +1,9 @@
 # Local Model Setup
 
-This package holds repeatable setup helpers for running local models behind an
-OpenAI-compatible endpoint. The current supported path is Ollama.
+This package holds repeatable setup helpers for running local models through
+Ollama. Existing model configs use Ollama's OpenAI-compatible endpoint; the
+Qwen2.5-Coder-3B config instead uses AgentEnv-owned prompt rendering through
+Ollama's native generate endpoint.
 
 ## Prerequisites
 
@@ -115,3 +117,15 @@ uv run agentenv eval \
   --policy local-deepseek-r1-distill-qwen-smoke \
   --out experiments/runs/agent_model_smoke_ollama_deepseek_r1_distill_qwen_14b
 ```
+
+The protocol-owned Qwen2.5-Coder-3B path requires the native Ollama server root
+without an OpenAI-compatible `/v1` suffix:
+
+```bash
+export AGENTENV_OLLAMA_BASE_URL=http://localhost:11434
+```
+
+Its model config is
+`configs/models/ollama_qwen2_5_coder_3b.yaml`. The separate environment
+variable makes it explicit whether a policy is using provider-owned
+OpenAI-compatible chat serialization or AgentEnv-owned raw generation.

@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-import agentenv.training.repairs.export as repair_export_module
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.manifests import (
     TRAINING_CANDIDATE_REPAIR_EXPORT_ARTIFACT_SCHEMA_VERSION,
@@ -29,6 +28,7 @@ from agentenv.training.repairs.export import (
     load_training_candidate_repair_export_artifact,
 )
 from agentenv.training.repairs.redundancy_repair import (
+    hash_training_candidate_record,
     hash_training_candidate_repair_record,
     hash_training_candidate_repair_review_record,
 )
@@ -63,21 +63,6 @@ from agentenv.trajectories.schema import ArtifactRef, TrajectoryRecord
 
 
 AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
-HARNESS_AUDIT_DIR = Path("/unit/harness-audit")
-CONTROL_CALIBRATION_DIR = Path("/unit/control-calibration")
-
-
-@pytest.fixture(autouse=True)
-def _stub_repair_calibration_loading(
-    monkeypatch: pytest.MonkeyPatch,
-    stub_training_export_gates,
-) -> None:
-    assert stub_training_export_gates.control_calibration_gate.overall_match
-    monkeypatch.setattr(
-        repair_export_module,
-        "_load_source_public_check_calibrations",
-        lambda _candidate_export: (),
-    )
 
 
 def test_export_training_candidate_repairs_writes_validated_transcript(
@@ -116,7 +101,7 @@ def test_export_training_candidate_repairs_writes_validated_transcript(
 
     source_export = load_training_candidate_export_artifact(candidate_export_dir)
     assert record.source_training_candidate_record_hash == (
-        repair_export_module.hash_training_candidate_record(source_export.records[0])
+        hash_training_candidate_record(source_export.records[0])
     )
     manifest = load_training_candidate_repair_export_manifest(
         export.out_dir / MANIFEST_FILENAME
@@ -758,8 +743,6 @@ def _build_candidate_export(
         trajectory_export.out_dir,
         review_artifact.out_dir,
         tmp_path / "training-candidates",
-        harness_audit_dir=HARNESS_AUDIT_DIR,
-        control_calibration_dir=CONTROL_CALIBRATION_DIR,
     )
     expected_block_count = 1 if add_redundancy else 0
     assert (

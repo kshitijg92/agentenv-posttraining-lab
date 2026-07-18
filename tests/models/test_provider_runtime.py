@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from agentenv.artifacts.payloads import ModelConfigProvenance
 from agentenv.models.config_schema import (
     ModelCapabilities,
+    OllamaGenerateModelConfig,
     OpenAICompatibleChatModelConfig,
 )
 from agentenv.models.provider_runtime import (
@@ -32,6 +33,29 @@ def _ollama_config() -> OpenAICompatibleChatModelConfig:
             supports_top_k=False,
         ),
         provider_runtime_probe="ollama",
+    )
+
+
+def _ollama_generate_config() -> OllamaGenerateModelConfig:
+    return OllamaGenerateModelConfig.model_validate(
+        {
+            "version": "model_config_v0",
+            "provider": "ollama_generate",
+            "model_id": "qwen-test:7b",
+            "model_manifest_digest": MODEL_DIGEST,
+            "base_url_env": "AGENTENV_OLLAMA_BASE_URL",
+            "capabilities": {
+                "token_usage": "native",
+                "supports_seed": True,
+                "supports_stop": True,
+                "supports_top_k": True,
+            },
+            "model_input_protocol": {
+                "path": "../model_input_protocols/qwen-test.yaml",
+                "content_hash": "xxh64:1111111111111111",
+            },
+            "agent_action_format": "json_schema",
+        }
     )
 
 
@@ -102,6 +126,41 @@ def test_ollama_runtime_probe_rejects_missing_exact_model(
             )
 
 
+def test_ollama_generate_runtime_probe_uses_native_root_and_config_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "AGENTENV_OLLAMA_BASE_URL",
+        "http://provider.test/ollama/",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/ollama/api/version":
+            return httpx.Response(200, json={"version": "0.30.11"})
+        if request.url.path == "/ollama/api/tags":
+            return httpx.Response(
+                200,
+                json={
+                    "models": [
+                        {
+                            "name": "qwen-test:7b",
+                            "digest": RAW_MODEL_DIGEST,
+                        }
+                    ]
+                },
+            )
+        raise AssertionError(f"unexpected provider probe path {request.url.path}")
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        provenance = capture_provider_runtime_provenance(
+            _ollama_generate_config(),
+            http_client=client,
+        )
+
+    assert provenance is not None
+    assert provenance.model_digest == MODEL_DIGEST
+
+
 def test_model_config_provenance_requires_configured_runtime_evidence() -> None:
     config = _ollama_config()
     payload = {
@@ -109,6 +168,7 @@ def test_model_config_provenance_requires_configured_runtime_evidence() -> None:
         "source_path": "configs/models/ollama.yaml",
         "source_hash": "xxh64:model",
         "config": json.loads(config.model_dump_json()),
+        "model_input_protocol": None,
         "provider_runtime": None,
     }
 
@@ -126,6 +186,7 @@ def test_model_config_provenance_requires_matching_runtime_model_id() -> None:
         "source_path": "configs/models/ollama.yaml",
         "source_hash": "xxh64:model",
         "config": json.loads(config.model_dump_json()),
+        "model_input_protocol": None,
         "provider_runtime": {
             "provider": "ollama",
             "model_id": "different-model:7b",

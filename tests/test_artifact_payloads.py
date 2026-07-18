@@ -910,6 +910,7 @@ def _model_config_provenance() -> dict[str, Any]:
         "source_hash": "xxh64:model",
         "config": _model_config(),
         "provider_runtime": None,
+        "model_input_protocol": None,
     }
 
 

@@ -9,6 +9,4 @@ capabilities:
   supports_seed: false
   supports_stop: true
   supports_top_k: false
-prompt_adapter:
-  system_suffix: /no_think
 agent_action_format: json_schema

@@ -1,5 +1,5 @@
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 
 from agentenv.controls.public_check_idempotency_schema import (
     PublicCheckIdempotencyCalibration,
@@ -9,12 +9,8 @@ from agentenv.training.repairs.redundancy_detection import (
     assess_trajectory_mechanical_redundancy,
 )
 from agentenv.training.candidates.schema import (
-    TrainingCandidateEligibility,
+    TrainingCandidateContentEligibility,
     TrainingCandidateRecord,
-)
-from agentenv.training.candidates.gates import (
-    TrainingExportGateValidation,
-    validate_training_export_gates,
 )
 from agentenv.trajectories.review import (
     TrajectoryReviewValidation,
@@ -35,35 +31,19 @@ REQUIRED_TRAINING_AGENT_ARTIFACT_FIELDS = (
 def build_training_candidate_records(
     trajectory_export_dir: Path,
     review_dir: Path,
-    *,
-    harness_audit_dir: Path,
-    control_calibration_dir: Path,
 ) -> tuple[TrainingCandidateRecord, ...]:
     validation = validate_trajectory_review_artifact(
         trajectory_export_dir,
         review_dir,
     )
-    gate_validation = validate_training_export_gates(
-        validation,
-        harness_audit_dir=harness_audit_dir,
-        control_calibration_dir=control_calibration_dir,
-    )
-    return build_training_candidate_records_from_review_validation(
-        validation,
-        gate_validation=gate_validation,
-    )
+    return build_training_candidate_records_from_review_validation(validation)
 
 
 def build_training_candidate_records_from_review_validation(
     validation: TrajectoryReviewValidation,
     *,
-    gate_validation: TrainingExportGateValidation,
+    public_check_calibrations: Sequence[PublicCheckIdempotencyCalibration] = (),
 ) -> tuple[TrainingCandidateRecord, ...]:
-    if gate_validation.harness_audit_gate.status != "PASS" or (
-        not gate_validation.control_calibration_gate.overall_match
-        or gate_validation.control_calibration_gate.flake_detection_status != "stable"
-    ):
-        raise ValueError("Training candidate construction requires validated gates")
     review_by_trajectory_id = {
         review.trajectory_id: review for review in validation.review_artifact.reviews
     }
@@ -71,9 +51,7 @@ def build_training_candidate_records_from_review_validation(
         build_training_candidate_record(
             trajectory,
             review_by_trajectory_id[trajectory.identity.trajectory_id],
-            public_check_calibrations=(
-                gate_validation.public_check_idempotency_calibrations
-            ),
+            public_check_calibrations=public_check_calibrations,
         )
         for trajectory in validation.source_export.records
     )
@@ -100,20 +78,20 @@ def build_training_candidate_record(
                 public_check_calibrations=public_check_calibrations,
             )
         ),
-        training_eligibility=build_training_candidate_eligibility(
+        content_eligibility=build_training_candidate_content_eligibility(
             trajectory,
             review,
         ),
     )
 
 
-def build_training_candidate_eligibility(
+def build_training_candidate_content_eligibility(
     trajectory: TrajectoryRecord,
     review: TrajectoryReviewRecord,
-) -> TrainingCandidateEligibility:
+) -> TrainingCandidateContentEligibility:
     if review.review_status != "reviewed" or review.review_decision != "accepted":
         review_block_reason = build_review_block_reason(review)
-        return TrainingCandidateEligibility(
+        return TrainingCandidateContentEligibility(
             analysis_eligible=True,
             analysis_reason=f"trajectory remains analysis-eligible; {review_block_reason}",
             positive_sft_review_eligible=False,
@@ -138,7 +116,7 @@ def build_training_candidate_eligibility(
         common_block_reason or build_preference_data_block_reason(trajectory)
     )
 
-    return TrainingCandidateEligibility(
+    return TrainingCandidateContentEligibility(
         analysis_eligible=True,
         analysis_reason="trajectory is available for analysis",
         positive_sft_review_eligible=positive_sft_block_reason is None,

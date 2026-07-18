@@ -1,14 +1,14 @@
 version: model_config_v0
-provider: openai_compatible_chat
+provider: ollama_generate
 model_id: qwen2.5-coder:3b
-api_key_env: null
-base_url_env: AGENTENV_MODEL_BASE_URL
-provider_runtime_probe: ollama
+model_manifest_digest: sha256:f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225
+base_url_env: AGENTENV_OLLAMA_BASE_URL
 capabilities:
   token_usage: native
-  supports_seed: false
+  supports_seed: true
   supports_stop: true
-  supports_top_k: false
-prompt_adapter:
-  system_suffix: /no_think
+  supports_top_k: true
+model_input_protocol:
+  path: ../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
+  content_hash: xxh64:9b9eba719de618f1
 agent_action_format: json_schema

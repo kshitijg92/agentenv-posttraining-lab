@@ -54,7 +54,7 @@ def test_build_trajectory_record_from_successful_agent_eval_attempt(
     assert record.leakage.canary_hash is not None
     assert not record.leakage.canary_leaked
     assert not record.leakage.hidden_validators_visible_to_model
-    assert "training_eligibility" not in record.model_dump(mode="json")
+    assert "content_eligibility" not in record.model_dump(mode="json")
     assert record.artifacts.agent_task_run_json is not None
     assert record.artifacts.agent_task_view_json is not None
     assert record.artifacts.prompt_loop_result_json is not None

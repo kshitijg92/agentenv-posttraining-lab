@@ -4,7 +4,11 @@ from typing import cast
 
 import httpx
 
-from agentenv.models.config_schema import OpenAICompatibleChatModelConfig
+from agentenv.models.config_schema import (
+    ModelConfig,
+    OllamaGenerateModelConfig,
+    OpenAICompatibleChatModelConfig,
+)
 from agentenv.models.runtime_schema import (
     OllamaProviderRuntimeProvenance,
     ProviderRuntimeProvenance,
@@ -19,26 +23,44 @@ class ProviderRuntimeProbeError(ValueError):
 
 
 def capture_provider_runtime_provenance(
-    config: OpenAICompatibleChatModelConfig,
+    config: ModelConfig,
     *,
     http_client: httpx.Client | None = None,
 ) -> ProviderRuntimeProvenance | None:
-    if config.provider_runtime_probe is None:
-        return None
-    if config.provider_runtime_probe == "ollama":
-        return _capture_ollama_runtime(config, http_client=http_client)
+    if isinstance(config, OllamaGenerateModelConfig):
+        provenance = _capture_ollama_runtime(
+            config,
+            native_root=_ollama_generate_native_root(config),
+            http_client=http_client,
+        )
+        if provenance.model_digest != config.model_manifest_digest:
+            raise ProviderRuntimeProbeError(
+                "Ollama runtime model digest does not match the model config pin"
+            )
+        return provenance
+    if isinstance(config, OpenAICompatibleChatModelConfig):
+        if config.provider_runtime_probe is None:
+            return None
+        if config.provider_runtime_probe == "ollama":
+            return _capture_ollama_runtime(
+                config,
+                native_root=_openai_compatible_ollama_native_root(config),
+                http_client=http_client,
+            )
+        raise ProviderRuntimeProbeError(
+            f"Unsupported provider runtime probe: {config.provider_runtime_probe}"
+        )
     raise ProviderRuntimeProbeError(
-        f"Unsupported provider runtime probe: {config.provider_runtime_probe}"
+        f"Unsupported model provider for runtime probing: {config.provider}"
     )
 
 
 def _capture_ollama_runtime(
-    config: OpenAICompatibleChatModelConfig,
+    config: ModelConfig,
     *,
+    native_root: str,
     http_client: httpx.Client | None,
 ) -> OllamaProviderRuntimeProvenance:
-    base_url = _configured_base_url(config)
-    native_root = _ollama_native_root(base_url)
     if http_client is None:
         with httpx.Client() as client:
             version_payload = _get_json(client, f"{native_root}/api/version")
@@ -92,9 +114,11 @@ def _canonical_ollama_digest(value: str) -> str:
     return f"sha256:{value}"
 
 
-def _configured_base_url(config: OpenAICompatibleChatModelConfig) -> str:
+def _configured_base_url(config: ModelConfig) -> str:
     env_name = config.base_url_env
     if env_name is None:
+        if isinstance(config, OllamaGenerateModelConfig):
+            return "http://localhost:11434"
         raise ProviderRuntimeProbeError(
             "Ollama runtime probing requires base_url_env in the model config"
         )
@@ -106,13 +130,25 @@ def _configured_base_url(config: OpenAICompatibleChatModelConfig) -> str:
     return value.rstrip("/")
 
 
-def _ollama_native_root(openai_base_url: str) -> str:
+def _openai_compatible_ollama_native_root(
+    config: OpenAICompatibleChatModelConfig,
+) -> str:
+    openai_base_url = _configured_base_url(config)
     if not openai_base_url.endswith("/v1"):
         raise ProviderRuntimeProbeError(
             "Ollama runtime probing requires an OpenAI-compatible base URL ending "
             "in /v1"
         )
     return openai_base_url[: -len("/v1")]
+
+
+def _ollama_generate_native_root(config: OllamaGenerateModelConfig) -> str:
+    native_root = _configured_base_url(config)
+    if native_root.endswith("/v1"):
+        raise ProviderRuntimeProbeError(
+            "ollama_generate runtime probing requires the Ollama server root, not /v1"
+        )
+    return native_root
 
 
 def _get_json(client: httpx.Client, url: str) -> dict[str, object]:

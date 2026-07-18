@@ -17,7 +17,8 @@ from agentenv.controls.public_check_idempotency_schema import (
     PublicCheckIdempotencyCalibration,
 )
 from agentenv.evals.schema import SCORER_CONTROL_LAYER, ControlLayer
-from agentenv.models.config_schema import ModelConfig
+from agentenv.models.config_schema import ModelConfig, OllamaGenerateModelConfig
+from agentenv.models.input_protocol_schema import ModelInputProtocol
 from agentenv.models.runtime_schema import (
     OllamaProviderRuntimeProvenance,
     ProviderRuntimeProvenance,
@@ -613,6 +614,14 @@ class ReplayComparisonRecord(BaseModel):
         return self
 
 
+class ModelInputProtocolProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str = Field(min_length=1)
+    source_hash: str = Field(pattern=r"^xxh64:[0-9a-f]{16}$", strict=True)
+    protocol: ModelInputProtocol
+
+
 class ModelConfigProvenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -620,10 +629,40 @@ class ModelConfigProvenance(BaseModel):
     source_path: str = Field(min_length=1)
     source_hash: str = Field(min_length=1)
     config: ModelConfig
-    provider_runtime: ProviderRuntimeProvenance | None = None
+    model_input_protocol: ModelInputProtocolProvenance | None
+    provider_runtime: ProviderRuntimeProvenance | None
 
     @model_validator(mode="after")
-    def validate_provider_runtime(self) -> "ModelConfigProvenance":
+    def validate_model_and_runtime_provenance(self) -> "ModelConfigProvenance":
+        if isinstance(self.config, OllamaGenerateModelConfig):
+            if self.model_input_protocol is None:
+                raise ValueError(
+                    "ollama_generate provenance requires model_input_protocol"
+                )
+            if (
+                self.model_input_protocol.source_hash
+                != self.config.model_input_protocol.content_hash
+            ):
+                raise ValueError(
+                    "model input protocol provenance hash must match the model "
+                    "config pin"
+                )
+            if self.provider_runtime is None:
+                raise ValueError("ollama_generate provenance requires provider_runtime")
+            if self.provider_runtime.model_digest != self.config.model_manifest_digest:
+                raise ValueError(
+                    "provider runtime digest must match the ollama_generate model pin"
+                )
+            if self.provider_runtime.model_id != self.config.model_id:
+                raise ValueError(
+                    "provider_runtime model_id must match the configured model_id"
+                )
+            return self
+
+        if self.model_input_protocol is not None:
+            raise ValueError(
+                "openai_compatible_chat provenance cannot include model_input_protocol"
+            )
         probe = self.config.provider_runtime_probe
         if probe is None:
             if self.provider_runtime is not None:
