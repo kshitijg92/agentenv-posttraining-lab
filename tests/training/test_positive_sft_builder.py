@@ -1,5 +1,7 @@
 import json
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Sequence
 
 import pytest
 
@@ -7,6 +9,7 @@ from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.manifests import (
     POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION,
     load_positive_sft_export_manifest,
+    load_positive_sft_training_materialization_manifest,
     load_trajectory_export_manifest,
 )
 from agentenv.evals.schema import AGENT_MODEL_POLICY_TYPE
@@ -18,6 +21,11 @@ from agentenv.training.positive_sft.builder import build_positive_sft_examples
 from agentenv.training.positive_sft.export import (
     export_positive_sft_examples,
     load_positive_sft_export_artifact,
+)
+import agentenv.training.positive_sft.materialization.export as materialization_export_module
+from agentenv.training.positive_sft.materialization.export import (
+    export_positive_sft_training_materializations,
+    load_positive_sft_training_materialization_artifact,
 )
 from agentenv.training.positive_sft.review import (
     build_positive_sft_review_selections,
@@ -46,6 +54,9 @@ from agentenv.trajectories.schema import (
 
 
 AGENT_CONTROL_CONFIG = Path("configs/eval/agent_control_policies.yaml")
+MODEL_INPUT_PROTOCOL = Path(
+    "configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
+)
 
 
 def test_build_positive_sft_examples_from_training_candidate_export(
@@ -362,6 +373,122 @@ def test_load_positive_sft_export_rejects_jsonl_hash_mismatch(
         load_positive_sft_export_artifact(export.out_dir)
 
 
+def test_export_positive_sft_training_materializations_persists_accounted_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    positive_sft_export = build_positive_sft_export(tmp_path)
+    install_character_tokenizer(monkeypatch)
+
+    export = export_positive_sft_training_materializations(
+        positive_sft_export.out_dir,
+        MODEL_INPUT_PROTOCOL,
+        tmp_path / "positive-sft-training-materialization",
+        max_sequence_length=10_000,
+    )
+
+    manifest = load_positive_sft_training_materialization_manifest(
+        export.out_dir / MANIFEST_FILENAME
+    )
+    assert manifest.artifact_type == "positive_sft_training_materialization"
+    assert manifest.training_authorization == "not_authorized"
+    assert manifest.record_count == positive_sft_export.manifest.record_count == 1
+    assert manifest.completed_count == 1
+    assert manifest.failed_count == 0
+    assert manifest.sequence_length_exceeded_count == 0
+    assert manifest.materialization_error_count == 0
+    assert manifest.model_input_protocol_id == (
+        "qwen2_5_coder_3b_agentenv_json"
+    )
+    assert manifest.model_input_protocol_hash == hash_file(MODEL_INPUT_PROTOCOL)
+    assert manifest.max_sequence_length == 10_000
+    assert manifest.materializations_jsonl_hash.startswith("xxh64:")
+    assert manifest.artifacts == {"materializations": "materializations.jsonl"}
+    assert len(export.records) == 1
+    assert export.records[0].status == "completed"
+    assert (export.out_dir / "materializations.jsonl").is_file()
+
+
+def test_materialization_export_counts_overlength_without_dropping_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    positive_sft_export = build_positive_sft_export(tmp_path)
+    install_character_tokenizer(monkeypatch)
+
+    export = export_positive_sft_training_materializations(
+        positive_sft_export.out_dir,
+        MODEL_INPUT_PROTOCOL,
+        tmp_path / "positive-sft-training-materialization",
+        max_sequence_length=1,
+    )
+
+    assert export.manifest.record_count == 1
+    assert export.manifest.completed_count == 0
+    assert export.manifest.failed_count == 1
+    assert export.manifest.sequence_length_exceeded_count == 1
+    assert export.manifest.materialization_error_count == 0
+    assert len(export.records) == positive_sft_export.manifest.record_count
+    assert export.records[0].status == "failed"
+    assert export.records[0].failure_kind == "sequence_length_exceeded"
+
+
+def test_materialization_reload_rejects_source_identity_substitution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    export = build_positive_sft_training_materialization_export(
+        tmp_path,
+        monkeypatch,
+    )
+    records_path = export.out_dir / "materializations.jsonl"
+    payload = json.loads(records_path.read_text())
+    payload["source_positive_sft_example_id"] = "substituted_example"
+    records_path.write_text(json.dumps(payload, sort_keys=True) + "\n")
+    rewrite_materialization_manifest_jsonl_hash(export.out_dir)
+
+    with pytest.raises(ValueError, match="source order/id mismatch"):
+        load_positive_sft_training_materialization_artifact(export.out_dir)
+
+
+def test_materialization_reload_rebuilds_and_rejects_label_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    export = build_positive_sft_training_materialization_export(
+        tmp_path,
+        monkeypatch,
+    )
+    records_path = export.out_dir / "materializations.jsonl"
+    payload = json.loads(records_path.read_text())
+    supervised_index = next(
+        index for index, label in enumerate(payload["labels"]) if label != -100
+    )
+    payload["labels"][supervised_index] = -100
+    payload["supervised_token_count"] -= 1
+    payload["ignored_token_count"] += 1
+    records_path.write_text(json.dumps(payload, sort_keys=True) + "\n")
+    rewrite_materialization_manifest_jsonl_hash(export.out_dir)
+
+    with pytest.raises(ValueError, match="do not match records rebuilt"):
+        load_positive_sft_training_materialization_artifact(export.out_dir)
+
+
+def test_materialization_reload_rejects_jsonl_hash_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    export = build_positive_sft_training_materialization_export(
+        tmp_path,
+        monkeypatch,
+    )
+    records_path = export.out_dir / "materializations.jsonl"
+    records_path.write_text(records_path.read_text() + "\n")
+
+    with pytest.raises(ValueError, match="materializations JSONL hash mismatch"):
+        load_positive_sft_training_materialization_artifact(export.out_dir)
+
+
 def initialize_accepted_positive_sft_review(
     candidate_export_dir: Path,
     out_dir: Path,
@@ -404,6 +531,84 @@ def initialize_accepted_positive_sft_review(
         accepted,
     )
     return artifact
+
+
+def build_positive_sft_export(tmp_path: Path):
+    candidate_export_dir = build_positive_sft_candidate_export(tmp_path)
+    sft_review = initialize_accepted_positive_sft_review(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
+    return export_positive_sft_examples(
+        candidate_export_dir,
+        sft_review.out_dir,
+        tmp_path / "positive-sft-export",
+    )
+
+
+def build_positive_sft_training_materialization_export(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    positive_sft_export = build_positive_sft_export(tmp_path)
+    install_character_tokenizer(monkeypatch)
+    return export_positive_sft_training_materializations(
+        positive_sft_export.out_dir,
+        MODEL_INPUT_PROTOCOL,
+        tmp_path / "positive-sft-training-materialization",
+        max_sequence_length=10_000,
+    )
+
+
+def install_character_tokenizer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        materialization_export_module,
+        "load_pinned_tokenizer",
+        lambda *args, **kwargs: _CharacterMaterializationTokenizer(),
+    )
+
+
+def rewrite_materialization_manifest_jsonl_hash(export_dir: Path) -> None:
+    manifest_path = export_dir / MANIFEST_FILENAME
+    payload = json.loads(manifest_path.read_text())
+    payload["materializations_jsonl_hash"] = hash_file(
+        export_dir / "materializations.jsonl"
+    )
+    manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+@dataclass
+class _CharacterTokenizerBackend:
+    normalizer: Any = None
+
+
+class _CharacterMaterializationTokenizer:
+    is_fast = True
+    backend_tokenizer = _CharacterTokenizerBackend()
+
+    def __call__(
+        self,
+        text: str,
+        *,
+        add_special_tokens: bool,
+        return_offsets_mapping: bool,
+    ) -> dict[str, object]:
+        return {
+            "input_ids": [ord(character) for character in text],
+            "offset_mapping": [
+                (character_index, character_index + 1)
+                for character_index in range(len(text))
+            ],
+        }
+
+    def decode(
+        self,
+        token_ids: Sequence[int],
+        *,
+        skip_special_tokens: bool,
+        clean_up_tokenization_spaces: bool,
+    ) -> str:
+        return "".join(chr(token_id) for token_id in token_ids)
 
 
 def build_positive_sft_candidate_export(

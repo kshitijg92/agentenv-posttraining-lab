@@ -51,6 +51,7 @@ flowchart TD
     IP --> TM[Tokenizer and label materialization]
     TM -->|canonical sequence fits| TS[Persisted input_ids + trainer labels]
     TM -->|exceeds max sequence length| OE[Explicit overlength exclusion]
+    TM -->|normalization, offset, or serialization invalid| ME[Explicit materialization error]
     TS --> DR[Planned final dataset release]
     HA[Harness audit] --> DR
     CC[Control calibration] --> DR
@@ -104,10 +105,10 @@ harness has been calibrated, the whole task succeeded, the full original
 trajectory was optimal, or the record is authorized for training. Candidate and
 positive-SFT export manifests both state `training_authorization: not_authorized`.
 
-## Next boundary: canonical tokenization and labels
+## Canonical tokenization and labels
 
-The next positive-SFT artifact will be a model-specific derivative of the
-source export:
+The positive-SFT training materialization artifact is a model-specific
+derivative of the source export:
 
 ```text
 PositiveSFTExampleRecord
@@ -123,6 +124,29 @@ original rollout. They must instead be reproducible for the target training
 checkpoint and match the interface intended at deployment. Examples exceeding
 the configured maximum sequence length remain explicit exclusions so dataset
 coverage is not overstated.
+
+The materializer renders the complete approved prefix once, rejects any
+tokenizer normalization that changes those rendered bytes, tokenizes once with
+offset mappings, and derives labels from the pinned model-generation spans. A
+token wholly inside a model-owned span receives its input id as its label; a
+token wholly outside receives `-100`; an ownership-boundary crossing, uncovered
+source character, or decode mismatch is an explicit materialization error.
+
+Every source row produces exactly one completed or failed result in source
+order. The materialization manifest pins the source positive-SFT export, model
+input protocol, sequence policy, materializer code, result counts, and JSONL
+hash. Loading verifies exact source id/record-hash coverage and rebuilds the
+tokens and labels from the pinned inputs before accepting the artifact.
+
+The CLI entrypoint is:
+
+```text
+agentenv training positive-sft materialize \
+  --source <positive-sft-export> \
+  --model-input-protocol <protocol.yaml> \
+  --max-sequence-length <tokens> \
+  --out <materialization-artifact>
+```
 
 After token materialization, a separate final release manifest will pin the
 materialized artifact plus matching harness-audit and control-calibration

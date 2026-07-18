@@ -2508,6 +2508,48 @@ The protocol YAML content hash is now `xxh64:9b9eba719de618f1`; the Qwen model
 config and focused assertions pin that value. The Ollama model manifest digest
 remains unchanged because the model artifact did not change.
 
+### Qwen Tokenizer Offset Conformance Probe
+
+Loaded the fast tokenizer for `Qwen/Qwen2.5-Coder-3B-Instruct` at pinned revision
+`89fe5444e8baf5736e70f528f1edcc79e6616ef6` from the local Hugging Face cache.
+The cached `tokenizer_config.json`, `tokenizer.json`, `vocab.json`, and
+`merges.txt` SHA-256 values exactly matched the protocol pins.
+
+The tokenizer reports an `NFC()` normalizer. Full-transcript probes used
+`add_special_tokens=false`, offset mappings, and the literal Qwen special tokens
+already present in the canonical render. Observed behavior:
+
+```text
+ASCII                         exact decode, complete offsets
+precomposed é                 exact decode, complete offsets
+Ω                             exact decode, complete offsets
+😀                             exact decode, complete offsets
+decomposed e + U+0301 accent  NFC-normalized decode, incomplete source coverage
+```
+
+The multi-turn Unicode/tool fixture produced 326 Python string positions, 351
+UTF-8 bytes, and 87 tokens. Assistant spans were `[127, 175)` and `[290, 325)`.
+All token offsets stayed wholly within one ownership class; no zero-width or
+ownership-crossing token appeared. Literal `<|im_start|>` and `<|im_end|>`
+tokens had meaningful source offsets. `special_tokens_mask` remained zero for
+them because they were present in the input text rather than added by the
+tokenizer, so special-token identity must come from the pinned token ids rather
+than that mask.
+
+For decomposed `e` plus combining acute accent, decoding the ids produced the
+NFC-composed `é`. The token offset covered the base `e` but left `U+0301`
+uncovered. Thus raw offset containment can still classify the token when both
+code points share ownership, but it cannot prove lossless coverage of the
+original rendered string.
+
+The v0 materialization policy rejects an example when the pinned tokenizer's
+normalizer changes the canonical rendered text. Added a content-safe guard that
+compares the strings before tokenization and raises a structured error carrying
+only lengths, SHA-256 hashes, and the first differing Python-string index. It
+does not include transcript content in the exception. The materialization
+builder still needs to catch this error and persist one failed result for the
+source example; the guard alone does not yet implement export accounting.
+
 Focused verification:
 
 ```text
@@ -2520,9 +2562,63 @@ positive-SFT/CLI focused set: 13 passed
 combined candidate/repair/positive-SFT workflow slice: 156 passed
 message-schema regression slice: 12 passed
 positive-SFT materialization schema: 9 passed
+positive-SFT tokenizer normalization guard: 7 passed
 model-input protocol and provider integration slice: 40 passed
 release-trust integration suite: 8 tests collected; execution intentionally deferred
 Ruff repository-wide: passed
 Pyright repository-wide: passed
+git diff --check: passed
+```
+
+### Positive-SFT Training Materialization Artifact
+
+Implemented the target-model materializer under
+`training/positive_sft/materialization/`. It renders each approved message
+prefix once with the pinned completed-transcript protocol, requires the
+tokenizer normalizer and decoder to preserve that exact text, tokenizes once
+with offsets, and maps tokens wholly inside model-generated spans to their token
+ids. Context tokens receive `-100`. Empty or uncovered offsets and tokens that
+cross an ownership boundary produce content-safe materialization errors.
+
+The builder always returns one result per source example in source order.
+Overlength sequences become explicit `sequence_length_exceeded` records;
+normalization, rendering, decode, and offset failures become
+`materialization_error` records. Unknown exception strings are not persisted,
+preventing an exception from copying transcript content into diagnostics.
+
+Added `PositiveSFTTrainingMaterializationManifest` and the
+`positive_sft_training_materialization` artifact type. The manifest pins the
+source positive-SFT export, model-input protocol, maximum length, materializer
+version and source-tree hash, outcome counts, record schema, and JSONL hash.
+Loading requires exact source-order ID and record-hash coverage, validates all
+record provenance against the manifest, and deterministically rebuilds every
+record from the pinned inputs and tokenizer.
+
+Added `agentenv training positive-sft materialize` with explicit source,
+protocol, sequence-length, tokenizer-cache/offline, output, and overwrite
+arguments. The artifact remains `training_authorization: not_authorized`.
+
+Materialized the accepted Qwen2.5-Coder-3B practice prefix using the locally
+cached tokenizer at revision
+`89fe5444e8baf5736e70f528f1edcc79e6616ef6` and `max_sequence_length=32768`.
+The first runtime artifact produced:
+
+```text
+artifact: experiments/runs/week_09_qwen2_5_coder_3b_protocol_practice_positive_sft_training_materialization_v1
+records: 1 completed, 0 failed
+sequence length: 843
+supervised tokens: 166
+ignored tokens: 677
+end-of-turn occurrences: 9 total, 4 supervised assistant occurrences
+supervised message-start occurrences: 0
+training authorization: not_authorized
+```
+
+Focused implementation verification at this checkpoint:
+
+```text
+final materialization/protocol/manifest/CLI focused slice: 56 passed
+Ruff: passed
+Pyright: passed
 git diff --check: passed
 ```

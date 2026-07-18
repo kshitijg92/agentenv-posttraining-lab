@@ -128,9 +128,10 @@ chat-template bytes, the `role/content` projection, the generation and
 completed-transcript operations, and the current AgentEnv JSON-content tool
 protocol. Provider-native tool serialization is explicitly unsupported.
 
-The next missing boundary is target-model tokenization and label
-materialization. A source-level positive-SFT example is not yet a trainer-ready
-batch.
+Target-model tokenization and label materialization are now implemented. A
+source-level positive-SFT example remains model-independent; its materialized
+derivative is the trainer-shaped record, though still explicitly unauthorized
+until final release.
 
 The selected target checkpoint's Qwen2.5 protocol no longer injects the
 Qwen3-specific `/no_think` soft switch. Fresh no-suffix Qwen2.5-Coder-3B
@@ -165,16 +166,14 @@ agentenv training candidates export
 agentenv training positive-sft review-init
 agentenv training positive-sft review-validate
 agentenv training positive-sft export
+agentenv training positive-sft materialize
 ```
 
 Remaining major artifacts or boundaries:
 
 ```text
-persisted target-model positive-SFT token records
-explicit token-materialization exclusion outcomes
 preference dataset schema/builder/export
 negative-example export boundary
-tokenizer-conformance and loss-masking tests
 configs/train/positive_sft_smoke.yaml
 configs/train/dpo_deferred.yaml
 docs/dpo_deferred_note.md
@@ -355,6 +354,10 @@ Current state:
 - the materialization result union now represents completed token/label output,
   explicit overlength failures, and other materialization failures with exact
   source, protocol, sequence-policy, and materializer provenance;
+- the materialization exporter preserves one result per source row, pins its
+  source export and protocol, and rebuilds persisted labels on load;
+- a real Qwen2.5-Coder-3B practice prefix materialized successfully with the
+  pinned tokenizer into 843 tokens, including assistant-only end-of-turn loss;
 - target-model token materialization remains before any training smoke.
 
 Self-deception trap:
@@ -393,6 +396,9 @@ Done when:
 - tests verify assistant-only loss, tool-call boundaries, EOS handling, and no
   hidden validator, scorer, or review metadata;
 - persisted records are rebuilt or validated against their pinned inputs.
+
+Current state: implemented and verified with both focused fixtures and the
+pinned Qwen2.5-Coder-3B practice artifact.
 
 Self-deception trap:
 

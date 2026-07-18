@@ -203,11 +203,12 @@ model-visible context
 + hash-pinned source and transformation provenance
 ```
 
-The current `PositiveSFTExampleRecord` is a source-level message record. Until
-tool-call serialization and loss masking are implemented and tested, it must
-not be described as trainer-ready.
+`PositiveSFTExampleRecord` is intentionally a source-level message record and
+must not be described as trainer-ready. Its model-specific derivative,
+`PositiveSFTTrainingMaterializationRecord`, persists the canonical `input_ids`,
+aligned trainer labels, and pinned transformation provenance.
 
-The initial trainer-ready representation will use trajectory aggregation: one
+The initial trainer-ready representation uses trajectory aggregation: one
 approved message prefix is serialized once, rather than expanded into one row
 per assistant turn. Causal attention still gives every approved assistant token
 its actual preceding prefix inside that sequence.
@@ -446,6 +447,18 @@ transformations would define a different context policy and require a separate
 contract. Overlength exclusions must remain countable so the resulting bias
 toward shorter trajectories is visible.
 
+The materializer also fails an example explicitly when tokenizer normalization
+changes the canonical rendering, decoded tokens do not reconstruct that
+rendering, token offsets leave source characters uncovered, or one token crosses
+a model/context ownership boundary. These are materialization-validity failures,
+not overlength policy exclusions.
+
+The materialization export preserves total accounting: each source example has
+exactly one completed or failed result in source order. Its manifest pins the
+source export, model-input protocol, sequence policy, materializer provenance,
+outcome counts, and result JSONL. Reload validates every source id and record
+hash and deterministically rebuilds the tokens and labels from pinned inputs.
+
 Canonical training tokens are not claimed to reproduce the exact per-turn
 rollout token ids. They are a pinned model-specific derivative of the reviewed
 message source. Exact rollout ids remain a different evidence type and are
@@ -658,15 +671,16 @@ historical artifact count != current training-data eligibility
 | Explicit positive-SFT repair selection and builder/export integration | Implemented |
 | Positive-SFT repair selection and prefix-review CLI | Implemented |
 | Positive-SFT contiguous-prefix review and source export | Implemented |
-| Deterministic tool-call serialization and token loss masks | Not implemented |
-| Persisted target-model token records and explicit overlength outcomes | Not implemented |
+| Deterministic tool-call serialization and token loss masks | Implemented |
+| Persisted target-model token records and explicit overlength outcomes | Implemented |
 | Negative-example dataset/export objective | Not implemented |
 | Preference-pair schema, pair validation, and export | Not implemented |
 | Human-repair provenance contract | Not implemented |
 | External-data license/source contract | Out of scope |
 
-The next training-validity checkpoint must define deterministic tool-call
-serialization and loss masks before any training smoke is attempted.
+The next training-validity checkpoint is the final release/trainer boundary:
+only a release artifact with matching trust evidence may authorize trainer
+consumption of completed materializations.
 
 ## Non-Claims
 

@@ -23,6 +23,9 @@ class ArtifactType(StrEnum):
     TRAINING_CANDIDATE_REPAIR_REVIEW = "training_candidate_repair_review"
     POSITIVE_SFT_REVIEW = "positive_sft_review"
     POSITIVE_SFT_EXPORT = "positive_sft_export"
+    POSITIVE_SFT_TRAINING_MATERIALIZATION = (
+        "positive_sft_training_materialization"
+    )
     SCORER_AUDIT = "scorer_audit"
     AGENT_TASK_AUDIT = "agent_task_audit"
     HARNESS_AUDIT = "harness_audit"

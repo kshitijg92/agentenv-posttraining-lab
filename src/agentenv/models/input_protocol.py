@@ -105,7 +105,7 @@ def render_model_input_with_generation_ownership(
     )
     if canonical_text.encode("utf-8") != annotated_text.encode("utf-8"):
         raise ValueError(
-            "Generation-ownership rendering differs from canonical model input"
+            "Generation-ownership rendering differs from canonical rendered text"
         )
 
     spans = _validate_model_generated_spans(raw_spans, text=canonical_text)

@@ -78,6 +78,10 @@ from agentenv.training.positive_sft.schema import (
     PositiveSFTExampleRecordSchemaVersion,
     PositiveSFTReviewRecordSchemaVersion,
 )
+from agentenv.training.positive_sft.materialization.schema import (
+    POSITIVE_SFT_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION,
+    PositiveSFTTrainingMaterializationRecordSchemaVersion,
+)
 from agentenv.trajectories.schema import (
     TRAJECTORY_RECORD_SCHEMA_VERSION,
     TRAJECTORY_REVIEW_SCHEMA_VERSION,
@@ -162,6 +166,9 @@ POSITIVE_SFT_REVIEW_ARTIFACT_REFS = {
 POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
     "positive_sft_examples": "positive_sft_examples.jsonl",
 }
+POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS = {
+    "materializations": "materializations.jsonl",
+}
 REWARD_HACK_AUDIT_ARTIFACT_REFS = {
     "results": "reward_hack_audit_results.jsonl",
     "case_runs": "case_runs",
@@ -200,6 +207,9 @@ POSITIVE_SFT_REVIEW_REQUIRED_ARTIFACTS = frozenset(
     POSITIVE_SFT_REVIEW_ARTIFACT_REFS
 )
 POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_REFS)
+POSITIVE_SFT_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS = frozenset(
+    POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS
+)
 REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS = frozenset(REWARD_HACK_AUDIT_ARTIFACT_REFS)
 SCORER_AUDIT_REQUIRED_ARTIFACTS = frozenset(SCORER_AUDIT_ARTIFACT_REFS)
 AGENT_TASK_AUDIT_REQUIRED_ARTIFACTS = frozenset(AGENT_TASK_AUDIT_ARTIFACT_REFS)
@@ -225,6 +235,9 @@ TrainingCandidateRepairReviewArtifactSchemaVersion = Literal[
 ]
 PositiveSFTReviewArtifactSchemaVersion = Literal["positive_sft_review_artifact_v0"]
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
+PositiveSFTTrainingMaterializationArtifactSchemaVersion = Literal[
+    "positive_sft_training_materialization_artifact_v0"
+]
 RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v2"]
 ScorerAuditArtifactSchemaVersion = Literal["scorer_audit_artifact_v0"]
 AgentTaskAuditArtifactSchemaVersion = Literal["agent_task_audit_artifact_v0"]
@@ -263,6 +276,9 @@ POSITIVE_SFT_REVIEW_ARTIFACT_SCHEMA_VERSION: PositiveSFTReviewArtifactSchemaVers
 POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVersion = (
     "positive_sft_export_artifact_v0"
 )
+POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION: (
+    PositiveSFTTrainingMaterializationArtifactSchemaVersion
+) = "positive_sft_training_materialization_artifact_v0"
 REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION: RewardHackAuditArtifactSchemaVersion = (
     "reward_hack_audit_artifact_v2"
 )
@@ -1440,6 +1456,86 @@ class PositiveSFTExportManifest(ArtifactManifest):
         return self
 
 
+class PositiveSFTExportArtifactRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    positive_sft_examples_jsonl_hash: ContentHash
+
+
+class PositiveSFTTrainingMaterializationManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.POSITIVE_SFT_TRAINING_MATERIALIZATION.value
+    expected_artifact_schema_version = (
+        POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    training_authorization: Literal["not_authorized"]
+    source_positive_sft_export: PositiveSFTExportArtifactRef
+    model_input_protocol_path: str = Field(min_length=1)
+    model_input_protocol_id: str = Field(
+        min_length=1,
+        pattern=r"^[a-z0-9_]+$",
+    )
+    model_input_protocol_hash: ContentHash
+    serialization_mode: Literal["completed_transcript"]
+    max_sequence_length: PositiveInt
+    materializer_version: str = Field(min_length=1)
+    materializer_code_hash: ContentHash
+    positive_sft_training_materialization_record_schema_version: (
+        PositiveSFTTrainingMaterializationRecordSchemaVersion
+    )
+    record_count: NonNegativeInt
+    completed_count: NonNegativeInt
+    failed_count: NonNegativeInt
+    sequence_length_exceeded_count: NonNegativeInt
+    materialization_error_count: NonNegativeInt
+    materializations_jsonl_hash: ContentHash
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_positive_sft_training_materialization_contract(
+        self,
+    ) -> "PositiveSFTTrainingMaterializationManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS,
+            owner="positive-SFT training materialization manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=(
+                POSITIVE_SFT_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS
+            ),
+            owner="positive-SFT training materialization manifests",
+        )
+        if (
+            self.positive_sft_training_materialization_record_schema_version
+            != POSITIVE_SFT_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "positive_sft_training_materialization_record_schema_version "
+                "must be "
+                f"{POSITIVE_SFT_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.completed_count + self.failed_count != self.record_count:
+            raise ValueError(
+                "completed and failed materialization counts must sum to "
+                "record_count"
+            )
+        if (
+            self.sequence_length_exceeded_count
+            + self.materialization_error_count
+            != self.failed_count
+        ):
+            raise ValueError(
+                "materialization failure-kind counts must sum to failed_count"
+            )
+        return self
+
+
 class ScorerAuditManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.SCORER_AUDIT.value
     expected_artifact_schema_version = SCORER_AUDIT_ARTIFACT_SCHEMA_VERSION
@@ -1761,6 +1857,12 @@ def load_positive_sft_review_manifest(path: Path) -> PositiveSFTReviewManifest:
 
 def load_positive_sft_export_manifest(path: Path) -> PositiveSFTExportManifest:
     return _validate_manifest(PositiveSFTExportManifest, path)
+
+
+def load_positive_sft_training_materialization_manifest(
+    path: Path,
+) -> PositiveSFTTrainingMaterializationManifest:
+    return _validate_manifest(PositiveSFTTrainingMaterializationManifest, path)
 
 
 def load_scorer_audit_manifest(path: Path) -> ScorerAuditManifest:

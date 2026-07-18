@@ -122,6 +122,10 @@ class FailedPositiveSFTTrainingMaterializationRecord(
                     "sequence-length failures require an observed length greater "
                     "than max_sequence_length"
                 )
+        elif self.observed_sequence_length is not None:
+            raise ValueError(
+                "materialization errors cannot claim an observed sequence length"
+            )
         return self
 
 

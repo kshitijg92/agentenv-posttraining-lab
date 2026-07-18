@@ -331,7 +331,7 @@ def test_generation_ownership_rejects_rendering_drift(tmp_path: Path) -> None:
 
     with pytest.raises(
         ValueError,
-        match="Generation-ownership rendering differs from canonical model input",
+        match="Generation-ownership rendering differs from canonical rendered text",
     ):
         render_model_input_with_generation_ownership(
             protocol,

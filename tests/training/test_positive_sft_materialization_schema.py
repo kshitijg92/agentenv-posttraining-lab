@@ -146,3 +146,24 @@ def test_runtime_materialization_failure_is_distinct_from_overlength() -> None:
 
     assert record.status == "failed"
     assert record.failure_kind == "materialization_error"
+
+
+def test_materialization_error_cannot_claim_observed_sequence_length() -> None:
+    payload = _record(
+        status="failed",
+        failure_kind="materialization_error",
+        observed_sequence_length=7,
+        error_class="TemplateRenderError",
+        error_message="Pinned chat template could not render the transcript.",
+    )
+    for field_name in (
+        "input_ids",
+        "labels",
+        "sequence_length",
+        "supervised_token_count",
+        "ignored_token_count",
+    ):
+        payload.pop(field_name)
+
+    with pytest.raises(ValidationError, match="cannot claim"):
+        MATERIALIZATION_ADAPTER.validate_python(payload)
