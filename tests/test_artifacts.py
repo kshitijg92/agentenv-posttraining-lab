@@ -34,6 +34,7 @@ def test_artifact_type_values_are_stable_json_strings() -> None:
         ArtifactType.PREFERENCE_ADJUDICATION_REVIEW
         == "preference_adjudication_review"
     )
+    assert ArtifactType.PREFERENCE_PAIR_EXPORT == "preference_pair_export"
     assert ArtifactType.SCORER_AUDIT == "scorer_audit"
     assert ArtifactType.AGENT_TASK_AUDIT == "agent_task_audit"
     assert ArtifactType.HARNESS_AUDIT == "harness_audit"

@@ -61,7 +61,8 @@ flowchart TD
     T -. hash-pinned original prompt loops .-> PD
     PD --> PC[Preference comparison export<br/>unordered + not authorized]
     PC --> PA[Preference adjudication review<br/>human, deterministic, or LLM judge]
-    PA -->|preferred only| PE[Planned preference export]
+    PA -->|reviewed + preferred only| PE[Preference pair export<br/>reference-only + exhaustive]
+    PE --> DM[Planned target-model<br/>DPO materialization]
 
     TS --> DR[Planned final dataset release]
     HA[Harness audit] --> DR
@@ -124,6 +125,10 @@ stand in for the other.
     that exact comparison manifest and payload plus an artifact-local copy of
     the rubric. Both remain `not_authorized`; review does not itself emit a DPO
     pair.
+14. Pair export includes every validated `reviewed + preferred` adjudication and
+    no other decision. It stores only hash-pinned source-record references;
+    shared context and alternative content stay in upstream artifacts. Sampling
+    and per-context weighting are later policies, not hidden export filters.
 
 ## What an exported positive-SFT record means
 
@@ -276,7 +281,21 @@ agentenv training preferences review-init \
 
 agentenv training preferences review-validate \
   --reviews <preference-adjudication-review>
+
+agentenv training preferences export \
+  --comparisons <preference-comparison-export> \
+  --reviews <preference-adjudication-review> \
+  --out <preference-pair-export>
 ```
 
-Chosen/rejected export and DPO materialization remain unimplemented, so the
-valid trainable preference-pair count remains zero and DPO is still deferred.
+`PreferencePairExport` independently pins the exact comparison manifest and
+JSONL plus the adjudication manifest and current editable JSONL. Each row pins
+only the selected comparison-record and adjudication-record hashes. Direction
+is resolved from the pinned adjudication during materialization; context and
+actions are reconstructed from the comparison evidence rather than duplicated.
+The manifest accounts for every non-reviewed, tie, ambiguous, invalid, and
+preferred source row and reports distinct shared-context count separately from
+pair count.
+
+Target-model DPO materialization remains unimplemented, so these reference-only
+pairs are not trainer-ready and DPO is still deferred.

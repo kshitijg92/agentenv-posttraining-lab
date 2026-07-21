@@ -62,6 +62,7 @@ from agentenv.training.positive_sft.review import (
 from agentenv.training.preferences.export import (
     export_preference_comparison_candidates,
 )
+from agentenv.training.preferences.pair_export import export_preference_pairs
 from agentenv.training.preferences.review import (
     initialize_preference_adjudication_review_artifact,
     validate_preference_adjudication_review_artifact,
@@ -939,6 +940,62 @@ def validate_training_preference_review(
         f"tie={decision_counts['tie']} "
         f"ambiguous={decision_counts['ambiguous']} "
         f"invalid={decision_counts['invalid']}"
+    )
+
+
+@training_preferences_app.command("export")
+def export_training_preference_pairs(
+    comparisons: Path = typer.Option(
+        ...,
+        "--comparisons",
+        help="Preference comparison export artifact directory.",
+    ),
+    reviews: Path = typer.Option(
+        ...,
+        "--reviews",
+        help="Preference adjudication review artifact directory.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for reference-only preference pair export artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before exporting.",
+    ),
+) -> None:
+    try:
+        export = export_preference_pairs(
+            comparisons,
+            reviews,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(
+            str(exc),
+            param_hint="--comparisons/--reviews",
+        ) from exc
+
+    manifest = export.manifest
+    console.print(
+        "[green]preference pair export complete[/green] "
+        f"records={manifest.record_count} "
+        f"shared_contexts={manifest.shared_context_count} "
+        f"not_reviewed={manifest.source_not_reviewed_count} "
+        f"tie={manifest.source_tie_count} "
+        f"ambiguous={manifest.source_ambiguous_count} "
+        f"invalid={manifest.source_invalid_count} "
+        f"training_authorization={manifest.training_authorization}"
+    )
+    console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {export.out_dir / manifest.artifacts['preference_pairs']}",
+        soft_wrap=True,
     )
 
 

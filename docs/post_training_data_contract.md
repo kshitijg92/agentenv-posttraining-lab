@@ -614,17 +614,21 @@ The persisted workflow keeps those authorities separate:
 TrainingCandidateExport
 -> PreferenceComparisonExport
 -> PreferenceAdjudicationReview
--> future chosen/rejected DPO pair export
+-> PreferencePairExport
+-> future target-model DPO materialization
 ```
 
 The comparison export pins its source candidate manifest, discovery
 implementation, record schema, candidate JSONL hash, and exact recomputed
 records. The adjudication-review artifact pins the exact comparison manifest
 and candidate payload, stores one review row per candidate, and contains a
-byte-for-byte copied, hash-pinned rubric. Both artifacts explicitly state
-`training_authorization: not_authorized`. The future DPO pair export must
-independently pin and validate both artifacts rather than treating review as a
-mutation of discovery evidence.
+byte-for-byte copied, hash-pinned rubric. The pair export independently pins and
+validates both artifacts rather than treating review as a mutation of discovery
+evidence. It exhaustively selects every `reviewed + preferred` adjudication,
+stores only source comparison/adjudication record hashes, and accounts for all
+other outcomes in its manifest. Context and actions are reconstructed later;
+they are not copied into another source-level schema. All three artifacts state
+`training_authorization: not_authorized`.
 
 The current source of truth is the versioned
 [`overall_action_preference_v0`](../configs/training/preference_rubrics/overall_action_preference_v0.md)
@@ -671,12 +675,12 @@ The following are not valid pairs:
 - any pair with an unauditable preference basis.
 
 The unlabeled discovery schema, deterministic discovery builder, immutable
-comparison export, reviewer-specific adjudication schema, and persisted review
-queue are implemented. Chosen/rejected pair export, selection/capping, and
-target-model DPO materialization are not. An empty comparison/review artifact
-or later documented insufficiency result remains valid. DPO remains deferred
-unless at least 20 auditable pairs exist, and combinatorial pairs from one
-shared context must not be misreported as independent data diversity.
+comparison export, reviewer-specific adjudication schema, persisted review
+queue, and exhaustive reference-only pair export are implemented. Sampling,
+weighting, and target-model DPO materialization are not. An empty
+comparison/review/pair artifact remains valid. DPO remains deferred unless at
+least 20 auditable pairs exist, and combinatorial pairs from one shared context
+must not be misreported as independent data diversity.
 
 ## Analysis-Only Contract
 
@@ -772,14 +776,16 @@ historical artifact count != current training-data eligibility
 | Negative-example dataset/export objective | Not implemented |
 | Unordered preference discovery schema and deterministic builder | Implemented |
 | Preference comparison export and adjudication-review artifact | Implemented |
-| Chosen/rejected preference-pair export and DPO materialization | Not implemented |
+| Exhaustive reference-only preference-pair export | Implemented |
+| Target-model DPO materialization | Not implemented |
 | Human-repair provenance contract | Not implemented |
 | External-data license/source contract | Out of scope |
 
-The next preference checkpoint is a chosen/rejected export that consumes and
-independently pins both the comparison and adjudication artifacts. Across all
-objectives, only the later final release/trainer boundary may combine completed
-materializations with matching trust evidence and authorize consumption.
+The next preference checkpoint is target-model DPO materialization: reconstruct
+the shared prompt and both actions through the pinned source chain, then enforce
+prompt identity and target-protocol tokenization. Across all objectives, only
+the later final release/trainer boundary may combine completed materializations
+with matching trust evidence and authorize consumption.
 
 ## Non-Claims
 

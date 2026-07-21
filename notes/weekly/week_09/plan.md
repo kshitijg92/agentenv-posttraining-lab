@@ -434,7 +434,8 @@ Done when:
   requires local causal justification, and abstains when both actions are bad;
 - unlabeled comparison discovery is persisted as a source-pinned export;
 - adjudication is persisted as a separate source- and rubric-pinned review;
-- chosen/rejected export is defined;
+- every validated preferred adjudication is persisted in an exhaustive,
+  reference-only preference-pair export;
 - a builder either writes valid JSONL or documents insufficient accepted pairs;
 - DPO remains deferred unless at least 20 auditable pairs exist.
 

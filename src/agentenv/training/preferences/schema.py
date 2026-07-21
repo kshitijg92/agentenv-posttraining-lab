@@ -9,6 +9,7 @@ from agentenv.training.preferences.hashing import (
     PREFERENCE_MESSAGE_PROJECTION_VERSION,
     build_preference_alternative_id,
     build_preference_comparison_candidate_id,
+    build_preference_pair_id,
     build_preference_rollout_evidence_id,
     build_preference_shared_context_id,
     hash_preference_action,
@@ -24,6 +25,7 @@ PreferenceTrainingSplit = Literal["practice", "dev"]
 PreferenceMessageProjectionVersion = Literal["preference_message_projection_v0"]
 PreferenceActionProjectionVersion = Literal["preference_action_projection_v0"]
 PreferenceAdjudicationRecordSchemaVersion = Literal["preference_adjudication_record_v0"]
+PreferencePairRecordSchemaVersion = Literal["preference_pair_record_v0"]
 PreferenceAdjudicationDecision = Literal[
     "preferred",
     "tie",
@@ -34,6 +36,9 @@ PreferenceAdjudicationScope = Literal["overall_action_preference"]
 
 PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION: PreferenceComparisonCandidateRecordSchemaVersion = "preference_comparison_candidate_record_v0"
 PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION: PreferenceAdjudicationRecordSchemaVersion = "preference_adjudication_record_v0"
+PREFERENCE_PAIR_RECORD_SCHEMA_VERSION: PreferencePairRecordSchemaVersion = (
+    "preference_pair_record_v0"
+)
 
 ContentHash = Annotated[
     str,
@@ -361,5 +366,40 @@ class PreferenceAdjudicationRecord(BaseModel):
             raise ValueError(
                 "tie, ambiguous, and invalid adjudications cannot select a "
                 "preferred alternative"
+            )
+        return self
+
+
+class PreferencePairSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comparison_candidate_id: str = Field(min_length=1)
+    source_preference_comparison_candidate_record_hash: ContentHash
+    source_preference_adjudication_record_hash: ContentHash
+
+
+class PreferencePairRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: PreferencePairRecordSchemaVersion = (
+        PREFERENCE_PAIR_RECORD_SCHEMA_VERSION
+    )
+    preference_pair_id: str = Field(min_length=1)
+    source: PreferencePairSource
+
+    @model_validator(mode="after")
+    def validate_preference_pair_id(self) -> "PreferencePairRecord":
+        expected_id = build_preference_pair_id(
+            comparison_candidate_id=self.source.comparison_candidate_id,
+            source_preference_comparison_candidate_record_hash=(
+                self.source.source_preference_comparison_candidate_record_hash
+            ),
+            source_preference_adjudication_record_hash=(
+                self.source.source_preference_adjudication_record_hash
+            ),
+        )
+        if self.preference_pair_id != expected_id:
+            raise ValueError(
+                "preference_pair_id must be derived from its exact source records"
             )
         return self

@@ -8,7 +8,9 @@ from agentenv.models.schema import MessageWithoutMetadata
 
 if TYPE_CHECKING:
     from agentenv.training.preferences.schema import (
+        PreferenceAdjudicationRecord,
         PreferenceComparisonCandidateRecord,
+        PreferencePairRecord,
     )
 
 
@@ -19,6 +21,16 @@ PREFERENCE_ACTION_PROJECTION_VERSION = "preference_action_projection_v0"
 def hash_preference_comparison_candidate_record(
     record: PreferenceComparisonCandidateRecord,
 ) -> str:
+    return hash_json(record.model_dump(mode="json"))
+
+
+def hash_preference_adjudication_record(
+    record: PreferenceAdjudicationRecord,
+) -> str:
+    return hash_json(record.model_dump(mode="json"))
+
+
+def hash_preference_pair_record(record: PreferencePairRecord) -> str:
     return hash_json(record.model_dump(mode="json"))
 
 
@@ -111,3 +123,23 @@ def build_preference_comparison_candidate_id(
         }
     )
     return f"preference_comparison_{identity_hash.removeprefix('xxh64:')}"
+
+
+def build_preference_pair_id(
+    *,
+    comparison_candidate_id: str,
+    source_preference_comparison_candidate_record_hash: str,
+    source_preference_adjudication_record_hash: str,
+) -> str:
+    identity_hash = hash_json(
+        {
+            "comparison_candidate_id": comparison_candidate_id,
+            "source_preference_comparison_candidate_record_hash": (
+                source_preference_comparison_candidate_record_hash
+            ),
+            "source_preference_adjudication_record_hash": (
+                source_preference_adjudication_record_hash
+            ),
+        }
+    )
+    return f"preference_pair_{identity_hash.removeprefix('xxh64:')}"

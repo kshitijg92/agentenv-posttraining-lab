@@ -27,7 +27,13 @@ from agentenv.training.preferences.hashing import (
     build_preference_comparison_candidate_id,
     build_preference_rollout_evidence_id,
     build_preference_shared_context_id,
+    hash_preference_adjudication_record,
     hash_preference_action,
+    hash_preference_comparison_candidate_record,
+)
+from agentenv.training.preferences.pair_export import (
+    export_preference_pairs,
+    load_preference_pair_export_artifact,
 )
 from agentenv.training.preferences.review import (
     initialize_preference_adjudication_review_artifact,
@@ -201,12 +207,20 @@ def test_preference_persistence_allows_empty_discovery_and_review(
         tmp_path / "preference-review",
     )
     validation = validate_preference_adjudication_review_artifact(review.out_dir)
+    pair_export = export_preference_pairs(
+        comparison_export.out_dir,
+        review.out_dir,
+        tmp_path / "preference-pairs",
+    )
 
     assert comparison_export.records == ()
     assert comparison_export.manifest.record_count == 0
     assert comparison_export.manifest.shared_context_count == 0
     assert review.adjudications == ()
     assert validation.review_status_counts == {"not_reviewed": 0, "reviewed": 0}
+    assert pair_export.records == ()
+    assert pair_export.manifest.record_count == 0
+    assert pair_export.manifest.source_adjudication_record_count == 0
 
 
 def test_training_preferences_cli_exposes_persistence_workflow() -> None:
@@ -216,6 +230,7 @@ def test_training_preferences_cli_exposes_persistence_workflow() -> None:
     assert "discover" in result.output
     assert "review-init" in result.output
     assert "review-validate" in result.output
+    assert "export" in result.output
 
 
 def test_preference_comparison_load_rejects_payload_tamper(
@@ -239,6 +254,151 @@ def test_preference_comparison_load_rejects_payload_tamper(
 
     with pytest.raises(ValueError, match="JSONL hash mismatch"):
         load_preference_comparison_export_artifact(comparison_export.out_dir)
+
+
+@pytest.mark.parametrize(
+    ("decision", "expected_pair_count"),
+    [
+        (None, 0),
+        ("preferred", 1),
+        ("tie", 0),
+        ("ambiguous", 0),
+        ("invalid", 0),
+    ],
+)
+def test_preference_pair_export_selects_only_preferred_adjudications(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    decision: str | None,
+    expected_pair_count: int,
+) -> None:
+    candidate = _comparison_candidate()
+    source_export = _stub_candidate_export(
+        tmp_path,
+        monkeypatch,
+        discovered_records=(candidate,),
+    )
+    comparison_export = export_preference_comparison_candidates(
+        source_export.out_dir,
+        tmp_path / "preference-comparisons",
+    )
+    review = initialize_preference_adjudication_review_artifact(
+        comparison_export.out_dir,
+        RUBRIC_PATH,
+        tmp_path / "preference-review",
+    )
+    adjudication = review.adjudications[0]
+    if decision is not None:
+        adjudication = _review_adjudication(
+            adjudication,
+            candidate=candidate,
+            decision=decision,
+        )
+        write_preference_adjudication_records_jsonl(
+            review.out_dir / review.manifest.artifacts["adjudications"],
+            (adjudication,),
+        )
+
+    pair_export = export_preference_pairs(
+        comparison_export.out_dir,
+        review.out_dir,
+        tmp_path / "preference-pairs",
+    )
+
+    assert pair_export.manifest.record_count == expected_pair_count
+    assert len(pair_export.records) == expected_pair_count
+    assert pair_export.manifest.shared_context_count == expected_pair_count
+    assert pair_export.manifest.source_adjudication_record_count == 1
+    assert pair_export.manifest.source_not_reviewed_count == (decision is None)
+    assert pair_export.manifest.source_preferred_count == (decision == "preferred")
+    assert pair_export.manifest.source_tie_count == (decision == "tie")
+    assert pair_export.manifest.source_ambiguous_count == (decision == "ambiguous")
+    assert pair_export.manifest.source_invalid_count == (decision == "invalid")
+    assert pair_export.manifest.training_authorization == "not_authorized"
+    if decision != "preferred":
+        return
+
+    pair = pair_export.records[0]
+    assert pair.source.comparison_candidate_id == candidate.comparison_candidate_id
+    assert pair.source.source_preference_comparison_candidate_record_hash == (
+        hash_preference_comparison_candidate_record(candidate)
+    )
+    assert pair.source.source_preference_adjudication_record_hash == (
+        hash_preference_adjudication_record(adjudication)
+    )
+    payload = pair.model_dump(mode="json")
+    assert "assistant_content" not in json.dumps(payload)
+    assert "preferred_alternative_id" not in json.dumps(payload)
+
+
+def test_preference_pair_export_pins_mutable_adjudication_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate = _comparison_candidate()
+    source_export = _stub_candidate_export(
+        tmp_path,
+        monkeypatch,
+        discovered_records=(candidate,),
+    )
+    comparison_export = export_preference_comparison_candidates(
+        source_export.out_dir,
+        tmp_path / "preference-comparisons",
+    )
+    review = initialize_preference_adjudication_review_artifact(
+        comparison_export.out_dir,
+        RUBRIC_PATH,
+        tmp_path / "preference-review",
+    )
+    preferred = _review_adjudication(
+        review.adjudications[0],
+        candidate=candidate,
+        decision="preferred",
+    )
+    adjudications_path = review.out_dir / review.manifest.artifacts["adjudications"]
+    write_preference_adjudication_records_jsonl(adjudications_path, (preferred,))
+    pair_export = export_preference_pairs(
+        comparison_export.out_dir,
+        review.out_dir,
+        tmp_path / "preference-pairs",
+    )
+    tie = _review_adjudication(
+        review.adjudications[0],
+        candidate=candidate,
+        decision="tie",
+    )
+    write_preference_adjudication_records_jsonl(adjudications_path, (tie,))
+
+    with pytest.raises(ValueError, match="source adjudication JSONL hash mismatch"):
+        load_preference_pair_export_artifact(pair_export.out_dir)
+
+
+def _review_adjudication(
+    adjudication: PreferenceAdjudicationRecord,
+    *,
+    candidate: PreferenceComparisonCandidateRecord,
+    decision: str,
+) -> PreferenceAdjudicationRecord:
+    payload = adjudication.model_dump(mode="json")
+    payload.update(
+        {
+            "review_status": "reviewed",
+            "review_id": f"preference_review_{decision}",
+            "reviewer_provenance": {
+                "reviewer_type": "human",
+                "reviewer_id": "reviewer_001",
+            },
+            "review_decision": decision,
+            "preferred_alternative_id": (
+                candidate.alternative_a.alternative_id
+                if decision == "preferred"
+                else None
+            ),
+            "decision_reason": f"Fixture decision: {decision}.",
+            "reviewed_at_utc": "2026-07-21T20:00:00Z",
+        }
+    )
+    return PreferenceAdjudicationRecord.model_validate(payload)
 
 
 def _stub_candidate_export(

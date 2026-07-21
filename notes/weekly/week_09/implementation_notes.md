@@ -2775,3 +2775,43 @@ repo-wide Ruff: passed
 repo-wide Pyright: passed
 git diff --check: passed
 ```
+
+### Exhaustive Preference Pair Export Checkpoint
+
+Added `PreferencePairExport` as a normalized selection artifact downstream of
+comparison discovery and adjudication review. Export validation independently
+pins both source artifacts, including the current editable adjudication JSONL.
+
+Every adjudication with `review_status=reviewed` and
+`review_decision=preferred` is exported. Non-reviewed, tie, ambiguous, and
+invalid rows are not pair records, but their counts remain explicit in the
+manifest. There is no per-context cap or sampling policy at this boundary.
+
+`PreferencePairRecord` contains only the exact comparison-record and
+adjudication-record hashes plus a derived pair id. It does not duplicate shared
+messages, assistant actions, rollout evidence, reviewer fields, or preference
+direction. A later materializer must traverse the pinned chain and resolve the
+preferred alternative from the exact adjudication record.
+
+The pair manifest separately reports pair count and distinct shared-context
+count so combinatorial comparisons are not presented as independent context
+diversity. The artifact remains `training_authorization: not_authorized`.
+
+Added:
+
+```text
+agentenv training preferences export
+```
+
+The next implementation checkpoint is target-model DPO materialization with
+source reconstruction and exact shared-prompt serialization checks.
+
+Focused verification:
+
+```text
+preference persistence/pair/schema/discovery/rubric + artifact slice: 31 passed
+adjacent artifact/candidate/repair/positive-SFT/preference slice: 165 passed
+repo-wide Ruff: passed
+repo-wide Pyright: passed using the checked-in `.venv` selection
+git diff --check: passed
+```
