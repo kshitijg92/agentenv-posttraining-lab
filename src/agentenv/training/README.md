@@ -245,7 +245,11 @@ exactly one record per discovered candidate and rejects source or rubric drift.
 Human provenance records a stable reviewer id. Deterministic provenance pins
 auditor identity, version, code, and configuration. LLM-judge provenance pins
 the model revision plus its exact prompt, input protocol, and decoding config.
-All reviewers use a hash-pinned overall-preference rubric and provide a nonempty
-reason. Persistence, chosen/rejected export, and DPO materialization remain
-unimplemented, so the valid trainable preference-pair count remains zero and
-DPO is still deferred.
+All reviewers use the hash-pinned
+[`overall_action_preference_v0`](../../../configs/training/preference_rubrics/overall_action_preference_v0.md)
+rubric and provide a nonempty reason. It prioritizes task solvability over
+efficiency, requires an action-level causal explanation, treats rollout outcome
+as supporting evidence only, and returns `ambiguous` rather than ranking two
+flawed actions. Repaired or synthetic actions are outside v0. Persistence,
+chosen/rejected export, and DPO materialization remain unimplemented, so the
+valid trainable preference-pair count remains zero and DPO is still deferred.

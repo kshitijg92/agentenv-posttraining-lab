@@ -1052,6 +1052,38 @@ focused Pyright: passed
 git diff --check: passed
 ```
 
+### Overall Action Preference Rubric
+
+Added the reusable v0 rubric at:
+
+```text
+configs/training/preference_rubrics/overall_action_preference_v0.md
+```
+
+The rubric covers only assistant actions observed in original rollouts. It
+orders task solvability before efficiency and requires every `preferred`
+decision to include an action-level explanation grounded in the exact shared
+context. Downstream outcomes may support that explanation but cannot supply the
+label by themselves.
+
+The strict v0 policy returns `ambiguous` when both actions are flawed, even if
+one looks less harmful. `tie` is reserved for confidently equivalent acceptable
+actions, while `invalid` remains a broken-comparison state. Repaired, edited,
+and synthetic alternatives are explicitly deferred.
+
+Added a focused fixture that loads the repository rubric, computes its content
+hash, constructs `PreferenceRubricProvenance`, and checks the settled semantic
+invariants remain present.
+
+Focused verification:
+
+```text
+candidate/preference/rubric regression slice: 73 passed
+Ruff: passed
+Pyright: passed
+git diff --check: passed
+```
+
 ### Training Package Workflow Refactor
 
 Split the former flat `training/` package into ownership-aligned subsystems:

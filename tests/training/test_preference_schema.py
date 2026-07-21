@@ -199,10 +199,10 @@ def _rubric_provenance(
     return PreferenceRubricProvenance.model_validate(
         {
             "adjudication_scope": "overall_action_preference",
-            "rubric_id": "agent_action_overall_preference",
-            "rubric_version": "agent_action_overall_preference_v0",
+            "rubric_id": "overall_action_preference",
+            "rubric_version": "overall_action_preference_v0",
             "rubric_ref": {
-                "path": "rubrics/agent_action_overall_preference_v0.md",
+                "path": "rubrics/overall_action_preference_v0.md",
                 "content_hash": rubric_hash,
             },
         }

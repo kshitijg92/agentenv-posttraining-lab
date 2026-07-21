@@ -608,6 +608,21 @@ does not change the downstream meaning of a valid `preferred` decision. The
 reason remains review evidence and must not be inserted into chosen/rejected
 training text.
 
+The current source of truth is the versioned
+[`overall_action_preference_v0`](../configs/training/preference_rubrics/overall_action_preference_v0.md)
+rubric. It admits only actions observed in original rollouts and applies this
+ordering:
+
+```text
+first:  preserve or improve task solvability
+second: among actions satisfying the first condition, prefer greater efficiency
+```
+
+A `preferred` decision requires an action-level causal explanation grounded in
+the shared context. Terminal task outcome and reward are supporting evidence,
+not labels. If both actions are flawed, the v0 decision is `ambiguous` rather
+than a lesser-of-two-bad preference.
+
 For action-level efficiency labels, the preferred construction shares an exact
 transcript prefix and differs at the next action. For full-trajectory
 comparisons, both sides must at least share the same task and model-visible
