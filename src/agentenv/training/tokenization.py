@@ -16,6 +16,16 @@ class ContentSafeMaterializationError(ValueError):
     """An error whose message contains no rendered transcript content."""
 
 
+def content_safe_materialization_error_message(
+    exc: Exception,
+    *,
+    operation: str,
+) -> str:
+    if isinstance(exc, ContentSafeMaterializationError):
+        return str(exc)
+    return f"{operation} failed with {type(exc).__name__}."
+
+
 class _TokenizerNormalizer(Protocol):
     def normalize_str(self, sequence: str) -> str: ...
 
@@ -30,9 +40,7 @@ class TokenizerWithBackend(Protocol):
     def backend_tokenizer(self) -> _BackendTokenizer: ...
 
 
-class TokenizerNormalizationChangedRenderedTextError(
-    ContentSafeMaterializationError
-):
+class TokenizerNormalizationChangedRenderedTextError(ContentSafeMaterializationError):
     def __init__(
         self,
         *,
@@ -96,7 +104,7 @@ class TokenOwnershipBoundaryCrossingError(ContentSafeMaterializationError):
 
 
 @dataclass(frozen=True)
-class TokenizedPositiveSFTInput:
+class TokenizedModelInput:
     input_ids: tuple[int, ...]
     labels: tuple[int, ...]
 
@@ -157,16 +165,16 @@ def load_pinned_tokenizer(
     return tokenizer
 
 
-def tokenize_positive_sft_input(
+def tokenize_model_input_with_ownership(
     tokenizer: MaterializationTokenizer,
     *,
     rendered_text: str,
     model_generated_spans: Sequence[ModelGeneratedCharacterSpan],
     trainer_ignore_index: int,
-) -> TokenizedPositiveSFTInput:
+) -> TokenizedModelInput:
     if not tokenizer.is_fast:
         raise TokenizerOutputContractError(
-            "Positive-SFT materialization requires a fast tokenizer"
+            "Training materialization requires a fast tokenizer"
         )
     require_tokenizer_preserves_rendered_text(tokenizer, rendered_text)
 
@@ -202,7 +210,7 @@ def tokenize_positive_sft_input(
         model_generated_spans=model_generated_spans,
         trainer_ignore_index=trainer_ignore_index,
     )
-    return TokenizedPositiveSFTInput(
+    return TokenizedModelInput(
         input_ids=tuple(input_ids),
         labels=tuple(labels),
     )

@@ -42,6 +42,7 @@ class PreferenceComparisonExport:
     out_dir: Path
     manifest: PreferenceComparisonExportManifest
     records: tuple[PreferenceComparisonCandidateRecord, ...]
+    source_training_candidate_export: TrainingCandidateExport
 
 
 def export_preference_comparison_candidates(
@@ -116,6 +117,7 @@ def load_preference_comparison_export_artifact(
         out_dir=export_dir,
         manifest=manifest,
         records=records,
+        source_training_candidate_export=candidate_export,
     )
 
 

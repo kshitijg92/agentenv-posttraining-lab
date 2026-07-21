@@ -59,10 +59,13 @@ from agentenv.training.positive_sft.review import (
     initialize_positive_sft_review_artifact,
     validate_positive_sft_review_artifact,
 )
-from agentenv.training.preferences.export import (
+from agentenv.training.preferences.comparison_export import (
     export_preference_comparison_candidates,
 )
 from agentenv.training.preferences.pair_export import export_preference_pairs
+from agentenv.training.preferences.materialization.export import (
+    export_dpo_training_materializations,
+)
 from agentenv.training.preferences.review import (
     initialize_preference_adjudication_review_artifact,
     validate_preference_adjudication_review_artifact,
@@ -999,6 +1002,80 @@ def export_training_preference_pairs(
     )
 
 
+@training_preferences_app.command("materialize")
+def materialize_training_preference_pairs(
+    source: Path = typer.Option(
+        ...,
+        "--source",
+        help="Reference-only preference pair export artifact directory.",
+    ),
+    model_input_protocol: Path = typer.Option(
+        ...,
+        "--model-input-protocol",
+        help="Pinned target-model input protocol YAML.",
+    ),
+    max_sequence_length: int = typer.Option(
+        ...,
+        "--max-sequence-length",
+        min=1,
+        help="Maximum chosen or rejected sequence length; overlength pairs fail.",
+    ),
+    tokenizer_cache_dir: Path | None = typer.Option(
+        None,
+        "--tokenizer-cache-dir",
+        help="Optional Hugging Face tokenizer cache directory.",
+    ),
+    local_files_only: bool = typer.Option(
+        False,
+        "--local-files-only",
+        help="Require the pinned tokenizer revision to be present locally.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for DPO training materialization artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before exporting.",
+    ),
+) -> None:
+    try:
+        export = export_dpo_training_materializations(
+            source,
+            model_input_protocol,
+            out,
+            max_sequence_length=max_sequence_length,
+            tokenizer_cache_dir=tokenizer_cache_dir,
+            local_files_only=local_files_only,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(
+            str(exc),
+            param_hint="--source/--model-input-protocol",
+        ) from exc
+
+    manifest = export.manifest
+    console.print(
+        "[green]DPO training materialization complete[/green] "
+        f"records={manifest.record_count} "
+        f"completed={manifest.completed_count} "
+        f"failed={manifest.failed_count} "
+        f"overlength={manifest.sequence_length_exceeded_count} "
+        f"materialization_errors={manifest.materialization_error_count} "
+        f"training_authorization={manifest.training_authorization}"
+    )
+    console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {export.out_dir / manifest.artifacts['materializations']}",
+        soft_wrap=True,
+    )
+
+
 @training_positive_sft_app.command("review-init")
 def initialize_training_positive_sft_review(
     candidates: Path = typer.Option(
@@ -1031,7 +1108,7 @@ def initialize_training_positive_sft_review(
         "--overwrite",
         help="Delete and recreate a non-empty --out directory before exporting.",
     ),
-    ) -> None:
+) -> None:
     try:
         artifact = initialize_positive_sft_review_artifact(
             candidates,

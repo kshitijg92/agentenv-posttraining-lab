@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 from typer.testing import CliRunner
 
-import agentenv.training.preferences.export as preference_export_module
+import agentenv.training.preferences.comparison_export as preference_export_module
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.manifests import TrainingCandidateExportManifest
 from agentenv.cli import app
@@ -16,7 +16,7 @@ from agentenv.training.preferences.builder import (
     PREFERENCE_DISCOVERY_VERSION,
     compute_preference_discovery_code_hash,
 )
-from agentenv.training.preferences.export import (
+from agentenv.training.preferences.comparison_export import (
     export_preference_comparison_candidates,
     load_preference_comparison_export_artifact,
 )

@@ -84,7 +84,12 @@ class CompletedDPOTrainingMaterializationRecord(_DPOTrainingMaterializationRecor
                 "chosen and rejected branches must have identical shared-prompt "
                 "token ids"
             )
-        if self.chosen_input_ids[prompt_end:] == self.rejected_input_ids[prompt_end:]:
+        chosen_response_end = prompt_end + self.chosen_response_token_count
+        rejected_response_end = prompt_end + self.rejected_response_token_count
+        if (
+            self.chosen_input_ids[prompt_end:chosen_response_end]
+            == self.rejected_input_ids[prompt_end:rejected_response_end]
+        ):
             raise ValueError("chosen and rejected response token ids must differ")
         return self
 
@@ -119,8 +124,13 @@ class CompletedDPOTrainingMaterializationRecord(_DPOTrainingMaterializationRecor
                 f"every {branch} shared-prompt label must use the trainer ignore index"
             )
 
-        response_ids = input_ids[self.shared_prompt_token_count :]
-        response_labels = labels[self.shared_prompt_token_count :]
+        response_end = self.shared_prompt_token_count + response_token_count
+        if response_end > sequence_length:
+            raise ValueError(
+                f"{branch}_response_token_count extends beyond the branch sequence"
+            )
+        response_ids = input_ids[self.shared_prompt_token_count : response_end]
+        response_labels = labels[self.shared_prompt_token_count : response_end]
         if any(
             label != token_id
             for token_id, label in zip(response_ids, response_labels, strict=True)
@@ -129,10 +139,11 @@ class CompletedDPOTrainingMaterializationRecord(_DPOTrainingMaterializationRecor
                 f"every {branch} response label must equal its corresponding "
                 "input token id"
             )
-        if response_token_count != len(response_ids):
+        template_suffix_labels = labels[response_end:]
+        if any(label != TRAINER_IGNORE_INDEX for label in template_suffix_labels):
             raise ValueError(
-                f"{branch}_response_token_count must equal the number of scored "
-                "response tokens"
+                f"every {branch} post-response template label must use the trainer "
+                "ignore index"
             )
 
 

@@ -26,7 +26,7 @@ from agentenv.training.preferences.adjudication import (
     build_pending_preference_adjudication_records,
     validate_preference_adjudication_records,
 )
-from agentenv.training.preferences.export import (
+from agentenv.training.preferences.comparison_export import (
     PreferenceComparisonExport,
     load_preference_comparison_export_artifact,
 )

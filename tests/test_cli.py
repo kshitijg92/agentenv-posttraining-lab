@@ -109,6 +109,75 @@ def test_positive_sft_materialize_cli_reports_accounted_outcomes(
     }
 
 
+def test_dpo_materialize_cli_reports_accounted_pair_outcomes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    captured = {}
+    out_dir = tmp_path / "dpo-materialized"
+
+    def fake_export(source, protocol, out, **kwargs):
+        captured.update(
+            {
+                "source": source,
+                "protocol": protocol,
+                "out": out,
+                **kwargs,
+            }
+        )
+        return SimpleNamespace(
+            out_dir=out_dir,
+            manifest=SimpleNamespace(
+                record_count=3,
+                completed_count=1,
+                failed_count=2,
+                sequence_length_exceeded_count=1,
+                materialization_error_count=1,
+                training_authorization="not_authorized",
+                artifacts={"materializations": "materializations.jsonl"},
+            ),
+        )
+
+    monkeypatch.setattr(
+        cli_module,
+        "export_dpo_training_materializations",
+        fake_export,
+    )
+    result = CliRunner().invoke(
+        app,
+        [
+            "training",
+            "preferences",
+            "materialize",
+            "--source",
+            "preference-pair-export",
+            "--model-input-protocol",
+            "protocol.yaml",
+            "--max-sequence-length",
+            "32768",
+            "--local-files-only",
+            "--out",
+            str(out_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "DPO training materialization complete" in result.output
+    assert "records=3 completed=1 failed=2" in result.output
+    assert "overlength=1 materialization_errors=1" in result.output
+    assert "training_authorization=not_authorized" in result.output
+    assert "materializations.jsonl" in result.output
+    assert captured == {
+        "source": Path("preference-pair-export"),
+        "protocol": Path("protocol.yaml"),
+        "out": out_dir,
+        "max_sequence_length": 32768,
+        "tokenizer_cache_dir": None,
+        "local_files_only": True,
+        "overwrite": False,
+    }
+
+
 def test_eval_cli_rejects_non_empty_out_without_overwrite(tmp_path: Path) -> None:
     out_dir = tmp_path / "eval_run"
     out_dir.mkdir()

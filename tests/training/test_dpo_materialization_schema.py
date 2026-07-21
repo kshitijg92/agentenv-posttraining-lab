@@ -23,13 +23,13 @@ def _record(**updates: Any) -> dict[str, Any]:
         "materializer_code_hash": "xxh64:3333333333333333",
         "status": "completed",
         "shared_prompt_token_count": 4,
-        "chosen_input_ids": [151644, 100, 151645, 151644, 200, 201, 151645],
-        "chosen_labels": [-100, -100, -100, -100, 200, 201, 151645],
-        "chosen_sequence_length": 7,
+        "chosen_input_ids": [151644, 100, 151645, 151644, 200, 201, 151645, 198],
+        "chosen_labels": [-100, -100, -100, -100, 200, 201, 151645, -100],
+        "chosen_sequence_length": 8,
         "chosen_response_token_count": 3,
-        "rejected_input_ids": [151644, 100, 151645, 151644, 300, 151645],
-        "rejected_labels": [-100, -100, -100, -100, 300, 151645],
-        "rejected_sequence_length": 6,
+        "rejected_input_ids": [151644, 100, 151645, 151644, 300, 151645, 198],
+        "rejected_labels": [-100, -100, -100, -100, 300, 151645, -100],
+        "rejected_sequence_length": 7,
         "rejected_response_token_count": 2,
     }
     payload.update(updates)
@@ -73,7 +73,7 @@ def test_completed_pair_materialization_has_two_response_only_label_sets() -> No
 def test_completed_pair_requires_identical_shared_prompt_tokens() -> None:
     with pytest.raises(ValidationError, match="identical shared-prompt token ids"):
         MATERIALIZATION_ADAPTER.validate_python(
-            _record(rejected_input_ids=[151644, 999, 151645, 151644, 300, 151645])
+            _record(rejected_input_ids=[151644, 999, 151645, 151644, 300, 151645, 198])
         )
 
 
@@ -91,9 +91,19 @@ def test_completed_pair_masks_every_shared_prompt_token(branch: str) -> None:
 def test_completed_pair_scores_every_response_token(branch: str) -> None:
     payload = _record()
     labels = list(payload[f"{branch}_labels"])
-    labels[-1] = -100
+    labels[payload["shared_prompt_token_count"]] = -100
 
     with pytest.raises(ValidationError, match="response label"):
+        MATERIALIZATION_ADAPTER.validate_python(_record(**{f"{branch}_labels": labels}))
+
+
+@pytest.mark.parametrize("branch", ["chosen", "rejected"])
+def test_completed_pair_masks_post_response_template_tokens(branch: str) -> None:
+    payload = _record()
+    labels = list(payload[f"{branch}_labels"])
+    labels[-1] = payload[f"{branch}_input_ids"][-1]
+
+    with pytest.raises(ValidationError, match="post-response template label"):
         MATERIALIZATION_ADAPTER.validate_python(_record(**{f"{branch}_labels": labels}))
 
 
@@ -109,9 +119,19 @@ def test_completed_pair_rejects_identical_response_tokens() -> None:
                     200,
                     201,
                     151645,
+                    198,
                 ],
-                rejected_labels=[-100, -100, -100, -100, 200, 201, 151645],
-                rejected_sequence_length=7,
+                rejected_labels=[
+                    -100,
+                    -100,
+                    -100,
+                    -100,
+                    200,
+                    201,
+                    151645,
+                    -100,
+                ],
+                rejected_sequence_length=8,
                 rejected_response_token_count=3,
             )
         )

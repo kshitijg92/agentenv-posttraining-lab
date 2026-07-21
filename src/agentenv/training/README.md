@@ -62,7 +62,8 @@ flowchart TD
     PD --> PC[Preference comparison export<br/>unordered + not authorized]
     PC --> PA[Preference adjudication review<br/>human, deterministic, or LLM judge]
     PA -->|reviewed + preferred only| PE[Preference pair export<br/>reference-only + exhaustive]
-    PE --> DM[Planned target-model<br/>DPO materialization]
+    PE --> DM[Target-model DPO materialization<br/>paired tokens + response labels]
+    DM -->|either branch invalid or overlength| DE[Explicit atomic pair failure]
 
     TS --> DR[Planned final dataset release]
     HA[Harness audit] --> DR
@@ -286,6 +287,12 @@ agentenv training preferences export \
   --comparisons <preference-comparison-export> \
   --reviews <preference-adjudication-review> \
   --out <preference-pair-export>
+
+agentenv training preferences materialize \
+  --source <preference-pair-export> \
+  --model-input-protocol <protocol.yaml> \
+  --max-sequence-length <tokens> \
+  --out <dpo-materialization-artifact>
 ```
 
 `PreferencePairExport` independently pins the exact comparison manifest and
@@ -297,12 +304,20 @@ The manifest accounts for every non-reviewed, tie, ambiguous, invalid, and
 preferred source row and reports distinct shared-context count separately from
 pair count.
 
-The atomic `DPOTrainingMaterializationRecord` contract is defined, but its
-builder and persisted export are not yet implemented. A completed record holds
-two full token sequences with one identical, fully masked shared-prompt prefix.
-Only the chosen and rejected next-assistant-action suffixes receive trainer
-labels. If either branch cannot be faithfully serialized or exceeds the
-sequence limit, the pair produces one failed record rather than a usable half.
-Reference-model selection is intentionally absent: it belongs to the later DPO
-training-run contract, not token materialization. Until the builder and export
-exist, the reference-only pairs are not trainer-ready and DPO remains deferred.
+The atomic `DPOTrainingMaterializationRecord`, source reconstruction,
+materializer, persisted export, and CLI are implemented. Reconstruction
+traverses every aggregated rollout-evidence occurrence as a consistency check,
+but emits exactly one input per pair. A deterministic canonical occurrence
+supplies the equivalent model-visible context rather than turning repeated
+observations into duplicate training rows.
+
+A completed record holds two full token sequences with one identical, fully
+masked shared-prompt prefix. Only the chosen and rejected next-assistant-action
+tokens, including the model-owned end-of-turn token, receive trainer labels. A
+template-owned separator after the response remains masked. If either branch
+cannot be faithfully serialized or exceeds the sequence limit, the pair
+produces one failed record rather than a usable half. Reference-model selection
+is intentionally absent: it belongs to the later DPO training-run contract,
+not token materialization. The persisted artifact is trainer-shaped but remains
+`not_authorized`; DPO remains deferred until pair quantity/quality and a later
+training-run contract justify it.

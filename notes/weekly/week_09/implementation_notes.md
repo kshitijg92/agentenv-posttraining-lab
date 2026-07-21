@@ -2841,8 +2841,80 @@ artifact persistence, or CLI integration.
 Focused verification:
 
 ```text
-DPO materialization schema: 14 passed
+DPO materialization schema: 16 passed
 Ruff schema/test slice: passed
 targeted Pyright: passed
+git diff --check: passed
+```
+
+### DPO Source Reconstruction And Tokenization Checkpoint
+
+Added fail-closed reconstruction from `PreferencePairRecord` through the pinned
+comparison, adjudication, training-candidate, trajectory, and prompt-loop
+sources. Every rollout-evidence occurrence supporting either alternative is
+loaded and hash-checked. Occurrences must reconstruct the same model-visible
+context and the same alternative action. One deterministic occurrence supplies
+the equivalent context, so repeated sampling does not create duplicate DPO
+rows.
+
+Added paired rendering and tokenization under the pinned model-input protocol.
+Each branch renders the same generation prompt followed by its next assistant
+action. Only the final action's ownership span is labeled; earlier assistant
+messages remain context-only. Chosen and rejected prompt token ids must match
+exactly. The model-owned end-of-turn token is scored, while a later
+template-owned newline or separator remains masked.
+
+Moved the protocol-pinned tokenizer and character-ownership implementation to
+the objective-neutral `training/tokenization.py` module so positive SFT and DPO
+use one normalization, decode-equivalence, offset, and boundary-crossing
+implementation.
+
+Atomic length handling tokenizes both branches before deciding whether the pair
+fits. An overlength result records both observed sequence lengths; any other
+rendering or tokenization error records neither partial branch.
+
+This checkpoint stops before a DPO materialization artifact manifest, reload
+validation, or CLI command.
+
+Focused verification:
+
+```text
+DPO schema/builder/source + positive-SFT tokenization regression slice: 60 passed
+targeted Pyright: passed
+git diff --check: passed
+```
+
+### Persisted DPO Materialization Checkpoint
+
+Added `DPOTrainingMaterializationExport` with exactly one completed or failed
+record per source `PreferencePairRecord`, including valid zero-row artifacts.
+Its manifest pins the exact preference-pair manifest and JSONL payload, pinned
+model-input protocol, sequence limit, materializer implementation, record
+schema, outcome counts, and materialization JSONL hash. It remains explicitly
+`training_authorization=not_authorized`.
+
+Reload validation traverses the complete pinned preference source chain,
+reconstructs all pair inputs, reloads the pinned tokenizer, and deterministically
+rebuilds every token and label. Source substitution, source payload drift,
+record-order drift, token/label drift, count drift, and protocol drift fail
+closed.
+
+Added:
+
+```text
+agentenv training preferences materialize
+```
+
+The command accepts the reference-only pair export, pinned model-input protocol,
+maximum branch length, tokenizer-cache policy, and output directory. It reports
+completed, overlength, and materialization-error counts without authorizing DPO
+training or choosing a reference model.
+
+Focused verification:
+
+```text
+DPO/preference/positive-SFT/artifact/CLI slice: 173 passed
+repo-wide Ruff: passed
+repo-wide Pyright: passed using the checked-in `.venv` selection
 git diff --check: passed
 ```

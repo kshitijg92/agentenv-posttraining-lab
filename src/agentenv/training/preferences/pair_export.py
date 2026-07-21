@@ -22,7 +22,7 @@ from agentenv.artifacts.manifests import (
     load_preference_pair_export_manifest,
 )
 from agentenv.hashing import hash_file
-from agentenv.training.preferences.export import (
+from agentenv.training.preferences.comparison_export import (
     PreferenceComparisonExport,
     load_preference_comparison_export_artifact,
 )
@@ -49,6 +49,8 @@ class PreferencePairExport:
     out_dir: Path
     manifest: PreferencePairExportManifest
     records: tuple[PreferencePairRecord, ...]
+    source_comparison_export: PreferenceComparisonExport
+    source_adjudication_review: PreferenceAdjudicationReviewValidation
 
 
 def export_preference_pairs(
@@ -138,6 +140,8 @@ def load_preference_pair_export_artifact(export_dir: Path) -> PreferencePairExpo
         out_dir=export_dir,
         manifest=manifest,
         records=records,
+        source_comparison_export=comparison_export,
+        source_adjudication_review=review_validation,
     )
 
 

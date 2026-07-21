@@ -615,7 +615,7 @@ TrainingCandidateExport
 -> PreferenceComparisonExport
 -> PreferenceAdjudicationReview
 -> PreferencePairExport
--> future target-model DPO materialization
+-> DPOTrainingMaterializationExport
 ```
 
 The comparison export pins its source candidate manifest, discovery
@@ -676,21 +676,28 @@ The following are not valid pairs:
 
 The unlabeled discovery schema, deterministic discovery builder, immutable
 comparison export, reviewer-specific adjudication schema, persisted review
-queue, exhaustive reference-only pair export, and atomic DPO-materialization
-record schema are implemented. Sampling, weighting, and the DPO materialization
-builder/export are not. An empty comparison/review/pair artifact remains valid.
-DPO remains deferred unless at least 20 auditable pairs exist, and combinatorial
-pairs from one shared context must not be misreported as independent data
-diversity.
+queue, exhaustive reference-only pair export, atomic DPO-materialization record,
+source reconstruction, materializer, and persisted DPO materialization export
+are implemented. Sampling and weighting are not. Empty comparison, review,
+pair, and materialization artifacts remain valid. DPO remains deferred unless
+at least 20 auditable pairs exist, and combinatorial pairs from one shared
+context must not be misreported as independent data diversity.
 
 One completed DPO materialization record contains two complete target-protocol
 token sequences: the exact shared prompt followed by the chosen action, and the
 same prompt followed by the rejected action. Both branches must have identical
 prompt token ids and must mask every prompt label. Every token in each compared
-assistant-action suffix is scored, including a model-owned end-of-turn token.
-The two response suffixes must differ. Either both branches materialize within
-the sequence limit or the pair produces one failed record; a one-sided result
-is never trainer-valid.
+assistant-action span is scored, including a model-owned end-of-turn token. Any
+template-owned separator after that span remains masked. The two response spans
+must differ. Either both branches materialize within the sequence limit or the
+pair produces one failed record; a one-sided result is never trainer-valid.
+
+Repeated occurrences of the same action under the same exact context remain
+supporting evidence for one alternative. Materialization traverses and validates
+every occurrence, rejects source drift or inconsistent model-visible content,
+and deterministically selects one equivalent occurrence for reconstruction. It
+does not multiply one pair according to how often either source action happened
+to be sampled.
 
 This materialization pins the model-input protocol and tokenizer needed to
 construct the two sequences. It does not select a frozen reference model.
@@ -795,15 +802,15 @@ historical artifact count != current training-data eligibility
 | Preference comparison export and adjudication-review artifact | Implemented |
 | Exhaustive reference-only preference-pair export | Implemented |
 | Atomic target-model DPO materialization record | Implemented |
-| Target-model DPO materialization builder and export | Not implemented |
+| DPO source reconstruction and paired tokenization builder | Implemented |
+| Persisted target-model DPO materialization export and CLI | Implemented |
 | Human-repair provenance contract | Not implemented |
 | External-data license/source contract | Out of scope |
 
-The next preference checkpoint is the target-model DPO materialization builder:
-reconstruct the shared prompt and both actions through the pinned source chain,
-then enforce prompt identity and target-protocol tokenization. Across all
-objectives, only the later final release/trainer boundary may combine completed
-materializations with matching trust evidence and authorize consumption.
+The preference-data plumbing now stops at a trainer-shaped but unauthorized DPO
+materialization artifact. Across all objectives, only the later final
+release/trainer boundary may combine completed materializations with matching
+trust evidence and authorize consumption.
 
 ## Non-Claims
 

@@ -358,7 +358,8 @@ Current state:
   source export and protocol, and rebuilds persisted labels on load;
 - a real Qwen2.5-Coder-3B practice prefix materialized successfully with the
   pinned tokenizer into 843 tokens, including assistant-only end-of-turn loss;
-- target-model token materialization remains before any training smoke.
+- target-model positive-SFT token materialization is complete; final training
+  authorization and the smoke-training decision remain separate boundaries.
 
 Self-deception trap:
 
@@ -439,7 +440,11 @@ Done when:
 - an atomic DPO training-materialization record requires two complete branches
   with one identical masked prompt and response-only labels, while leaving
   reference-model selection to the later training run;
-- a builder either writes valid JSONL or documents insufficient accepted pairs;
+- repeated observations supporting one preference alternative are all
+  source-validated but materialize as one pair rather than frequency-weighted
+  duplicates;
+- the materialization export writes one completed or failed row per source pair,
+  pins the target-model input protocol, and remains unauthorized for training;
 - DPO remains deferred unless at least 20 auditable pairs exist.
 
 Self-deception trap:
