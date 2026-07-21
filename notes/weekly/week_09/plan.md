@@ -436,6 +436,9 @@ Done when:
 - adjudication is persisted as a separate source- and rubric-pinned review;
 - every validated preferred adjudication is persisted in an exhaustive,
   reference-only preference-pair export;
+- an atomic DPO training-materialization record requires two complete branches
+  with one identical masked prompt and response-only labels, while leaving
+  reference-model selection to the later training run;
 - a builder either writes valid JSONL or documents insufficient accepted pairs;
 - DPO remains deferred unless at least 20 auditable pairs exist.
 

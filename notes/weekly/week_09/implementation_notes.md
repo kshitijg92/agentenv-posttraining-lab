@@ -2815,3 +2815,34 @@ repo-wide Ruff: passed
 repo-wide Pyright: passed using the checked-in `.venv` selection
 git diff --check: passed
 ```
+
+### Atomic DPO Materialization Schema Checkpoint
+
+Added `DPOTrainingMaterializationRecord` downstream of the reference-only pair
+export. A completed record contains full chosen and rejected token sequences,
+an exact shared-prompt token boundary, and response-only trainer labels for
+both branches. Schema validation requires identical prompt token ids, masks all
+prompt labels, scores every response token, rejects identical response token
+sequences, and enforces the sequence limit independently on both branches.
+
+Pair validity is atomic. Sequence-length failures record both observed branch
+lengths and require at least one to exceed the configured maximum. Other
+materialization errors cannot retain partial branch tokens or lengths. There is
+no representable half-completed pair.
+
+The schema pins the source preference-pair record, model-input protocol,
+sequence policy, and materializer implementation. It deliberately contains no
+reference-model fields: reference checkpoint selection and the DPO objective
+belong to a later training-run contract.
+
+This checkpoint stops before source reconstruction, rendering/tokenization,
+artifact persistence, or CLI integration.
+
+Focused verification:
+
+```text
+DPO materialization schema: 14 passed
+Ruff schema/test slice: passed
+targeted Pyright: passed
+git diff --check: passed
+```

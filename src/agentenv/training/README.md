@@ -297,5 +297,12 @@ The manifest accounts for every non-reviewed, tie, ambiguous, invalid, and
 preferred source row and reports distinct shared-context count separately from
 pair count.
 
-Target-model DPO materialization remains unimplemented, so these reference-only
-pairs are not trainer-ready and DPO is still deferred.
+The atomic `DPOTrainingMaterializationRecord` contract is defined, but its
+builder and persisted export are not yet implemented. A completed record holds
+two full token sequences with one identical, fully masked shared-prompt prefix.
+Only the chosen and rejected next-assistant-action suffixes receive trainer
+labels. If either branch cannot be faithfully serialized or exceeds the
+sequence limit, the pair produces one failed record rather than a usable half.
+Reference-model selection is intentionally absent: it belongs to the later DPO
+training-run contract, not token materialization. Until the builder and export
+exist, the reference-only pairs are not trainer-ready and DPO remains deferred.

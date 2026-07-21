@@ -676,11 +676,28 @@ The following are not valid pairs:
 
 The unlabeled discovery schema, deterministic discovery builder, immutable
 comparison export, reviewer-specific adjudication schema, persisted review
-queue, and exhaustive reference-only pair export are implemented. Sampling,
-weighting, and target-model DPO materialization are not. An empty
-comparison/review/pair artifact remains valid. DPO remains deferred unless at
-least 20 auditable pairs exist, and combinatorial pairs from one shared context
-must not be misreported as independent data diversity.
+queue, exhaustive reference-only pair export, and atomic DPO-materialization
+record schema are implemented. Sampling, weighting, and the DPO materialization
+builder/export are not. An empty comparison/review/pair artifact remains valid.
+DPO remains deferred unless at least 20 auditable pairs exist, and combinatorial
+pairs from one shared context must not be misreported as independent data
+diversity.
+
+One completed DPO materialization record contains two complete target-protocol
+token sequences: the exact shared prompt followed by the chosen action, and the
+same prompt followed by the rejected action. Both branches must have identical
+prompt token ids and must mask every prompt label. Every token in each compared
+assistant-action suffix is scored, including a model-owned end-of-turn token.
+The two response suffixes must differ. Either both branches materialize within
+the sequence limit or the pair produces one failed record; a one-sided result
+is never trainer-valid.
+
+This materialization pins the model-input protocol and tokenizer needed to
+construct the two sequences. It does not select a frozen reference model.
+Policy initialization, reference checkpoint, DPO objective variant, and beta
+belong to a later training-run contract. If reference log probabilities are
+precomputed, they require a separate artifact pinned to both this
+materialization and the exact reference checkpoint.
 
 ## Analysis-Only Contract
 
@@ -777,15 +794,16 @@ historical artifact count != current training-data eligibility
 | Unordered preference discovery schema and deterministic builder | Implemented |
 | Preference comparison export and adjudication-review artifact | Implemented |
 | Exhaustive reference-only preference-pair export | Implemented |
-| Target-model DPO materialization | Not implemented |
+| Atomic target-model DPO materialization record | Implemented |
+| Target-model DPO materialization builder and export | Not implemented |
 | Human-repair provenance contract | Not implemented |
 | External-data license/source contract | Out of scope |
 
-The next preference checkpoint is target-model DPO materialization: reconstruct
-the shared prompt and both actions through the pinned source chain, then enforce
-prompt identity and target-protocol tokenization. Across all objectives, only
-the later final release/trainer boundary may combine completed materializations
-with matching trust evidence and authorize consumption.
+The next preference checkpoint is the target-model DPO materialization builder:
+reconstruct the shared prompt and both actions through the pinned source chain,
+then enforce prompt identity and target-protocol tokenization. Across all
+objectives, only the later final release/trainer boundary may combine completed
+materializations with matching trust evidence and authorize consumption.
 
 ## Non-Claims
 
