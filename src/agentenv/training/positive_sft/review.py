@@ -30,8 +30,8 @@ from agentenv.training.candidates.source_integrity import (
     validate_artifact_ref_hash,
     validate_pinned_candidate_source_review,
 )
+from agentenv.training.candidates.hashing import hash_training_candidate_record
 from agentenv.training.repairs.redundancy_repair import (
-    hash_training_candidate_record,
     hash_training_candidate_repair_record,
     hash_training_candidate_repair_review_record,
 )

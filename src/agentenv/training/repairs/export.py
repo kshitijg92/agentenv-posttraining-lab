@@ -32,6 +32,7 @@ from agentenv.training.candidates.export import (
     TrainingCandidateExport,
     load_training_candidate_export_artifact,
 )
+from agentenv.training.candidates.hashing import hash_training_candidate_record
 from agentenv.training.candidates.source_integrity import (
     build_trajectory_record_index,
     load_pinned_candidate_trajectory_export,
@@ -44,7 +45,6 @@ from agentenv.training.repairs.redundancy_repair import (
     MechanicalRedundancyRepairCannotComplete,
     build_training_candidate_repair_id,
     compute_mechanical_redundancy_repairer_code_hash,
-    hash_training_candidate_record,
     repair_prompt_loop_mechanical_redundancy,
 )
 from agentenv.training.repairs.schema import (

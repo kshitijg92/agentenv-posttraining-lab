@@ -793,12 +793,13 @@ def export_training_candidates(
         "[green]training candidate export complete[/green] "
         f"records={manifest.record_count} "
         f"training_authorization={manifest.training_authorization} "
-        f"objective_use_eligible={manifest.any_objective_use_eligible_count} "
+        "downstream_construction_eligible="
+        f"{manifest.downstream_construction_eligible_count} "
         f"analysis_only={manifest.analysis_only_count} "
         f"fully_ineligible={manifest.fully_ineligible_count} "
         f"positive_sft_review={manifest.positive_sft_review_eligible_count} "
         f"negative_examples={manifest.negative_example_eligible_count} "
-        f"preference_pairing={manifest.preference_pairing_eligible_count}"
+        f"preference_discovery={manifest.preference_discovery_eligible_count}"
     )
     console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
     console.print(

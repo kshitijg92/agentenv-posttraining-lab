@@ -2622,3 +2622,44 @@ Ruff: passed
 Pyright: passed
 git diff --check: passed
 ```
+
+### Preference Discovery Evidence Checkpoint
+
+Renamed candidate-level `preference_pairing_eligible` to
+`preference_discovery_eligible` in place. The previous name implied that one
+eligible trajectory already had a valid counterpart. The builder no longer
+requires a scored or gradable terminal outcome for this field. It applies the
+common model-source, split, leakage, orchestration, reward-detector-completeness,
+and required-artifact checks only.
+
+The aggregate candidate property/count was likewise renamed from “objective
+use” to `downstream_construction`. Preference discovery is a construction path,
+not yet an authorized objective record, so the former wording became misleading
+once unreviewed evidence could enter discovery.
+
+Positive-SFT and negative-example paths remain trajectory-review gated.
+Preference discovery does not: an unreviewed or rejected but trustworthy
+trajectory may be mined as unlabeled evidence. `TrainingCandidateRecord`
+validation now enforces accepted source review only for the review-gated paths.
+
+Added `training/preferences/` with:
+
+```text
+hashing.py -> versioned logical-message/action projections and deterministic ids
+schema.py  -> unordered comparison candidates and hash-pinned rollout evidence
+builder.py -> original prompt-loop loading, exact-state joins, and pair enumeration
+```
+
+The branch key covers selected task hashes, harness runtime hash, ordered
+logical-message hashes, and canonical workspace state before the action.
+Random occurrence message IDs and assistant model names remain provenance and
+are excluded from logical-message equality. Tool name and tool-call linkage are
+retained. The builder validates the original tool-result/workspace chain and
+never accepts a repair artifact as rollout evidence.
+
+Repeated occurrences of identical assistant content are aggregated into one
+alternative. Every two distinct action hashes under one branch key produce one
+canonical unordered candidate. Records carry no preference direction. A
+focused integration fixture used two identical happy-path occurrences and one
+malformed, ungradable occurrence; discovery produced one comparison with
+evidence multiplicities two and one.

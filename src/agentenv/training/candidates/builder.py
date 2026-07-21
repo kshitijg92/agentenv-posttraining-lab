@@ -89,31 +89,24 @@ def build_training_candidate_content_eligibility(
     trajectory: TrajectoryRecord,
     review: TrajectoryReviewRecord,
 ) -> TrainingCandidateContentEligibility:
-    if review.review_status != "reviewed" or review.review_decision != "accepted":
-        review_block_reason = build_review_block_reason(review)
-        return TrainingCandidateContentEligibility(
-            analysis_eligible=True,
-            analysis_reason=f"trajectory remains analysis-eligible; {review_block_reason}",
-            positive_sft_review_eligible=False,
-            positive_sft_review_reason=review_block_reason,
-            negative_example_eligible=False,
-            negative_example_reason=review_block_reason,
-            preference_pairing_eligible=False,
-            preference_pairing_reason=review_block_reason,
-        )
-
-    common_block_reason = build_common_training_block_reason(
-        trajectory
-    ) or build_reward_hack_review_block_reason(trajectory, review)
+    common_block_reason = build_common_training_block_reason(trajectory)
+    review_block_reason = (
+        None
+        if review.review_status == "reviewed" and review.review_decision == "accepted"
+        else build_review_block_reason(review)
+    )
+    review_gated_common_block_reason = (
+        review_block_reason
+        or common_block_reason
+        or build_reward_hack_review_block_reason(trajectory, review)
+    )
     positive_sft_block_reason = (
-        common_block_reason
+        review_gated_common_block_reason
         or build_positive_sft_review_block_reason(trajectory, review)
     )
     negative_example_block_reason = (
-        common_block_reason or build_negative_example_block_reason(trajectory)
-    )
-    preference_data_block_reason = (
-        common_block_reason or build_preference_data_block_reason(trajectory)
+        review_gated_common_block_reason
+        or build_negative_example_block_reason(trajectory)
     )
 
     return TrainingCandidateContentEligibility(
@@ -129,10 +122,9 @@ def build_training_candidate_content_eligibility(
             path_label="negative example",
             block_reason=negative_example_block_reason,
         ),
-        preference_pairing_eligible=preference_data_block_reason is None,
-        preference_pairing_reason=build_training_path_reason(
-            path_label="preference pairing",
-            block_reason=preference_data_block_reason,
+        preference_discovery_eligible=common_block_reason is None,
+        preference_discovery_reason=build_preference_discovery_reason(
+            block_reason=common_block_reason,
         ),
     )
 
@@ -212,14 +204,6 @@ def build_negative_example_block_reason(trajectory: TrajectoryRecord) -> str | N
     return None
 
 
-def build_preference_data_block_reason(trajectory: TrajectoryRecord) -> str | None:
-    if trajectory.statuses.grade_state == "cannot_grade":
-        return "preference data requires a gradable trajectory"
-    if trajectory.statuses.agent_task_run_status != "scored":
-        return "preference data requires a scored agent trajectory"
-    return None
-
-
 def build_review_block_reason(review: TrajectoryReviewRecord) -> str:
     if review.review_status == "not_reviewed":
         return "trajectory has not been reviewed"
@@ -237,4 +221,13 @@ def build_training_path_reason(
 ) -> str:
     if block_reason is None:
         return f"accepted human review; trajectory evidence permits {path_label}"
+    return block_reason
+
+
+def build_preference_discovery_reason(*, block_reason: str | None) -> str:
+    if block_reason is None:
+        return (
+            "trusted original trajectory evidence permits preference discovery; "
+            "task outcome and behavioral findings are not preference labels"
+        )
     return block_reason

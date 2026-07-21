@@ -690,18 +690,18 @@ def test_trajectories_review_init_cli_writes_review_artifact(
     assert "training candidate export complete" in training_result.output
     assert "records=1" in training_result.output
     assert "training_authorization=not_authorized" in training_result.output
-    assert "objective_use_eligible=0" in training_result.output
+    assert "downstream_construction_eligible=0" in training_result.output
     assert "analysis_only=1" in training_result.output
     assert "fully_ineligible=0" in training_result.output
     assert "positive_sft_review=0" in training_result.output
     assert "negative_examples=0" in training_result.output
-    assert "preference_pairing=0" in training_result.output
+    assert "preference_discovery=0" in training_result.output
     assert "manifest.json" in training_result.output
     assert "training_candidates.jsonl" in training_result.output
     training_manifest = json.loads((training_out / "manifest.json").read_text())
     assert training_manifest["artifact_type"] == "training_candidate_export"
     assert training_manifest["record_count"] == 1
-    assert training_manifest["any_objective_use_eligible_count"] == 0
+    assert training_manifest["downstream_construction_eligible_count"] == 0
     assert training_manifest["analysis_only_count"] == 1
     assert training_manifest["training_authorization"] == "not_authorized"
     assert (training_out / "training_candidates.jsonl").is_file()

@@ -1,9 +1,9 @@
 # Training-data workflow
 
-This package owns the decisions and transformations that turn reviewed trajectory
-evidence into objective-specific, pre-release data artifacts. It does not own eval
-execution or the immutable trajectory evidence itself, and no artifact before a
-final release manifest is authorized for training.
+This package owns the decisions and transformations that turn validated trajectory
+and review evidence into objective-specific, pre-release data artifacts. It does
+not own eval execution or the immutable trajectory evidence itself, and no artifact
+before a final release manifest is authorized for training.
 
 ## Package ownership
 
@@ -19,6 +19,10 @@ final release manifest is authorized for training.
   objective-specific prefix review, exports approved positive-SFT prefixes, and
   owns their target-model materialization contract. It owns positive-SFT
   semantics rather than generic “SFT” semantics.
+- `preferences/` mines original rollout evidence for distinct assistant actions
+  under an exact shared decision state. It emits unordered comparison candidates;
+  it does not decide which action is preferred and never treats a repaired
+  transcript as an executed rollout.
 - `release/` owns fail-closed harness-audit and control-calibration validation for
   the eventual final dataset release. The release manifest itself remains a
   downstream boundary after token materialization.
@@ -52,6 +56,13 @@ flowchart TD
     TM -->|canonical sequence fits| TS[Persisted input_ids + trainer labels]
     TM -->|exceeds max sequence length| OE[Explicit overlength exclusion]
     TM -->|normalization, offset, or serialization invalid| ME[Explicit materialization error]
+
+    TC -->|trusted original rollout evidence| PD[Preference discovery]
+    T -. hash-pinned original prompt loops .-> PD
+    PD --> PC[Unlabeled action comparisons<br/>same context + distinct actions]
+    PC --> PA[Planned preference adjudication]
+    PA -->|preferred only| PE[Planned preference export]
+
     TS --> DR[Planned final dataset release]
     HA[Harness audit] --> DR
     CC[Control calibration] --> DR
@@ -86,15 +97,23 @@ stand in for the other.
 7. The target-model input protocol pins the checkpoint, tokenizer artifacts,
    exact chat-template bytes, serialization operations, message projection, and
    tool representation. It also pins a generation-ownership annotation whose
-   render must remain byte-identical to the canonical template. Token-level loss
-   assignment remains downstream. System, user, and tool-observation tokens are
-   context only; approved assistant-generated spans receive loss.
+   render must remain byte-identical to the canonical template. The downstream
+   positive-SFT materializer performs token-level loss assignment: system, user,
+   and tool-observation tokens are context only, while approved
+   assistant-generated spans receive loss.
 8. The initial materializer uses one trajectory-aggregated sequence per source
    example. An overlength sequence is explicitly excluded whole; it is not
    truncated, arbitrarily chunked, overlapped, or summarized.
 9. Every accepted source example must produce exactly one materialization result.
    Completed and failed outcomes are both persisted so exclusions and runtime
    failures cannot silently disappear from dataset accounting.
+10. Preference discovery is gated by evidence integrity, not task success or
+    trajectory-level behavioral acceptance. It may mine trusted unsuccessful,
+    redundant, malformed, or reward-hacking behavior as a possible rejected
+    alternative. Private leakage, ineligible splits, orchestration failures,
+    incomplete reward-hack evaluation, and missing source evidence still block it.
+11. Preference discovery only follows original prompt-loop artifacts. A repaired
+    transcript is a dataset transformation, not an executed counterfactual rollout.
 
 ## What an exported positive-SFT record means
 
@@ -138,6 +157,13 @@ input protocol, sequence policy, materializer code, result counts, and JSONL
 hash. Loading verifies exact source id/record-hash coverage and rebuilds the
 tokens and labels from the pinned inputs before accepting the artifact.
 
+A completed materialization is trainer-shaped, not training-authorized. It
+means that the pinned source and target-model protocol deterministically
+produced a valid, in-budget `input_ids` and `labels` sequence. It does not mean
+that final harness and control evidence is current, that the example should be
+sampled by a trainer, or that training is permitted. Failed materializations
+remain accounting evidence and can never be passed to a trainer as examples.
+
 The CLI entrypoint is:
 
 ```text
@@ -169,3 +195,36 @@ Ollama's native generate endpoint with raw templating mode mandatory. The
 OpenAI-compatible client remains a separate provider-owned serialization path;
 the 7B and 14B Qwen2.5 configs remain on that path until they have their own
 pinned input-protocol records.
+
+## Preference discovery boundary
+
+`PreferenceComparisonCandidateRecord` is an unlabeled action comparison, not a
+DPO pair. Discovery scans every assistant decision occurrence in every
+`preference_discovery_eligible` candidate and joins occurrences only when they
+share all of:
+
+```text
+task hashes
+harness runtime hash
+ordered logical-message hashes through context C
+canonical workspace hash immediately before the assistant action
+```
+
+Occurrence-only message IDs and assistant model names are provenance rather than
+logical context content. Tool observations retain their tool name and call ID.
+The complete original prompt-loop artifact and trajectory remain hash-pinned for
+each occurrence.
+
+Repeated observations of the same exact assistant content under one context are
+aggregated as rollout evidence for one alternative. Distinct action hashes form
+canonical unordered comparisons. If one context has `k` distinct actions, it can
+therefore yield up to `k * (k - 1) / 2` comparison candidates. Pair count must not
+be confused with independent context diversity.
+
+Discovery does not inspect task success and contains no `chosen`, `rejected`, or
+preference decision. A later adjudication record will allow a human,
+deterministic auditor, or pinned LLM judge to return `PREFERRED`, `TIE`,
+`AMBIGUOUS`, or `INVALID` with nonempty reasoning and reviewer-specific
+provenance. That adjudication and a persisted preference export are not yet
+implemented. The valid trainable preference-pair count remains zero and DPO is
+still deferred.

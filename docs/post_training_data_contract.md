@@ -10,7 +10,7 @@ The central boundary is:
 
 ```text
 trusted trajectory evidence
-  -> reviewed training candidate
+  -> interpreted training candidate
   -> objective-specific dataset record
   -> serialized tokens or comparison pair
   -> training loss
@@ -45,10 +45,10 @@ training eligibility != a constructed training example
 a valid dataset row != a valid token-level loss
 ```
 
-`TrainingCandidateRecord.training_eligibility` is the single authority for
-broad positive-SFT, negative-example, preference-data, and analysis use. A
-downstream builder may apply stricter objective-specific rules, but it must not
-override a denied use.
+`TrainingCandidateRecord.content_eligibility` is the single authority for which
+broad objective-specific construction workflows may inspect a source. A
+downstream builder may apply stricter rules, but it must not override a denied
+use. Discovery eligibility is not itself training authorization.
 
 ## Fail-Closed Trust Root
 
@@ -84,7 +84,6 @@ The trajectory must:
 
 - come from the `practice` or `dev` split recorded in its hash-pinned task
   manifest and split lock;
-- have an accepted trajectory review;
 - contain the required agent attempt id, task view, task-run result,
   prompt-loop result, and decoding configuration;
 - contain no detected canary or hidden-validator exposure in model-visible
@@ -92,6 +91,12 @@ The trajectory must:
 - contain no harness orchestration failure;
 - have a complete reward-hack catalogue evaluation;
 - remain linked to hash-pinned source artifacts.
+
+Positive-SFT and negative-example construction additionally require an accepted
+trajectory review. Preference discovery is deliberately different: it may mine
+an unreviewed or behaviorally rejected source as an unlabeled alternative when
+all evidence-integrity gates above pass. A later preference adjudication must
+still authorize any chosen/rejected claim.
 
 An ordinary model-caused failure can still be interpretable. For example, a
 malformed tool call or disallowed command may be useful negative evidence when
@@ -136,6 +141,10 @@ The following sources are forbidden from every trainable path:
 - trajectories whose reward-hack evaluation is incomplete;
 - trajectories missing required model-agent evidence;
 - unreviewed, rejected, or `needs_followup` trajectories.
+
+The final item applies to trainable objective records. An unlabeled preference
+comparison candidate is evidence for later review, not yet a trainable record,
+so its source review state is preserved rather than used as an automatic label.
 
 Controls calibrate the measurement system. They are not demonstrations of the
 unique or ideal reasoning path and must not be promoted into chosen responses
@@ -218,7 +227,7 @@ its actual preceding prefix inside that sequence.
 A source candidate may enter positive-SFT prefix review only when:
 
 - every common source and trust gate passes;
-- `training_eligibility.positive_sft_review_eligible` is true;
+- `content_eligibility.positive_sft_review_eligible` is true;
 - the trajectory review is accepted;
 - confirmed reward hacking is absent;
 - any ambiguous reward-hack finding has an explicit human `cleared` decision.
@@ -477,7 +486,7 @@ The current candidate policy permits a negative example when:
 
 - every common source and trust gate passes;
 - the trajectory review is accepted;
-- `training_eligibility.negative_example_eligible` is true;
+- `content_eligibility.negative_example_eligible` is true;
 - the trajectory is unsuccessful.
 
 This pool may contain gradable task failures, model-caused terminal tool
@@ -531,24 +540,41 @@ One preference pair contains:
 - source ids, hashes, splits, scorer/reward versions, and known risks for both
   sides.
 
-Candidate-level `preference_pairing_eligible` only permits a trajectory to be
-considered as one side. It does not prove that a valid counterpart or pair
-exists.
+Candidate-level `preference_discovery_eligible` only says that an original
+trajectory is trustworthy enough to be searched for action alternatives. It
+does not prove that a counterpart exists, that either action is better, or that
+a trainable preference pair exists. Unlike positive-SFT eligibility, discovery
+does not require task success or an accepted trajectory-level behavioral
+review. Those would remove exactly the poor behavior needed as possible
+rejected alternatives.
+
+Discovery groups assistant-action occurrences by an exact decision-state key:
+
+```text
+task hashes
++ harness runtime hash
++ ordered logical-message hashes through context C
++ canonical workspace hash before the action
+```
+
+It aggregates repeated occurrences of the same exact action as supporting
+rollout evidence. Distinct action hashes under that shared state become
+canonical unordered comparison candidates. Complete original prompt-loop and
+trajectory records remain hash-pinned evidence; repaired positive-SFT
+transcripts are excluded because their edited continuations were never
+executed.
 
 ### Pair-Level Requirements
 
-A pair is valid only when:
+A reviewed pair will be valid only when:
 
-- both sides pass the common source and accepted-review gates;
+- both sides pass the common evidence-integrity gates;
 - both sides come from training-eligible splits;
-- both responses use the same model-compatible serialization;
+- both actions occur under the same exact shared decision state;
+- both responses can use the target model's pinned serialization;
 - the chosen and rejected sides are not identical;
-- the prompt, task, and decision context are sufficiently comparable for the
-  declared basis;
-- the chosen side is supported by trusted success or a future explicitly
-  provenance-tracked human repair;
-- the rejected side's defect is evidenced rather than inferred solely from
-  hindsight;
+- one reviewer with auditable human, deterministic-auditor, or LLM-judge
+  provenance returns an explicit `PREFERRED` decision with a nonempty reason;
 - neither side contains private leakage or an environment/orchestration
   failure;
 - the pair builder records enough evidence to reproduce the comparison.
@@ -560,12 +586,15 @@ task prompt, and the comparison basis must account for material differences.
 
 Potential auditable bases include:
 
-- trusted successful behavior versus a trusted, gradable failed behavior;
-- two trusted successes where one contains a proven mechanically redundant
-  action and the other supplies a valid alternative at the same prefix;
+- a deterministic finding that one action is mechanically redundant while the
+  alternative is valid under the same state;
+- human judgment of correctness, safety, or efficiency under a versioned
+  overall-preference rubric;
+- a pinned LLM judge whose model, prompt, input protocol, and decoding settings
+  are preserved;
 - non-hacking trusted success versus an explicitly confirmed hack attempt with
   no private leakage;
-- future provenance-tracked human repair versus the original failed behavior.
+- controlled continuation evidence that isolates the local action difference.
 
 The following are not valid pairs:
 
@@ -576,11 +605,15 @@ The following are not valid pairs:
 - a pair whose chosen side is a control script or privileged oracle path;
 - any pair containing `heldout_private` or `public_calibration` evidence;
 - any pair containing actual private leakage;
-- any pair with an unauditable or ambiguous preference basis.
+- any comparison reviewed as `TIE`, `AMBIGUOUS`, or `INVALID`;
+- any pair with an unauditable preference basis.
 
-No preference schema or pair builder is implemented yet. An empty pair export
-or a documented insufficiency result is valid. DPO remains deferred unless at
-least 20 auditable pairs exist.
+The unlabeled discovery schema and deterministic discovery builder are now
+implemented. Reviewer-specific adjudication, persisted preference export, pair
+selection/capping, and target-model DPO materialization are not. An empty pair
+export or a documented insufficiency result remains valid. DPO remains deferred
+unless at least 20 auditable pairs exist, and combinatorial pairs from one
+shared context must not be misreported as independent data diversity.
 
 ## Analysis-Only Contract
 

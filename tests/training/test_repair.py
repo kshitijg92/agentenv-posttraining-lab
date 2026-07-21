@@ -11,13 +11,13 @@ from agentenv.models.schema import Message
 from agentenv.tasks.validate import load_task_manifest
 from agentenv.tools.hashing import hash_tool_input
 from agentenv.tools.schema import ReadFileOutput, ToolResult, validate_tool_input
+from agentenv.training.candidates.hashing import hash_training_candidate_record
 from agentenv.training.repairs.redundancy_detection import (
     assess_prompt_loop_mechanical_redundancy,
 )
 from agentenv.training.repairs.redundancy_repair import (
     MechanicalRedundancyRepairCannotComplete,
     build_training_candidate_repair_id,
-    hash_training_candidate_record,
     repair_prompt_loop_mechanical_redundancy,
 )
 from agentenv.training.candidates.schema import TrainingCandidateRecord
@@ -265,7 +265,7 @@ def _candidate_payload() -> dict[str, Any]:
             "positive_sft_review_reason": "allowed",
             "negative_example_eligible": False,
             "negative_example_reason": "succeeded",
-            "preference_pairing_eligible": True,
-            "preference_pairing_reason": "gradable",
+            "preference_discovery_eligible": True,
+            "preference_discovery_reason": "trusted original evidence",
         },
     }

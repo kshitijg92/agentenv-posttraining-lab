@@ -1,0 +1,1 @@
+"""Preference comparison discovery contracts."""

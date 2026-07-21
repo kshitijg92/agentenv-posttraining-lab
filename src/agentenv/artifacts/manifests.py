@@ -1159,8 +1159,8 @@ class TrainingCandidateExportManifest(ArtifactManifest):
     analysis_eligible_count: NonNegativeInt
     positive_sft_review_eligible_count: NonNegativeInt
     negative_example_eligible_count: NonNegativeInt
-    preference_pairing_eligible_count: NonNegativeInt
-    any_objective_use_eligible_count: NonNegativeInt
+    preference_discovery_eligible_count: NonNegativeInt
+    downstream_construction_eligible_count: NonNegativeInt
     analysis_only_count: NonNegativeInt
     fully_ineligible_count: NonNegativeInt
     artifacts: dict[str, str]
@@ -1202,21 +1202,22 @@ class TrainingCandidateExportManifest(ArtifactManifest):
             self.analysis_eligible_count,
             self.positive_sft_review_eligible_count,
             self.negative_example_eligible_count,
-            self.preference_pairing_eligible_count,
-            self.any_objective_use_eligible_count,
+            self.preference_discovery_eligible_count,
+            self.downstream_construction_eligible_count,
             self.analysis_only_count,
             self.fully_ineligible_count,
         )
         if any(count > self.record_count for count in bounded_counts):
             raise ValueError("training candidate summary counts cannot exceed records")
         if (
-            self.any_objective_use_eligible_count
+            self.downstream_construction_eligible_count
             + self.analysis_only_count
             + self.fully_ineligible_count
             != self.record_count
         ):
             raise ValueError(
-                "any_objective_use_eligible, analysis_only, and fully_ineligible "
+                "downstream_construction_eligible, analysis_only, and "
+                "fully_ineligible "
                 "counts must sum to record_count"
             )
         return self

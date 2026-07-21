@@ -23,24 +23,28 @@ class TrainingCandidateContentEligibility(BaseModel):
     positive_sft_review_reason: str = Field(min_length=1)
     negative_example_eligible: bool
     negative_example_reason: str = Field(min_length=1)
-    preference_pairing_eligible: bool
-    preference_pairing_reason: str = Field(min_length=1)
+    preference_discovery_eligible: bool
+    preference_discovery_reason: str = Field(min_length=1)
 
     @property
-    def has_objective_use_path(self) -> bool:
+    def has_review_gated_use_path(self) -> bool:
+        return self.positive_sft_review_eligible or self.negative_example_eligible
+
+    @property
+    def has_downstream_construction_path(self) -> bool:
         return (
             self.positive_sft_review_eligible
             or self.negative_example_eligible
-            or self.preference_pairing_eligible
+            or self.preference_discovery_eligible
         )
 
     @property
     def is_analysis_only(self) -> bool:
-        return self.analysis_eligible and not self.has_objective_use_path
+        return self.analysis_eligible and not self.has_downstream_construction_path
 
     @property
     def is_fully_ineligible(self) -> bool:
-        return not self.analysis_eligible and not self.has_objective_use_path
+        return not self.analysis_eligible and not self.has_downstream_construction_path
 
 
 class MechanicallyRedundantToolCallBlock(BaseModel):
@@ -159,10 +163,10 @@ class TrainingCandidateRecord(BaseModel):
             if self.review_decision is None:
                 raise ValueError("reviewed training candidates require review_decision")
 
-        if self.content_eligibility.has_objective_use_path and (
+        if self.content_eligibility.has_review_gated_use_path and (
             self.review_status != "reviewed" or self.review_decision != "accepted"
         ):
             raise ValueError(
-                "candidates with an objective-use path require accepted human review"
+                "candidates with a review-gated use path require accepted human review"
             )
         return self

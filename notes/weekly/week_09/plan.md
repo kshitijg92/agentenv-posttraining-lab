@@ -415,14 +415,21 @@ Purpose:
 Define preference data only where the comparison basis is auditable.
 ```
 
-Start with eligible gradable trajectories as possible rejected sides. Do not
-assume a chosen side exists until the contract says what can validly be chosen.
+Start with trustworthy original model trajectories as possible alternatives.
+Task success, gradability, trajectory-level behavioral acceptance, mechanical
+redundancy, and reward-hack findings are evidence rather than discovery labels.
+Actual leakage, ineligible splits, orchestration failures, and missing or
+incomplete source evidence remain hard exclusions. Do not assume a chosen side
+exists until an auditable adjudication says what can validly be preferred.
 
 Done when:
 
-- preference-pair schema is defined;
-- invalid pairs are rejected in tests;
-- a builder either writes valid JSONL or documents insufficient pairs;
+- unlabeled shared-context comparison schema is defined;
+- invalid comparisons are rejected in tests;
+- deterministic discovery aggregates identical actions and enumerates distinct
+  action pairs without using task outcome;
+- reviewer-specific adjudication and preference export are defined;
+- a builder either writes valid JSONL or documents insufficient accepted pairs;
 - DPO remains deferred unless at least 20 auditable pairs exist.
 
 Self-deception trap:

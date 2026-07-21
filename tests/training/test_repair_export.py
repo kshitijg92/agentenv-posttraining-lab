@@ -27,8 +27,8 @@ from agentenv.training.repairs.export import (
     load_repaired_transcript_artifact,
     load_training_candidate_repair_export_artifact,
 )
+from agentenv.training.candidates.hashing import hash_training_candidate_record
 from agentenv.training.repairs.redundancy_repair import (
-    hash_training_candidate_record,
     hash_training_candidate_repair_record,
     hash_training_candidate_repair_review_record,
 )
@@ -380,9 +380,8 @@ def test_positive_sft_uses_explicit_accepted_completed_repair(
     assert sft_export.manifest.record_count == 1
     assert sft_export.manifest.original_record_count == 0
     assert sft_export.manifest.repaired_record_count == 1
-    assert (
-        sft_export.manifest.source_positive_sft_review.manifest_hash
-        == hash_file(sft_review.out_dir / MANIFEST_FILENAME)
+    assert sft_export.manifest.source_positive_sft_review.manifest_hash == hash_file(
+        sft_review.out_dir / MANIFEST_FILENAME
     )
     example = sft_export.records[0]
     assert example.source_provenance.source_type == "repaired"
