@@ -1,4 +1,5 @@
-from typing import Annotated, Literal
+from datetime import datetime, timedelta
+from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -22,8 +23,17 @@ PreferenceDiscoveryMethod = Literal["exact_shared_context_distinct_assistant_act
 PreferenceTrainingSplit = Literal["practice", "dev"]
 PreferenceMessageProjectionVersion = Literal["preference_message_projection_v0"]
 PreferenceActionProjectionVersion = Literal["preference_action_projection_v0"]
+PreferenceAdjudicationRecordSchemaVersion = Literal["preference_adjudication_record_v0"]
+PreferenceAdjudicationDecision = Literal[
+    "preferred",
+    "tie",
+    "ambiguous",
+    "invalid",
+]
+PreferenceAdjudicationScope = Literal["overall_action_preference"]
 
 PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION: PreferenceComparisonCandidateRecordSchemaVersion = "preference_comparison_candidate_record_v0"
+PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION: PreferenceAdjudicationRecordSchemaVersion = "preference_adjudication_record_v0"
 
 ContentHash = Annotated[
     str,
@@ -196,5 +206,160 @@ class PreferenceComparisonCandidateRecord(BaseModel):
         if self.comparison_candidate_id != expected_candidate_id:
             raise ValueError(
                 "comparison_candidate_id must be derived from its unordered pair"
+            )
+        return self
+
+
+class PreferenceAdjudicationSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comparison_candidate_id: str = Field(min_length=1)
+    source_preference_comparison_candidate_record_hash: ContentHash
+    alternative_a_id: str = Field(min_length=1)
+    alternative_b_id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_distinct_alternatives(self) -> "PreferenceAdjudicationSource":
+        if self.alternative_a_id == self.alternative_b_id:
+            raise ValueError("preference adjudication alternatives must be distinct")
+        return self
+
+
+class PreferenceRubricProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adjudication_scope: PreferenceAdjudicationScope
+    rubric_id: str = Field(min_length=1)
+    rubric_version: str = Field(min_length=1)
+    rubric_ref: ArtifactRef
+
+    @model_validator(mode="after")
+    def validate_hash_pinned_rubric(self) -> "PreferenceRubricProvenance":
+        if self.rubric_ref.content_hash is None:
+            raise ValueError("preference adjudication rubric must be hash-pinned")
+        return self
+
+
+class HumanPreferenceReviewerProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_type: Literal["human"]
+    reviewer_id: str = Field(min_length=1)
+
+
+class DeterministicPreferenceReviewerProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_type: Literal["deterministic_auditor"]
+    auditor_id: str = Field(min_length=1)
+    auditor_version: str = Field(min_length=1)
+    auditor_code_hash: ContentHash
+    auditor_configuration_hash: ContentHash
+
+
+class LLMJudgePreferenceReviewerProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_type: Literal["llm_judge"]
+    model_id: str = Field(min_length=1)
+    model_revision: str = Field(min_length=1)
+    judge_prompt_ref: ArtifactRef
+    model_input_protocol_ref: ArtifactRef
+    decoding_config_ref: ArtifactRef
+
+    @model_validator(mode="after")
+    def validate_hash_pinned_judge_inputs(
+        self,
+    ) -> "LLMJudgePreferenceReviewerProvenance":
+        refs = {
+            "judge_prompt_ref": self.judge_prompt_ref,
+            "model_input_protocol_ref": self.model_input_protocol_ref,
+            "decoding_config_ref": self.decoding_config_ref,
+        }
+        for field_name, artifact_ref in refs.items():
+            if artifact_ref.content_hash is None:
+                raise ValueError(f"{field_name} must be hash-pinned")
+        return self
+
+
+PreferenceReviewerProvenance: TypeAlias = Annotated[
+    HumanPreferenceReviewerProvenance
+    | DeterministicPreferenceReviewerProvenance
+    | LLMJudgePreferenceReviewerProvenance,
+    Field(discriminator="reviewer_type"),
+]
+
+
+class PreferenceAdjudicationRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: PreferenceAdjudicationRecordSchemaVersion = (
+        PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION
+    )
+    source: PreferenceAdjudicationSource
+    rubric_provenance: PreferenceRubricProvenance
+    review_status: ReviewStatus
+    review_id: str | None = Field(default=None, min_length=1)
+    reviewer_provenance: PreferenceReviewerProvenance | None = None
+    review_decision: PreferenceAdjudicationDecision | None = None
+    preferred_alternative_id: str | None = Field(default=None, min_length=1)
+    decision_reason: str | None = Field(default=None, min_length=1)
+    reviewed_at_utc: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_adjudication_state(self) -> "PreferenceAdjudicationRecord":
+        review_details = (
+            self.review_id,
+            self.reviewer_provenance,
+            self.review_decision,
+            self.preferred_alternative_id,
+            self.decision_reason,
+            self.reviewed_at_utc,
+        )
+        if self.review_status == "not_reviewed":
+            if any(value is not None for value in review_details):
+                raise ValueError(
+                    "not_reviewed preference adjudications cannot include review "
+                    "details"
+                )
+            return self
+
+        if self.review_id is None:
+            raise ValueError("reviewed preference adjudications require review_id")
+        if self.reviewer_provenance is None:
+            raise ValueError(
+                "reviewed preference adjudications require reviewer provenance"
+            )
+        if self.review_decision is None:
+            raise ValueError(
+                "reviewed preference adjudications require review_decision"
+            )
+        if self.decision_reason is None or not self.decision_reason.strip():
+            raise ValueError(
+                "reviewed preference adjudications require a nonempty decision_reason"
+            )
+        if self.reviewed_at_utc is None:
+            raise ValueError(
+                "reviewed preference adjudications require reviewed_at_utc"
+            )
+        if (
+            self.reviewed_at_utc.utcoffset() is None
+            or self.reviewed_at_utc.utcoffset() != timedelta(0)
+        ):
+            raise ValueError("reviewed_at_utc must be timezone-aware UTC")
+
+        alternative_ids = {
+            self.source.alternative_a_id,
+            self.source.alternative_b_id,
+        }
+        if self.review_decision == "preferred":
+            if self.preferred_alternative_id not in alternative_ids:
+                raise ValueError(
+                    "preferred adjudications must select exactly one source alternative"
+                )
+        elif self.preferred_alternative_id is not None:
+            raise ValueError(
+                "tie, ambiguous, and invalid adjudications cannot select a "
+                "preferred alternative"
             )
         return self

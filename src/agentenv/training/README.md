@@ -20,9 +20,9 @@ before a final release manifest is authorized for training.
   owns their target-model materialization contract. It owns positive-SFT
   semantics rather than generic “SFT” semantics.
 - `preferences/` mines original rollout evidence for distinct assistant actions
-  under an exact shared decision state. It emits unordered comparison candidates;
-  it does not decide which action is preferred and never treats a repaired
-  transcript as an executed rollout.
+  under an exact shared decision state, emits unordered comparison candidates,
+  and defines the separate adjudication record that may label a comparison. It
+  never treats a repaired transcript as an executed rollout.
 - `release/` owns fail-closed harness-audit and control-calibration validation for
   the eventual final dataset release. The release manifest itself remains a
   downstream boundary after token materialization.
@@ -60,7 +60,7 @@ flowchart TD
     TC -->|trusted original rollout evidence| PD[Preference discovery]
     T -. hash-pinned original prompt loops .-> PD
     PD --> PC[Unlabeled action comparisons<br/>same context + distinct actions]
-    PC --> PA[Planned preference adjudication]
+    PC --> PA[Preference adjudication<br/>human, deterministic, or LLM judge]
     PA -->|preferred only| PE[Planned preference export]
 
     TS --> DR[Planned final dataset release]
@@ -114,6 +114,11 @@ stand in for the other.
     incomplete reward-hack evaluation, and missing source evidence still block it.
 11. Preference discovery only follows original prompt-loop artifacts. A repaired
     transcript is a dataset transformation, not an executed counterfactual rollout.
+12. Preference discovery never chooses a direction. A hash-pinned adjudication
+    may return `preferred`, `tie`, `ambiguous`, or `invalid`; only `preferred`
+    names one of the two source alternative ids and can feed later pair export.
+    Every reviewed result has a nonempty reason, a UTC timestamp, one pinned
+    overall-preference rubric, and reviewer-type-specific provenance.
 
 ## What an exported positive-SFT record means
 
@@ -222,9 +227,25 @@ therefore yield up to `k * (k - 1) / 2` comparison candidates. Pair count must n
 be confused with independent context diversity.
 
 Discovery does not inspect task success and contains no `chosen`, `rejected`, or
-preference decision. A later adjudication record will allow a human,
-deterministic auditor, or pinned LLM judge to return `PREFERRED`, `TIE`,
-`AMBIGUOUS`, or `INVALID` with nonempty reasoning and reviewer-specific
-provenance. That adjudication and a persisted preference export are not yet
-implemented. The valid trainable preference-pair count remains zero and DPO is
-still deferred.
+preference decision. `PreferenceAdjudicationRecord` is the separate decision
+boundary. It lets a human, deterministic auditor, or pinned LLM judge return:
+
+```text
+preferred -> one exact source alternative is better under the pinned rubric
+tie       -> the comparison is valid and the alternatives are confidently equivalent
+ambiguous -> the comparison is valid but the evidence cannot support a direction
+invalid   -> the comparison contract or its evidence is broken
+```
+
+Only `preferred` carries `preferred_alternative_id`; every other result is
+non-directional. Pending-record construction pins the complete comparison
+candidate hash and both alternative ids. Cross-record validation requires
+exactly one record per discovered candidate and rejects source or rubric drift.
+
+Human provenance records a stable reviewer id. Deterministic provenance pins
+auditor identity, version, code, and configuration. LLM-judge provenance pins
+the model revision plus its exact prompt, input protocol, and decoding config.
+All reviewers use a hash-pinned overall-preference rubric and provide a nonempty
+reason. Persistence, chosen/rejected export, and DPO materialization remain
+unimplemented, so the valid trainable preference-pair count remains zero and
+DPO is still deferred.

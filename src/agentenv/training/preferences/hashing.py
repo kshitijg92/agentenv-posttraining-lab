@@ -1,11 +1,25 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from agentenv.hashing import hash_json
 from agentenv.models.schema import MessageWithoutMetadata
 
+if TYPE_CHECKING:
+    from agentenv.training.preferences.schema import (
+        PreferenceComparisonCandidateRecord,
+    )
+
 
 PREFERENCE_MESSAGE_PROJECTION_VERSION = "preference_message_projection_v0"
 PREFERENCE_ACTION_PROJECTION_VERSION = "preference_action_projection_v0"
+
+
+def hash_preference_comparison_candidate_record(
+    record: PreferenceComparisonCandidateRecord,
+) -> str:
+    return hash_json(record.model_dump(mode="json"))
 
 
 def hash_preference_context_message(message: MessageWithoutMetadata) -> str:

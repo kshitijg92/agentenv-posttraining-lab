@@ -428,7 +428,9 @@ Done when:
 - invalid comparisons are rejected in tests;
 - deterministic discovery aggregates identical actions and enumerates distinct
   action pairs without using task outcome;
-- reviewer-specific adjudication and preference export are defined;
+- reviewer-specific adjudication is defined and pins the exact source candidate,
+  rubric, reason, decision time, and reviewer-specific provenance;
+- preference persistence and chosen/rejected export are defined;
 - a builder either writes valid JSONL or documents insufficient accepted pairs;
 - DPO remains deferred unless at least 20 auditable pairs exist.
 

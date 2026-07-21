@@ -2663,3 +2663,38 @@ canonical unordered candidate. Records carry no preference direction. A
 focused integration fixture used two identical happy-path occurrences and one
 malformed, ungradable occurrence; discovery produced one comparison with
 evidence multiplicities two and one.
+
+### Preference Adjudication Schema Checkpoint
+
+Added `PreferenceAdjudicationRecord` as a separate decision record downstream
+of the unordered comparison candidate. Its source pins the full candidate
+record hash and both alternative ids. Pending-record construction produces one
+unreviewed record per candidate; validation rejects duplicate, missing,
+unknown, source-drifted, or rubric-drifted records.
+
+The decision states are `preferred`, `tie`, `ambiguous`, and `invalid`. Only
+`preferred` requires and permits a `preferred_alternative_id`, and that id must
+be one of the exact source alternatives. All reviewed states require a review
+id, nonempty reason, and timezone-aware UTC timestamp.
+
+Reviewer provenance is a discriminated union:
+
+```text
+human                 -> stable reviewer id
+deterministic_auditor -> auditor id/version + code/configuration hashes
+llm_judge             -> model revision + pinned prompt/protocol/decoding refs
+```
+
+All reviewer types share one hash-pinned `overall_action_preference` rubric.
+This checkpoint deliberately stops before an adjudication artifact manifest,
+CLI, chosen/rejected export, or DPO materialization.
+
+Focused verification:
+
+```text
+preference schema + discovery: 17 passed
+candidate/preference regression slice: 72 passed
+Ruff preference slice: passed
+Pyright: passed with the repository virtual environment selected explicitly
+git diff --check: passed
+```

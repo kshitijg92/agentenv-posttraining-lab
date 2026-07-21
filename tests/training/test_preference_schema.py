@@ -12,9 +12,16 @@ from agentenv.training.preferences.hashing import (
     build_preference_shared_context_id,
     hash_preference_action,
 )
+from agentenv.training.preferences.adjudication import (
+    build_pending_preference_adjudication_records,
+    validate_preference_adjudication_records,
+)
 from agentenv.training.preferences.schema import (
+    PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION,
     PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION,
+    PreferenceAdjudicationRecord,
     PreferenceComparisonCandidateRecord,
+    PreferenceRubricProvenance,
 )
 
 
@@ -183,3 +190,220 @@ def test_comparison_candidate_rejects_context_identity_drift() -> None:
         match="shared_context_id must be derived from the exact shared state",
     ):
         PreferenceComparisonCandidateRecord.model_validate(payload)
+
+
+def _rubric_provenance(
+    *,
+    rubric_hash: str = "xxh64:bbbbbbbbbbbbbbbb",
+) -> PreferenceRubricProvenance:
+    return PreferenceRubricProvenance.model_validate(
+        {
+            "adjudication_scope": "overall_action_preference",
+            "rubric_id": "agent_action_overall_preference",
+            "rubric_version": "agent_action_overall_preference_v0",
+            "rubric_ref": {
+                "path": "rubrics/agent_action_overall_preference_v0.md",
+                "content_hash": rubric_hash,
+            },
+        }
+    )
+
+
+def _reviewed_adjudication_payload(
+    *,
+    decision: str = "preferred",
+    reviewer_provenance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    candidate = PreferenceComparisonCandidateRecord.model_validate(_candidate_payload())
+    pending = build_pending_preference_adjudication_records(
+        [candidate],
+        rubric_provenance=_rubric_provenance(),
+    )[0]
+    payload = pending.model_dump(mode="json")
+    payload.update(
+        {
+            "review_status": "reviewed",
+            "review_id": "preference_review_001",
+            "reviewer_provenance": reviewer_provenance
+            or {
+                "reviewer_type": "human",
+                "reviewer_id": "reviewer_001",
+            },
+            "review_decision": decision,
+            "preferred_alternative_id": (
+                candidate.alternative_a.alternative_id
+                if decision == "preferred"
+                else None
+            ),
+            "decision_reason": "Alternative A is the better action under the rubric.",
+            "reviewed_at_utc": "2026-07-21T18:30:00Z",
+        }
+    )
+    return payload
+
+
+def test_pending_adjudication_pins_candidate_and_rubric() -> None:
+    candidate = PreferenceComparisonCandidateRecord.model_validate(_candidate_payload())
+    rubric = _rubric_provenance()
+
+    records = build_pending_preference_adjudication_records(
+        [candidate],
+        rubric_provenance=rubric,
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.schema_version == PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION
+    assert record.review_status == "not_reviewed"
+    assert record.source.comparison_candidate_id == candidate.comparison_candidate_id
+    assert record.source.alternative_a_id == candidate.alternative_a.alternative_id
+    assert record.source.alternative_b_id == candidate.alternative_b.alternative_id
+    validate_preference_adjudication_records(
+        records,
+        [candidate],
+        rubric_provenance=rubric,
+    )
+
+
+@pytest.mark.parametrize("decision", ["tie", "ambiguous", "invalid"])
+def test_non_directional_adjudications_do_not_select_an_alternative(
+    decision: str,
+) -> None:
+    record = PreferenceAdjudicationRecord.model_validate(
+        _reviewed_adjudication_payload(decision=decision)
+    )
+
+    assert record.review_decision == decision
+    assert record.preferred_alternative_id is None
+
+
+def test_preferred_adjudication_requires_source_alternative() -> None:
+    payload = _reviewed_adjudication_payload()
+    payload["preferred_alternative_id"] = "preference_alternative_unknown"
+
+    with pytest.raises(ValidationError, match="select exactly one source alternative"):
+        PreferenceAdjudicationRecord.model_validate(payload)
+
+
+def test_non_directional_adjudication_rejects_selected_alternative() -> None:
+    payload = _reviewed_adjudication_payload(decision="ambiguous")
+    payload["preferred_alternative_id"] = payload["source"]["alternative_a_id"]
+
+    with pytest.raises(ValidationError, match="cannot select a preferred alternative"):
+        PreferenceAdjudicationRecord.model_validate(payload)
+
+
+def test_reviewed_adjudication_requires_nonempty_reason_and_utc_timestamp() -> None:
+    payload = _reviewed_adjudication_payload()
+    payload["decision_reason"] = "   "
+    with pytest.raises(ValidationError, match="nonempty decision_reason"):
+        PreferenceAdjudicationRecord.model_validate(payload)
+
+    payload = _reviewed_adjudication_payload()
+    payload["reviewed_at_utc"] = "2026-07-21T18:30:00-07:00"
+    with pytest.raises(ValidationError, match="timezone-aware UTC"):
+        PreferenceAdjudicationRecord.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "reviewer_provenance",
+    [
+        {
+            "reviewer_type": "deterministic_auditor",
+            "auditor_id": "mechanical_tool_efficiency_auditor",
+            "auditor_version": "mechanical_tool_efficiency_auditor_v0",
+            "auditor_code_hash": "xxh64:cccccccccccccccc",
+            "auditor_configuration_hash": "xxh64:dddddddddddddddd",
+        },
+        {
+            "reviewer_type": "llm_judge",
+            "model_id": "judge-model",
+            "model_revision": "revision-or-digest-001",
+            "judge_prompt_ref": {
+                "path": "judge/judge_prompt.json",
+                "content_hash": "xxh64:eeeeeeeeeeeeeeee",
+            },
+            "model_input_protocol_ref": {
+                "path": "judge/model_input_protocol.yaml",
+                "content_hash": "xxh64:ffffffffffffffff",
+            },
+            "decoding_config_ref": {
+                "path": "judge/decoding_config.json",
+                "content_hash": "xxh64:1212121212121212",
+            },
+        },
+    ],
+)
+def test_nonhuman_reviewer_provenance_is_explicit(
+    reviewer_provenance: dict[str, Any],
+) -> None:
+    record = PreferenceAdjudicationRecord.model_validate(
+        _reviewed_adjudication_payload(
+            reviewer_provenance=reviewer_provenance,
+        )
+    )
+
+    assert record.reviewer_provenance is not None
+    assert (
+        record.reviewer_provenance.reviewer_type == reviewer_provenance["reviewer_type"]
+    )
+
+
+def test_llm_reviewer_requires_hash_pinned_judge_inputs() -> None:
+    reviewer = {
+        "reviewer_type": "llm_judge",
+        "model_id": "judge-model",
+        "model_revision": "revision-or-digest-001",
+        "judge_prompt_ref": {
+            "path": "judge/judge_prompt.json",
+            "content_hash": None,
+        },
+        "model_input_protocol_ref": {
+            "path": "judge/model_input_protocol.yaml",
+            "content_hash": "xxh64:ffffffffffffffff",
+        },
+        "decoding_config_ref": {
+            "path": "judge/decoding_config.json",
+            "content_hash": "xxh64:1212121212121212",
+        },
+    }
+
+    with pytest.raises(ValidationError, match="judge_prompt_ref must be hash-pinned"):
+        PreferenceAdjudicationRecord.model_validate(
+            _reviewed_adjudication_payload(reviewer_provenance=reviewer)
+        )
+
+
+def test_adjudication_validation_rejects_source_hash_drift() -> None:
+    candidate = PreferenceComparisonCandidateRecord.model_validate(_candidate_payload())
+    rubric = _rubric_provenance()
+    record = build_pending_preference_adjudication_records(
+        [candidate],
+        rubric_provenance=rubric,
+    )[0]
+    drifted_source = record.source.model_copy(
+        update={
+            "source_preference_comparison_candidate_record_hash": (
+                "xxh64:abababababababab"
+            )
+        }
+    )
+    drifted_record = record.model_copy(update={"source": drifted_source})
+
+    with pytest.raises(ValueError, match="source provenance mismatch"):
+        validate_preference_adjudication_records(
+            [drifted_record],
+            [candidate],
+            rubric_provenance=rubric,
+        )
+
+
+def test_adjudication_validation_requires_exact_candidate_coverage() -> None:
+    candidate = PreferenceComparisonCandidateRecord.model_validate(_candidate_payload())
+
+    with pytest.raises(ValueError, match="missing comparison candidates"):
+        validate_preference_adjudication_records(
+            [],
+            [candidate],
+            rubric_provenance=_rubric_provenance(),
+        )

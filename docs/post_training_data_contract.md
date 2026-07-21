@@ -579,6 +579,35 @@ A reviewed pair will be valid only when:
   failure;
 - the pair builder records enough evidence to reproduce the comparison.
 
+Discovery and adjudication are intentionally separate records. The discovered
+candidate stays canonically unordered. Its adjudication returns exactly one of:
+
+| Decision | Meaning | May name a preferred alternative? | May become a DPO pair? |
+| --- | --- | --- | --- |
+| `preferred` | The evidence and rubric support one source action over the other | Exactly one of the two source alternative ids is required | Yes, after later export gates |
+| `tie` | The comparison is valid and the reviewer confidently judges the actions equivalent | No | No |
+| `ambiguous` | The comparison is valid, but evidence is insufficient, conflicting, or causally unclear | No | No; it may be reviewed again |
+| `invalid` | The shared-context, source, or evidence contract is broken | No | No |
+
+This distinction prevents uncertainty from being mislabeled as equality and
+prevents a broken comparison from entering an unresolved-review bucket.
+
+Every adjudication pins the complete source comparison record hash, both source
+alternative ids, and a versioned overall-action-preference rubric. A reviewed
+record requires a review id, a nonempty decision reason, and a UTC review time.
+Reviewer provenance is a discriminated contract rather than one generic label:
+
+- a human supplies a stable pseudonymous reviewer id;
+- a deterministic auditor supplies its identity, version, code hash, and
+  configuration hash;
+- an LLM judge supplies its pinned model revision and hash-pinned prompt,
+  model-input protocol, and decoding configuration.
+
+The reviewer kind changes what evidence is required to audit the decision. It
+does not change the downstream meaning of a valid `preferred` decision. The
+reason remains review evidence and must not be inserted into chosen/rejected
+training text.
+
 For action-level efficiency labels, the preferred construction shares an exact
 transcript prefix and differs at the next action. For full-trajectory
 comparisons, both sides must at least share the same task and model-visible
@@ -609,7 +638,9 @@ The following are not valid pairs:
 - any pair with an unauditable preference basis.
 
 The unlabeled discovery schema and deterministic discovery builder are now
-implemented. Reviewer-specific adjudication, persisted preference export, pair
+implemented. The reviewer-specific adjudication schema, pending-record
+construction, and exact source/rubric coverage validation are also implemented.
+Persisted adjudication/export manifests, chosen/rejected pair export,
 selection/capping, and target-model DPO materialization are not. An empty pair
 export or a documented insufficiency result remains valid. DPO remains deferred
 unless at least 20 auditable pairs exist, and combinatorial pairs from one
