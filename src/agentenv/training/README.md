@@ -20,9 +20,9 @@ before a final release manifest is authorized for training.
   owns their target-model materialization contract. It owns positive-SFT
   semantics rather than generic “SFT” semantics.
 - `preferences/` mines original rollout evidence for distinct assistant actions
-  under an exact shared decision state, emits unordered comparison candidates,
-  and defines the separate adjudication record that may label a comparison. It
-  never treats a repaired transcript as an executed rollout.
+  under an exact shared decision state, persists unordered comparison exports,
+  and owns the separate adjudication-review artifact that may label a
+  comparison. It never treats a repaired transcript as an executed rollout.
 - `release/` owns fail-closed harness-audit and control-calibration validation for
   the eventual final dataset release. The release manifest itself remains a
   downstream boundary after token materialization.
@@ -59,8 +59,8 @@ flowchart TD
 
     TC -->|trusted original rollout evidence| PD[Preference discovery]
     T -. hash-pinned original prompt loops .-> PD
-    PD --> PC[Unlabeled action comparisons<br/>same context + distinct actions]
-    PC --> PA[Preference adjudication<br/>human, deterministic, or LLM judge]
+    PD --> PC[Preference comparison export<br/>unordered + not authorized]
+    PC --> PA[Preference adjudication review<br/>human, deterministic, or LLM judge]
     PA -->|preferred only| PE[Planned preference export]
 
     TS --> DR[Planned final dataset release]
@@ -119,6 +119,11 @@ stand in for the other.
     names one of the two source alternative ids and can feed later pair export.
     Every reviewed result has a nonempty reason, a UTC timestamp, one pinned
     overall-preference rubric, and reviewer-type-specific provenance.
+13. The comparison export is deterministically rebuilt from its pinned
+    `TrainingCandidateExport` on load. The adjudication artifact separately pins
+    that exact comparison manifest and payload plus an artifact-local copy of
+    the rubric. Both remain `not_authorized`; review does not itself emit a DPO
+    pair.
 
 ## What an exported positive-SFT record means
 
@@ -250,6 +255,28 @@ All reviewers use the hash-pinned
 rubric and provide a nonempty reason. It prioritizes task solvability over
 efficiency, requires an action-level causal explanation, treats rollout outcome
 as supporting evidence only, and returns `ambiguous` rather than ranking two
-flawed actions. Repaired or synthetic actions are outside v0. Persistence,
-chosen/rejected export, and DPO materialization remain unimplemented, so the
+flawed actions. Repaired or synthetic actions are outside v0.
+
+Discovery is persisted as an immutable `PreferenceComparisonExport` pinned to
+its source `TrainingCandidateExport`, discovery code, JSONL hash, and exact
+recomputed records. `PreferenceAdjudicationReview` pins that comparison export,
+copies and hash-pins the rubric, and initializes exactly one editable
+adjudication row per comparison. Its validator rejects source, rubric, or
+coverage drift. The CLI flow is:
+
+```text
+agentenv training preferences discover \
+  --candidates <training-candidate-export> \
+  --out <preference-comparison-export>
+
+agentenv training preferences review-init \
+  --comparisons <preference-comparison-export> \
+  --rubric configs/training/preference_rubrics/overall_action_preference_v0.md \
+  --out <preference-adjudication-review>
+
+agentenv training preferences review-validate \
+  --reviews <preference-adjudication-review>
+```
+
+Chosen/rejected export and DPO materialization remain unimplemented, so the
 valid trainable preference-pair count remains zero and DPO is still deferred.

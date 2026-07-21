@@ -1,1 +1,1 @@
-"""Preference comparison discovery contracts."""
+"""Preference comparison discovery, persistence, and adjudication contracts."""

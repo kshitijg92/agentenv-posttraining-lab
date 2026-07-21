@@ -2730,3 +2730,48 @@ Ruff preference slice: passed
 Pyright: passed with the repository virtual environment selected explicitly
 git diff --check: passed
 ```
+
+### Preference Persistence Checkpoint
+
+Added two explicit non-training artifacts downstream of candidate construction:
+
+```text
+TrainingCandidateExport
+-> PreferenceComparisonExport
+-> PreferenceAdjudicationReview
+```
+
+`PreferenceComparisonExport` writes canonical unordered comparison records to
+`comparison_candidates.jsonl`. Its manifest pins the source candidate export,
+record schema, discovery method/version/code hash, JSONL hash, record count, and
+shared-context count. Loading revalidates the pinned candidate source and
+recomputes discovery exactly, including the valid empty-output case.
+
+`PreferenceAdjudicationReview` writes one editable adjudication row per
+comparison plus a Markdown review queue. It pins the exact comparison manifest
+and JSONL payload, copies the selected rubric into the artifact, and checks the
+copied bytes and declared rubric metadata on load. Validation rejects missing,
+unknown, duplicate, source-drifted, or rubric-drifted adjudication rows. Both
+manifests remain `training_authorization: not_authorized`.
+
+Added CLI commands:
+
+```text
+agentenv training preferences discover
+agentenv training preferences review-init
+agentenv training preferences review-validate
+```
+
+This checkpoint deliberately stops before the final chosen/rejected DPO-pair
+export. That later export must independently pin both the immutable comparison
+artifact and the mutable adjudication artifact.
+
+Focused verification:
+
+```text
+preference persistence/schema/discovery/rubric slice: 24 passed
+adjacent artifact/candidate/repair/positive-SFT/preference slice: 123 passed
+repo-wide Ruff: passed
+repo-wide Pyright: passed
+git diff --check: passed
+```

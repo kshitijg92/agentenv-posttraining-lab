@@ -82,6 +82,14 @@ from agentenv.training.positive_sft.materialization.schema import (
     POSITIVE_SFT_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION,
     PositiveSFTTrainingMaterializationRecordSchemaVersion,
 )
+from agentenv.training.preferences.schema import (
+    PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION,
+    PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION,
+    PreferenceAdjudicationRecordSchemaVersion,
+    PreferenceComparisonCandidateRecordSchemaVersion,
+    PreferenceDiscoveryMethod,
+    PreferenceRubricProvenance,
+)
 from agentenv.trajectories.schema import (
     TRAJECTORY_RECORD_SCHEMA_VERSION,
     TRAJECTORY_REVIEW_SCHEMA_VERSION,
@@ -169,6 +177,14 @@ POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
 POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS = {
     "materializations": "materializations.jsonl",
 }
+PREFERENCE_COMPARISON_EXPORT_ARTIFACT_REFS = {
+    "comparison_candidates": "comparison_candidates.jsonl",
+}
+PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_REFS = {
+    "adjudications": "adjudications.jsonl",
+    "review_queue": "review_queue.md",
+    "rubric": "rubrics/overall_action_preference_v0.md",
+}
 REWARD_HACK_AUDIT_ARTIFACT_REFS = {
     "results": "reward_hack_audit_results.jsonl",
     "case_runs": "case_runs",
@@ -210,6 +226,12 @@ POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_
 POSITIVE_SFT_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS = frozenset(
     POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS
 )
+PREFERENCE_COMPARISON_EXPORT_REQUIRED_ARTIFACTS = frozenset(
+    PREFERENCE_COMPARISON_EXPORT_ARTIFACT_REFS
+)
+PREFERENCE_ADJUDICATION_REVIEW_REQUIRED_ARTIFACTS = frozenset(
+    PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_REFS
+)
 REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS = frozenset(REWARD_HACK_AUDIT_ARTIFACT_REFS)
 SCORER_AUDIT_REQUIRED_ARTIFACTS = frozenset(SCORER_AUDIT_ARTIFACT_REFS)
 AGENT_TASK_AUDIT_REQUIRED_ARTIFACTS = frozenset(AGENT_TASK_AUDIT_ARTIFACT_REFS)
@@ -237,6 +259,12 @@ PositiveSFTReviewArtifactSchemaVersion = Literal["positive_sft_review_artifact_v
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 PositiveSFTTrainingMaterializationArtifactSchemaVersion = Literal[
     "positive_sft_training_materialization_artifact_v0"
+]
+PreferenceComparisonExportArtifactSchemaVersion = Literal[
+    "preference_comparison_export_artifact_v0"
+]
+PreferenceAdjudicationReviewArtifactSchemaVersion = Literal[
+    "preference_adjudication_review_artifact_v0"
 ]
 RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v2"]
 ScorerAuditArtifactSchemaVersion = Literal["scorer_audit_artifact_v0"]
@@ -279,6 +307,12 @@ POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVers
 POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION: (
     PositiveSFTTrainingMaterializationArtifactSchemaVersion
 ) = "positive_sft_training_materialization_artifact_v0"
+PREFERENCE_COMPARISON_EXPORT_ARTIFACT_SCHEMA_VERSION: (
+    PreferenceComparisonExportArtifactSchemaVersion
+) = "preference_comparison_export_artifact_v0"
+PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_SCHEMA_VERSION: (
+    PreferenceAdjudicationReviewArtifactSchemaVersion
+) = "preference_adjudication_review_artifact_v0"
 REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION: RewardHackAuditArtifactSchemaVersion = (
     "reward_hack_audit_artifact_v2"
 )
@@ -1230,6 +1264,111 @@ class TrainingCandidateExportManifestRef(BaseModel):
     manifest_hash: ContentHash
 
 
+class PreferenceComparisonExportManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.PREFERENCE_COMPARISON_EXPORT.value
+    expected_artifact_schema_version = (
+        PREFERENCE_COMPARISON_EXPORT_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    source_training_candidate_export: TrainingCandidateExportManifestRef
+    training_authorization: Literal["not_authorized"]
+    preference_comparison_candidate_record_schema_version: (
+        PreferenceComparisonCandidateRecordSchemaVersion
+    )
+    discovery_method: PreferenceDiscoveryMethod
+    discovery_version: str = Field(min_length=1)
+    discovery_code_hash: ContentHash
+    record_count: NonNegativeInt
+    shared_context_count: NonNegativeInt
+    comparison_candidates_jsonl_hash: ContentHash
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_preference_comparison_export_contract(
+        self,
+    ) -> "PreferenceComparisonExportManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=PREFERENCE_COMPARISON_EXPORT_ARTIFACT_REFS,
+            owner="preference comparison export manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=PREFERENCE_COMPARISON_EXPORT_REQUIRED_ARTIFACTS,
+            owner="preference comparison export manifests",
+        )
+        if (
+            self.preference_comparison_candidate_record_schema_version
+            != PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "preference_comparison_candidate_record_schema_version must be "
+                f"{PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.shared_context_count > self.record_count:
+            raise ValueError(
+                "preference comparison shared-context count cannot exceed records"
+            )
+        return self
+
+
+class PreferenceComparisonExportManifestRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    comparison_candidates_jsonl_hash: ContentHash
+
+
+class PreferenceAdjudicationReviewManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.PREFERENCE_ADJUDICATION_REVIEW.value
+    expected_artifact_schema_version = (
+        PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    source_preference_comparison_export: PreferenceComparisonExportManifestRef
+    training_authorization: Literal["not_authorized"]
+    preference_adjudication_record_schema_version: (
+        PreferenceAdjudicationRecordSchemaVersion
+    )
+    rubric_provenance: PreferenceRubricProvenance
+    record_count: NonNegativeInt
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_preference_adjudication_review_contract(
+        self,
+    ) -> "PreferenceAdjudicationReviewManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_REFS,
+            owner="preference adjudication review manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=PREFERENCE_ADJUDICATION_REVIEW_REQUIRED_ARTIFACTS,
+            owner="preference adjudication review manifests",
+        )
+        if (
+            self.preference_adjudication_record_schema_version
+            != PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "preference_adjudication_record_schema_version must be "
+                f"{PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.rubric_provenance.rubric_ref.path != self.artifacts["rubric"]:
+            raise ValueError(
+                "preference adjudication rubric provenance must reference the "
+                "manifest rubric artifact"
+            )
+        return self
+
+
 class TrainingCandidateRepairExportManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.TRAINING_CANDIDATE_REPAIR_EXPORT.value
     expected_artifact_schema_version = (
@@ -1838,6 +1977,18 @@ def load_training_candidate_export_manifest(
     path: Path,
 ) -> TrainingCandidateExportManifest:
     return _validate_manifest(TrainingCandidateExportManifest, path)
+
+
+def load_preference_comparison_export_manifest(
+    path: Path,
+) -> PreferenceComparisonExportManifest:
+    return _validate_manifest(PreferenceComparisonExportManifest, path)
+
+
+def load_preference_adjudication_review_manifest(
+    path: Path,
+) -> PreferenceAdjudicationReviewManifest:
+    return _validate_manifest(PreferenceAdjudicationReviewManifest, path)
 
 
 def load_training_candidate_repair_export_manifest(

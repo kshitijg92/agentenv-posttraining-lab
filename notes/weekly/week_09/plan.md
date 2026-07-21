@@ -432,7 +432,9 @@ Done when:
   rubric, reason, decision time, and reviewer-specific provenance;
 - the v0 overall-action rubric prioritizes task solvability over efficiency,
   requires local causal justification, and abstains when both actions are bad;
-- preference persistence and chosen/rejected export are defined;
+- unlabeled comparison discovery is persisted as a source-pinned export;
+- adjudication is persisted as a separate source- and rubric-pinned review;
+- chosen/rejected export is defined;
 - a builder either writes valid JSONL or documents insufficient accepted pairs;
 - DPO remains deferred unless at least 20 auditable pairs exist.
 

@@ -59,6 +59,13 @@ from agentenv.training.positive_sft.review import (
     initialize_positive_sft_review_artifact,
     validate_positive_sft_review_artifact,
 )
+from agentenv.training.preferences.export import (
+    export_preference_comparison_candidates,
+)
+from agentenv.training.preferences.review import (
+    initialize_preference_adjudication_review_artifact,
+    validate_preference_adjudication_review_artifact,
+)
 from agentenv.trajectories.export import export_trajectory_records_from_eval_artifact
 from agentenv.trajectories.review import (
     initialize_trajectory_review_artifact,
@@ -76,6 +83,7 @@ trajectories_app = typer.Typer(no_args_is_help=True)
 training_app = typer.Typer(no_args_is_help=True)
 training_candidates_app = typer.Typer(no_args_is_help=True)
 training_positive_sft_app = typer.Typer(no_args_is_help=True)
+training_preferences_app = typer.Typer(no_args_is_help=True)
 sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 harness_app = typer.Typer(no_args_is_help=True)
@@ -96,6 +104,7 @@ app.add_typer(rewards_app, name="rewards")
 app.add_typer(local_model_app, name="local-model")
 training_app.add_typer(training_candidates_app, name="candidates")
 training_app.add_typer(training_positive_sft_app, name="positive-sft")
+training_app.add_typer(training_preferences_app, name="preferences")
 local_model_app.add_typer(ollama_app, name="ollama")
 
 console = Console()
@@ -805,6 +814,131 @@ def export_training_candidates(
     console.print(
         f"wrote {export.out_dir / manifest.artifacts['training_candidates']}",
         soft_wrap=True,
+    )
+
+
+@training_preferences_app.command("discover")
+def discover_training_preferences(
+    candidates: Path = typer.Option(
+        ...,
+        "--candidates",
+        help="Training candidate export artifact directory.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for preference comparison export artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before exporting.",
+    ),
+) -> None:
+    try:
+        export = export_preference_comparison_candidates(
+            candidates,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--candidates") from exc
+
+    manifest = export.manifest
+    console.print(
+        "[green]preference comparison discovery complete[/green] "
+        f"records={manifest.record_count} "
+        f"shared_contexts={manifest.shared_context_count} "
+        f"training_authorization={manifest.training_authorization}"
+    )
+    console.print(f"wrote {export.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {export.out_dir / manifest.artifacts['comparison_candidates']}",
+        soft_wrap=True,
+    )
+
+
+@training_preferences_app.command("review-init")
+def initialize_training_preference_review(
+    comparisons: Path = typer.Option(
+        ...,
+        "--comparisons",
+        help="Preference comparison export artifact directory.",
+    ),
+    rubric: Path = typer.Option(
+        ...,
+        "--rubric",
+        help="Versioned overall-action preference rubric Markdown file.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for preference adjudication review artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before initializing.",
+    ),
+) -> None:
+    try:
+        artifact = initialize_preference_adjudication_review_artifact(
+            comparisons,
+            rubric,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(
+            str(exc),
+            param_hint="--comparisons/--rubric",
+        ) from exc
+
+    manifest = artifact.manifest
+    console.print(
+        "[green]preference adjudication review initialized[/green] "
+        f"records={manifest.record_count} "
+        f"rubric={manifest.rubric_provenance.rubric_version}"
+    )
+    console.print(f"wrote {artifact.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['adjudications']}",
+        soft_wrap=True,
+    )
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['review_queue']}",
+        soft_wrap=True,
+    )
+
+
+@training_preferences_app.command("review-validate")
+def validate_training_preference_review(
+    reviews: Path = typer.Option(
+        ...,
+        "--reviews",
+        help="Preference adjudication review artifact directory.",
+    ),
+) -> None:
+    try:
+        validation = validate_preference_adjudication_review_artifact(reviews)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--reviews") from exc
+
+    status_counts = validation.review_status_counts
+    decision_counts = validation.review_decision_counts
+    console.print(
+        "[green]preference adjudication review valid[/green] "
+        f"records={len(validation.review_artifact.adjudications)} "
+        f"not_reviewed={status_counts['not_reviewed']} "
+        f"reviewed={status_counts['reviewed']} "
+        f"preferred={decision_counts['preferred']} "
+        f"tie={decision_counts['tie']} "
+        f"ambiguous={decision_counts['ambiguous']} "
+        f"invalid={decision_counts['invalid']}"
     )
 
 

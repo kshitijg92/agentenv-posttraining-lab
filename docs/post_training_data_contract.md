@@ -608,6 +608,24 @@ does not change the downstream meaning of a valid `preferred` decision. The
 reason remains review evidence and must not be inserted into chosen/rejected
 training text.
 
+The persisted workflow keeps those authorities separate:
+
+```text
+TrainingCandidateExport
+-> PreferenceComparisonExport
+-> PreferenceAdjudicationReview
+-> future chosen/rejected DPO pair export
+```
+
+The comparison export pins its source candidate manifest, discovery
+implementation, record schema, candidate JSONL hash, and exact recomputed
+records. The adjudication-review artifact pins the exact comparison manifest
+and candidate payload, stores one review row per candidate, and contains a
+byte-for-byte copied, hash-pinned rubric. Both artifacts explicitly state
+`training_authorization: not_authorized`. The future DPO pair export must
+independently pin and validate both artifacts rather than treating review as a
+mutation of discovery evidence.
+
 The current source of truth is the versioned
 [`overall_action_preference_v0`](../configs/training/preference_rubrics/overall_action_preference_v0.md)
 rubric. It admits only actions observed in original rollouts and applies this
@@ -652,12 +670,11 @@ The following are not valid pairs:
 - any comparison reviewed as `TIE`, `AMBIGUOUS`, or `INVALID`;
 - any pair with an unauditable preference basis.
 
-The unlabeled discovery schema and deterministic discovery builder are now
-implemented. The reviewer-specific adjudication schema, pending-record
-construction, and exact source/rubric coverage validation are also implemented.
-Persisted adjudication/export manifests, chosen/rejected pair export,
-selection/capping, and target-model DPO materialization are not. An empty pair
-export or a documented insufficiency result remains valid. DPO remains deferred
+The unlabeled discovery schema, deterministic discovery builder, immutable
+comparison export, reviewer-specific adjudication schema, and persisted review
+queue are implemented. Chosen/rejected pair export, selection/capping, and
+target-model DPO materialization are not. An empty comparison/review artifact
+or later documented insufficiency result remains valid. DPO remains deferred
 unless at least 20 auditable pairs exist, and combinatorial pairs from one
 shared context must not be misreported as independent data diversity.
 
@@ -694,12 +711,12 @@ denied. At minimum the reason must distinguish:
 | Actual leakage | Deny every trainable use and never copy leaked bytes |
 | Orchestration failure | Deny every trainable use |
 | Reward-hack evaluation incomplete | Deny every trainable use |
-| Trajectory review not accepted | Analysis only; no objective-specific training path |
+| Trajectory review not accepted | Block review-gated positive-SFT and negative-example paths; do not by itself block unlabeled preference discovery when evidence-integrity gates pass |
 | Positive-SFT prefix review not accepted | Emit no positive-SFT source example |
 | Confirmed reward hack | Deny positive SFT; allow only explicitly labeled negative/adversarial consideration when otherwise safe |
 | Ambiguous reward hack without adjudication | Block trainable use pending review |
 | Task failure | Does not by itself deny an accepted positive-SFT prefix; may also support negative or preference-rejected consideration |
-| Cannot grade | Does not invalidate an earlier accepted positive prefix; deny preference pairing under the current policy; possibly retain labeled negative evidence |
+| Cannot grade | Does not invalidate an earlier accepted positive prefix and does not by itself label or block an exact-context preference comparison; possibly retain labeled negative evidence |
 | Mechanical redundancy unhandled | Deny raw full-transcript positive SFT; retain assessment for deterministic repair or pairing |
 | Preference basis unauditable | Deny pair construction even if both sides are individually eligible |
 | Canonical sequence exceeds `max_sequence_length` | Exclude the initial trajectory-aggregated training row and preserve an explicit overlength reason |
@@ -753,13 +770,16 @@ historical artifact count != current training-data eligibility
 | Deterministic tool-call serialization and token loss masks | Implemented |
 | Persisted target-model token records and explicit overlength outcomes | Implemented |
 | Negative-example dataset/export objective | Not implemented |
-| Preference-pair schema, pair validation, and export | Not implemented |
+| Unordered preference discovery schema and deterministic builder | Implemented |
+| Preference comparison export and adjudication-review artifact | Implemented |
+| Chosen/rejected preference-pair export and DPO materialization | Not implemented |
 | Human-repair provenance contract | Not implemented |
 | External-data license/source contract | Out of scope |
 
-The next training-validity checkpoint is the final release/trainer boundary:
-only a release artifact with matching trust evidence may authorize trainer
-consumption of completed materializations.
+The next preference checkpoint is a chosen/rejected export that consumes and
+independently pins both the comparison and adjudication artifacts. Across all
+objectives, only the later final release/trainer boundary may combine completed
+materializations with matching trust evidence and authorize consumption.
 
 ## Non-Claims
 

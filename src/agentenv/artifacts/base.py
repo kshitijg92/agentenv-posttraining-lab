@@ -26,6 +26,8 @@ class ArtifactType(StrEnum):
     POSITIVE_SFT_TRAINING_MATERIALIZATION = (
         "positive_sft_training_materialization"
     )
+    PREFERENCE_COMPARISON_EXPORT = "preference_comparison_export"
+    PREFERENCE_ADJUDICATION_REVIEW = "preference_adjudication_review"
     SCORER_AUDIT = "scorer_audit"
     AGENT_TASK_AUDIT = "agent_task_audit"
     HARNESS_AUDIT = "harness_audit"
