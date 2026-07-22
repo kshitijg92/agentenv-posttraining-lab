@@ -27,8 +27,8 @@ from agentenv.training.repairs.export import (
     load_repaired_transcript_artifact,
     load_training_candidate_repair_export_artifact,
 )
+from agentenv.training.candidates.hashing import hash_training_candidate_record
 from agentenv.training.repairs.redundancy_repair import (
-    hash_training_candidate_record,
     hash_training_candidate_repair_record,
     hash_training_candidate_repair_review_record,
 )

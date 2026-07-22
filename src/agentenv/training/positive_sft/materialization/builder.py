@@ -12,10 +12,10 @@ from agentenv.training.positive_sft.materialization.schema import (
     FailedPositiveSFTTrainingMaterializationRecord,
     PositiveSFTTrainingMaterializationRecord,
 )
-from agentenv.training.positive_sft.materialization.tokenization import (
-    ContentSafeMaterializationError,
+from agentenv.training.tokenization import (
     MaterializationTokenizer,
-    tokenize_positive_sft_input,
+    content_safe_materialization_error_message,
+    tokenize_model_input_with_ownership,
 )
 from agentenv.training.positive_sft.schema import PositiveSFTExampleRecord
 
@@ -80,7 +80,7 @@ def _materialize_positive_sft_example(
             example.messages,
             mode="completed_transcript",
         )
-        tokenized = tokenize_positive_sft_input(
+        tokenized = tokenize_model_input_with_ownership(
             tokenizer,
             rendered_text=rendered.text,
             model_generated_spans=rendered.model_generated_spans,
@@ -93,7 +93,10 @@ def _materialize_positive_sft_example(
             failure_kind="materialization_error",
             observed_sequence_length=None,
             error_class=type(exc).__name__,
-            error_message=_content_safe_error_message(exc),
+            error_message=content_safe_materialization_error_message(
+                exc,
+                operation="Positive-SFT materialization",
+            ),
         )
 
     sequence_length = len(tokenized.input_ids)
@@ -123,9 +126,3 @@ def _materialize_positive_sft_example(
         supervised_token_count=supervised_token_count,
         ignored_token_count=sequence_length - supervised_token_count,
     )
-
-
-def _content_safe_error_message(exc: Exception) -> str:
-    if isinstance(exc, ContentSafeMaterializationError):
-        return str(exc)
-    return f"Positive-SFT materialization failed with {type(exc).__name__}."

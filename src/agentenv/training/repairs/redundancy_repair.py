@@ -11,6 +11,7 @@ from agentenv.hashing import hash_file, hash_json
 from agentenv.models.schema import Message
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tools.schema import ToolResult
+from agentenv.training.candidates.schema import MechanicalRedundancyAssessment
 from agentenv.training.repairs.redundancy_detection import (
     assess_prompt_loop_mechanical_redundancy,
 )
@@ -18,10 +19,6 @@ from agentenv.training.repairs.schema import (
     RepairedTranscriptArtifact,
     TrainingCandidateRepairRecord,
     TrainingCandidateRepairReviewRecord,
-)
-from agentenv.training.candidates.schema import (
-    MechanicalRedundancyAssessment,
-    TrainingCandidateRecord,
 )
 
 
@@ -41,10 +38,6 @@ class CompletedMechanicalRedundancyRepair:
 
 def compute_mechanical_redundancy_repairer_code_hash() -> str:
     return hash_file(Path(__file__))
-
-
-def hash_training_candidate_record(record: TrainingCandidateRecord) -> str:
-    return hash_json(record.model_dump(mode="json"))
 
 
 def hash_training_candidate_repair_record(

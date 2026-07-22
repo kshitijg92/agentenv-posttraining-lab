@@ -19,10 +19,10 @@ from agentenv.training.positive_sft.materialization.builder import (
 from agentenv.training.positive_sft.materialization.schema import (
     TRAINER_IGNORE_INDEX,
 )
-from agentenv.training.positive_sft.materialization.tokenization import (
+from agentenv.training.tokenization import (
     TokenOwnershipBoundaryCrossingError,
     TokenizerOutputContractError,
-    tokenize_positive_sft_input,
+    tokenize_model_input_with_ownership,
 )
 from agentenv.training.positive_sft.schema import PositiveSFTExampleRecord
 
@@ -144,7 +144,9 @@ def test_materializer_tokenizes_full_transcript_once_and_uses_owned_spans() -> N
     )
     expected_labels = [
         ord(character)
-        if any(span.start <= index < span.end for span in rendered.model_generated_spans)
+        if any(
+            span.start <= index < span.end for span in rendered.model_generated_spans
+        )
         else TRAINER_IGNORE_INDEX
         for index, character in enumerate(rendered.text)
     ]
@@ -219,9 +221,7 @@ def test_materializer_persists_normalization_drift_without_content() -> None:
     assert record.status == "failed"
     assert record.failure_kind == "materialization_error"
     assert record.observed_sequence_length is None
-    assert record.error_class == (
-        "TokenizerNormalizationChangedRenderedTextError"
-    )
+    assert record.error_class == ("TokenizerNormalizationChangedRenderedTextError")
     assert private_content not in record.error_message
     assert "private" not in record.error_message
 
@@ -281,7 +281,7 @@ def test_token_label_mapping_rejects_ownership_boundary_crossing() -> None:
     )
 
     with pytest.raises(TokenOwnershipBoundaryCrossingError):
-        tokenize_positive_sft_input(
+        tokenize_model_input_with_ownership(
             tokenizer,
             rendered_text="ca",
             model_generated_spans=[ModelGeneratedCharacterSpan(start=1, end=2)],
@@ -297,7 +297,7 @@ def test_token_label_mapping_requires_complete_source_coverage() -> None:
     )
 
     with pytest.raises(TokenizerOutputContractError, match="do not cover"):
-        tokenize_positive_sft_input(
+        tokenize_model_input_with_ownership(
             tokenizer,
             rendered_text="ab",
             model_generated_spans=[ModelGeneratedCharacterSpan(start=0, end=1)],

@@ -1052,6 +1052,62 @@ focused Pyright: passed
 git diff --check: passed
 ```
 
+### Overall Action Preference Rubric
+
+Added the reusable v0 rubric at:
+
+```text
+configs/training/preference_rubrics/overall_action_preference_v0.md
+```
+
+The rubric covers only assistant actions observed in original rollouts. It
+orders task solvability before efficiency and requires every `preferred`
+decision to include an action-level explanation grounded in the exact shared
+context. Downstream outcomes may support that explanation but cannot supply the
+label by themselves.
+
+The strict v0 policy returns `ambiguous` when both actions are flawed, even if
+one looks less harmful. `tie` is reserved for confidently equivalent acceptable
+actions, while `invalid` remains a broken-comparison state. Repaired, edited,
+and synthetic alternatives are explicitly deferred.
+
+Added a focused fixture that loads the repository rubric, computes its content
+hash, constructs `PreferenceRubricProvenance`, and checks the settled semantic
+invariants remain present.
+
+Focused verification:
+
+```text
+candidate/preference/rubric regression slice: 73 passed
+Ruff: passed
+Pyright: passed
+git diff --check: passed
+```
+
+### Training Package Workflow Refactor
+
+Split the former flat `training/` package into ownership-aligned subsystems:
+
+```text
+candidates/    trajectory-review and harness/control gates, candidate records
+repairs/       redundancy detection, deletion repair, repair export and review
+positive_sft/  exact source selection, prefix review, example build and export
+```
+
+Removed the old top-level modules instead of leaving compatibility imports.
+Candidate-pinned trajectory and review validation now lives in
+`candidates/source_integrity.py`; positive-SFT original/repaired source selection
+lives in `positive_sft/source_selection.py`. This also removes the prior
+dependency from repair export code onto the positive-SFT builder. The CLI
+objective group is now `training positive-sft` rather than the ambiguous
+`training sft`.
+
+Added `training/README.md` and `trajectories/README.md` with Mermaid workflow
+diagrams and the evidence, repair, review, and export invariants. Focused
+candidate/repair/positive-SFT/CLI tests pass (`176 passed`), repository-wide
+Ruff passes, targeted Pyright reports zero errors, and `git diff --check`
+passes.
+
 ### Atomic Harness-Audit Artifact And Typed Consumer Migration
 
 #### Root Composition
@@ -3567,4 +3623,268 @@ corrected full-pack control expectation: 1 passed
 Ruff: passed
 Pyright: passed
 artifact compatibility audit: completed
+```
+
+### Preference Discovery Evidence Checkpoint
+
+Renamed candidate-level `preference_pairing_eligible` to
+`preference_discovery_eligible` in place. The previous name implied that one
+eligible trajectory already had a valid counterpart. The builder no longer
+requires a scored or gradable terminal outcome for this field. It applies the
+common model-source, split, leakage, orchestration, reward-detector-completeness,
+and required-artifact checks only.
+
+The aggregate candidate property/count was likewise renamed from “objective
+use” to `downstream_construction`. Preference discovery is a construction path,
+not yet an authorized objective record, so the former wording became misleading
+once unreviewed evidence could enter discovery.
+
+Positive-SFT and negative-example paths remain trajectory-review gated.
+Preference discovery does not: an unreviewed or rejected but trustworthy
+trajectory may be mined as unlabeled evidence. `TrainingCandidateRecord`
+validation now enforces accepted source review only for the review-gated paths.
+
+Added `training/preferences/` with:
+
+```text
+hashing.py -> versioned logical-message/action projections and deterministic ids
+schema.py  -> unordered comparison candidates and hash-pinned rollout evidence
+builder.py -> original prompt-loop loading, exact-state joins, and pair enumeration
+```
+
+The branch key covers selected task hashes, harness runtime hash, ordered
+logical-message hashes, and canonical workspace state before the action.
+Random occurrence message IDs and assistant model names remain provenance and
+are excluded from logical-message equality. Tool name and tool-call linkage are
+retained. The builder validates the original tool-result/workspace chain and
+never accepts a repair artifact as rollout evidence.
+
+Repeated occurrences of identical assistant content are aggregated into one
+alternative. Every two distinct action hashes under one branch key produce one
+canonical unordered candidate. Records carry no preference direction. A
+focused integration fixture used two identical happy-path occurrences and one
+malformed, ungradable occurrence; discovery produced one comparison with
+evidence multiplicities two and one.
+
+### Preference Adjudication Schema Checkpoint
+
+Added `PreferenceAdjudicationRecord` as a separate decision record downstream
+of the unordered comparison candidate. Its source pins the full candidate
+record hash and both alternative ids. Pending-record construction produces one
+unreviewed record per candidate; validation rejects duplicate, missing,
+unknown, source-drifted, or rubric-drifted records.
+
+The decision states are `preferred`, `tie`, `ambiguous`, and `invalid`. Only
+`preferred` requires and permits a `preferred_alternative_id`, and that id must
+be one of the exact source alternatives. All reviewed states require a review
+id, nonempty reason, and timezone-aware UTC timestamp.
+
+Reviewer provenance is a discriminated union:
+
+```text
+human                 -> stable reviewer id
+deterministic_auditor -> auditor id/version + code/configuration hashes
+llm_judge             -> model revision + pinned prompt/protocol/decoding refs
+```
+
+All reviewer types share one hash-pinned `overall_action_preference` rubric.
+This checkpoint deliberately stops before an adjudication artifact manifest,
+CLI, chosen/rejected export, or DPO materialization.
+
+Focused verification:
+
+```text
+preference schema + discovery: 17 passed
+candidate/preference regression slice: 72 passed
+Ruff preference slice: passed
+Pyright: passed with the repository virtual environment selected explicitly
+git diff --check: passed
+```
+
+### Preference Persistence Checkpoint
+
+Added two explicit non-training artifacts downstream of candidate construction:
+
+```text
+TrainingCandidateExport
+-> PreferenceComparisonExport
+-> PreferenceAdjudicationReview
+```
+
+`PreferenceComparisonExport` writes canonical unordered comparison records to
+`comparison_candidates.jsonl`. Its manifest pins the source candidate export,
+record schema, discovery method/version/code hash, JSONL hash, record count, and
+shared-context count. Loading revalidates the pinned candidate source and
+recomputes discovery exactly, including the valid empty-output case.
+
+`PreferenceAdjudicationReview` writes one editable adjudication row per
+comparison plus a Markdown review queue. It pins the exact comparison manifest
+and JSONL payload, copies the selected rubric into the artifact, and checks the
+copied bytes and declared rubric metadata on load. Validation rejects missing,
+unknown, duplicate, source-drifted, or rubric-drifted adjudication rows. Both
+manifests remain `training_authorization: not_authorized`.
+
+Added CLI commands:
+
+```text
+agentenv training preferences discover
+agentenv training preferences review-init
+agentenv training preferences review-validate
+```
+
+This checkpoint deliberately stops before the final chosen/rejected DPO-pair
+export. That later export must independently pin both the immutable comparison
+artifact and the mutable adjudication artifact.
+
+Focused verification:
+
+```text
+preference persistence/schema/discovery/rubric slice: 24 passed
+adjacent artifact/candidate/repair/positive-SFT/preference slice: 123 passed
+repo-wide Ruff: passed
+repo-wide Pyright: passed
+git diff --check: passed
+```
+
+### Exhaustive Preference Pair Export Checkpoint
+
+Added `PreferencePairExport` as a normalized selection artifact downstream of
+comparison discovery and adjudication review. Export validation independently
+pins both source artifacts, including the current editable adjudication JSONL.
+
+Every adjudication with `review_status=reviewed` and
+`review_decision=preferred` is exported. Non-reviewed, tie, ambiguous, and
+invalid rows are not pair records, but their counts remain explicit in the
+manifest. There is no per-context cap or sampling policy at this boundary.
+
+`PreferencePairRecord` contains only the exact comparison-record and
+adjudication-record hashes plus a derived pair id. It does not duplicate shared
+messages, assistant actions, rollout evidence, reviewer fields, or preference
+direction. A later materializer must traverse the pinned chain and resolve the
+preferred alternative from the exact adjudication record.
+
+The pair manifest separately reports pair count and distinct shared-context
+count so combinatorial comparisons are not presented as independent context
+diversity. The artifact remains `training_authorization: not_authorized`.
+
+Added:
+
+```text
+agentenv training preferences export
+```
+
+The next implementation checkpoint is target-model DPO materialization with
+source reconstruction and exact shared-prompt serialization checks.
+
+Focused verification:
+
+```text
+preference persistence/pair/schema/discovery/rubric + artifact slice: 31 passed
+adjacent artifact/candidate/repair/positive-SFT/preference slice: 165 passed
+repo-wide Ruff: passed
+repo-wide Pyright: passed using the checked-in `.venv` selection
+git diff --check: passed
+```
+
+### Atomic DPO Materialization Schema Checkpoint
+
+Added `DPOTrainingMaterializationRecord` downstream of the reference-only pair
+export. A completed record contains full chosen and rejected token sequences,
+an exact shared-prompt token boundary, and response-only trainer labels for
+both branches. Schema validation requires identical prompt token ids, masks all
+prompt labels, scores every response token, rejects identical response token
+sequences, and enforces the sequence limit independently on both branches.
+
+Pair validity is atomic. Sequence-length failures record both observed branch
+lengths and require at least one to exceed the configured maximum. Other
+materialization errors cannot retain partial branch tokens or lengths. There is
+no representable half-completed pair.
+
+The schema pins the source preference-pair record, model-input protocol,
+sequence policy, and materializer implementation. It deliberately contains no
+reference-model fields: reference checkpoint selection and the DPO objective
+belong to a later training-run contract.
+
+This checkpoint stops before source reconstruction, rendering/tokenization,
+artifact persistence, or CLI integration.
+
+Focused verification:
+
+```text
+DPO materialization schema: 16 passed
+Ruff schema/test slice: passed
+targeted Pyright: passed
+git diff --check: passed
+```
+
+### DPO Source Reconstruction And Tokenization Checkpoint
+
+Added fail-closed reconstruction from `PreferencePairRecord` through the pinned
+comparison, adjudication, training-candidate, trajectory, and prompt-loop
+sources. Every rollout-evidence occurrence supporting either alternative is
+loaded and hash-checked. Occurrences must reconstruct the same model-visible
+context and the same alternative action. One deterministic occurrence supplies
+the equivalent context, so repeated sampling does not create duplicate DPO
+rows.
+
+Added paired rendering and tokenization under the pinned model-input protocol.
+Each branch renders the same generation prompt followed by its next assistant
+action. Only the final action's ownership span is labeled; earlier assistant
+messages remain context-only. Chosen and rejected prompt token ids must match
+exactly. The model-owned end-of-turn token is scored, while a later
+template-owned newline or separator remains masked.
+
+Moved the protocol-pinned tokenizer and character-ownership implementation to
+the objective-neutral `training/tokenization.py` module so positive SFT and DPO
+use one normalization, decode-equivalence, offset, and boundary-crossing
+implementation.
+
+Atomic length handling tokenizes both branches before deciding whether the pair
+fits. An overlength result records both observed sequence lengths; any other
+rendering or tokenization error records neither partial branch.
+
+This checkpoint stops before a DPO materialization artifact manifest, reload
+validation, or CLI command.
+
+Focused verification:
+
+```text
+DPO schema/builder/source + positive-SFT tokenization regression slice: 60 passed
+targeted Pyright: passed
+git diff --check: passed
+```
+
+### Persisted DPO Materialization Checkpoint
+
+Added `DPOTrainingMaterializationExport` with exactly one completed or failed
+record per source `PreferencePairRecord`, including valid zero-row artifacts.
+Its manifest pins the exact preference-pair manifest and JSONL payload, pinned
+model-input protocol, sequence limit, materializer implementation, record
+schema, outcome counts, and materialization JSONL hash. It remains explicitly
+`training_authorization=not_authorized`.
+
+Reload validation traverses the complete pinned preference source chain,
+reconstructs all pair inputs, reloads the pinned tokenizer, and deterministically
+rebuilds every token and label. Source substitution, source payload drift,
+record-order drift, token/label drift, count drift, and protocol drift fail
+closed.
+
+Added:
+
+```text
+agentenv training preferences materialize
+```
+
+The command accepts the reference-only pair export, pinned model-input protocol,
+maximum branch length, tokenizer-cache policy, and output directory. It reports
+completed, overlength, and materialization-error counts without authorizing DPO
+training or choosing a reference model.
+
+Focused verification:
+
+```text
+DPO/preference/positive-SFT/artifact/CLI slice: 173 passed
+repo-wide Ruff: passed
+repo-wide Pyright: passed using the checked-in `.venv` selection
+git diff --check: passed
 ```

@@ -358,8 +358,9 @@ Current state:
   source export and protocol, and rebuilds persisted labels on load;
 - a real Qwen2.5-Coder-3B practice prefix materialized successfully with the
   pinned tokenizer into 843 tokens, including assistant-only end-of-turn loss;
-- target-model token materialization is implemented; final release authorization
-  and trainer consumption remain before any training smoke.
+- target-model positive-SFT token materialization is complete; final training
+  authorization, trainer consumption, and the smoke-training decision remain
+  separate boundaries.
 
 Self-deception trap:
 
@@ -416,14 +417,35 @@ Purpose:
 Define preference data only where the comparison basis is auditable.
 ```
 
-Start with eligible gradable trajectories as possible rejected sides. Do not
-assume a chosen side exists until the contract says what can validly be chosen.
+Start with trustworthy original model trajectories as possible alternatives.
+Task success, gradability, trajectory-level behavioral acceptance, mechanical
+redundancy, and reward-hack findings are evidence rather than discovery labels.
+Actual leakage, ineligible splits, orchestration failures, and missing or
+incomplete source evidence remain hard exclusions. Do not assume a chosen side
+exists until an auditable adjudication says what can validly be preferred.
 
 Done when:
 
-- preference-pair schema is defined;
-- invalid pairs are rejected in tests;
-- a builder either writes valid JSONL or documents insufficient pairs;
+- unlabeled shared-context comparison schema is defined;
+- invalid comparisons are rejected in tests;
+- deterministic discovery aggregates identical actions and enumerates distinct
+  action pairs without using task outcome;
+- reviewer-specific adjudication is defined and pins the exact source candidate,
+  rubric, reason, decision time, and reviewer-specific provenance;
+- the v0 overall-action rubric prioritizes task solvability over efficiency,
+  requires local causal justification, and abstains when both actions are bad;
+- unlabeled comparison discovery is persisted as a source-pinned export;
+- adjudication is persisted as a separate source- and rubric-pinned review;
+- every validated preferred adjudication is persisted in an exhaustive,
+  reference-only preference-pair export;
+- an atomic DPO training-materialization record requires two complete branches
+  with one identical masked prompt and response-only labels, while leaving
+  reference-model selection to the later training run;
+- repeated observations supporting one preference alternative are all
+  source-validated but materialize as one pair rather than frequency-weighted
+  duplicates;
+- the materialization export writes one completed or failed row per source pair,
+  pins the target-model input protocol, and remains unauthorized for training;
 - DPO remains deferred unless at least 20 auditable pairs exist.
 
 Self-deception trap:

@@ -9,10 +9,10 @@ from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.hashing import hash_file
 from agentenv.training.candidates.export import TrainingCandidateExport
+from agentenv.training.candidates.hashing import hash_training_candidate_record
 from agentenv.training.candidates.schema import TrainingCandidateRecord
 from agentenv.training.repairs.redundancy_repair import (
     MECHANICAL_REDUNDANCY_REPAIR_METHOD,
-    hash_training_candidate_record,
 )
 from agentenv.training.repairs.schema import (
     TrainingCandidateRepairRecord,

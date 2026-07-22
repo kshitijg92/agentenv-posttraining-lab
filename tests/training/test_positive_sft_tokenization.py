@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from tokenizers import normalizers
 
-from agentenv.training.positive_sft.materialization.tokenization import (
+from agentenv.training.tokenization import (
     TokenizerNormalizationChangedRenderedTextError,
     require_tokenizer_preserves_rendered_text,
 )
@@ -47,9 +47,7 @@ def test_normalization_guard_rejects_changed_text_without_exposing_content() -> 
     rendered_text = "private prefix e\u0301 private suffix"
     normalized_text = "private prefix é private suffix"
 
-    with pytest.raises(
-        TokenizerNormalizationChangedRenderedTextError
-    ) as exc_info:
+    with pytest.raises(TokenizerNormalizationChangedRenderedTextError) as exc_info:
         require_tokenizer_preserves_rendered_text(tokenizer, rendered_text)
 
     error = exc_info.value
@@ -65,9 +63,7 @@ def test_normalization_guard_rejects_changed_text_without_exposing_content() -> 
 def test_normalization_guard_detects_change_after_equal_prefix() -> None:
     tokenizer = _Tokenizer(_BackendTokenizer(normalizers.NFC()))
 
-    with pytest.raises(
-        TokenizerNormalizationChangedRenderedTextError
-    ) as exc_info:
+    with pytest.raises(TokenizerNormalizationChangedRenderedTextError) as exc_info:
         require_tokenizer_preserves_rendered_text(tokenizer, "abc e\u0301")
 
     assert exc_info.value.first_difference_index == 4

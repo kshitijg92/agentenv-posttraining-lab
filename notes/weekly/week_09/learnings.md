@@ -2116,3 +2116,306 @@ gate.
 The self-deception trap is to regenerate manifests around old rows and call
 them current. Rebuilding proves deterministic derivation; it cannot manufacture
 the missing runtime equivalence evidence.
+
+### Complete Rollouts Are Preference Evidence, Not Automatically The Loss Unit
+
+Two agent rollouts may begin from the same task, workspace, tool contract, and
+model-visible history, then diverge at one assistant action:
+
+```text
+shared context C
+├── A1 -> observation O1 -> later action B1 -> ... -> rollout outcome R1
+└── A2 -> observation O2 -> later action B2 -> ... -> rollout outcome R2
+```
+
+The complete branches are valuable evidence because they reveal the
+consequences associated with `A1` and `A2`. They are not automatically the right
+trainable chosen and rejected sequences. Full-trajectory preference loss would
+apply pressure across every later assistant action in each branch. That can
+reward incidental or redundant behavior in a successful branch and penalize
+sensible diagnosis or recovery behavior in a failed branch. It also introduces
+long-horizon length and credit-assignment effects that are unrelated to the
+first decision.
+
+For an action-level preference pair, the trainable claim is narrower:
+
+```text
+prompt:   exact shared context C
+chosen:   one assistant action A1
+rejected: one assistant action A2
+evidence: references to the complete downstream rollouts
+```
+
+Only `A1` and `A2` share the same conditioning context. The later actions do
+not:
+
+```text
+context for B1 = C + A1 + O1
+context for B2 = C + A2 + O2
+```
+
+Comparing `B1` directly with `B2` would confound action quality with different
+histories and environment states. Either later action may still support
+positive SFT within its own reviewed context or form another preference pair
+against an alternative generated from that exact context. It simply cannot
+inherit loss from the original branch-point comparison.
+
+This separates two artifacts with different authority:
+
+```text
+complete rollout -> evidence used to justify or review the preference
+shared-context action pair -> unit that receives pairwise preference loss
+```
+
+### Task Outcome Does Not Establish A Local Action Preference
+
+Task success and failure summarize whole-trajectory outcomes. They do not
+provide local credit assignment for every action in those trajectories.
+
+For example, a successful rollout may contain an unnecessary repeated file
+read before eventually producing a correct patch. Terminal success does not
+make that repeated read a desirable chosen action. Conversely, a failed
+rollout may begin with a precise diagnosis and correct edit, then fail because
+of a later formatting mistake. Terminal failure does not make the earlier
+diagnosis a valid rejected action.
+
+This is the same reason positive SFT no longer requires whole-task success. A
+human-approved good prefix may come from a failed trajectory, while a
+successful trajectory may require repair or prefix truncation before receiving
+positive supervision. Preference data needs the same discipline:
+
+```text
+trajectory outcome -> evidence about the complete run
+action preference  -> reviewed claim about alternatives under one shared state
+```
+
+A terminal success/failure contrast can prioritize pairs for review, but it is
+not sufficient by itself to authorize `A1 > A2`. The preference may instead be
+established by:
+
+- a human comparing the two actions under the shared context and a written
+  rubric;
+- a deterministic auditor that proves a narrow action property;
+- an LLM judge operating under a pinned, audited comparison protocol;
+- controlled branch evaluation in which both actions receive comparable
+  downstream evaluation.
+
+Each authority has a scope. A deterministic auditor that proves one tool call
+is mechanically redundant does not prove that every aspect of the other action
+is superior. A human judgment can be inconsistent or under-informed. An LLM
+judge can prefer verbosity, ordering, or model-specific style and may reproduce
+the same reward-hacking weaknesses as the policies being judged. Judge
+disagreement or insufficient evidence should produce an ambiguous or review
+outcome, not a forced preference label.
+
+The self-deception trap is to treat a scalar terminal reward as if it contained
+token- or action-level causal attribution. It does not.
+
+### Source Models And The Reference Model Have Different Roles
+
+Chosen and rejected actions do not need to originate from the same model. They
+may come from different checkpoints, different model families, separate samples
+from one model, human repair, or search. DPO trains a target model by scoring
+both actions under the target and a frozen reference model; the models that
+originally generated the candidates are provenance, not mathematical
+participants in the loss.
+
+The roles are distinct:
+
+```text
+source policy M1 -> produced candidate action A1
+source policy M2 -> produced candidate action A2
+target policy    -> being updated by preference training
+reference policy -> frozen anchor used by the DPO objective
+```
+
+Cross-model candidate pairs are valid only when both actions are alternatives
+under the same exact model-visible context, branch-point environment state, and
+action protocol. Both must also be representable by the target model's pinned
+serialization and tokenizer.
+
+Different source models create a separate evidence risk. If M1 generates the
+rest of branch one and M2 generates the rest of branch two, a terminal outcome
+difference reflects the first actions plus every later decision made by two
+different continuation policies. A continuation policy is the model and
+decoding process that selects subsequent actions from each branch-specific
+history. Therefore terminal success alone cannot isolate whether `A1` or `A2`
+was better.
+
+Using the same source model does not automatically solve this problem: sampling
+randomness and divergent observations still affect later behavior. Controlled
+continuations, repeated branch evaluations, or direct action judgment can make
+the evidence stronger.
+
+Cross-model pairing can also leak easy style shortcuts. If every chosen action
+comes from M1 and every rejected action comes from M2, the learner may identify
+verbosity, formatting, or phrasing associated with M1 rather than learn the
+intended behavioral distinction. Source identity must therefore remain visible
+for dataset analysis even though source-model equality is not an eligibility
+rule.
+
+### Positive SFT And DPO Encode Different Training Claims
+
+Positive SFT is supervised imitation. Given one approved assistant action, it
+maximizes the likelihood of its tokens under their real preceding context:
+
+```text
+positive-SFT loss =
+  negative sum of approved assistant-token log probabilities
+```
+
+It has no rejected alternative, preference margin, reference policy, scalar
+reward, critic, or online environment interaction. It is supervised
+post-training rather than reinforcement learning.
+
+DPO consumes a chosen and rejected action under one shared context. It changes
+their relative likelihood while anchoring the update to a frozen reference
+model. DPO is derived from a KL-regularized RLHF objective, but its optimization
+uses an offline supervised-style pairwise loss. It does not require PPO, a
+separate learned reward model, a critic, or online policy-gradient rollouts.
+
+The distinction is:
+
+```text
+positive SFT -> make this approved action more likely
+DPO          -> make this chosen action more likely relative to this rejected action
+online RL    -> sample actions and optimize using observed reward signals
+```
+
+Calling all three simply “post-training” is convenient operationally but hides
+their different data contracts and credit-assignment assumptions.
+
+### The DPO Preference Margin Is Reference-Adjusted Relative Movement
+
+For one shared context `C`, DPO separately scores the chosen and rejected
+assistant actions. An action score is the sum of log probabilities of its
+model-generated tokens; context and tool-observation tokens condition those
+probabilities but are not themselves action-score terms.
+
+The reference-adjusted shifts are:
+
+```text
+chosen_shift =
+  log p_target(chosen | C) - log p_reference(chosen | C)
+
+rejected_shift =
+  log p_target(rejected | C) - log p_reference(rejected | C)
+
+preference_margin = chosen_shift - rejected_shift
+```
+
+A positive margin means the target has moved toward the chosen action relative
+to the rejected action compared with the reference policy. A zero margin means
+it preserves the reference model's relative preference, and a negative margin
+means it has moved in the wrong direction. DPO applies a logistic loss that
+pushes this margin upward.
+
+The chosen action does not need to begin with a larger raw probability than the
+rejected action. The margin measures relative movement from the reference, not
+an isolated chosen-action likelihood. This is why DPO is not merely positive
+SFT on the chosen side plus a metadata label saying the other side was bad.
+
+Action-level comparison reduces trajectory-length confounding but does not
+eliminate sequence-length effects entirely: the likelihood of each assistant
+action still sums over its tokens. Length, formatting, and verbosity therefore
+remain pair-quality dimensions to inspect rather than reasons to abandon the
+shared-context invariant.
+
+### Preference Discovery Admits Trustworthy Evidence, Not Only Good Behavior
+
+Preference data requires actions that may eventually become both chosen and
+rejected. Requiring task success, a completed score, or prior behavioral
+acceptance before discovery would preferentially remove the mistakes that make
+preference learning possible.
+
+The admission question is therefore:
+
+```text
+Did this action really occur under trustworthy, non-leaky conditions?
+```
+
+It is not:
+
+```text
+Was this action successful or already judged desirable?
+```
+
+A failed task, malformed action, mechanically redundant call, or confirmed
+reward-hack attempt may be useful comparison evidence. None automatically
+becomes the rejected side. Preference direction still requires a reviewer or
+auditor that can justify the local comparison.
+
+Harness and data-integrity failures are different. An orchestration failure,
+missing observation, invalid split, or incomplete detector run can make the
+record untrustworthy rather than merely bad behavior. Those conditions remain
+discovery exclusions.
+
+### Rejected Preference Text Must Still Be Free Of Private Leakage
+
+Calling one action `rejected` does not make its bytes harmless. DPO evaluates
+both chosen and rejected completions under the target and reference policies;
+both sides participate in the loss. A rejected completion containing a secret,
+hidden validator, or private transcript can still expose and potentially teach
+that content.
+
+The safe distinction is:
+
+```text
+real non-leaky exploit attempt -> possible rejected preference evidence
+actual private/evaluator leak  -> forbidden from ordinary preference training
+```
+
+Negative direction is not a privacy mechanism.
+
+### A Repaired Transcript Is Not Executed Rollout Evidence
+
+A deterministic repair can create a valid positive-SFT target when its narrow
+transformation contract is proven. It cannot retroactively establish what the
+environment or policy would have done after the edited action sequence.
+
+For example, deleting a redundant tool call changes the history on which every
+later action is conditioned. Reusing the original suffix as if it had followed
+the repaired prefix would assert an unexecuted counterfactual continuation.
+
+Therefore preference discovery starts from original prompt-loop trajectories.
+A repaired action can become rollout evidence only if it is re-executed and
+recorded as a new trajectory under its real resulting state.
+
+### Repeated Actions Are Evidence Multiplicity; Distinct Actions Are Alternatives
+
+Suppose ten rollouts contain the same shared context `C` and the same assistant
+action `A`. They are ten observations of one alternative, not ten different
+actions. Producing duplicate `C, A` training rows would overweight sampling
+frequency without adding a new behavioral choice.
+
+If the ten actions are all distinct, there are instead up to:
+
+```text
+10 choose 2 = 45
+```
+
+valid unordered comparisons to review. Those 45 comparisons remain highly
+correlated because they share one context. A trustworthy report must preserve
+both accepted-pair count and unique-shared-context count; combinatorial growth
+must not masquerade as independent dataset diversity.
+
+### Shared Context Requires Logical Content And Environment State
+
+Random message IDs identify occurrences, so separately sampled rollouts can
+have different IDs while presenting identical content to the policy. They must
+not be used as context equality. Conversely, matching message text alone is
+insufficient when a tool has silently changed the workspace.
+
+An agentic shared decision state needs at least:
+
+```text
+same task hashes
+same harness/tool runtime
+same ordered logical-message hashes through C
+same canonical workspace hash before the action
+```
+
+Source model identity and decoding policy remain provenance rather than an
+equality rule. This allows actions sampled from different models to be compared
+under the same logical state while retaining enough evidence to detect style or
+continuation-policy confounds later.

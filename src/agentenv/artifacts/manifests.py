@@ -82,6 +82,20 @@ from agentenv.training.positive_sft.materialization.schema import (
     POSITIVE_SFT_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION,
     PositiveSFTTrainingMaterializationRecordSchemaVersion,
 )
+from agentenv.training.preferences.schema import (
+    PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION,
+    PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION,
+    PREFERENCE_PAIR_RECORD_SCHEMA_VERSION,
+    PreferenceAdjudicationRecordSchemaVersion,
+    PreferenceComparisonCandidateRecordSchemaVersion,
+    PreferenceDiscoveryMethod,
+    PreferencePairRecordSchemaVersion,
+    PreferenceRubricProvenance,
+)
+from agentenv.training.preferences.materialization.schema import (
+    DPO_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION,
+    DPOTrainingMaterializationRecordSchemaVersion,
+)
 from agentenv.trajectories.schema import (
     TRAJECTORY_RECORD_SCHEMA_VERSION,
     TRAJECTORY_REVIEW_SCHEMA_VERSION,
@@ -169,6 +183,20 @@ POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
 POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS = {
     "materializations": "materializations.jsonl",
 }
+PREFERENCE_COMPARISON_EXPORT_ARTIFACT_REFS = {
+    "comparison_candidates": "comparison_candidates.jsonl",
+}
+PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_REFS = {
+    "adjudications": "adjudications.jsonl",
+    "review_queue": "review_queue.md",
+    "rubric": "rubrics/overall_action_preference_v0.md",
+}
+PREFERENCE_PAIR_EXPORT_ARTIFACT_REFS = {
+    "preference_pairs": "preference_pairs.jsonl",
+}
+DPO_TRAINING_MATERIALIZATION_ARTIFACT_REFS = {
+    "materializations": "materializations.jsonl",
+}
 REWARD_HACK_AUDIT_ARTIFACT_REFS = {
     "results": "reward_hack_audit_results.jsonl",
     "case_runs": "case_runs",
@@ -208,6 +236,18 @@ POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_
 POSITIVE_SFT_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS = frozenset(
     POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS
 )
+PREFERENCE_COMPARISON_EXPORT_REQUIRED_ARTIFACTS = frozenset(
+    PREFERENCE_COMPARISON_EXPORT_ARTIFACT_REFS
+)
+PREFERENCE_ADJUDICATION_REVIEW_REQUIRED_ARTIFACTS = frozenset(
+    PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_REFS
+)
+PREFERENCE_PAIR_EXPORT_REQUIRED_ARTIFACTS = frozenset(
+    PREFERENCE_PAIR_EXPORT_ARTIFACT_REFS
+)
+DPO_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS = frozenset(
+    DPO_TRAINING_MATERIALIZATION_ARTIFACT_REFS
+)
 REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS = frozenset(REWARD_HACK_AUDIT_ARTIFACT_REFS)
 SCORER_AUDIT_REQUIRED_ARTIFACTS = frozenset(SCORER_AUDIT_ARTIFACT_REFS)
 AGENT_TASK_AUDIT_REQUIRED_ARTIFACTS = frozenset(AGENT_TASK_AUDIT_ARTIFACT_REFS)
@@ -235,6 +275,18 @@ PositiveSFTReviewArtifactSchemaVersion = Literal["positive_sft_review_artifact_v
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 PositiveSFTTrainingMaterializationArtifactSchemaVersion = Literal[
     "positive_sft_training_materialization_artifact_v0"
+]
+PreferenceComparisonExportArtifactSchemaVersion = Literal[
+    "preference_comparison_export_artifact_v0"
+]
+PreferenceAdjudicationReviewArtifactSchemaVersion = Literal[
+    "preference_adjudication_review_artifact_v0"
+]
+PreferencePairExportArtifactSchemaVersion = Literal[
+    "preference_pair_export_artifact_v0"
+]
+DPOTrainingMaterializationArtifactSchemaVersion = Literal[
+    "dpo_training_materialization_artifact_v0"
 ]
 RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v2"]
 ScorerAuditArtifactSchemaVersion = Literal["scorer_audit_artifact_v0"]
@@ -274,9 +326,11 @@ POSITIVE_SFT_REVIEW_ARTIFACT_SCHEMA_VERSION: PositiveSFTReviewArtifactSchemaVers
 POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVersion = (
     "positive_sft_export_artifact_v0"
 )
-POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION: (
-    PositiveSFTTrainingMaterializationArtifactSchemaVersion
-) = "positive_sft_training_materialization_artifact_v0"
+POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION: PositiveSFTTrainingMaterializationArtifactSchemaVersion = "positive_sft_training_materialization_artifact_v0"
+PREFERENCE_COMPARISON_EXPORT_ARTIFACT_SCHEMA_VERSION: PreferenceComparisonExportArtifactSchemaVersion = "preference_comparison_export_artifact_v0"
+PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_SCHEMA_VERSION: PreferenceAdjudicationReviewArtifactSchemaVersion = "preference_adjudication_review_artifact_v0"
+PREFERENCE_PAIR_EXPORT_ARTIFACT_SCHEMA_VERSION: PreferencePairExportArtifactSchemaVersion = "preference_pair_export_artifact_v0"
+DPO_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION: DPOTrainingMaterializationArtifactSchemaVersion = "dpo_training_materialization_artifact_v0"
 REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION: RewardHackAuditArtifactSchemaVersion = (
     "reward_hack_audit_artifact_v2"
 )
@@ -1162,8 +1216,8 @@ class TrainingCandidateExportManifest(ArtifactManifest):
     analysis_eligible_count: NonNegativeInt
     positive_sft_review_eligible_count: NonNegativeInt
     negative_example_eligible_count: NonNegativeInt
-    preference_pairing_eligible_count: NonNegativeInt
-    any_objective_use_eligible_count: NonNegativeInt
+    preference_discovery_eligible_count: NonNegativeInt
+    downstream_construction_eligible_count: NonNegativeInt
     analysis_only_count: NonNegativeInt
     fully_ineligible_count: NonNegativeInt
     artifacts: dict[str, str]
@@ -1205,21 +1259,22 @@ class TrainingCandidateExportManifest(ArtifactManifest):
             self.analysis_eligible_count,
             self.positive_sft_review_eligible_count,
             self.negative_example_eligible_count,
-            self.preference_pairing_eligible_count,
-            self.any_objective_use_eligible_count,
+            self.preference_discovery_eligible_count,
+            self.downstream_construction_eligible_count,
             self.analysis_only_count,
             self.fully_ineligible_count,
         )
         if any(count > self.record_count for count in bounded_counts):
             raise ValueError("training candidate summary counts cannot exceed records")
         if (
-            self.any_objective_use_eligible_count
+            self.downstream_construction_eligible_count
             + self.analysis_only_count
             + self.fully_ineligible_count
             != self.record_count
         ):
             raise ValueError(
-                "any_objective_use_eligible, analysis_only, and fully_ineligible "
+                "downstream_construction_eligible, analysis_only, and "
+                "fully_ineligible "
                 "counts must sum to record_count"
             )
         return self
@@ -1230,6 +1285,260 @@ class TrainingCandidateExportManifestRef(BaseModel):
 
     artifact_dir: str = Field(min_length=1)
     manifest_hash: ContentHash
+
+
+class PreferenceComparisonExportManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.PREFERENCE_COMPARISON_EXPORT.value
+    expected_artifact_schema_version = (
+        PREFERENCE_COMPARISON_EXPORT_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    source_training_candidate_export: TrainingCandidateExportManifestRef
+    training_authorization: Literal["not_authorized"]
+    preference_comparison_candidate_record_schema_version: (
+        PreferenceComparisonCandidateRecordSchemaVersion
+    )
+    discovery_method: PreferenceDiscoveryMethod
+    discovery_version: str = Field(min_length=1)
+    discovery_code_hash: ContentHash
+    record_count: NonNegativeInt
+    shared_context_count: NonNegativeInt
+    comparison_candidates_jsonl_hash: ContentHash
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_preference_comparison_export_contract(
+        self,
+    ) -> "PreferenceComparisonExportManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=PREFERENCE_COMPARISON_EXPORT_ARTIFACT_REFS,
+            owner="preference comparison export manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=PREFERENCE_COMPARISON_EXPORT_REQUIRED_ARTIFACTS,
+            owner="preference comparison export manifests",
+        )
+        if (
+            self.preference_comparison_candidate_record_schema_version
+            != PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "preference_comparison_candidate_record_schema_version must be "
+                f"{PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.shared_context_count > self.record_count:
+            raise ValueError(
+                "preference comparison shared-context count cannot exceed records"
+            )
+        return self
+
+
+class PreferenceComparisonExportManifestRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    comparison_candidates_jsonl_hash: ContentHash
+
+
+class PreferenceAdjudicationReviewManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.PREFERENCE_ADJUDICATION_REVIEW.value
+    expected_artifact_schema_version = (
+        PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    source_preference_comparison_export: PreferenceComparisonExportManifestRef
+    training_authorization: Literal["not_authorized"]
+    preference_adjudication_record_schema_version: (
+        PreferenceAdjudicationRecordSchemaVersion
+    )
+    rubric_provenance: PreferenceRubricProvenance
+    record_count: NonNegativeInt
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_preference_adjudication_review_contract(
+        self,
+    ) -> "PreferenceAdjudicationReviewManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_REFS,
+            owner="preference adjudication review manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=PREFERENCE_ADJUDICATION_REVIEW_REQUIRED_ARTIFACTS,
+            owner="preference adjudication review manifests",
+        )
+        if (
+            self.preference_adjudication_record_schema_version
+            != PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "preference_adjudication_record_schema_version must be "
+                f"{PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.rubric_provenance.rubric_ref.path != self.artifacts["rubric"]:
+            raise ValueError(
+                "preference adjudication rubric provenance must reference the "
+                "manifest rubric artifact"
+            )
+        return self
+
+
+class PreferenceAdjudicationReviewManifestRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    adjudications_jsonl_hash: ContentHash
+
+
+class PreferencePairExportManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.PREFERENCE_PAIR_EXPORT.value
+    expected_artifact_schema_version = PREFERENCE_PAIR_EXPORT_ARTIFACT_SCHEMA_VERSION
+
+    created_at: str = Field(min_length=1)
+    source_preference_comparison_export: PreferenceComparisonExportManifestRef
+    source_preference_adjudication_review: PreferenceAdjudicationReviewManifestRef
+    training_authorization: Literal["not_authorized"]
+    preference_pair_record_schema_version: PreferencePairRecordSchemaVersion
+    source_adjudication_record_count: NonNegativeInt
+    source_not_reviewed_count: NonNegativeInt
+    source_preferred_count: NonNegativeInt
+    source_tie_count: NonNegativeInt
+    source_ambiguous_count: NonNegativeInt
+    source_invalid_count: NonNegativeInt
+    record_count: NonNegativeInt
+    shared_context_count: NonNegativeInt
+    preference_pairs_jsonl_hash: ContentHash
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_preference_pair_export_contract(
+        self,
+    ) -> "PreferencePairExportManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=PREFERENCE_PAIR_EXPORT_ARTIFACT_REFS,
+            owner="preference pair export manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=PREFERENCE_PAIR_EXPORT_REQUIRED_ARTIFACTS,
+            owner="preference pair export manifests",
+        )
+        if (
+            self.preference_pair_record_schema_version
+            != PREFERENCE_PAIR_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "preference_pair_record_schema_version must be "
+                f"{PREFERENCE_PAIR_RECORD_SCHEMA_VERSION!r}"
+            )
+        source_counts = (
+            self.source_not_reviewed_count,
+            self.source_preferred_count,
+            self.source_tie_count,
+            self.source_ambiguous_count,
+            self.source_invalid_count,
+        )
+        if sum(source_counts) != self.source_adjudication_record_count:
+            raise ValueError(
+                "preference adjudication outcome counts must sum to source records"
+            )
+        if self.record_count != self.source_preferred_count:
+            raise ValueError(
+                "preference pair record count must equal preferred adjudications"
+            )
+        if self.shared_context_count > self.record_count:
+            raise ValueError(
+                "preference pair shared-context count cannot exceed records"
+            )
+        return self
+
+
+class PreferencePairExportArtifactRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    preference_pairs_jsonl_hash: ContentHash
+
+
+class DPOTrainingMaterializationManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.DPO_TRAINING_MATERIALIZATION.value
+    expected_artifact_schema_version = (
+        DPO_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    training_authorization: Literal["not_authorized"]
+    source_preference_pair_export: PreferencePairExportArtifactRef
+    model_input_protocol_path: str = Field(min_length=1)
+    model_input_protocol_id: str = Field(
+        min_length=1,
+        pattern=r"^[a-z0-9_]+$",
+    )
+    model_input_protocol_hash: ContentHash
+    serialization_mode: Literal["shared_context_next_action"]
+    max_sequence_length: PositiveInt
+    materializer_version: str = Field(min_length=1)
+    materializer_code_hash: ContentHash
+    dpo_training_materialization_record_schema_version: (
+        DPOTrainingMaterializationRecordSchemaVersion
+    )
+    record_count: NonNegativeInt
+    completed_count: NonNegativeInt
+    failed_count: NonNegativeInt
+    sequence_length_exceeded_count: NonNegativeInt
+    materialization_error_count: NonNegativeInt
+    materializations_jsonl_hash: ContentHash
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_dpo_training_materialization_contract(
+        self,
+    ) -> "DPOTrainingMaterializationManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=DPO_TRAINING_MATERIALIZATION_ARTIFACT_REFS,
+            owner="DPO training materialization manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=DPO_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS,
+            owner="DPO training materialization manifests",
+        )
+        if (
+            self.dpo_training_materialization_record_schema_version
+            != DPO_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "dpo_training_materialization_record_schema_version must be "
+                f"{DPO_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION!r}"
+            )
+        if self.completed_count + self.failed_count != self.record_count:
+            raise ValueError(
+                "completed and failed DPO materialization counts must sum to "
+                "record_count"
+            )
+        if (
+            self.sequence_length_exceeded_count + self.materialization_error_count
+            != self.failed_count
+        ):
+            raise ValueError(
+                "DPO materialization failure-kind counts must sum to failed_count"
+            )
+        return self
 
 
 class TrainingCandidateRepairExportManifest(ArtifactManifest):
@@ -1525,12 +1834,10 @@ class PositiveSFTTrainingMaterializationManifest(ArtifactManifest):
             )
         if self.completed_count + self.failed_count != self.record_count:
             raise ValueError(
-                "completed and failed materialization counts must sum to "
-                "record_count"
+                "completed and failed materialization counts must sum to record_count"
             )
         if (
-            self.sequence_length_exceeded_count
-            + self.materialization_error_count
+            self.sequence_length_exceeded_count + self.materialization_error_count
             != self.failed_count
         ):
             raise ValueError(
@@ -1840,6 +2147,30 @@ def load_training_candidate_export_manifest(
     path: Path,
 ) -> TrainingCandidateExportManifest:
     return _validate_manifest(TrainingCandidateExportManifest, path)
+
+
+def load_preference_comparison_export_manifest(
+    path: Path,
+) -> PreferenceComparisonExportManifest:
+    return _validate_manifest(PreferenceComparisonExportManifest, path)
+
+
+def load_preference_adjudication_review_manifest(
+    path: Path,
+) -> PreferenceAdjudicationReviewManifest:
+    return _validate_manifest(PreferenceAdjudicationReviewManifest, path)
+
+
+def load_preference_pair_export_manifest(
+    path: Path,
+) -> PreferencePairExportManifest:
+    return _validate_manifest(PreferencePairExportManifest, path)
+
+
+def load_dpo_training_materialization_manifest(
+    path: Path,
+) -> DPOTrainingMaterializationManifest:
+    return _validate_manifest(DPOTrainingMaterializationManifest, path)
 
 
 def load_training_candidate_repair_export_manifest(

@@ -74,8 +74,8 @@ def test_export_training_candidate_records_writes_pending_review_artifact(
     assert manifest.analysis_eligible_count == 1
     assert manifest.positive_sft_review_eligible_count == 0
     assert manifest.negative_example_eligible_count == 0
-    assert manifest.preference_pairing_eligible_count == 0
-    assert manifest.any_objective_use_eligible_count == 0
+    assert manifest.preference_discovery_eligible_count == 0
+    assert manifest.downstream_construction_eligible_count == 0
     assert manifest.analysis_only_count == 1
     assert manifest.fully_ineligible_count == 0
     assert manifest.artifacts == {
@@ -106,8 +106,8 @@ def test_export_training_candidate_records_keeps_accepted_controls_analysis_only
     assert export.manifest.analysis_eligible_count == 1
     assert export.manifest.positive_sft_review_eligible_count == 0
     assert export.manifest.negative_example_eligible_count == 0
-    assert export.manifest.preference_pairing_eligible_count == 0
-    assert export.manifest.any_objective_use_eligible_count == 0
+    assert export.manifest.preference_discovery_eligible_count == 0
+    assert export.manifest.downstream_construction_eligible_count == 0
     assert export.manifest.analysis_only_count == 1
     assert export.manifest.fully_ineligible_count == 0
     assert export.records[0].content_eligibility.is_analysis_only

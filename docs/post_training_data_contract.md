@@ -10,7 +10,7 @@ The central boundary is:
 
 ```text
 trusted trajectory evidence
-  -> reviewed training candidate
+  -> interpreted training candidate
   -> objective-specific dataset record
   -> serialized tokens or comparison pair
   -> training loss
@@ -45,10 +45,10 @@ training eligibility != a constructed training example
 a valid dataset row != a valid token-level loss
 ```
 
-`TrainingCandidateRecord.content_eligibility` is the single authority for
-broad positive-SFT, negative-example, preference-data, and analysis use. A
-downstream builder may apply stricter objective-specific rules, but it must not
-override a denied use.
+`TrainingCandidateRecord.content_eligibility` is the single authority for which
+broad objective-specific construction workflows may inspect a source. A
+downstream builder may apply stricter rules, but it must not override a denied
+use. Discovery eligibility is not itself training authorization.
 
 ## Fail-Closed Trust Root
 
@@ -85,7 +85,6 @@ The trajectory must:
 
 - come from the `practice` or `dev` split recorded in its hash-pinned task
   manifest and split lock;
-- have an accepted trajectory review;
 - contain the required agent attempt id, task view, task-run result,
   prompt-loop result, and decoding configuration;
 - contain no detected canary or hidden-validator exposure in model-visible
@@ -93,6 +92,12 @@ The trajectory must:
 - contain no harness orchestration failure;
 - have a complete reward-hack catalogue evaluation;
 - remain linked to hash-pinned source artifacts.
+
+Positive-SFT and negative-example construction additionally require an accepted
+trajectory review. Preference discovery is deliberately different: it may mine
+an unreviewed or behaviorally rejected source as an unlabeled alternative when
+all evidence-integrity gates above pass. A later preference adjudication must
+still authorize any chosen/rejected claim.
 
 An ordinary model-caused failure can still be interpretable. For example, a
 malformed tool call or disallowed command may be useful negative evidence when
@@ -137,6 +142,10 @@ The following sources are forbidden from every trainable path:
 - trajectories whose reward-hack evaluation is incomplete;
 - trajectories missing required model-agent evidence;
 - unreviewed, rejected, or `needs_followup` trajectories.
+
+The final item applies to trainable objective records. An unlabeled preference
+comparison candidate is evidence for later review, not yet a trainable record,
+so its source review state is preserved rather than used as an automatic label.
 
 Controls calibrate the measurement system. They are not demonstrations of the
 unique or ideal reasoning path and must not be promoted into chosen responses
@@ -530,27 +539,110 @@ One preference pair contains:
 - source ids, hashes, splits, scorer/reward versions, and known risks for both
   sides.
 
-Candidate-level `preference_pairing_eligible` only permits a trajectory to be
-considered as one side. It does not prove that a valid counterpart or pair
-exists.
+Candidate-level `preference_discovery_eligible` only says that an original
+trajectory is trustworthy enough to be searched for action alternatives. It
+does not prove that a counterpart exists, that either action is better, or that
+a trainable preference pair exists. Unlike positive-SFT eligibility, discovery
+does not require task success or an accepted trajectory-level behavioral
+review. Those would remove exactly the poor behavior needed as possible
+rejected alternatives.
+
+Discovery groups assistant-action occurrences by an exact decision-state key:
+
+```text
+task hashes
++ harness runtime hash
++ ordered logical-message hashes through context C
++ canonical workspace hash before the action
+```
+
+It aggregates repeated occurrences of the same exact action as supporting
+rollout evidence. Distinct action hashes under that shared state become
+canonical unordered comparison candidates. Complete original prompt-loop and
+trajectory records remain hash-pinned evidence; repaired positive-SFT
+transcripts are excluded because their edited continuations were never
+executed.
 
 ### Pair-Level Requirements
 
-A pair is valid only when:
+A reviewed pair will be valid only when:
 
-- both sides pass the common source and accepted-review gates;
+- both sides pass the common evidence-integrity gates;
 - both sides come from training-eligible splits;
-- both responses use the same model-compatible serialization;
+- both actions occur under the same exact shared decision state;
+- both responses can use the target model's pinned serialization;
 - the chosen and rejected sides are not identical;
-- the prompt, task, and decision context are sufficiently comparable for the
-  declared basis;
-- the chosen side is supported by trusted success or a future explicitly
-  provenance-tracked human repair;
-- the rejected side's defect is evidenced rather than inferred solely from
-  hindsight;
+- one reviewer with auditable human, deterministic-auditor, or LLM-judge
+  provenance returns an explicit `PREFERRED` decision with a nonempty reason;
 - neither side contains private leakage or an environment/orchestration
   failure;
 - the pair builder records enough evidence to reproduce the comparison.
+
+Discovery and adjudication are intentionally separate records. The discovered
+candidate stays canonically unordered. Its adjudication returns exactly one of:
+
+| Decision | Meaning | May name a preferred alternative? | May become a DPO pair? |
+| --- | --- | --- | --- |
+| `preferred` | The evidence and rubric support one source action over the other | Exactly one of the two source alternative ids is required | Yes, after later export gates |
+| `tie` | The comparison is valid and the reviewer confidently judges the actions equivalent | No | No |
+| `ambiguous` | The comparison is valid, but evidence is insufficient, conflicting, or causally unclear | No | No; it may be reviewed again |
+| `invalid` | The shared-context, source, or evidence contract is broken | No | No |
+
+This distinction prevents uncertainty from being mislabeled as equality and
+prevents a broken comparison from entering an unresolved-review bucket.
+
+Every adjudication pins the complete source comparison record hash, both source
+alternative ids, and a versioned overall-action-preference rubric. A reviewed
+record requires a review id, a nonempty decision reason, and a UTC review time.
+Reviewer provenance is a discriminated contract rather than one generic label:
+
+- a human supplies a stable pseudonymous reviewer id;
+- a deterministic auditor supplies its identity, version, code hash, and
+  configuration hash;
+- an LLM judge supplies its pinned model revision and hash-pinned prompt,
+  model-input protocol, and decoding configuration.
+
+The reviewer kind changes what evidence is required to audit the decision. It
+does not change the downstream meaning of a valid `preferred` decision. The
+reason remains review evidence and must not be inserted into chosen/rejected
+training text.
+
+The persisted workflow keeps those authorities separate:
+
+```text
+TrainingCandidateExport
+-> PreferenceComparisonExport
+-> PreferenceAdjudicationReview
+-> PreferencePairExport
+-> DPOTrainingMaterializationExport
+```
+
+The comparison export pins its source candidate manifest, discovery
+implementation, record schema, candidate JSONL hash, and exact recomputed
+records. The adjudication-review artifact pins the exact comparison manifest
+and candidate payload, stores one review row per candidate, and contains a
+byte-for-byte copied, hash-pinned rubric. The pair export independently pins and
+validates both artifacts rather than treating review as a mutation of discovery
+evidence. It exhaustively selects every `reviewed + preferred` adjudication,
+stores only source comparison/adjudication record hashes, and accounts for all
+other outcomes in its manifest. Context and actions are reconstructed later;
+they are not copied into another source-level schema. All three artifacts state
+`training_authorization: not_authorized`.
+
+The current source of truth is the versioned
+[`overall_action_preference_v0`](../configs/training/preference_rubrics/overall_action_preference_v0.md)
+rubric. It admits only actions observed in original rollouts and applies this
+ordering:
+
+```text
+first:  preserve or improve task solvability
+second: among actions satisfying the first condition, prefer greater efficiency
+```
+
+A `preferred` decision requires an action-level causal explanation grounded in
+the shared context. Terminal task outcome and reward are supporting evidence,
+not labels. If both actions are flawed, the v0 decision is `ambiguous` rather
+than a lesser-of-two-bad preference.
 
 For action-level efficiency labels, the preferred construction shares an exact
 transcript prefix and differs at the next action. For full-trajectory
@@ -559,12 +651,15 @@ task prompt, and the comparison basis must account for material differences.
 
 Potential auditable bases include:
 
-- trusted successful behavior versus a trusted, gradable failed behavior;
-- two trusted successes where one contains a proven mechanically redundant
-  action and the other supplies a valid alternative at the same prefix;
+- a deterministic finding that one action is mechanically redundant while the
+  alternative is valid under the same state;
+- human judgment of correctness, safety, or efficiency under a versioned
+  overall-preference rubric;
+- a pinned LLM judge whose model, prompt, input protocol, and decoding settings
+  are preserved;
 - non-hacking trusted success versus an explicitly confirmed hack attempt with
   no private leakage;
-- future provenance-tracked human repair versus the original failed behavior.
+- controlled continuation evidence that isolates the local action difference.
 
 The following are not valid pairs:
 
@@ -575,11 +670,40 @@ The following are not valid pairs:
 - a pair whose chosen side is a control script or privileged oracle path;
 - any pair containing `heldout_private` or `public_calibration` evidence;
 - any pair containing actual private leakage;
-- any pair with an unauditable or ambiguous preference basis.
+- any comparison reviewed as `TIE`, `AMBIGUOUS`, or `INVALID`;
+- any pair with an unauditable preference basis.
 
-No preference schema or pair builder is implemented yet. An empty pair export
-or a documented insufficiency result is valid. DPO remains deferred unless at
-least 20 auditable pairs exist.
+The unlabeled discovery schema, deterministic discovery builder, immutable
+comparison export, reviewer-specific adjudication schema, persisted review
+queue, exhaustive reference-only pair export, atomic DPO-materialization record,
+source reconstruction, materializer, and persisted DPO materialization export
+are implemented. Sampling and weighting are not. Empty comparison, review,
+pair, and materialization artifacts remain valid. DPO remains deferred unless
+at least 20 auditable pairs exist, and combinatorial pairs from one shared
+context must not be misreported as independent data diversity.
+
+One completed DPO materialization record contains two complete target-protocol
+token sequences: the exact shared prompt followed by the chosen action, and the
+same prompt followed by the rejected action. Both branches must have identical
+prompt token ids and must mask every prompt label. Every token in each compared
+assistant-action span is scored, including a model-owned end-of-turn token. Any
+template-owned separator after that span remains masked. The two response spans
+must differ. Either both branches materialize within the sequence limit or the
+pair produces one failed record; a one-sided result is never trainer-valid.
+
+Repeated occurrences of the same action under the same exact context remain
+supporting evidence for one alternative. Materialization traverses and validates
+every occurrence, rejects source drift or inconsistent model-visible content,
+and deterministically selects one equivalent occurrence for reconstruction. It
+does not multiply one pair according to how often either source action happened
+to be sampled.
+
+This materialization pins the model-input protocol and tokenizer needed to
+construct the two sequences. It does not select a frozen reference model.
+Policy initialization, reference checkpoint, DPO objective variant, and beta
+belong to a later training-run contract. If reference log probabilities are
+precomputed, they require a separate artifact pinned to both this
+materialization and the exact reference checkpoint.
 
 ## Analysis-Only Contract
 
@@ -614,12 +738,12 @@ denied. At minimum the reason must distinguish:
 | Actual leakage | Deny every trainable use and never copy leaked bytes |
 | Orchestration failure | Deny every trainable use |
 | Reward-hack evaluation incomplete | Deny every trainable use |
-| Trajectory review not accepted | Analysis only; no objective-specific training path |
+| Trajectory review not accepted | Block review-gated positive-SFT and negative-example paths; do not by itself block unlabeled preference discovery when evidence-integrity gates pass |
 | Positive-SFT prefix review not accepted | Emit no positive-SFT source example |
 | Confirmed reward hack | Deny positive SFT; allow only explicitly labeled negative/adversarial consideration when otherwise safe |
 | Ambiguous reward hack without adjudication | Block trainable use pending review |
 | Task failure | Does not by itself deny an accepted positive-SFT prefix; may also support negative or preference-rejected consideration |
-| Cannot grade | Does not invalidate an earlier accepted positive prefix; deny preference pairing under the current policy; possibly retain labeled negative evidence |
+| Cannot grade | Does not invalidate an earlier accepted positive prefix and does not by itself label or block an exact-context preference comparison; possibly retain labeled negative evidence |
 | Mechanical redundancy unhandled | Deny raw full-transcript positive SFT; retain assessment for deterministic repair or pairing |
 | Preference basis unauditable | Deny pair construction even if both sides are individually eligible |
 | Canonical sequence exceeds `max_sequence_length` | Exclude the initial trajectory-aggregated training row and preserve an explicit overlength reason |
@@ -673,13 +797,19 @@ historical artifact count != current training-data eligibility
 | Deterministic tool-call serialization and token loss masks | Implemented |
 | Persisted target-model token records and explicit overlength outcomes | Implemented |
 | Negative-example dataset/export objective | Not implemented |
-| Preference-pair schema, pair validation, and export | Not implemented |
+| Unordered preference discovery schema and deterministic builder | Implemented |
+| Preference comparison export and adjudication-review artifact | Implemented |
+| Exhaustive reference-only preference-pair export | Implemented |
+| Atomic target-model DPO materialization record | Implemented |
+| DPO source reconstruction and paired tokenization builder | Implemented |
+| Persisted target-model DPO materialization export and CLI | Implemented |
 | Human-repair provenance contract | Not implemented |
 | External-data license/source contract | Out of scope |
 
-The next training-validity checkpoint is the final release/trainer boundary:
-only a release artifact with matching trust evidence may authorize trainer
-consumption of completed materializations.
+The preference-data plumbing now stops at a trainer-shaped but unauthorized DPO
+materialization artifact. Across all objectives, only the later final
+release/trainer boundary may combine completed materializations with matching
+trust evidence and authorize consumption.
 
 ## Non-Claims
 

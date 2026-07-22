@@ -49,8 +49,8 @@ class TrainingCandidateRecordCounts:
     analysis_eligible_count: int
     positive_sft_review_eligible_count: int
     negative_example_eligible_count: int
-    preference_pairing_eligible_count: int
-    any_objective_use_eligible_count: int
+    preference_discovery_eligible_count: int
+    downstream_construction_eligible_count: int
     analysis_only_count: int
     fully_ineligible_count: int
 
@@ -61,11 +61,11 @@ class TrainingCandidateRecordCounts:
                 self.positive_sft_review_eligible_count
             ),
             "negative_example_eligible_count": self.negative_example_eligible_count,
-            "preference_pairing_eligible_count": (
-                self.preference_pairing_eligible_count
+            "preference_discovery_eligible_count": (
+                self.preference_discovery_eligible_count
             ),
-            "any_objective_use_eligible_count": (
-                self.any_objective_use_eligible_count
+            "downstream_construction_eligible_count": (
+                self.downstream_construction_eligible_count
             ),
             "analysis_only_count": self.analysis_only_count,
             "fully_ineligible_count": self.fully_ineligible_count,
@@ -258,15 +258,15 @@ def count_training_candidate_records(
             for record in records
         ),
         negative_example_eligible_count=sum(
-            record.content_eligibility.negative_example_eligible
+            record.content_eligibility.negative_example_eligible for record in records
+        ),
+        preference_discovery_eligible_count=sum(
+            record.content_eligibility.preference_discovery_eligible
             for record in records
         ),
-        preference_pairing_eligible_count=sum(
-            record.content_eligibility.preference_pairing_eligible
+        downstream_construction_eligible_count=sum(
+            record.content_eligibility.has_downstream_construction_path
             for record in records
-        ),
-        any_objective_use_eligible_count=sum(
-            record.content_eligibility.has_objective_use_path for record in records
         ),
         analysis_only_count=sum(
             record.content_eligibility.is_analysis_only for record in records

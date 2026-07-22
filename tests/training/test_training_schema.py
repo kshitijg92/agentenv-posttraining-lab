@@ -28,8 +28,8 @@ def _eligibility_payload(**updates: Any) -> dict[str, Any]:
         "positive_sft_review_reason": "accepted successful agent trajectory",
         "negative_example_eligible": False,
         "negative_example_reason": "trajectory succeeded",
-        "preference_pairing_eligible": True,
-        "preference_pairing_reason": "accepted gradable trajectory",
+        "preference_discovery_eligible": True,
+        "preference_discovery_reason": "trusted original trajectory evidence",
     }
     payload.update(updates)
     return payload
@@ -228,7 +228,7 @@ def test_training_candidate_record_accepts_reviewed_candidate() -> None:
     assert record.review_decision == "accepted"
     assert record.mechanical_redundancy_assessment.evaluation_status == "complete"
     assert record.mechanical_redundancy_assessment.blocks == []
-    assert record.content_eligibility.has_objective_use_path
+    assert record.content_eligibility.has_downstream_construction_path
     assert not record.content_eligibility.is_analysis_only
     assert not record.content_eligibility.is_fully_ineligible
 
@@ -308,12 +308,12 @@ def test_content_eligibility_exposes_analysis_only_utility() -> None:
         _eligibility_payload(
             positive_sft_review_eligible=False,
             positive_sft_review_reason="not a positive SFT target",
-            preference_pairing_eligible=False,
-            preference_pairing_reason="not a preference candidate",
+            preference_discovery_eligible=False,
+            preference_discovery_reason="not a preference candidate",
         )
     )
 
-    assert not eligibility.has_objective_use_path
+    assert not eligibility.has_downstream_construction_path
     assert eligibility.is_analysis_only
     assert not eligibility.is_fully_ineligible
 
@@ -325,12 +325,12 @@ def test_content_eligibility_exposes_fully_ineligible_utility() -> None:
             analysis_reason="source artifact failed validation",
             positive_sft_review_eligible=False,
             positive_sft_review_reason="source artifact failed validation",
-            preference_pairing_eligible=False,
-            preference_pairing_reason="source artifact failed validation",
+            preference_discovery_eligible=False,
+            preference_discovery_reason="source artifact failed validation",
         )
     )
 
-    assert not eligibility.has_objective_use_path
+    assert not eligibility.has_downstream_construction_path
     assert not eligibility.is_analysis_only
     assert eligibility.is_fully_ineligible
 
@@ -343,7 +343,7 @@ def test_training_candidate_rejects_objective_paths_without_accepted_review() ->
 
     with pytest.raises(
         ValidationError,
-        match="candidates with an objective-use path require accepted human review",
+        match="candidates with a review-gated use path require accepted human review",
     ):
         TrainingCandidateRecord.model_validate(payload)
 
@@ -356,8 +356,8 @@ def test_training_candidate_accepts_rejected_analysis_only_candidate() -> None:
             positive_sft_review_reason="human review rejected trajectory",
             negative_example_eligible=False,
             negative_example_reason="human review rejected trajectory",
-            preference_pairing_eligible=False,
-            preference_pairing_reason="human review rejected trajectory",
+            preference_discovery_eligible=False,
+            preference_discovery_reason="human review rejected trajectory",
         ),
     )
 
@@ -365,6 +365,32 @@ def test_training_candidate_accepts_rejected_analysis_only_candidate() -> None:
 
     assert record.review_decision == "rejected"
     assert record.content_eligibility.is_analysis_only
+
+
+def test_training_candidate_allows_preference_discovery_without_source_acceptance() -> (
+    None
+):
+    payload = _candidate_payload(
+        review_status="not_reviewed",
+        review_id=None,
+        reviewer_id=None,
+        review_decision=None,
+        content_eligibility=_eligibility_payload(
+            positive_sft_review_eligible=False,
+            positive_sft_review_reason="trajectory has not been reviewed",
+            negative_example_eligible=False,
+            negative_example_reason="trajectory has not been reviewed",
+            preference_discovery_eligible=True,
+            preference_discovery_reason="trusted original trajectory evidence",
+        ),
+    )
+
+    record = TrainingCandidateRecord.model_validate(payload)
+
+    assert record.content_eligibility.preference_discovery_eligible
+    assert record.content_eligibility.has_downstream_construction_path
+    assert not record.content_eligibility.has_review_gated_use_path
+    assert not record.content_eligibility.is_analysis_only
 
 
 def test_not_reviewed_candidate_cannot_include_review_details() -> None:
@@ -378,8 +404,8 @@ def test_not_reviewed_candidate_cannot_include_review_details() -> None:
             positive_sft_review_reason="trajectory has not been reviewed",
             negative_example_eligible=False,
             negative_example_reason="trajectory has not been reviewed",
-            preference_pairing_eligible=False,
-            preference_pairing_reason="trajectory has not been reviewed",
+            preference_discovery_eligible=False,
+            preference_discovery_reason="trajectory has not been reviewed",
         ),
     )
 
