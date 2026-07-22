@@ -25,8 +25,10 @@ preserve_cli_error_codes
 repair_config_precedence
 ```
 
-The suite has since expanded to thirteen dev tasks with the same local,
-deterministic, single-repository patch shape. The authoritative inventory is
+The suite has since expanded to nineteen dev tasks. Six of the newer tasks
+progress from one to seven source files and add recursive filesystem, pipeline,
+transaction, policy, and graph-scheduling interactions while retaining the
+same deterministic repo-patch contract. The authoritative inventory is
 `data/task_packs/repo_patch_python_v0/splits.lock.json`.
 
 The practice split contains:
@@ -57,9 +59,10 @@ The original three tasks exercise:
   environment overrides.
 
 Later dev and heldout tasks extend the same construct family to deterministic
-parsing, ordering, validation, batching, path, interval, numeric, and
-record-transformation contracts. Per-task cards remain the authoritative
-description of what each task does and does not measure.
+parsing, ordering, validation, batching, path, interval, numeric,
+record-transformation, recursive configuration, transaction, policy, pipeline,
+and scheduling contracts. Per-task cards remain the authoritative description
+of what each task does and does not measure.
 
 These are not prompt-list tasks. Each task requires reading the seed code,
 understanding the local contract, and changing implementation behavior so that
@@ -146,16 +149,16 @@ This is a measurement-quality baseline, not a model-quality baseline.
 
 ## Known Weaknesses
 
-The suite is intentionally narrow:
+The suite remains intentionally narrow:
 
-- only three dev tasks,
-- only Python repo-patch tasks,
-- no real model-agent loop yet,
-- no large-repo navigation,
-- no multi-file architecture tasks beyond a small two-module config loader,
+- only Python repo-patch tasks;
+- synthetic small repositories rather than large-repo navigation;
 - no external services, databases, async workflows, or production-like
-  deployment constraints,
-- no heldout-private split.
+  deployment constraints;
+- predominantly repair-shaped objectives rather than feature implementation,
+  diagnosis-only, review, or valid no-op task families; and
+- six heldout tasks provide weak task-level directional evidence rather than a
+  statistically strong population estimate.
 
 The current report still has instrumentation gaps:
 

@@ -1,0 +1,37 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"list_files\",\"arguments\":{\"path\":\"src\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/policy_engine.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/policy_models.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/policy_patterns.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/policy_engine.py\",\"content\":\"from collections.abc import Iterable\\n\\nfrom policy_models import parse_rules\\nfrom policy_patterns import matches_pattern, validate_exact_name, validate_subject\\n\\n\\ndef is_allowed(\\n    rules: Iterable[object],\\n    subject: object,\\n    action: object,\\n    resource: object,\\n) -> bool:\\n    parsed_rules = parse_rules(rules)\\n    query_subject = validate_subject(subject)\\n    query_action = validate_exact_name(action, label=\\\"action\\\")\\n    query_resource = validate_exact_name(resource, label=\\\"resource\\\")\\n\\n    allowed = False\\n    for rule in parsed_rules:\\n        if (\\n            any(matches_pattern(pattern, query_subject) for pattern in rule.subjects)\\n            and any(matches_pattern(pattern, query_action) for pattern in rule.actions)\\n            and any(\\n                matches_pattern(pattern, query_resource) for pattern in rule.resources\\n            )\\n        ):\\n            if rule.effect == \\\"deny\\\":\\n                return False\\n            allowed = True\\n    return allowed\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/policy_models.py\",\"content\":\"from collections.abc import Iterable, Mapping\\nfrom dataclasses import dataclass\\n\\nfrom policy_patterns import validate_pattern\\n\\n\\n@dataclass(frozen=True)\\nclass Rule:\\n    effect: str\\n    subjects: tuple[str, ...]\\n    actions: tuple[str, ...]\\n    resources: tuple[str, ...]\\n\\n\\ndef _parse_axis(value: object, *, subject: bool) -> tuple[str, ...]:\\n    if isinstance(value, (str, bytes)):\\n        raise ValueError(\\\"rule axis must be a non-string iterable\\\")\\n    try:\\n        items = tuple(value)  # type: ignore[arg-type]\\n    except TypeError as exc:\\n        raise ValueError(\\\"rule axis must be iterable\\\") from exc\\n    if not items:\\n        raise ValueError(\\\"rule axis must not be empty\\\")\\n    parsed = tuple(validate_pattern(item, subject=subject) for item in items)\\n    if len(set(parsed)) != len(parsed):\\n        raise ValueError(\\\"rule axis values must be unique\\\")\\n    return parsed\\n\\n\\ndef parse_rules(raw_rules: Iterable[object]) -> list[Rule]:\\n    if isinstance(raw_rules, (str, bytes)):\\n        raise ValueError(\\\"rules must be a non-string iterable\\\")\\n    try:\\n        materialized = list(raw_rules)\\n    except TypeError as exc:\\n        raise ValueError(\\\"rules must be iterable\\\") from exc\\n\\n    rules: list[Rule] = []\\n    required_keys = {\\\"effect\\\", \\\"subjects\\\", \\\"actions\\\", \\\"resources\\\"}\\n    for raw_rule in materialized:\\n        if not isinstance(raw_rule, Mapping):\\n            raise ValueError(\\\"rule must be a mapping\\\")\\n        if set(raw_rule) != required_keys:\\n            raise ValueError(\\\"rule keys must match the policy schema\\\")\\n        effect = raw_rule[\\\"effect\\\"]\\n        if effect not in {\\\"allow\\\", \\\"deny\\\"}:\\n            raise ValueError(\\\"invalid effect\\\")\\n        rules.append(\\n            Rule(\\n                effect=effect,\\n                subjects=_parse_axis(raw_rule[\\\"subjects\\\"], subject=True),\\n                actions=_parse_axis(raw_rule[\\\"actions\\\"], subject=False),\\n                resources=_parse_axis(raw_rule[\\\"resources\\\"], subject=False),\\n            )\\n        )\\n    return rules\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/policy_patterns.py\",\"content\":\"import re\\n\\n\\n_SEGMENT_RE = re.compile(r\\\"[A-Za-z0-9][A-Za-z0-9._-]*\\\")\\n\\n\\ndef validate_subject(value: object) -> str:\\n    if not isinstance(value, str) or _SEGMENT_RE.fullmatch(value) is None:\\n        raise ValueError(\\\"invalid subject\\\")\\n    return value\\n\\n\\ndef validate_exact_name(value: object, *, label: str) -> str:\\n    if not isinstance(value, str):\\n        raise ValueError(f\\\"invalid {label}\\\")\\n    parts = value.split(\\\":\\\")\\n    if not parts or any(_SEGMENT_RE.fullmatch(part) is None for part in parts):\\n        raise ValueError(f\\\"invalid {label}\\\")\\n    return value\\n\\n\\ndef validate_pattern(value: object, *, subject: bool = False) -> str:\\n    if value == \\\"*\\\":\\n        return \\\"*\\\"\\n    if subject:\\n        return validate_subject(value)\\n    if not isinstance(value, str):\\n        raise ValueError(\\\"invalid pattern\\\")\\n    if value.endswith(\\\":*\\\"):\\n        validate_exact_name(value[:-2], label=\\\"pattern\\\")\\n        return value\\n    validate_exact_name(value, label=\\\"pattern\\\")\\n    return value\\n\\n\\ndef matches_pattern(pattern: str, value: str) -> bool:\\n    if pattern == \\\"*\\\":\\n        return True\\n    if pattern.endswith(\\\":*\\\"):\\n        return value.startswith(pattern[:-1])\\n    return pattern == value\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed"
+  }
+}

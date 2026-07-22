@@ -1,0 +1,32 @@
+id: repair_inventory_transaction
+domain: repo_patch_python
+split: dev
+instruction: "Fix the inventory transaction modules so reserve_inventory is deterministic and atomic. inventory must be a mapping whose keys match ASCII [A-Za-z0-9][A-Za-z0-9._-]* and whose values are non-negative integers other than bool. requests must be a finite non-string iterable of two-item lists or tuples (sku, quantity), where sku follows the same rule and quantity is a positive integer other than bool. Aggregate duplicate request SKUs in first-request order and reject unknown SKUs. Validate everything before deciding availability. On success return ReservationResult(accepted=True) with a fresh remaining mapping in inventory order, the aggregated allocated mapping, and empty shortfalls. If any aggregate exceeds stock, return accepted=False with an unchanged fresh remaining mapping, empty allocated mapping, and every insufficient SKU mapped to requested-minus-available in first-request order. Never mutate inputs. Every malformed input raises ValueError."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: inventory_transaction_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 20
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_INVENTORY_TRANSACTION_PRIVATE"

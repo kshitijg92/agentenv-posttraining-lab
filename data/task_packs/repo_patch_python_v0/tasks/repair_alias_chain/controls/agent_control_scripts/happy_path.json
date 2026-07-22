@@ -1,0 +1,25 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"list_files\",\"arguments\":{\"path\":\"src\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/alias_registry.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/alias_registry.py\",\"content\":\"import re\\nfrom collections.abc import Iterable, Mapping\\n\\n\\n_NAME_RE = re.compile(r\\\"[A-Za-z][A-Za-z0-9_-]*\\\")\\n\\n\\ndef normalize_name(value: object) -> str:\\n    \\\"\\\"\\\"Return the canonical spelling for one registry name.\\\"\\\"\\\"\\n    if not isinstance(value, str):\\n        raise ValueError(\\\"name must be a string\\\")\\n    normalized = value.strip(\\\" \\\\t\\\")\\n    if _NAME_RE.fullmatch(normalized) is None:\\n        raise ValueError(\\\"invalid name\\\")\\n    return normalized.lower()\\n\\n\\ndef _materialize_non_string_iterable(value: object, *, label: str) -> list[object]:\\n    if isinstance(value, (str, bytes)):\\n        raise ValueError(f\\\"{label} must be a non-string iterable\\\")\\n    try:\\n        return list(value)  # type: ignore[arg-type]\\n    except TypeError as exc:\\n        raise ValueError(f\\\"{label} must be a non-string iterable\\\") from exc\\n\\n\\ndef build_alias_index(\\n    canonical_names: Iterable[object],\\n    aliases: Mapping[object, object],\\n) -> dict[str, str]:\\n    \\\"\\\"\\\"Map canonical names and aliases to their final canonical names.\\\"\\\"\\\"\\n    canonical_values = _materialize_non_string_iterable(\\n        canonical_names,\\n        label=\\\"canonical_names\\\",\\n    )\\n    canonicals = [normalize_name(name) for name in canonical_values]\\n    if len(canonicals) != len(set(canonicals)):\\n        raise ValueError(\\\"duplicate canonical name\\\")\\n    if not isinstance(aliases, Mapping):\\n        raise ValueError(\\\"aliases must be a mapping\\\")\\n\\n    canonical_set = set(canonicals)\\n    normalized_aliases: dict[str, str] = {}\\n    for raw_alias, raw_target in aliases.items():\\n        alias = normalize_name(raw_alias)\\n        target = normalize_name(raw_target)\\n        if alias in canonical_set or alias in normalized_aliases:\\n            raise ValueError(\\\"alias name collision\\\")\\n        normalized_aliases[alias] = target\\n\\n    known_names = canonical_set | set(normalized_aliases)\\n    if any(target not in known_names for target in normalized_aliases.values()):\\n        raise ValueError(\\\"alias target is missing\\\")\\n\\n    resolved: dict[str, str] = {}\\n    visiting: set[str] = set()\\n\\n    def resolve(alias: str) -> str:\\n        if alias in resolved:\\n            return resolved[alias]\\n        if alias in visiting:\\n            raise ValueError(\\\"alias cycle\\\")\\n        visiting.add(alias)\\n        target = normalized_aliases[alias]\\n        canonical = target if target in canonical_set else resolve(target)\\n        visiting.remove(alias)\\n        resolved[alias] = canonical\\n        return canonical\\n\\n    index = {name: name for name in canonicals}\\n    for alias in normalized_aliases:\\n        index[alias] = resolve(alias)\\n    return index\\n\\n\\ndef resolve_names(\\n    canonical_names: Iterable[object],\\n    aliases: Mapping[object, object],\\n    requested_names: Iterable[object],\\n) -> list[str]:\\n    \\\"\\\"\\\"Resolve requested names through a freshly built alias index.\\\"\\\"\\\"\\n    index = build_alias_index(canonical_names, aliases)\\n    requested_values = _materialize_non_string_iterable(\\n        requested_names,\\n        label=\\\"requested_names\\\",\\n    )\\n    requested = [normalize_name(name) for name in requested_values]\\n    try:\\n        return [index[name] for name in requested]\\n    except KeyError as exc:\\n        raise ValueError(\\\"unknown requested name\\\") from exc\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed"
+  }
+}

@@ -1,0 +1,32 @@
+id: repair_job_dispatch
+domain: repo_patch_python
+split: dev
+instruction: "Fix the dispatch modules so build_dispatch_plan(jobs, worker_slots) validates the complete job graph and returns a deterministic capacity-aware plan. worker_slots is a positive integer other than bool. jobs is a finite non-string iterable of mappings containing exactly id, priority, slots, and dependencies. id must match lowercase ASCII [a-z][a-z0-9_-]* and be unique. priority is an integer other than bool in 0..100. slots is an integer other than bool in 1..worker_slots. dependencies is a finite non-string iterable of unique valid job ids. Self dependencies, unknown dependencies, and dependency cycles are invalid. Validate the entire input before scheduling and never mutate it. Return DispatchPlan(waves), with an empty tuple for no jobs. A job is ready for a wave only when all dependencies completed in earlier waves, never earlier in the same wave. At each wave, sort ready jobs by descending priority then original input order. Scan that order once, selecting every job that fits the remaining slots and skipping non-fitting jobs so later smaller jobs can backfill capacity. Each DispatchWave contains selected job ids in selection order and their total slots_used. Every job appears exactly once. Every malformed input raises ValueError."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: job_dispatch_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 36
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_JOB_DISPATCH_PRIVATE"

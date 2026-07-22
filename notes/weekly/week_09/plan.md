@@ -1,5 +1,8 @@
 # Week 9 Plan
 
+Status: closed on 2026-07-22. See `closure_audit.md` for the final evidence and
+the exact Week 10 handoff.
+
 ## Theme
 
 Week 9 turns reviewed trajectories into post-training data artifacts without
@@ -147,7 +150,7 @@ checks failed. They are therefore potential prefix-review sources, not claimed
 successful demonstrations. Older Qwen2.5 records remain historical evidence
 conditioned on the removed suffix.
 
-## Existing Implementation Surface
+## Implemented Surface
 
 The current training package is organized by contract ownership:
 
@@ -155,6 +158,8 @@ The current training package is organized by contract ownership:
 src/agentenv/training/candidates/
 src/agentenv/training/repairs/
 src/agentenv/training/positive_sft/
+src/agentenv/training/preferences/
+src/agentenv/training/release/
 src/agentenv/training/README.md
 tests/training/
 ```
@@ -167,22 +172,31 @@ agentenv training positive-sft review-init
 agentenv training positive-sft review-validate
 agentenv training positive-sft export
 agentenv training positive-sft materialize
+agentenv training positive-sft train-lora
+agentenv training preferences discover
+agentenv training preferences review-init
+agentenv training preferences review-validate
+agentenv training preferences export
+agentenv training preferences materialize
 ```
 
-Remaining major artifacts or boundaries:
+Resolved beyond the original plan:
 
 ```text
-preference dataset schema/builder/export
-negative-example export boundary
-configs/train/positive_sft_smoke.yaml
-configs/train/dpo_deferred.yaml
-docs/dpo_deferred_note.md
+source-pinned positive-SFT prefix review and export
+deterministic repair plus repair review
+shared-context preference discovery and adjudication
+SFT and DPO trainer-shaped materialization
+explicit training authorization override provenance
+pinned Qwen model-input protocol and tokenizer
+operational positive-SFT LoRA smoke
 ```
 
-Repo-native placement should be decided deliberately. The manual names
-standalone scripts such as `scripts/make_sft_dataset.py`, but the repo already
-uses typed builders plus `agentenv training ...` CLI commands. Prefer extending
-that pattern unless a script boundary is clearly better.
+The repo intentionally uses typed builders plus `agentenv training ...` CLI
+commands instead of the manual's standalone dataset scripts. A dedicated
+negative-example training objective, DPO optimization runtime, and adapter
+serving/evaluation remain later work; none is required to establish the Week 9
+data-contract and SFT-smoke claims.
 
 ## Non-Claims
 
@@ -197,12 +211,13 @@ Week 9 must not claim:
 - that public-pass/hidden-fail rows are near-success positive examples;
 - that preference pairs are valid without an auditable basis.
 
-The strongest acceptable claim is:
+The strongest acceptable claim at closure is:
 
 ```text
-the repo can define, validate, and export non-authorized post-training data
-candidates while reserving actual training authorization for a fail-closed final
-release boundary
+the repo can reconstruct reviewed SFT and preference evidence into explicitly
+authorized trainer-shaped artifacts, enforce assistant-only/response-only loss
+ownership, and complete an adapter-only operational LoRA smoke while preserving
+the distinction between execution correctness and model efficacy
 ```
 
 ## Design Priority
@@ -257,7 +272,7 @@ failed records preserve either an explicit overlength exclusion or an
 untrustworthy materialization error. No source example may disappear silently
 from accounting.
 
-## Planned Outputs
+## Outputs
 
 Primary planned artifacts:
 
@@ -265,20 +280,20 @@ Primary planned artifacts:
 notes/weekly/week_09/plan.md
 notes/weekly/week_09/implementation_notes.md
 notes/weekly/week_09/learnings.md
+notes/weekly/week_09/closure_audit.md
 docs/post_training_data_contract.md
-docs/dpo_deferred_note.md
-configs/train/positive_sft_smoke.yaml
-configs/train/dpo_deferred.yaml
+docs/model_design/qwen2_5_coder_3b_architecture.md
+configs/train/positive_sft_lora_smoke.yaml
+configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
 ```
 
-Remaining code/test boundaries, after design:
+Implemented code/test boundaries:
 
 ```text
 target-model token materialization under training/positive_sft/
-tests/training/test_token_materialization.py
-tests/training/test_loss_masking.py
-preference schema/builder/export under training/
-tests/training/test_preference_pairs.py
+preference discovery/review/export/materialization under training/preferences/
+LoRA qualification/training/persistence under training/positive_sft/lora/
+assistant-only and response-only token-label tests under tests/training/
 ```
 
 Possible later boundaries:
@@ -289,8 +304,9 @@ runtime-aligned context management for overlength examples
 configs/data/post_training.yaml
 ```
 
-Only create these if they clarify the boundary. Do not split files just to match
-the manual if the existing repo-native structure remains cleaner.
+These remain later objectives, not unfinished Week 9 criteria. Do not split
+files just to match the manual if the existing repo-native structure remains
+cleaner.
 
 ## Planned Checkpoints
 
@@ -783,3 +799,91 @@ The next boundary is no longer data-contract or token-materialization plumbing.
 It is target and reference checkpoint semantics, a minimal trainer, and paired
 base-versus-adapter evaluation through the frozen heldout protocol. A normal
 trust-gated release remains necessary before any production-style claim.
+
+## Progressive Development Suite Checkpoint (2026-07-22)
+
+Six new development tasks in `repo_patch_python_v0` now supply increasing
+structural surfaces for future SFT/DPO acquisition without modifying the
+frozen heldout slice. They include one-, three-, four-, five-, six-, and
+seven-source-file tasks, complete deterministic controls, acquisition and
+budget-matrix configs, and explicit documentation that the ordering is
+structural rather than empirically measured difficulty.
+
+The heldout freeze boundary was narrowed from accidental whole-container
+immutability to the actual claim: the exact heldout ID set and every heldout
+task hash remain frozen. Complete pack and split-lock hashes recorded at freeze
+time remain historical provenance and do not prevent unrelated dev expansion.
+
+Near-final authoring calibration produced 72/72 matching repeated control
+records and 36 stable flake groups. On the exact consolidated bytes, all 36
+primary control attempts matched expectations, all 36 replay comparisons
+matched, and a separate two-run calibration classified all six public checks
+as idempotent. Natural-model configs resolve but have not yet been executed.
+Once the tasks are merged into the final training branch, run natural
+acquisition only after any remaining runtime-provenance-affecting trainer or
+harness edits are stabilized if the resulting trajectories are expected to
+pass the normal trust gate.
+
+## Week 9 Closeout (2026-07-22)
+
+Week 9 is closed.
+
+The final closeout regenerated trust evidence against the exact current
+runtime and consolidated 26-task pack:
+
+```text
+harness audit: PASS
+  agent layer: PASS
+  scorer layer: PASS
+runtime hash: xxh64:95dc2d8fd2e7d812
+source hash: xxh64:463eef405ab6619e
+
+control calibration: PASS
+  tasks: 26
+  repeats: 3
+  records: 468/468 matched
+  flake groups: 156 stable, 0 drifted
+  public checks: 26/26 IDEMPOTENT at repeat_count=2
+  selected task hash set: xxh64:7455451b7893b71d
+```
+
+Closeout also reloaded every canonical trainer-shaped artifact through its
+pinned source reconstruction. This exposed stale whole-source materializer
+hashes in copied historical manifests. The affected derived artifacts were
+rematerialized from the existing reviewed source exports under the previously
+recorded explicit learning-lab authorization; no trajectory, review, or
+preference decision was changed.
+
+```text
+positive-SFT materialization manifests: 8
+positive-SFT records: 18 completed, 0 failed
+DPO materialization manifests: 8
+DPO records: 29 completed, 0 failed
+LoRA smoke: completed, 3 real optimizer steps
+LoRA adapter hash: xxh64:ccd2828a4bc5fbe1
+```
+
+Final code verification:
+
+```text
+uv run pytest -n auto: 1200 passed in 319.65 seconds
+uv run ruff check .: passed
+uv run pyright: 0 errors, 0 warnings
+git diff --check: passed
+```
+
+The fresh harness and control artifacts establish current measurement trust.
+They do not retroactively convert the historical model acquisitions into a
+normal trust-gated training release: the 16 materialization manifests remain
+authorized through the explicit user override that accepts their known source-
+runtime mismatch. That exception is suitable only for this non-production
+learning exercise.
+
+Week 10 starts from three separate facts:
+
+```text
+the heldout-private slice remains untouched by natural-model evaluation
+the LoRA artifact proves training mechanics, not improvement
+the next empirical claim requires a frozen same-path B0/S_raw/S_filtered
+comparison before any heldout result is inspected
+```

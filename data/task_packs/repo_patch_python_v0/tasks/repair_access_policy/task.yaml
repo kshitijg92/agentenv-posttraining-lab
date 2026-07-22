@@ -1,0 +1,32 @@
+id: repair_access_policy
+domain: repo_patch_python
+split: dev
+instruction: "Fix the access-policy modules so is_allowed validates all rules before evaluating them. rules is a finite non-string iterable of mappings containing exactly effect, subjects, actions, and resources. effect is allow or deny. Each other field is a non-empty finite non-string iterable of unique strings. Subjects are either * or ASCII identifiers matching [A-Za-z0-9][A-Za-z0-9._-]*. Action and resource patterns are *, an exact colon-separated identifier, or a segment prefix ending in :*; wildcards are otherwise invalid. The queried subject is one identifier and queried action/resource are exact colon-separated identifiers. Matching is case-sensitive. * matches any valid value; prefix:* matches only values with that complete colon-delimited prefix. A rule applies when every axis has a matching pattern. Any applicable deny wins regardless of order, otherwise any applicable allow permits, and no match denies. Empty rules are valid. Do not mutate inputs. Every malformed input raises ValueError."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: access_policy_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 24
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_ACCESS_POLICY_PRIVATE"

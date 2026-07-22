@@ -1,0 +1,65 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"list_files\",\"arguments\":{\"path\":\"src\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/inventory_service.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/inventory_validation.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/inventory_service.py\",\"content\":\"from collections.abc import Iterable, Mapping\\n\\nfrom inventory_models import ReservationResult\\nfrom inventory_validation import normalize_requests, validate_inventory\\n\\n\\ndef reserve_inventory(\\n    inventory: Mapping[object, object],\\n    requests: Iterable[object],\\n) -> ReservationResult:\\n    stock = validate_inventory(inventory)\\n    requested = normalize_requests(requests)\\n    unknown = [sku for sku in requested if sku not in stock]\\n    if unknown:\\n        raise ValueError(f\\\"unknown SKU: {unknown[0]}\\\")\\n\\n    shortfalls = {\\n        sku: quantity - stock[sku]\\n        for sku, quantity in requested.items()\\n        if quantity > stock[sku]\\n    }\\n    if shortfalls:\\n        return ReservationResult(\\n            accepted=False,\\n            remaining=dict(stock),\\n            allocated={},\\n            shortfalls=shortfalls,\\n        )\\n\\n    remaining = dict(stock)\\n    for sku, quantity in requested.items():\\n        remaining[sku] -= quantity\\n    return ReservationResult(\\n        accepted=True,\\n        remaining=remaining,\\n        allocated=dict(requested),\\n        shortfalls={},\\n    )\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/inventory_validation.py\",\"content\":\"import re\\nfrom collections.abc import Iterable, Mapping\\n\\n\\n_SKU_RE = re.compile(r\\\"[A-Za-z0-9][A-Za-z0-9._-]*\\\")\\n\\n\\ndef validate_inventory(inventory: object) -> dict[str, int]:\\n    if not isinstance(inventory, Mapping):\\n        raise ValueError(\\\"inventory must be a mapping\\\")\\n    validated: dict[str, int] = {}\\n    for sku, quantity in inventory.items():\\n        if not isinstance(sku, str) or _SKU_RE.fullmatch(sku) is None:\\n            raise ValueError(\\\"invalid inventory SKU\\\")\\n        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 0:\\n            raise ValueError(\\\"invalid inventory quantity\\\")\\n        validated[sku] = quantity\\n    return validated\\n\\n\\ndef normalize_requests(requests: Iterable[object]) -> dict[str, int]:\\n    if isinstance(requests, (str, bytes)):\\n        raise ValueError(\\\"requests must be a non-string iterable\\\")\\n    try:\\n        materialized = list(requests)\\n    except TypeError as exc:\\n        raise ValueError(\\\"requests must be iterable\\\") from exc\\n\\n    normalized: dict[str, int] = {}\\n    for request in materialized:\\n        if not isinstance(request, (list, tuple)) or len(request) != 2:\\n            raise ValueError(\\\"invalid request\\\")\\n        sku, quantity = request\\n        if not isinstance(sku, str) or _SKU_RE.fullmatch(sku) is None:\\n            raise ValueError(\\\"invalid request SKU\\\")\\n        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:\\n            raise ValueError(\\\"invalid request quantity\\\")\\n        normalized[sku] = normalized.get(sku, 0) + quantity\\n    return normalized\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed",
+    "tool_results": [
+      {
+        "tool_name": "read_file",
+        "status": "error",
+        "error_class": "InvalidToolInput"
+      },
+      {
+        "tool_name": "list_files",
+        "status": "ok"
+      },
+      {
+        "tool_name": "read_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "read_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "run_tests",
+        "status": "ok"
+      }
+    ]
+  }
+}

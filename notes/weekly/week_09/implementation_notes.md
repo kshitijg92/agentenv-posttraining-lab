@@ -1084,6 +1084,83 @@ Pyright: passed
 git diff --check: passed
 ```
 
+## Progressive Development Task Foundation (2026-07-22)
+
+Added six development-only tasks to the existing task pack:
+
+```text
+data/task_packs/repo_patch_python_v0
+```
+
+The first implementation placed them in a separate pack because the heldout
+freeze test compared whole-pack and complete split-lock hashes. That was
+cleaned up: the freeze now gates the exact frozen heldout ID set and per-task
+hashes, while the recorded whole-pack hashes remain historical freeze-time
+provenance. This permits unrelated dev growth without refreezing heldout data.
+
+The six tasks increase structural surface from one to seven source files:
+
+```text
+repair_alias_chain               1 source file
+repair_inventory_transaction     3 source files
+repair_access_policy             4 source files
+repair_config_inheritance        5 source files
+repair_event_rollup              6 source files
+repair_job_dispatch              7 source files
+```
+
+Every task has a narrow public check, a stronger contract-aligned hidden
+validator, oracle/no-op/public-only scorer controls, and happy/malformed/
+recoverable scripted-agent controls. Two authoring helpers generate unified
+diff controls from solution snapshots and generate standard scripted-agent
+controls from each oracle patch.
+
+Added three eval configs:
+
+```text
+configs/eval/progressive_dev_controls.yaml
+configs/eval/progressive_dev_acquisition.yaml
+configs/eval/progressive_dev_budget_matrix.yaml
+```
+
+The acquisition config defines 84 attempts across seven local model policies;
+the budget matrix defines 54 attempts across three models and three decoding
+budgets. They were path-validated but natural-model acquisition was not run in
+this checkpoint.
+
+Near-final task authoring calibration used two explicit control repeats and
+observed:
+
+```text
+72/72 control records matched expectations
+36 flake groups checked, 0 drifted
+6/6 oracle controls hidden PASS on both repeats
+12/12 no-op and 12/12 public-only controls public PASS, hidden FAIL
+12/12 happy and 12/12 recoverable agent controls hidden PASS
+12/12 malformed agent controls rejected before scoring
+```
+
+After the tasks were consolidated into the main pack and the final task bytes
+were fixed, the complete current control eval observed:
+
+```text
+36/36 primary control attempts matched expectations
+36/36 replay comparisons matched
+6/6 oracle controls hidden PASS
+6/6 no-op and 6/6 public-only controls public PASS, hidden FAIL
+6/6 happy and 6/6 recoverable agent controls hidden PASS
+6/6 malformed agent controls rejected before scoring
+```
+
+A separate exact-current-byte idempotency run observed all 6/6 declared public
+checks as `IDEMPOTENT` at `repeat_count=2`. The consolidated pack record hash
+is `xxh64:70af6abbb3ae1d61`.
+
+The event-rollup oracle uses integer cents rather than floating point or a
+fixed Decimal context, preserving exact arithmetic for every amount accepted
+by its unbounded digit grammar. The config-inheritance oracle also converts
+symlink-resolution loops into the task contract's `ValueError` boundary.
+
 ### Training Package Workflow Refactor
 
 Split the former flat `training/` package into ownership-aligned subsystems:
@@ -4284,4 +4361,50 @@ revision: 89fe5444e8baf5736e70f528f1edcc79e6616ef6
 adapter directory hash: xxh64:ccd2828a4bc5fbe1
 adapter state exactly reloaded: true
 reload probe logits exactly equal: true
+```
+
+### Week 9 Closeout Verification And Artifact Refresh
+
+Generated final current-tree trust artifacts:
+
+```text
+experiments/harness_audit/week_09_closeout
+experiments/runs/week_09_closeout_control_calibration
+```
+
+The aggregate harness audit passed both layers with matching runtime/source
+hashes. The three-repeat calibration covered all 26 tasks and produced 468
+matching records, 156 stable flake groups, no drift, and 26 idempotent public
+checks at two seed-state runs each.
+
+Loading the copied acquisition materializations through their real artifact
+loaders found that most nonempty rows still carried the earlier whole-
+`src/agentenv` materializer hash. Several copied manifests also retained
+absolute provenance paths to the original foundation worktree. Merely counting
+the JSONL rows had therefore overstated their current-tree readiness.
+
+Rematerialized seven SFT manifests and all eight DPO manifests from the local
+source exports using the existing explicit user override. The one current SFT
+manifest used by the LoRA smoke was preserved so its source pin did not change.
+Afterward, all eight SFT and all eight DPO artifacts rebuilt exactly from their
+pinned sources:
+
+```text
+SFT: 18 completed, 0 failed
+DPO: 29 completed, 0 failed
+current materializer code hash: xxh64:463eef405ab6619e
+LoRA artifact: completed, 3 steps, adapter hash xxh64:ccd2828a4bc5fbe1
+```
+
+No natural-model rollout, trajectory review, positive-SFT prefix decision, or
+preference adjudication was rerun or altered. The refresh changed only the
+trainer-shaped derivatives and their current provenance.
+
+Final repository verification:
+
+```text
+uv run pytest -n auto: 1200 passed in 319.65 seconds
+uv run ruff check .: passed
+uv run pyright: 0 errors, 0 warnings
+git diff --check: passed
 ```

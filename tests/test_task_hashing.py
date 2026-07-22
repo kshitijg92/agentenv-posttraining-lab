@@ -17,7 +17,7 @@ def test_task_hash_report_contains_pack_and_task_hashes() -> None:
 
     assert report["schema_version"] == "task_hash_report_v0"
     assert report["task_pack_id"] == "repo_patch_python_v0"
-    assert report["task_count"] == 20
+    assert report["task_count"] == 26
     assert report["manifest_yaml_hash"].startswith("xxh64:")
     assert report["splits_lock_hash"].startswith("xxh64:")
     assert report["pack_record_hash"].startswith("xxh64:")
@@ -171,7 +171,7 @@ def test_task_hash_cli_writes_report(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert "hashed repo_patch_python_v0 tasks=20" in result.output
+    assert "hashed repo_patch_python_v0 tasks=26" in result.output
     assert out_path.is_file()
     report = json.loads(out_path.read_text())
     assert report["schema_version"] == "task_hash_report_v0"

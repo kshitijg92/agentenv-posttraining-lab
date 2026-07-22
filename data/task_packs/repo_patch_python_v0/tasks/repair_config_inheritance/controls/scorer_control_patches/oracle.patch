@@ -1,0 +1,203 @@
+--- a/src/config_loader.py
++++ b/src/config_loader.py
+@@ -1,30 +1,63 @@
+ import json
+-from pathlib import Path
++from pathlib import Path, PurePosixPath
+ 
+ from config_merge import empty_fragment, finalize_config, merge_fragments
+ from config_schema import validate_document
+ from config_types import ConfigFragment, ServiceConfig
+ 
+ 
++def _reject_nonstandard_constant(value: str) -> object:
++    raise ValueError(f"invalid JSON numeric constant: {value}")
++
++
+ def _read_document(path: Path) -> object:
+     try:
+-        return json.loads(path.read_text())
++        return json.loads(
++            path.read_text(),
++            parse_constant=_reject_nonstandard_constant,
++        )
+     except FileNotFoundError:
+         raise
+-    except (OSError, json.JSONDecodeError) as exc:
++    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+         raise ValueError(f"cannot read configuration: {path}") from exc
+ 
+ 
+-def _load_direct(path: Path) -> ConfigFragment:
+-    parsed = validate_document(_read_document(path))
++def _resolve_path(path: Path) -> Path:
++    try:
++        return path.resolve()
++    except (OSError, RuntimeError) as exc:
++        raise ValueError(f"cannot resolve configuration path: {path}") from exc
++
++
++def _resolve_include(path: Path, include: str, root: Path) -> Path:
++    candidate = _resolve_path(path.parent / Path(PurePosixPath(include)))
++    try:
++        candidate.relative_to(root)
++    except ValueError as exc:
++        raise ValueError("include resolves outside the configuration root") from exc
++    return candidate
++
++
++def _load_recursive(path: Path, root: Path, active: frozenset[Path]) -> ConfigFragment:
++    resolved = _resolve_path(path)
++    try:
++        resolved.relative_to(root)
++    except ValueError as exc:
++        raise ValueError("configuration path is outside the root") from exc
++    if resolved in active:
++        raise ValueError("configuration include cycle")
++
++    parsed = validate_document(_read_document(resolved))
+     merged = empty_fragment()
++    next_active = active | {resolved}
+     for include in parsed.includes:
+-        include_path = path.parent / include
+-        included = validate_document(_read_document(include_path))
+-        merged = merge_fragments(merged, included.fragment)
++        included_path = _resolve_include(resolved, include, root)
++        included = _load_recursive(included_path, root, next_active)
++        merged = merge_fragments(merged, included)
+     return merge_fragments(merged, parsed.fragment)
+ 
+ 
+ def load_config(entry_path: str | Path) -> ServiceConfig:
+-    fragment = _load_direct(Path(entry_path))
++    entry = _resolve_path(Path(entry_path))
++    fragment = _load_recursive(entry, entry.parent, frozenset())
+     return finalize_config(fragment)
+--- a/src/config_merge.py
++++ b/src/config_merge.py
+@@ -7,22 +7,19 @@
+ 
+ def merge_fragments(base: ConfigFragment, override: ConfigFragment) -> ConfigFragment:
+     service = dict(base.service)
++    service.update(override.service)
+     limits = dict(base.limits)
++    limits.update(override.limits)
+     labels = dict(base.labels)
+-    if override.service:
+-        service = dict(override.service)
+-    if override.limits:
+-        limits = dict(override.limits)
+-    if override.labels:
+-        labels = dict(override.labels)
++    labels.update(override.labels)
+     return ConfigFragment(service=service, limits=limits, labels=labels)
+ 
+ 
+ def finalize_config(fragment: ConfigFragment) -> ServiceConfig:
+     return ServiceConfig(
+-        host=str(fragment.service.get("host", "localhost")),
+-        port=int(fragment.service.get("port", 8080)),
+-        timeout_seconds=float(fragment.limits.get("timeout_seconds", 30.0)),
+-        retries=int(fragment.limits.get("retries", 3)),
++        host=fragment.service.get("host", "localhost"),  # type: ignore[arg-type]
++        port=fragment.service.get("port", 8080),  # type: ignore[arg-type]
++        timeout_seconds=fragment.limits.get("timeout_seconds", 30.0),  # type: ignore[arg-type]
++        retries=fragment.limits.get("retries", 3),  # type: ignore[arg-type]
+         labels=dict(fragment.labels),
+     )
+--- a/src/config_schema.py
++++ b/src/config_schema.py
+@@ -1,15 +1,87 @@
++import math
+ from collections.abc import Mapping
++from pathlib import PurePosixPath
+ 
+ from config_types import ConfigFragment, ParsedDocument
+ 
+ 
++_TOP_LEVEL_KEYS = {"includes", "service", "limits", "labels"}
++_SERVICE_KEYS = {"host", "port"}
++_LIMIT_KEYS = {"timeout_seconds", "retries"}
++
++
++def _validate_include(value: object) -> str:
++    if not isinstance(value, str) or not value or "\\" in value or "\x00" in value:
++        raise ValueError("include must be a non-empty POSIX path string")
++    path = PurePosixPath(value)
++    if path.is_absolute() or value.endswith("/"):
++        raise ValueError("include must name a relative file")
++    return value
++
++
++def _validate_includes(value: object) -> tuple[str, ...]:
++    if not isinstance(value, list):
++        raise ValueError("includes must be a list")
++    return tuple(_validate_include(item) for item in value)
++
++
++def _validate_service(value: object) -> dict[str, object]:
++    if not isinstance(value, Mapping) or not set(value).issubset(_SERVICE_KEYS):
++        raise ValueError("invalid service section")
++    result: dict[str, object] = {}
++    if "host" in value:
++        host = value["host"]
++        if not isinstance(host, str) or not host:
++            raise ValueError("host must be a non-empty string")
++        result["host"] = host
++    if "port" in value:
++        port = value["port"]
++        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
++            raise ValueError("port must be an integer in 1..65535")
++        result["port"] = port
++    return result
++
++
++def _validate_limits(value: object) -> dict[str, object]:
++    if not isinstance(value, Mapping) or not set(value).issubset(_LIMIT_KEYS):
++        raise ValueError("invalid limits section")
++    result: dict[str, object] = {}
++    if "timeout_seconds" in value:
++        timeout = value["timeout_seconds"]
++        if (
++            isinstance(timeout, bool)
++            or not isinstance(timeout, (int, float))
++            or not math.isfinite(timeout)
++            or timeout <= 0
++        ):
++            raise ValueError("timeout_seconds must be finite and positive")
++        result["timeout_seconds"] = float(timeout)
++    if "retries" in value:
++        retries = value["retries"]
++        if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
++            raise ValueError("retries must be a non-negative integer")
++        result["retries"] = retries
++    return result
++
++
++def _validate_labels(value: object) -> dict[str, str]:
++    if not isinstance(value, Mapping):
++        raise ValueError("labels must be an object")
++    labels: dict[str, str] = {}
++    for key, label_value in value.items():
++        if not isinstance(key, str) or not key or not isinstance(label_value, str):
++            raise ValueError("labels must map non-empty strings to strings")
++        labels[key] = label_value
++    return labels
++
++
+ def validate_document(raw: object) -> ParsedDocument:
+-    if not isinstance(raw, Mapping):
+-        raise ValueError("configuration document must be an object")
+-    includes = tuple(raw.get("includes", ()))
+-    service = dict(raw.get("service", {}))
+-    limits = dict(raw.get("limits", {}))
+-    labels = dict(raw.get("labels", {}))
++    if not isinstance(raw, Mapping) or not set(raw).issubset(_TOP_LEVEL_KEYS):
++        raise ValueError("invalid configuration document")
++    includes = _validate_includes(raw["includes"]) if "includes" in raw else ()
++    service = _validate_service(raw["service"]) if "service" in raw else {}
++    limits = _validate_limits(raw["limits"]) if "limits" in raw else {}
++    labels = _validate_labels(raw["labels"]) if "labels" in raw else {}
+     return ParsedDocument(
+         includes=includes,
+         fragment=ConfigFragment(service=service, limits=limits, labels=labels),

@@ -1,0 +1,32 @@
+id: repair_event_rollup
+domain: repo_patch_python
+split: dev
+instruction: "Fix the event pipeline so build_rollup(jsonl_text, start, end) validates the complete input, deduplicates it, filters it, and aggregates it deterministically. jsonl_text must be a string; blank lines are ignored and every non-blank line must be a JSON object containing exactly id, user, kind, amount, and timestamp. id and user must match ASCII [A-Za-z0-9][A-Za-z0-9._-]*. kind is credit or debit. amount is a positive decimal string containing ASCII digits, an optional decimal point, and at most two fractional digits; exponent, sign, and numeric JSON values are invalid. timestamp, start, and end use exactly YYYY-MM-DDTHH:MM:SSZ and must be real UTC dates. start may equal end but not follow it; the window is start-inclusive and end-exclusive. Duplicate ids whose validated field values are identical collapse to their first occurrence, while conflicting duplicates raise ValueError even outside the window. All lines are parsed and all duplicate ids are checked before filtering. Return Rollup(event_count, users), where event_count is the number of unique in-window events and users is a tuple of UserRollup(user, net_amount, event_count) in first in-window appearance order. Credits add, debits subtract, and net_amount is an exact two-decimal string for arbitrarily large accepted amounts. Every malformed input raises ValueError."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: event_rollup_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 32
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_EVENT_ROLLUP_PRIVATE"

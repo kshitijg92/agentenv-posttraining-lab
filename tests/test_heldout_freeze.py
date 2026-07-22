@@ -20,16 +20,21 @@ HASH_FIELDS = (
 )
 
 
-def test_heldout_freeze_matches_current_task_bytes_and_split() -> None:
+def test_heldout_freeze_matches_current_heldout_bytes_and_membership() -> None:
     freeze = _load_json(FREEZE_PATH)
     report = build_task_hash_report(TASK_PACK).payload.model_dump(mode="json")
+    split_lock = _load_json(TASK_PACK / "splits.lock.json")
 
     assert freeze["artifact_type"] == "heldout_private_freeze"
     assert freeze["freeze_version"] == "heldout_private_freeze_v0"
+    assert freeze["task_pack_id"] == report["task_pack_id"]
     assert freeze["natural_model_attempt_count_at_freeze"] == 0
     assert freeze["manifest_yaml_hash"] == report["manifest_yaml_hash"]
-    assert freeze["splits_lock_hash"] == report["splits_lock_hash"]
-    assert freeze["pack_record_hash_at_freeze"] == report["pack_record_hash"]
+
+    # These whole-pack hashes are historical provenance from the freeze point.
+    # The dev inventory may grow without changing the frozen heldout slice.
+    assert freeze["splits_lock_hash"].startswith("xxh64:")
+    assert freeze["pack_record_hash_at_freeze"].startswith("xxh64:")
 
     heldout_records = {
         record["task_id"]: record
@@ -37,6 +42,7 @@ def test_heldout_freeze_matches_current_task_bytes_and_split() -> None:
         if record["split"] == "heldout_private"
     }
     frozen_records = {record["task_id"]: record for record in freeze["tasks"]}
+    assert set(split_lock["heldout_private"]) == frozen_records.keys()
     assert frozen_records.keys() == heldout_records.keys()
     assert len(frozen_records) == 6
     for task_id, frozen_record in frozen_records.items():

@@ -66,6 +66,13 @@ zero natural-model attempts existed at freeze time. The repository test suite
 recomputes those task hashes and fails if any frozen task byte, task manifest,
 split assignment, or control-gate config drifts.
 
+The freeze record also preserves the whole-pack and complete split-lock hashes
+observed at the freeze point. Those are historical provenance, not a rule that
+the development inventory can never grow. Current validation requires the
+frozen heldout ID set and every frozen heldout task hash to remain exact. New
+`dev` tasks may be added to the same task pack without refreezing or weakening
+the heldout claim.
+
 After freeze:
 
 - task defects discovered before the natural-policy run may invalidate and

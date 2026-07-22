@@ -1,0 +1,43 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"list_files\",\"arguments\":{\"path\":\"src\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/event_dedupe.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/event_parser.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/event_pipeline.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/event_rollup.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/event_dedupe.py\",\"content\":\"from event_models import Event\\n\\n\\ndef dedupe_events(events: list[Event]) -> list[Event]:\\n    seen: dict[str, Event] = {}\\n    unique: list[Event] = []\\n    for event in events:\\n        previous = seen.get(event.event_id)\\n        if previous is None:\\n            seen[event.event_id] = event\\n            unique.append(event)\\n        elif previous != event:\\n            raise ValueError(\\\"conflicting duplicate event id\\\")\\n    return unique\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/event_parser.py\",\"content\":\"import json\\nimport re\\nfrom collections.abc import Mapping\\n\\nfrom event_models import Event\\nfrom event_time import parse_timestamp\\n\\n\\n_IDENTIFIER_RE = re.compile(r\\\"[A-Za-z0-9][A-Za-z0-9._-]*\\\")\\n_AMOUNT_RE = re.compile(r\\\"[0-9]+(?:\\\\.[0-9]{1,2})?\\\")\\n_EVENT_KEYS = {\\\"id\\\", \\\"user\\\", \\\"kind\\\", \\\"amount\\\", \\\"timestamp\\\"}\\n\\n\\ndef _reject_nonstandard_constant(value: str) -> object:\\n    raise ValueError(f\\\"invalid JSON numeric constant: {value}\\\")\\n\\n\\ndef _identifier(value: object, *, label: str) -> str:\\n    if not isinstance(value, str) or _IDENTIFIER_RE.fullmatch(value) is None:\\n        raise ValueError(f\\\"invalid {label}\\\")\\n    return value\\n\\n\\ndef _amount_cents(value: object) -> int:\\n    if not isinstance(value, str) or _AMOUNT_RE.fullmatch(value) is None:\\n        raise ValueError(\\\"invalid amount\\\")\\n    whole, separator, fraction = value.partition(\\\".\\\")\\n    amount_cents = int(whole) * 100\\n    if separator:\\n        amount_cents += int(fraction.ljust(2, \\\"0\\\"))\\n    if amount_cents <= 0:\\n        raise ValueError(\\\"amount must be positive\\\")\\n    return amount_cents\\n\\n\\ndef parse_jsonl(text: str) -> list[Event]:\\n    if not isinstance(text, str):\\n        raise ValueError(\\\"jsonl_text must be a string\\\")\\n    events: list[Event] = []\\n    for line in text.splitlines():\\n        if not line.strip():\\n            continue\\n        try:\\n            raw = json.loads(line, parse_constant=_reject_nonstandard_constant)\\n        except (json.JSONDecodeError, ValueError) as exc:\\n            raise ValueError(\\\"invalid event line\\\") from exc\\n        if not isinstance(raw, Mapping) or set(raw) != _EVENT_KEYS:\\n            raise ValueError(\\\"event must contain exactly the required keys\\\")\\n        kind = raw[\\\"kind\\\"]\\n        if kind not in {\\\"credit\\\", \\\"debit\\\"}:\\n            raise ValueError(\\\"invalid event kind\\\")\\n        events.append(\\n            Event(\\n                event_id=_identifier(raw[\\\"id\\\"], label=\\\"id\\\"),\\n                user=_identifier(raw[\\\"user\\\"], label=\\\"user\\\"),\\n                kind=kind,\\n                amount_cents=_amount_cents(raw[\\\"amount\\\"]),\\n                timestamp=parse_timestamp(raw[\\\"timestamp\\\"]),\\n            )\\n        )\\n    return events\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/event_pipeline.py\",\"content\":\"from event_dedupe import dedupe_events\\nfrom event_models import Rollup, UserRollup\\nfrom event_parser import parse_jsonl\\nfrom event_rollup import rollup_events\\nfrom event_time import parse_timestamp\\n\\n\\ndef build_rollup(jsonl_text: str, start: str, end: str) -> Rollup:\\n    start_time = parse_timestamp(start)\\n    end_time = parse_timestamp(end)\\n    if start_time > end_time:\\n        raise ValueError(\\\"start must not follow end\\\")\\n    unique = dedupe_events(parse_jsonl(jsonl_text))\\n    in_window = [\\n        event for event in unique if start_time <= event.timestamp < end_time\\n    ]\\n    return rollup_events(in_window)\\n\\n\\n__all__ = [\\\"Rollup\\\", \\\"UserRollup\\\", \\\"build_rollup\\\"]\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/event_rollup.py\",\"content\":\"from collections import defaultdict\\n\\nfrom event_models import Event, Rollup, UserRollup\\n\\n\\ndef rollup_events(events: list[Event]) -> Rollup:\\n    totals: dict[str, int] = defaultdict(int)\\n    counts: dict[str, int] = defaultdict(int)\\n    user_order: list[str] = []\\n    for event in events:\\n        if event.user not in totals:\\n            user_order.append(event.user)\\n        direction = 1 if event.kind == \\\"credit\\\" else -1\\n        totals[event.user] += direction * event.amount_cents\\n        counts[event.user] += 1\\n    users = tuple(\\n        UserRollup(\\n            user=user,\\n            net_amount=_format_cents(totals[user]),\\n            event_count=counts[user],\\n        )\\n        for user in user_order\\n    )\\n    return Rollup(event_count=len(events), users=users)\\n\\n\\ndef _format_cents(value: int) -> str:\\n    sign = \\\"-\\\" if value < 0 else \\\"\\\"\\n    whole, fraction = divmod(abs(value), 100)\\n    return f\\\"{sign}{whole}.{fraction:02d}\\\"\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed"
+  }
+}

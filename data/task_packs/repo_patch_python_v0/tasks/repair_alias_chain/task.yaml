@@ -1,0 +1,32 @@
+id: repair_alias_chain
+domain: repo_patch_python
+split: dev
+instruction: "Fix the three public functions in alias_registry.py. normalize_name accepts only strings, trims ASCII spaces and tabs, requires the remaining name to match ASCII [A-Za-z][A-Za-z0-9_-]*, and returns lowercase ASCII. build_alias_index accepts a finite non-string iterable of canonical names and a mapping of alias names to target names. Normalize every name, reject normalized duplicate canonicals, alias-key collisions, malformed entries, missing targets, and alias cycles, and return a new dict mapping canonical names and every transitive alias to its final canonical name. Canonicals appear first in input order and aliases follow mapping iteration order. resolve_names builds that index and resolves a finite non-string iterable of requested names in order, preserving duplicates. Do not mutate any input. Every invalid input raises ValueError."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: alias_chain_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 16
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_ALIAS_CHAIN_PRIVATE"

@@ -1,0 +1,103 @@
+--- a/src/alias_registry.py
++++ b/src/alias_registry.py
+@@ -7,34 +7,69 @@
+ 
+ def normalize_name(value: object) -> str:
+     """Return the canonical spelling for one registry name."""
+-    if not isinstance(value, str) or _NAME_RE.fullmatch(value) is None:
++    if not isinstance(value, str):
++        raise ValueError("name must be a string")
++    normalized = value.strip(" \t")
++    if _NAME_RE.fullmatch(normalized) is None:
+         raise ValueError("invalid name")
+-    return value
++    return normalized.lower()
++
++
++def _materialize_non_string_iterable(value: object, *, label: str) -> list[object]:
++    if isinstance(value, (str, bytes)):
++        raise ValueError(f"{label} must be a non-string iterable")
++    try:
++        return list(value)  # type: ignore[arg-type]
++    except TypeError as exc:
++        raise ValueError(f"{label} must be a non-string iterable") from exc
+ 
+ 
+ def build_alias_index(
+     canonical_names: Iterable[object],
+     aliases: Mapping[object, object],
+ ) -> dict[str, str]:
+-    """Map canonical names and aliases to canonical names."""
+-    if isinstance(canonical_names, (str, bytes)):
+-        raise ValueError("canonical_names must be a non-string iterable")
+-    try:
+-        canonicals = [normalize_name(name) for name in canonical_names]
+-    except (TypeError, ValueError) as exc:
+-        raise ValueError("invalid canonical names") from exc
++    """Map canonical names and aliases to their final canonical names."""
++    canonical_values = _materialize_non_string_iterable(
++        canonical_names,
++        label="canonical_names",
++    )
++    canonicals = [normalize_name(name) for name in canonical_values]
+     if len(canonicals) != len(set(canonicals)):
+         raise ValueError("duplicate canonical name")
+     if not isinstance(aliases, Mapping):
+         raise ValueError("aliases must be a mapping")
+ 
+-    index = {name: name for name in canonicals}
++    canonical_set = set(canonicals)
++    normalized_aliases: dict[str, str] = {}
+     for raw_alias, raw_target in aliases.items():
+         alias = normalize_name(raw_alias)
+         target = normalize_name(raw_target)
+-        if alias in index or target not in index:
+-            raise ValueError("invalid alias")
+-        index[alias] = target
++        if alias in canonical_set or alias in normalized_aliases:
++            raise ValueError("alias name collision")
++        normalized_aliases[alias] = target
++
++    known_names = canonical_set | set(normalized_aliases)
++    if any(target not in known_names for target in normalized_aliases.values()):
++        raise ValueError("alias target is missing")
++
++    resolved: dict[str, str] = {}
++    visiting: set[str] = set()
++
++    def resolve(alias: str) -> str:
++        if alias in resolved:
++            return resolved[alias]
++        if alias in visiting:
++            raise ValueError("alias cycle")
++        visiting.add(alias)
++        target = normalized_aliases[alias]
++        canonical = target if target in canonical_set else resolve(target)
++        visiting.remove(alias)
++        resolved[alias] = canonical
++        return canonical
++
++    index = {name: name for name in canonicals}
++    for alias in normalized_aliases:
++        index[alias] = resolve(alias)
+     return index
+ 
+ 
+@@ -45,12 +80,11 @@
+ ) -> list[str]:
+     """Resolve requested names through a freshly built alias index."""
+     index = build_alias_index(canonical_names, aliases)
+-    if isinstance(requested_names, (str, bytes)):
+-        raise ValueError("requested_names must be a non-string iterable")
+-    try:
+-        requested = [normalize_name(name) for name in requested_names]
+-    except (TypeError, ValueError) as exc:
+-        raise ValueError("invalid requested names") from exc
++    requested_values = _materialize_non_string_iterable(
++        requested_names,
++        label="requested_names",
++    )
++    requested = [normalize_name(name) for name in requested_values]
+     try:
+         return [index[name] for name in requested]
+     except KeyError as exc:

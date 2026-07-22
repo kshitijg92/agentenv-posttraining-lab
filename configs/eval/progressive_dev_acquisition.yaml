@@ -1,0 +1,65 @@
+name: progressive_dev_acquisition
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_alias_chain
+  - repair_inventory_transaction
+  - repair_access_policy
+  - repair_config_inheritance
+  - repair_event_rollup
+  - repair_job_dispatch
+split: dev
+policies:
+  qwen2-5-coder-3b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+  qwen2-5-coder-7b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_7b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+  qwen2-5-coder-14b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+  qwen3-14b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+  devstral-small-2-24b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_devstral_small_2_24b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+  qwen3-5-27b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_5_27b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+  qwen3-coder-30b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/sampling_8192_long_timeout.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

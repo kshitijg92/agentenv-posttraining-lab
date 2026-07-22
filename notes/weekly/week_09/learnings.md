@@ -3214,3 +3214,92 @@ Sources for the library semantics used above:
 - [Transformers 4.57.3 causal-LM loss shift](https://github.com/huggingface/transformers/blob/v4.57.3/src/transformers/loss/loss_utils.py)
 - [PyTorch autograd mechanics and parameter freezing](https://docs.pytorch.org/docs/stable/notes/autograd)
 - [PEFT LoRA scaling, initialization, and forward path](https://github.com/huggingface/peft/blob/v0.18.0/src/peft/tuners/lora/layer.py)
+
+### A Freeze Must Be Scoped To The Claim It Protects
+
+Pinning a complete task-pack hash is useful historical provenance, but using it
+as the current heldout gate can freeze unrelated development inventory. That
+couples repository organization to a broader claim than the evaluation needs.
+
+For a heldout-slice claim, the live invariant is:
+
+```text
+same frozen heldout ID set
+same split assignment for every frozen ID
+same task, instruction, visible-test, hidden/control, and full-directory hashes
+same pre-freeze control evidence
+```
+
+The whole-pack and complete split-lock hashes should remain recorded as the
+state observed at freeze time. They need not equal the evolving container after
+new `dev` tasks are added. Otherwise, ordinary dev growth either forces
+artificial pack fragmentation or tempts a misleading heldout refreeze.
+
+### Structural Complexity Is A Hypothesis, Not An Outcome Label
+
+More files, functions, stages, and interacting invariants usually increase an
+agent's navigation and integration burden. They do not prove a task is harder.
+A seven-file task with obvious local defects can be easier for a model than a
+one-file task with a subtle semantic boundary.
+
+Report both kinds of evidence without substituting one for the other:
+
+```text
+authored structure: files, functions, stages, dependency shape
+observed difficulty: success, failure phase, turns, tokens, repair pattern
+```
+
+Calling the authored order a measured difficulty ladder before natural-model
+runs would bake the desired conclusion into the task labels.
+
+### A Development Task Can Feed Training Or Measure Generalization, Not Both
+
+The new tasks may legitimately produce positive SFT examples, rejected
+actions, preference comparisons, and analysis trajectories after the normal
+eligibility and review gates. Once their content or outcomes influence
+training, prompt tuning, filtering, budgets, or model selection, post-training
+performance on those same tasks is in-distribution evidence.
+
+It remains useful for regression and memorization checks, but it cannot be the
+untouched generalization claim. That requires a separately frozen task slice
+whose contents and outcomes did not influence the training decision.
+
+### Code Correctness And Persisted-Artifact Validity Are Different Claims
+
+A complete unit suite can prove that current builders and loaders obey their
+contracts on test fixtures while saying nothing about whether yesterday's
+persisted dataset still reconstructs under today's source tree. Conversely, a
+JSONL file can remain byte-for-byte intact while no longer being a current
+trainer input because its materializer provenance or pinned source graph has
+drifted.
+
+The durable closeout check is therefore not just:
+
+```text
+the files exist
+the manifest counts look plausible
+the current unit tests pass
+```
+
+It is:
+
+```text
+load the manifest
+verify every referenced source and content hash
+reconstruct the semantic input from that source graph
+rerun the pinned serialization/tokenization policy
+require the rebuilt typed records to equal the persisted records exactly
+```
+
+This distinction also explains why copying an artifact directory is not the
+same as making an artifact self-contained. If its manifest deliberately pins
+an absolute source location, the copy is historical evidence whose provenance
+still points to the original location. Rewriting that path by hand would erase
+the identity of what was reviewed. A current derivative should instead be
+rebuilt from an explicitly selected local source artifact, producing new pins
+without pretending the old record was created somewhere else.
+
+Staleness is not automatically corruption. It means the artifact supports a
+historical claim rather than the current training-use claim. Treating those as
+equivalent is a subtle way to train on data whose actual construction path was
+never revalidated.

@@ -1838,26 +1838,73 @@ Do not claim model improvement from this smoke.
 
 ---
 
-## Week 10 - Filtering Policy V1 And Raw Vs Filtered Comparison
+## Week 10 - Filtering Policy V1 And Baseline-Controlled Comparison
 
-Goal: turn manual review into reproducible filtering and test whether filtering changes behavior.
+Goal: turn manual review into reproducible filtering and test whether
+fine-tuning and filtering change behavior relative to the frozen base policy.
 
 Learning objective:
 
-- Learn data filtering as an experimental variable, not a vibes-based cleanup step.
+- Learn data filtering as an experimental variable, not a vibes-based cleanup
+  step.
+- Learn why comparing two trained policies without the unchanged base arm
+  cannot establish whether either policy improved or regressed.
+- Learn why development-task partitioning must prevent training examples from
+  reappearing in the evaluation context.
+- If enough auditable preference pairs exist, learn the incremental effect of
+  preference optimization relative to the exact SFT policy from which it
+  starts.
 
 ### Files To Create
 
 ```text
 src/agentenv/data/filtering.py
 configs/data/week10_filtering.yaml
+configs/data/week10_task_partition.yaml
 data/processed/manifests/week10_filter_manifest.json
+data/processed/sft/week10_raw_train_dev.jsonl
+data/processed/sft/week10_filtered_train_dev.jsonl
+data/processed/preferences/week10_train_dev_pairs.jsonl
 experiments/reports/week10_filtering_quality.md
 configs/train/week10_sft_raw.yaml
 configs/train/week10_sft_filtered.yaml
-configs/eval/week10_fixed_dev.yaml
+configs/train/week10_dpo.yaml
+configs/eval/week10_fixed_selection_dev.yaml
+experiments/reports/week10_base_vs_raw.md
+experiments/reports/week10_base_vs_filtered.md
 experiments/reports/week10_raw_vs_filtered.md
+experiments/reports/week10_dpo_increment.md
 ```
+
+The DPO files are conditional. Create them only when the Week 9 preference
+artifact contains at least 20 auditable pairs and the reference-policy contract
+below can be enforced.
+
+### Task-Level Development Partition
+
+Freeze two disjoint task-id sets before constructing Week 10 datasets:
+
+```text
+train_dev_task_ids
+selection_dev_task_ids
+```
+
+Require:
+
+```text
+train_dev_task_ids intersect selection_dev_task_ids = empty
+```
+
+All SFT examples and DPO preference evidence must come only from
+`train_dev_task_ids`. The fixed development evaluation must contain only
+`selection_dev_task_ids`. Split attempts, seeds, or trajectories from the same
+task do not create independence; the exclusion is at task identity and pinned
+task-content hash level.
+
+The selection-dev subset is development data, not heldout evidence. It may be
+used to compare policies and make modeling choices, but it may never be
+relabeled as heldout later. Keep `heldout_private` unopened until every data,
+training, serving, decoding, and reporting choice is frozen.
 
 ### Filtering Labels
 
@@ -1893,26 +1940,91 @@ timestamp
 Run:
 
 ```bash
-uv run agentenv data filter --config configs/data/week10_filtering.yaml --input data/processed/trajectories/week07_baseline.jsonl --out data/processed/filtered/week10_filtered.jsonl
-uv run agentenv data summarize --input data/processed/filtered/week10_filtered.jsonl --out experiments/reports/week10_filtering_quality.md
+uv run agentenv data filter --config configs/data/week10_filtering.yaml --task-partition configs/data/week10_task_partition.yaml --input data/processed/trajectories/week07_baseline.jsonl --raw-out data/processed/sft/week10_raw_train_dev.jsonl --filtered-out data/processed/sft/week10_filtered_train_dev.jsonl
+uv run agentenv data summarize --input data/processed/sft/week10_filtered_train_dev.jsonl --out experiments/reports/week10_filtering_quality.md
 ```
 
-### Raw Vs Filtered Training
+Here, `raw` does not mean arbitrary trajectories. `S_raw` must still satisfy all
+Week 9 hard eligibility rules for split, leakage, harness integrity,
+orchestration validity, reward-hack handling, review, serialization, and loss
+ownership. `S_filtered` applies the stricter Week 10 quality policy to that
+eligible pool.
+
+### Baseline-Controlled SFT Training And Development Evaluation
 
 Only run if Week 9 training smoke worked.
 
+Define three policy arms:
+
+```text
+B0          = exact frozen base checkpoint with no adapter
+S_raw       = B0 plus LoRA trained on raw-eligible train-dev SFT data
+S_filtered  = B0 plus LoRA trained on strictly filtered train-dev SFT data
+```
+
+Hold the base checkpoint, tokenizer, model-input protocol, provider, chat
+template, tool/action contract, decoding configuration, seed policy, and all
+inference budgets constant. The intended treatment difference is the adapter.
+If the base and adapter policies require different serving paths, report the
+comparison as confounded rather than as a clean fine-tuning effect.
+
 ```bash
-uv run agentenv train sft --config configs/train/week10_sft_raw.yaml --data data/processed/sft/week09_sft.jsonl --out experiments/models/week10_raw
-uv run agentenv train sft --config configs/train/week10_sft_filtered.yaml --data data/processed/filtered/week10_filtered.jsonl --out experiments/models/week10_filtered
-uv run agentenv eval --config configs/eval/week10_fixed_dev.yaml --adapter experiments/models/week10_raw --out experiments/runs/week10_raw
-uv run agentenv eval --config configs/eval/week10_fixed_dev.yaml --adapter experiments/models/week10_filtered --out experiments/runs/week10_filtered
+uv run agentenv train sft --config configs/train/week10_sft_raw.yaml --data data/processed/sft/week10_raw_train_dev.jsonl --out experiments/models/week10_raw
+uv run agentenv train sft --config configs/train/week10_sft_filtered.yaml --data data/processed/sft/week10_filtered_train_dev.jsonl --out experiments/models/week10_filtered
+uv run agentenv eval --config configs/eval/week10_fixed_selection_dev.yaml --out experiments/runs/week10_base
+uv run agentenv eval --config configs/eval/week10_fixed_selection_dev.yaml --adapter experiments/models/week10_raw --out experiments/runs/week10_raw
+uv run agentenv eval --config configs/eval/week10_fixed_selection_dev.yaml --adapter experiments/models/week10_filtered --out experiments/runs/week10_filtered
+uv run agentenv report compare experiments/runs/week10_base experiments/runs/week10_raw --out experiments/reports/week10_base_vs_raw.md
+uv run agentenv report compare experiments/runs/week10_base experiments/runs/week10_filtered --out experiments/reports/week10_base_vs_filtered.md
 uv run agentenv report compare experiments/runs/week10_raw experiments/runs/week10_filtered --out experiments/reports/week10_raw_vs_filtered.md
 ```
+
+The required questions are:
+
+```text
+B0 vs S_raw       -> what changed after raw-eligible SFT?
+B0 vs S_filtered  -> what changed after filtered SFT?
+S_raw vs S_filtered
+                  -> what changed when filtering policy changed?
+```
+
+A raw-versus-filtered result alone is incomplete. Both adapters may improve,
+both may regress, or one may merely regress less. The frozen base arm anchors
+those interpretations.
+
+### Conditional DPO Follow-Up
+
+Run DPO only if at least 20 auditable Week 9 pairs remain after applying the
+same task-partition, leakage, harness, and provenance gates. First select the
+SFT policy using only the fixed selection-dev results. Then define:
+
+```text
+S_selected = the frozen selected SFT policy
+P_dpo      = a policy initialized exactly from S_selected and updated by DPO
+R_dpo      = a frozen reference initialized exactly from S_selected
+```
+
+`P_dpo` and `R_dpo` must begin with identical policy weights and serialization
+semantics. Only `P_dpo` receives preference updates. The DPO run must pin its
+reference-policy identity, beta, chosen/rejected log-probability reduction,
+pair artifact, seed, runtime, and adapter composition. Task success alone must
+not create the preference direction.
+
+Evaluate `P_dpo` on the same fixed selection-dev tasks and report:
+
+```text
+S_selected vs P_dpo  -> incremental effect of preference optimization
+B0 vs P_dpo          -> total observed post-training effect
+```
+
+If the reference-policy or adapter-composition contract is not yet trustworthy,
+preserve the DPO materializations and write an explicit deferral rather than
+forcing a training run.
 
 If training did not work, run filtering-only analysis:
 
 ```bash
-uv run agentenv report data-quality data/processed/sft/week09_sft.jsonl data/processed/filtered/week10_filtered.jsonl --out experiments/reports/week10_filtering_quality.md
+uv run agentenv report data-quality data/processed/sft/week10_raw_train_dev.jsonl data/processed/sft/week10_filtered_train_dev.jsonl --out experiments/reports/week10_filtering_quality.md
 ```
 
 ### Report Must Include
@@ -1935,8 +2047,10 @@ If raw vs filtered eval runs:
 ```text
 same base model
 same tokenizer
+same provider and model-input protocol
 same inference budget
-same eval split
+task-disjoint train-dev and selection-dev subsets
+same fixed selection-dev task hashes
 same scorer version
 same seed policy
 success rate
@@ -1946,15 +2060,28 @@ tool validity
 reward-hack rate
 regression rate
 output length
+base-versus-raw paired deltas
+base-versus-filtered paired deltas
+raw-versus-filtered paired deltas
 ```
+
+If DPO runs, also report the selected SFT policy, exact frozen reference-policy
+identity, pair count and distinct shared-context count, DPO loss configuration,
+selected-SFT-versus-DPO paired deltas, and base-versus-DPO paired deltas.
 
 ### Done Criteria
 
 - Every accepted trace has a reason.
 - Every rejected trace has machine-readable rejection reason.
 - No heldout/public calibration trace is accepted.
+- Train-dev and selection-dev task ids and task-content hashes are frozen and
+  disjoint.
 - Filtering report exists.
-- Raw vs filtered comparison exists or is explicitly blocked by training limitation.
+- Base, raw-SFT, and filtered-SFT policies use one serving and evaluation path.
+- Base-versus-raw, base-versus-filtered, and raw-versus-filtered comparisons
+  exist or are explicitly blocked by a training or serving limitation.
+- If DPO runs, its policy and frozen reference start from the exact same
+  selected SFT policy and its two required comparisons are reported.
 - Negative or neutral result is written clearly.
 
 ### Fallback
@@ -1966,7 +2093,10 @@ If full SFT fails:
 - label as plumbing-only,
 - keep filtering report as the primary output.
 
-Do not claim general SFT benefit.
+Do not inspect `heldout_private` during Week 10 iteration. After all policy arms
+and reporting rules are frozen, a later one-shot heldout operation may compare
+the predeclared base, selected SFT, and SFT-to-DPO policies together. Do not
+claim general SFT or DPO benefit from development comparisons.
 
 ---
 
@@ -2184,7 +2314,8 @@ control pass/fail table
 baseline table
 reward-hack table
 filtering rejection table
-raw vs filtered comparison if available
+base vs raw-SFT vs filtered-SFT comparisons if available
+selected-SFT vs DPO comparison if DPO ran
 flake/exclusion table
 claim/evidence table
 ```
@@ -2211,7 +2342,7 @@ decision
 Implement:
 
 ```bash
-uv run agentenv report bundle --runs experiments/runs/week10_raw experiments/runs/week10_filtered experiments/runs/week11_repro --out experiments/reports/week12_spike_report.md
+uv run agentenv report bundle --runs experiments/runs/week10_base experiments/runs/week10_raw experiments/runs/week10_filtered experiments/runs/week10_dpo experiments/runs/week11_repro --out experiments/reports/week12_spike_report.md
 ```
 
 If some runs do not exist, the bundle command should include a missing-artifact section rather than crash without explanation.
@@ -2259,7 +2390,8 @@ Choose one:
    - build stronger trace labels,
    - improve SFT quality,
    - collect enough auditable preference pairs,
-   - run DPO only if pair quality supports it.
+   - run DPO only if pair quality supports it and it was not already completed
+     during the conditional Week 10 follow-up.
 
 3. Reward/safety hardening:
    - expand reward-hack suite,

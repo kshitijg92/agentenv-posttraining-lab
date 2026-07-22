@@ -1,0 +1,39 @@
+--- a/src/inventory_service.py
++++ b/src/inventory_service.py
+@@ -14,11 +14,11 @@
+     if unknown:
+         raise ValueError(f"unknown SKU: {unknown[0]}")
+ 
+-    shortfalls: dict[str, int] = {}
+-    for sku, quantity in requested.items():
+-        if quantity > stock[sku]:
+-            shortfalls[sku] = quantity - stock[sku]
+-            break
++    shortfalls = {
++        sku: quantity - stock[sku]
++        for sku, quantity in requested.items()
++        if quantity > stock[sku]
++    }
+     if shortfalls:
+         return ReservationResult(
+             accepted=False,
+--- a/src/inventory_validation.py
++++ b/src/inventory_validation.py
+@@ -12,7 +12,7 @@
+     for sku, quantity in inventory.items():
+         if not isinstance(sku, str) or _SKU_RE.fullmatch(sku) is None:
+             raise ValueError("invalid inventory SKU")
+-        if not isinstance(quantity, int) or quantity < 0:
++        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 0:
+             raise ValueError("invalid inventory quantity")
+         validated[sku] = quantity
+     return validated
+@@ -33,7 +33,7 @@
+         sku, quantity = request
+         if not isinstance(sku, str) or _SKU_RE.fullmatch(sku) is None:
+             raise ValueError("invalid request SKU")
+-        if not isinstance(quantity, int) or quantity <= 0:
++        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+             raise ValueError("invalid request quantity")
+         normalized[sku] = quantity
+     return normalized

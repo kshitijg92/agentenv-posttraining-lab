@@ -18,7 +18,13 @@
     "repair_relative_path",
     "repair_retry_schedule",
     "repair_interval_coalescing",
-    "repair_template_expansion"
+    "repair_template_expansion",
+    "repair_alias_chain",
+    "repair_inventory_transaction",
+    "repair_access_policy",
+    "repair_config_inheritance",
+    "repair_event_rollup",
+    "repair_job_dispatch"
   ],
   "heldout_private": [
     "repair_stable_toposort",

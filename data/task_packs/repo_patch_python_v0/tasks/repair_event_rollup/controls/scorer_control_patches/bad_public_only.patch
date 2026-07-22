@@ -1,0 +1,102 @@
+--- a/src/event_parser.py
++++ b/src/event_parser.py
+@@ -1,7 +1,36 @@
+ import json
++import re
++from collections.abc import Mapping
+ 
+ from event_models import Event
+ from event_time import parse_timestamp
++
++
++_IDENTIFIER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
++_AMOUNT_RE = re.compile(r"[0-9]+(?:\.[0-9]{1,2})?")
++_EVENT_KEYS = {"id", "user", "kind", "amount", "timestamp"}
++
++
++def _reject_nonstandard_constant(value: str) -> object:
++    raise ValueError(f"invalid JSON numeric constant: {value}")
++
++
++def _identifier(value: object, *, label: str) -> str:
++    if not isinstance(value, str) or _IDENTIFIER_RE.fullmatch(value) is None:
++        raise ValueError(f"invalid {label}")
++    return value
++
++
++def _amount_cents(value: object) -> int:
++    if not isinstance(value, str) or _AMOUNT_RE.fullmatch(value) is None:
++        raise ValueError("invalid amount")
++    whole, separator, fraction = value.partition(".")
++    amount_cents = int(whole) * 100
++    if separator:
++        amount_cents += int(fraction.ljust(2, "0"))
++    if amount_cents <= 0:
++        raise ValueError("amount must be positive")
++    return amount_cents
+ 
+ 
+ def parse_jsonl(text: str) -> list[Event]:
+@@ -12,16 +41,21 @@
+         if not line.strip():
+             continue
+         try:
+-            raw = json.loads(line)
+-            events.append(
+-                Event(
+-                    event_id=str(raw["id"]),
+-                    user=str(raw["user"]),
+-                    kind=str(raw["kind"]),
+-                    amount_cents=round(float(raw["amount"]) * 100),
+-                    timestamp=parse_timestamp(raw["timestamp"]),
+-                )
++            raw = json.loads(line, parse_constant=_reject_nonstandard_constant)
++        except (json.JSONDecodeError, ValueError) as exc:
++            raise ValueError("invalid event line") from exc
++        if not isinstance(raw, Mapping) or set(raw) != _EVENT_KEYS:
++            raise ValueError("event must contain exactly the required keys")
++        kind = raw["kind"]
++        if kind not in {"credit", "debit"}:
++            raise ValueError("invalid event kind")
++        events.append(
++            Event(
++                event_id=_identifier(raw["id"], label="id"),
++                user=_identifier(raw["user"], label="user"),
++                kind=kind,
++                amount_cents=_amount_cents(raw["amount"]),
++                timestamp=parse_timestamp(raw["timestamp"]),
+             )
+-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+-            raise ValueError("invalid event line") from exc
++        )
+     return events
+--- a/src/event_rollup.py
++++ b/src/event_rollup.py
+@@ -6,16 +6,25 @@
+ def rollup_events(events: list[Event]) -> Rollup:
+     totals: dict[str, int] = defaultdict(int)
+     counts: dict[str, int] = defaultdict(int)
++    user_order: list[str] = []
+     for event in events:
++        if event.user not in totals:
++            user_order.append(event.user)
+         direction = 1 if event.kind == "credit" else -1
+         totals[event.user] += direction * event.amount_cents
+         counts[event.user] += 1
+     users = tuple(
+         UserRollup(
+             user=user,
+-            net_amount=f"{totals[user] / 100:.2f}",
++            net_amount=_format_cents(totals[user]),
+             event_count=counts[user],
+         )
+-        for user in sorted(totals)
++        for user in user_order
+     )
+     return Rollup(event_count=len(events), users=users)
++
++
++def _format_cents(value: int) -> str:
++    sign = "-" if value < 0 else ""
++    whole, fraction = divmod(abs(value), 100)
++    return f"{sign}{whole}.{fraction:02d}"

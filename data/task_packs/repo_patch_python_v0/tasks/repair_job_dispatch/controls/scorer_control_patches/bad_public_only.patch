@@ -1,0 +1,87 @@
+--- a/src/job_validation.py
++++ b/src/job_validation.py
+@@ -1,11 +1,35 @@
++import re
+ from collections.abc import Iterable, Mapping
+ 
+ from job_models import Job
+ 
+ 
++_JOB_ID_RE = re.compile(r"[a-z][a-z0-9_-]*")
++_JOB_KEYS = {"id", "priority", "slots", "dependencies"}
++
++
++def _job_id(value: object) -> str:
++    if not isinstance(value, str) or _JOB_ID_RE.fullmatch(value) is None:
++        raise ValueError("invalid job id")
++    return value
++
++
++def _dependencies(value: object) -> tuple[str, ...]:
++    if isinstance(value, (str, bytes)):
++        raise ValueError("dependencies must be a non-string iterable")
++    try:
++        raw_dependencies = tuple(value)  # type: ignore[arg-type]
++    except TypeError as exc:
++        raise ValueError("dependencies must be iterable") from exc
++    dependencies = tuple(_job_id(item) for item in raw_dependencies)
++    if len(set(dependencies)) != len(dependencies):
++        raise ValueError("dependencies must be unique")
++    return dependencies
++
++
+ def parse_jobs(raw_jobs: Iterable[object], worker_slots: int) -> list[Job]:
+-    if not isinstance(worker_slots, int) or worker_slots <= 0:
+-        raise ValueError("worker_slots must be positive")
++    if isinstance(worker_slots, bool) or not isinstance(worker_slots, int) or worker_slots <= 0:
++        raise ValueError("worker_slots must be a positive integer")
+     if isinstance(raw_jobs, (str, bytes)):
+         raise ValueError("jobs must be a non-string iterable")
+     try:
+@@ -15,18 +39,33 @@
+ 
+     jobs: list[Job] = []
+     for index, raw in enumerate(materialized):
+-        if not isinstance(raw, Mapping):
+-            raise ValueError("job must be a mapping")
+-        try:
+-            jobs.append(
+-                Job(
+-                    job_id=str(raw["id"]),
+-                    priority=int(raw["priority"]),
+-                    slots=int(raw["slots"]),
+-                    dependencies=tuple(raw.get("dependencies", ())),
+-                    input_index=index,
+-                )
++        if not isinstance(raw, Mapping) or set(raw) != _JOB_KEYS:
++            raise ValueError("job must contain exactly the required keys")
++        priority = raw["priority"]
++        if (
++            isinstance(priority, bool)
++            or not isinstance(priority, int)
++            or not 0 <= priority <= 100
++        ):
++            raise ValueError("priority must be an integer in 0..100")
++        slots = raw["slots"]
++        if (
++            isinstance(slots, bool)
++            or not isinstance(slots, int)
++            or not 1 <= slots <= worker_slots
++        ):
++            raise ValueError("slots must be within worker capacity")
++        jobs.append(
++            Job(
++                job_id=_job_id(raw["id"]),
++                priority=priority,
++                slots=slots,
++                dependencies=_dependencies(raw["dependencies"]),
++                input_index=index,
+             )
+-        except (KeyError, TypeError, ValueError) as exc:
+-            raise ValueError("invalid job") from exc
++        )
++
++    job_ids = [job.job_id for job in jobs]
++    if len(set(job_ids)) != len(job_ids):
++        raise ValueError("job ids must be unique")
+     return jobs

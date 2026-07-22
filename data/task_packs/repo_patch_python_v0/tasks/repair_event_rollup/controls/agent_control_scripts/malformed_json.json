@@ -1,0 +1,13 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",,\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/event_dedupe.py\"}}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "invalid_model_output"
+  }
+}

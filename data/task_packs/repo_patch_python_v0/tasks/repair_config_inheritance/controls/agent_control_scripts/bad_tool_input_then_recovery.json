@@ -1,0 +1,79 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"list_files\",\"arguments\":{\"path\":\"src\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/config_loader.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/config_merge.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{\"path\":\"src/config_schema.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/config_loader.py\",\"content\":\"import json\\nfrom pathlib import Path, PurePosixPath\\n\\nfrom config_merge import empty_fragment, finalize_config, merge_fragments\\nfrom config_schema import validate_document\\nfrom config_types import ConfigFragment, ServiceConfig\\n\\n\\ndef _reject_nonstandard_constant(value: str) -> object:\\n    raise ValueError(f\\\"invalid JSON numeric constant: {value}\\\")\\n\\n\\ndef _read_document(path: Path) -> object:\\n    try:\\n        return json.loads(\\n            path.read_text(),\\n            parse_constant=_reject_nonstandard_constant,\\n        )\\n    except FileNotFoundError:\\n        raise\\n    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:\\n        raise ValueError(f\\\"cannot read configuration: {path}\\\") from exc\\n\\n\\ndef _resolve_path(path: Path) -> Path:\\n    try:\\n        return path.resolve()\\n    except (OSError, RuntimeError) as exc:\\n        raise ValueError(f\\\"cannot resolve configuration path: {path}\\\") from exc\\n\\n\\ndef _resolve_include(path: Path, include: str, root: Path) -> Path:\\n    candidate = _resolve_path(path.parent / Path(PurePosixPath(include)))\\n    try:\\n        candidate.relative_to(root)\\n    except ValueError as exc:\\n        raise ValueError(\\\"include resolves outside the configuration root\\\") from exc\\n    return candidate\\n\\n\\ndef _load_recursive(path: Path, root: Path, active: frozenset[Path]) -> ConfigFragment:\\n    resolved = _resolve_path(path)\\n    try:\\n        resolved.relative_to(root)\\n    except ValueError as exc:\\n        raise ValueError(\\\"configuration path is outside the root\\\") from exc\\n    if resolved in active:\\n        raise ValueError(\\\"configuration include cycle\\\")\\n\\n    parsed = validate_document(_read_document(resolved))\\n    merged = empty_fragment()\\n    next_active = active | {resolved}\\n    for include in parsed.includes:\\n        included_path = _resolve_include(resolved, include, root)\\n        included = _load_recursive(included_path, root, next_active)\\n        merged = merge_fragments(merged, included)\\n    return merge_fragments(merged, parsed.fragment)\\n\\n\\ndef load_config(entry_path: str | Path) -> ServiceConfig:\\n    entry = _resolve_path(Path(entry_path))\\n    fragment = _load_recursive(entry, entry.parent, frozenset())\\n    return finalize_config(fragment)\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/config_merge.py\",\"content\":\"from config_types import ConfigFragment, ServiceConfig\\n\\n\\ndef empty_fragment() -> ConfigFragment:\\n    return ConfigFragment(service={}, limits={}, labels={})\\n\\n\\ndef merge_fragments(base: ConfigFragment, override: ConfigFragment) -> ConfigFragment:\\n    service = dict(base.service)\\n    service.update(override.service)\\n    limits = dict(base.limits)\\n    limits.update(override.limits)\\n    labels = dict(base.labels)\\n    labels.update(override.labels)\\n    return ConfigFragment(service=service, limits=limits, labels=labels)\\n\\n\\ndef finalize_config(fragment: ConfigFragment) -> ServiceConfig:\\n    return ServiceConfig(\\n        host=fragment.service.get(\\\"host\\\", \\\"localhost\\\"),  # type: ignore[arg-type]\\n        port=fragment.service.get(\\\"port\\\", 8080),  # type: ignore[arg-type]\\n        timeout_seconds=fragment.limits.get(\\\"timeout_seconds\\\", 30.0),  # type: ignore[arg-type]\\n        retries=fragment.limits.get(\\\"retries\\\", 3),  # type: ignore[arg-type]\\n        labels=dict(fragment.labels),\\n    )\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/config_schema.py\",\"content\":\"import math\\nfrom collections.abc import Mapping\\nfrom pathlib import PurePosixPath\\n\\nfrom config_types import ConfigFragment, ParsedDocument\\n\\n\\n_TOP_LEVEL_KEYS = {\\\"includes\\\", \\\"service\\\", \\\"limits\\\", \\\"labels\\\"}\\n_SERVICE_KEYS = {\\\"host\\\", \\\"port\\\"}\\n_LIMIT_KEYS = {\\\"timeout_seconds\\\", \\\"retries\\\"}\\n\\n\\ndef _validate_include(value: object) -> str:\\n    if not isinstance(value, str) or not value or \\\"\\\\\\\\\\\" in value or \\\"\\\\x00\\\" in value:\\n        raise ValueError(\\\"include must be a non-empty POSIX path string\\\")\\n    path = PurePosixPath(value)\\n    if path.is_absolute() or value.endswith(\\\"/\\\"):\\n        raise ValueError(\\\"include must name a relative file\\\")\\n    return value\\n\\n\\ndef _validate_includes(value: object) -> tuple[str, ...]:\\n    if not isinstance(value, list):\\n        raise ValueError(\\\"includes must be a list\\\")\\n    return tuple(_validate_include(item) for item in value)\\n\\n\\ndef _validate_service(value: object) -> dict[str, object]:\\n    if not isinstance(value, Mapping) or not set(value).issubset(_SERVICE_KEYS):\\n        raise ValueError(\\\"invalid service section\\\")\\n    result: dict[str, object] = {}\\n    if \\\"host\\\" in value:\\n        host = value[\\\"host\\\"]\\n        if not isinstance(host, str) or not host:\\n            raise ValueError(\\\"host must be a non-empty string\\\")\\n        result[\\\"host\\\"] = host\\n    if \\\"port\\\" in value:\\n        port = value[\\\"port\\\"]\\n        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:\\n            raise ValueError(\\\"port must be an integer in 1..65535\\\")\\n        result[\\\"port\\\"] = port\\n    return result\\n\\n\\ndef _validate_limits(value: object) -> dict[str, object]:\\n    if not isinstance(value, Mapping) or not set(value).issubset(_LIMIT_KEYS):\\n        raise ValueError(\\\"invalid limits section\\\")\\n    result: dict[str, object] = {}\\n    if \\\"timeout_seconds\\\" in value:\\n        timeout = value[\\\"timeout_seconds\\\"]\\n        if (\\n            isinstance(timeout, bool)\\n            or not isinstance(timeout, (int, float))\\n            or not math.isfinite(timeout)\\n            or timeout <= 0\\n        ):\\n            raise ValueError(\\\"timeout_seconds must be finite and positive\\\")\\n        result[\\\"timeout_seconds\\\"] = float(timeout)\\n    if \\\"retries\\\" in value:\\n        retries = value[\\\"retries\\\"]\\n        if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:\\n            raise ValueError(\\\"retries must be a non-negative integer\\\")\\n        result[\\\"retries\\\"] = retries\\n    return result\\n\\n\\ndef _validate_labels(value: object) -> dict[str, str]:\\n    if not isinstance(value, Mapping):\\n        raise ValueError(\\\"labels must be an object\\\")\\n    labels: dict[str, str] = {}\\n    for key, label_value in value.items():\\n        if not isinstance(key, str) or not key or not isinstance(label_value, str):\\n            raise ValueError(\\\"labels must map non-empty strings to strings\\\")\\n        labels[key] = label_value\\n    return labels\\n\\n\\ndef validate_document(raw: object) -> ParsedDocument:\\n    if not isinstance(raw, Mapping) or not set(raw).issubset(_TOP_LEVEL_KEYS):\\n        raise ValueError(\\\"invalid configuration document\\\")\\n    includes = _validate_includes(raw[\\\"includes\\\"]) if \\\"includes\\\" in raw else ()\\n    service = _validate_service(raw[\\\"service\\\"]) if \\\"service\\\" in raw else {}\\n    limits = _validate_limits(raw[\\\"limits\\\"]) if \\\"limits\\\" in raw else {}\\n    labels = _validate_labels(raw[\\\"labels\\\"]) if \\\"labels\\\" in raw else {}\\n    return ParsedDocument(\\n        includes=includes,\\n        fragment=ConfigFragment(service=service, limits=limits, labels=labels),\\n    )\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed",
+    "tool_results": [
+      {
+        "tool_name": "read_file",
+        "status": "error",
+        "error_class": "InvalidToolInput"
+      },
+      {
+        "tool_name": "list_files",
+        "status": "ok"
+      },
+      {
+        "tool_name": "read_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "read_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "read_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "run_tests",
+        "status": "ok"
+      }
+    ]
+  }
+}

@@ -6,30 +6,13 @@ from agentenv.artifacts.manifests import load_control_calibration_manifest
 from agentenv.artifacts.payloads import load_control_calibration_result_records
 from agentenv.controls import controls_run as controls_run_module
 from agentenv.controls.controls_run import expected_control_outcome, run_controls
+from agentenv.tasks.validate import load_task_manifest
 
 
 TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
 TASK_IDS = {
-    "preserve_cli_error_codes",
-    "repair_config_precedence",
-    "repair_csv_projection",
-    "repair_decimal_rounding",
-    "repair_duration_parser",
-    "repair_env_assignment_parser",
-    "repair_header_merge",
-    "repair_interval_coalescing",
-    "repair_json_pointer_lookup",
-    "repair_jsonl_deduper",
-    "repair_latest_record_selection",
-    "repair_query_encoding",
-    "repair_record_chunking",
-    "repair_relative_path",
-    "repair_retry_schedule",
-    "repair_semver_precedence",
-    "repair_stable_toposort",
-    "repair_template_expansion",
-    "repair_utf8_batching",
-    "toy_python_fix_001",
+    load_task_manifest(task_manifest).id
+    for task_manifest in (TASK_PACK / "tasks").glob("*/task.yaml")
 }
 CONTROL_NAMES = {"oracle", "bad.noop", "bad.public_only"}
 AGENT_CONTROL_NAMES = {

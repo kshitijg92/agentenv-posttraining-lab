@@ -1,0 +1,82 @@
+name: progressive_dev_budget_matrix
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_alias_chain
+  - repair_inventory_transaction
+  - repair_access_policy
+  - repair_config_inheritance
+  - repair_event_rollup
+  - repair_job_dispatch
+split: dev
+policies:
+  qwen2-5-coder-14b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-14b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-14b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-5-27b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_5_27b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-5-27b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_5_27b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-5-27b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_5_27b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-coder-30b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-coder-30b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-coder-30b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

@@ -1,0 +1,67 @@
+--- a/src/policy_models.py
++++ b/src/policy_models.py
+@@ -1,5 +1,7 @@
+ from collections.abc import Iterable, Mapping
+ from dataclasses import dataclass
++
++from policy_patterns import validate_pattern
+ 
+ 
+ @dataclass(frozen=True)
+@@ -8,6 +10,21 @@
+     subjects: tuple[str, ...]
+     actions: tuple[str, ...]
+     resources: tuple[str, ...]
++
++
++def _parse_axis(value: object, *, subject: bool) -> tuple[str, ...]:
++    if isinstance(value, (str, bytes)):
++        raise ValueError("rule axis must be a non-string iterable")
++    try:
++        items = tuple(value)  # type: ignore[arg-type]
++    except TypeError as exc:
++        raise ValueError("rule axis must be iterable") from exc
++    if not items:
++        raise ValueError("rule axis must not be empty")
++    parsed = tuple(validate_pattern(item, subject=subject) for item in items)
++    if len(set(parsed)) != len(parsed):
++        raise ValueError("rule axis values must be unique")
++    return parsed
+ 
+ 
+ def parse_rules(raw_rules: Iterable[object]) -> list[Rule]:
+@@ -19,18 +36,21 @@
+         raise ValueError("rules must be iterable") from exc
+ 
+     rules: list[Rule] = []
++    required_keys = {"effect", "subjects", "actions", "resources"}
+     for raw_rule in materialized:
+         if not isinstance(raw_rule, Mapping):
+             raise ValueError("rule must be a mapping")
+-        effect = raw_rule.get("effect")
++        if set(raw_rule) != required_keys:
++            raise ValueError("rule keys must match the policy schema")
++        effect = raw_rule["effect"]
+         if effect not in {"allow", "deny"}:
+             raise ValueError("invalid effect")
+         rules.append(
+             Rule(
+                 effect=effect,
+-                subjects=tuple(raw_rule.get("subjects", ())),
+-                actions=tuple(raw_rule.get("actions", ())),
+-                resources=tuple(raw_rule.get("resources", ())),
++                subjects=_parse_axis(raw_rule["subjects"], subject=True),
++                actions=_parse_axis(raw_rule["actions"], subject=False),
++                resources=_parse_axis(raw_rule["resources"], subject=False),
+             )
+         )
+     return rules
+--- a/src/policy_patterns.py
++++ b/src/policy_patterns.py
+@@ -37,5 +37,5 @@
+     if pattern == "*":
+         return True
+     if pattern.endswith(":*"):
+-        return value.startswith(pattern[:-2])
++        return value.startswith(pattern[:-1])
+     return pattern == value
