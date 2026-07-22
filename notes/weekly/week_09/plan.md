@@ -715,3 +715,46 @@ Catch-up order:
 Do not spend another full natural-model acquisition before step 4: the current
 strict runtime-equality gate would invalidate it after the next package or lock
 change.
+
+## Integrated SFT And DPO Materialization Checkpoint (2026-07-21)
+
+The latest `week9` implementation has been merged into the acquisition
+foundation. The current development evidence has been regenerated through both
+training-data paths:
+
+```text
+source trajectories: 156
+
+positive-SFT review opportunities: 100
+  accepted: 18
+  needs_followup: 80
+  rejected: 2
+positive-SFT materializations: 18 completed, 0 failed
+
+preference comparison candidates: 117
+comparison shared contexts: 63
+  preferred: 29
+  tie: 16
+  ambiguous: 72
+preferred-pair shared contexts: 20
+DPO materializations: 29 completed, 0 failed
+```
+
+The reviewer provenance identifies Codex as an AI proxy acting under the
+user's explicit authorization. Preference labels were based on local action
+quality and available rollout evidence, never copied from terminal task
+outcomes. Ambiguous comparisons remain abstentions: only explicitly preferred
+adjudications can produce chosen/rejected pair records.
+
+All 18 SFT records and 29 DPO pairs were deterministically reloaded through
+their full pinned source chains. Token/label ownership, shared DPO prompt
+prefixes, response-only labels, sequence bounds, and chosen/rejected inequality
+were rechecked. The materialized artifacts remain
+`training_authorization=not_authorized`: their source eval runtime predates the
+merged source tree, and downstream regeneration cannot repair that provenance
+mismatch.
+
+The next boundary is no longer data-contract or token-materialization plumbing.
+It is the guided design and execution of a final authorized release, target and
+reference checkpoint semantics, a minimal trainer, and paired base-versus-
+adapter evaluation through the frozen heldout protocol.

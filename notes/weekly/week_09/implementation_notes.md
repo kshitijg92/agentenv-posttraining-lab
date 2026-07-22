@@ -3888,3 +3888,102 @@ repo-wide Ruff: passed
 repo-wide Pyright: passed using the checked-in `.venv` selection
 git diff --check: passed
 ```
+
+### Integrated Development-Artifact Regeneration And Review
+
+Merged the latest `week9` preference/DPO implementation into
+`codex/acquisition-foundation` as merge commit `ca2582e`. The retained artifact
+chain is:
+
+```text
+TrajectoryExport
+-> TrainingCandidateExport
+-> PositiveSFTReview
+-> PositiveSFTExampleExport
+-> PositiveSFTTrainingMaterializationExport
+
+TrainingCandidateExport
+-> PreferenceComparisonExport
+-> PreferenceAdjudicationReview
+-> PreferencePairExport
+-> DPOTrainingMaterializationExport
+```
+
+Regenerated eight policy-specific chains from each combination of two
+acquisition roots and four model/decoding policies:
+
+```text
+experiments/runs/natural_model_dev_coverage_acquisition/
+experiments/runs/natural_model_anchor_contrast_acquisition/
+
+devstral-sampling
+qwen2-5-coder-14b-sampling
+qwen3-14b-sampling
+qwen3-coder-30b-sampling
+```
+
+Candidate regeneration preserved all 156 source trajectories. Positive-SFT
+review initialization exposed 100 eligible records. The AI-proxy review,
+recorded as `codex_ai_proxy_on_behalf_of_kshitij_2026_07_21`, produced 18
+accepted, 80 `needs_followup`, and 2 rejected records. The eight source exports
+contained `2, 0, 0, 0` examples for development coverage and `7, 3, 0, 6`
+examples for anchor contrast. All 18 materialized successfully with no
+overlength or other materialization error.
+
+Preference discovery produced `17, 18, 17, 19` comparison candidates for the
+four development-coverage policies and `12, 13, 10, 11` for the four anchor-
+contrast policies: 117 comparisons across 63 globally distinct shared
+contexts. The same explicitly identified AI proxy recorded 29 preferred, 16
+tie, and 72 ambiguous decisions. The ties are semantically identical successful
+`list_files` actions whose serialized JSON differs only in key order. Ambiguous
+rows were deliberately left as abstentions.
+
+Pair export produced `2, 3, 5, 9` development-coverage pairs and `3, 2, 2, 3`
+anchor-contrast pairs. The resulting 29 pairs span 20 distinct shared contexts.
+All 29 DPO records materialized successfully; there were no overlength or
+materialization-error rows.
+
+Both paths used:
+
+```text
+configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
+max_sequence_length: 32768
+tokenizer loading: local files only
+```
+
+The review packet, review-application helpers, summaries, and generated run
+artifacts live under the ignored `experiments/` tree. The concise summaries are:
+
+```text
+experiments/analysis/natural_model_full_dev_ai_proxy_positive_sft_review_summary.json
+experiments/analysis/natural_model_full_dev_ai_proxy_preference_review_summary.json
+experiments/analysis/natural_model_full_dev_preference_review_packet.json
+```
+
+Final deterministic loading traversed every pinned source chain and regenerated
+all token records. The audit checked SFT token/label alignment and exact
+supervised-token counts, and DPO shared-prompt equality, response-only labels,
+nonempty responses, chosen/rejected inequality, and exact record counts. It
+observed:
+
+```text
+positive SFT: 18 records, 32,066 total tokens, 10,205 supervised tokens
+DPO: 29 records, 20 unique shared-prompt token sequences
+DPO chosen response tokens: 7,722
+DPO rejected response tokens: 4,865
+protocol hash: xxh64:9b9eba719de618f1
+```
+
+Every derived manifest remains `training_authorization=not_authorized`. The
+source eval manifests pin an older runtime, so rebuilding their derivatives
+under current schemas establishes construction correctness but cannot satisfy
+the runtime-equality authorization gate.
+
+Final branch-closeout verification:
+
+```text
+repository-wide pytest: 1,150 passed in 887.95 seconds
+repository-wide Ruff: passed
+repository-wide Pyright: 0 errors, 0 warnings
+git diff --check: passed
+```

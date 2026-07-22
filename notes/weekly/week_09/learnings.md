@@ -2419,3 +2419,63 @@ Source model identity and decoding policy remain provenance rather than an
 equality rule. This allows actions sampled from different models to be compared
 under the same logical state while retaining enough evidence to detect style or
 continuation-policy confounds later.
+
+### Review Abstention Is A Data-Quality Decision, Not A Missing Label
+
+A preference reviewer is not required to force every comparison into chosen
+and rejected sides. When the evidence does not isolate which local action is
+better, `ambiguous` is the truthful result. When the alternatives are
+semantically equivalent, `tie` is the truthful result. Neither state should be
+silently converted to a directional pair to meet a dataset-size target.
+
+This creates a useful fail-closed boundary:
+
+```text
+explicit preferred decision -> may become a preference pair
+tie                         -> no directional training claim
+ambiguous                   -> no directional training claim
+invalid                     -> unusable comparison
+```
+
+The self-deception trap is to treat reviewer coverage as the objective. A
+larger fully labeled dataset can contain more invented certainty than a smaller
+dataset with principled abstentions.
+
+### Successful Materialization Proves Representation, Not Authorization
+
+Deterministically rebuilding token records can prove that source references
+resolve, templates and tokenizer bytes are pinned, ownership masks are
+well-defined, sequence limits are respected, and chosen/rejected branches share
+the claimed prompt. These are necessary representation invariants.
+
+They do not prove that the source evidence was acquired under the current
+trusted harness, that a record is authorized for training, or that training on
+it will improve behavior. Those are separate trust and empirical claims:
+
+```text
+materialization success -> the approved claim has a reproducible token form
+training authorization  -> every required source and runtime gate passes
+training efficacy       -> a controlled post-training evaluation shows change
+```
+
+Conflating these levels turns a clean serialization audit into an unsupported
+claim about data safety or model quality.
+
+### Re-Derivation Cannot Repair Stale Source Provenance
+
+A derived artifact may be rebuilt perfectly under new code while still relying
+on trajectories acquired under an older harness runtime. The new derivation
+can validate its own transformation, but it cannot retroactively show that the
+old acquisition would have behaved identically under the new runtime.
+
+Provenance trust flows from sources to derivatives. It does not flow backward:
+
+```text
+stale acquisition + current deterministic derivation
+  -> useful development artifact
+  -> not a current-runtime training authorization
+```
+
+The honest remedies are to keep the artifact non-authorized or reacquire the
+source evidence after the runtime is frozen. Rehashing or re-exporting the old
+evidence is not reacquisition.
