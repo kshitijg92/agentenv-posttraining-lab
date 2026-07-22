@@ -71,9 +71,7 @@ def _tool_results() -> list[ToolResult]:
 
 def test_prompt_loop_rejects_duplicate_message_ids() -> None:
     messages = _messages()
-    messages[1] = messages[1].model_copy(
-        update={"message_id": messages[0].message_id}
-    )
+    messages[1] = messages[1].model_copy(update={"message_id": messages[0].message_id})
 
     with pytest.raises(
         ValidationError,

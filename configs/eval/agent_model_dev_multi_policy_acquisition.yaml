@@ -8,6 +8,12 @@ tasks:
   - repair_duration_parser
   - repair_record_chunking
   - repair_query_encoding
+  - repair_semver_precedence
+  - repair_csv_projection
+  - repair_relative_path
+  - repair_retry_schedule
+  - repair_interval_coalescing
+  - repair_template_expansion
 split: dev
 policies:
   qwen2-5-coder-14b:

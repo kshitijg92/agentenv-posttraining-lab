@@ -1,0 +1,36 @@
+diff --git a/src/record_batches.py b/src/record_batches.py
+--- a/src/record_batches.py
++++ b/src/record_batches.py
+@@ -1,22 +1,12 @@
+-def batch_records(
+-    records: list[str],
+-    max_items: int,
+-    max_bytes: int,
+-) -> list[list[str]]:
+-    """Greedily batch strings by count and character length."""
+-    batches: list[list[str]] = []
+-    current: list[str] = []
+-    current_size = 0
++def batch_records(records, max_items, max_bytes):
++    if not isinstance(max_items, int) or not isinstance(max_bytes, int):
++        raise ValueError("integer limits required")
++    batches = []
++    current = []
++    size = 0
+     for record in records:
+-        if current and (
+-            len(current) >= max_items
+-            or current_size + len(record) > max_bytes
+-        ):
+-            batches.append(current)
+-            current = []
+-            current_size = 0
+-        current.append(record)
+-        current_size += len(record)
+-    if current:
+-        batches.append(current)
++        if current and (len(current) == max_items or size + len(record) > max_bytes):
++            batches.append(current); current = []; size = 0
++        current.append(record); size += len(record)
++    if current: batches.append(current)
+     return batches

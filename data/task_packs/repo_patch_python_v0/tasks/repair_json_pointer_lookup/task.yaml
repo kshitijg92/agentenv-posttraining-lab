@@ -1,0 +1,32 @@
+id: repair_json_pointer_lookup
+domain: repo_patch_python
+split: heldout_private
+instruction: "Fix resolve_pointer to implement this JSON-pointer lookup contract. The empty pointer returns the whole document. Every non-empty pointer must start with '/'. Decode '~1' as '/' and '~0' as '~'; reject every other or dangling '~' escape. Traverse mappings by decoded string key and lists by canonical non-negative decimal indexes with no leading zero except '0'. Reject missing keys, invalid or out-of-range indexes, '-' indexes, and traversal through scalars with ValueError. Do not mutate the document."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: repair_json_pointer_lookup_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 20
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_JSON_POINTER_LOOKUP_PRIVATE"

@@ -2,7 +2,8 @@ diff --git a/src/duration.py b/src/duration.py
 index 288606d..a3a954a 100644
 --- a/src/duration.py
 +++ b/src/duration.py
-@@ -1,5 +1,20 @@
+@@ -1,5 +1,24 @@
++import math
 +import re
 +
 +
@@ -25,4 +26,7 @@ index 288606d..a3a954a 100644
 +        number = float(number_text)
 +    except ValueError as exc:
 +        raise ValueError("invalid duration number") from exc
-+    return number * _MULTIPLIERS[unit]
++    result = number * _MULTIPLIERS[unit]
++    if not math.isfinite(result):
++        raise ValueError("duration must be finite")
++    return result

@@ -683,6 +683,20 @@ def test_eval_manifest_rejects_invalid_policy_metadata(tmp_path: Path) -> None:
         load_eval_run_manifest(path)
 
 
+def test_eval_manifest_rejects_max_turns_override_for_control_policy(
+    tmp_path: Path,
+) -> None:
+    manifest = _eval_run_manifest()
+    manifest["max_turns_override"] = 37
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    with pytest.raises(
+        ValidationError,
+        match="control policies cannot override max_turns",
+    ):
+        load_eval_run_manifest(path)
+
+
 def test_eval_manifest_rejects_field_name_alias_for_model_config(
     tmp_path: Path,
 ) -> None:
@@ -1139,6 +1153,7 @@ def test_control_manifest_rejects_false_overall_match(tmp_path: Path) -> None:
         "error_class": "MaxTurnsExceeded",
     }
     agent_record["match"] = False
+    manifest["overall_match"] = True
     path = _write_json(tmp_path / "manifest.json", manifest)
 
     with pytest.raises(
@@ -1168,6 +1183,8 @@ def test_control_manifest_requires_every_record_repeat_index(
     manifest = _control_manifest()
     manifest["repeats"] = 2
     manifest["flake_detection"]["repeats"] = 2
+    manifest["flake_detection"]["status"] = "stable"
+    manifest["overall_match"] = True
     path = _write_json(tmp_path / "manifest.json", manifest)
 
     with pytest.raises(
@@ -1405,10 +1422,10 @@ def _control_manifest() -> dict[str, Any]:
         "task_hashes": _eval_task_hashes(),
         "repeats": 1,
         "record_count": 2,
-        "overall_match": True,
+        "overall_match": False,
         "flake_detection": {
             "schema_version": CONTROL_FLAKE_DETECTION_SCHEMA_VERSION,
-            "status": "stable",
+            "status": "inconclusive",
             "repeats": 1,
             "groups_checked": 2,
             "drifted_groups": 0,

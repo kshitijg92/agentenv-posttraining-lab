@@ -1,0 +1,62 @@
+diff --git a/src/template.py b/src/template.py
+index d9178d8..8df05e6 100644
+--- a/src/template.py
++++ b/src/template.py
+@@ -1,6 +1,53 @@
++import re
++from collections.abc import Mapping
++
++
++_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*", re.ASCII)
++
++
++def _validated_values(values: object) -> dict[str, str]:
++    if not isinstance(values, Mapping):
++        raise ValueError("values must be a mapping")
++    validated: dict[str, str] = {}
++    for name, value in values.items():
++        if not isinstance(name, str) or _NAME_RE.fullmatch(name) is None:
++            raise ValueError("mapping keys must be valid placeholder names")
++        if not isinstance(value, str):
++            raise ValueError("mapping values must be strings")
++        if name in validated:
++            raise ValueError("mapping keys must be unique")
++        validated[name] = value
++    return validated
++
++
+ def expand_template(template: str, values: dict[str, str]) -> str:
+     """Expand named placeholders in a template."""
+-    result = template
+-    for name, value in values.items():
+-        result = result.replace("${" + name + "}", value)
+-    return result
++    if not isinstance(template, str):
++        raise ValueError("template must be a string")
++    replacements = _validated_values(values)
++    output: list[str] = []
++    index = 0
++    while index < len(template):
++        if template[index] != "$":
++            output.append(template[index])
++            index += 1
++            continue
++        if index + 1 >= len(template):
++            raise ValueError("lone dollar sign")
++        if template[index + 1] == "$":
++            output.append("$")
++            index += 2
++            continue
++        if template[index + 1] != "{":
++            raise ValueError("malformed dollar syntax")
++        end = template.find("}", index + 2)
++        if end < 0:
++            raise ValueError("unclosed placeholder")
++        name = template[index + 2 : end]
++        if _NAME_RE.fullmatch(name) is None:
++            raise ValueError("invalid placeholder name")
++        if name not in replacements:
++            raise ValueError("unknown placeholder")
++        output.append(replacements[name])
++        index = end + 1
++    return "".join(output)

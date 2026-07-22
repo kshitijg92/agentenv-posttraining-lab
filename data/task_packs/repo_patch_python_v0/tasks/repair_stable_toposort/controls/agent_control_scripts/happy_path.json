@@ -1,0 +1,19 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/dependency_order.py\",\"content\":\"from collections.abc import Mapping\\n\\n\\ndef _finite_list(value: object, *, label: str) -> list[object]:\\n    if isinstance(value, (str, bytes)):\\n        raise ValueError(f\\\"{label} must be a non-string iterable\\\")\\n    try:\\n        return list(value)  # type: ignore[arg-type]\\n    except TypeError as exc:\\n        raise ValueError(f\\\"{label} must be iterable\\\") from exc\\n\\n\\ndef stable_toposort(\\n    nodes: list[str],\\n    dependencies: dict[str, list[str]],\\n) -> list[str]:\\n    \\\"\\\"\\\"Return nodes in stable dependency order.\\\"\\\"\\\"\\n    raw_nodes = _finite_list(nodes, label=\\\"nodes\\\")\\n    ordered_nodes: list[str] = []\\n    seen_nodes: set[str] = set()\\n    for node in raw_nodes:\\n        if not isinstance(node, str) or not node:\\n            raise ValueError(\\\"nodes must be non-empty strings\\\")\\n        if node in seen_nodes:\\n            raise ValueError(\\\"nodes must be unique\\\")\\n        seen_nodes.add(node)\\n        ordered_nodes.append(node)\\n\\n    if not isinstance(dependencies, Mapping):\\n        raise ValueError(\\\"dependencies must be a mapping\\\")\\n    normalized = {node: set() for node in ordered_nodes}\\n    for node, raw_dependencies in dependencies.items():\\n        if not isinstance(node, str) or node not in seen_nodes:\\n            raise ValueError(\\\"dependency keys must name known nodes\\\")\\n        values = _finite_list(\\n            raw_dependencies,\\n            label=f\\\"dependencies for {node}\\\",\\n        )\\n        seen_dependencies: set[str] = set()\\n        for dependency in values:\\n            if not isinstance(dependency, str) or dependency not in seen_nodes:\\n                raise ValueError(\\\"dependencies must name known nodes\\\")\\n            if dependency == node:\\n                raise ValueError(\\\"a node cannot depend on itself\\\")\\n            if dependency in seen_dependencies:\\n                raise ValueError(\\\"dependencies must not contain duplicates\\\")\\n            seen_dependencies.add(dependency)\\n        normalized[node] = seen_dependencies\\n\\n    result: list[str] = []\\n    resolved: set[str] = set()\\n    while len(result) < len(ordered_nodes):\\n        ready = next(\\n            (\\n                node\\n                for node in ordered_nodes\\n                if node not in resolved and normalized[node] <= resolved\\n            ),\\n            None,\\n        )\\n        if ready is None:\\n            raise ValueError(\\\"dependency graph contains a cycle\\\")\\n        result.append(ready)\\n        resolved.add(ready)\\n    return result\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed"
+  }
+}

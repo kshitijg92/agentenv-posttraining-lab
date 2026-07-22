@@ -2,8 +2,11 @@
 
 This package owns the decisions and transformations that turn validated trajectory
 and review evidence into objective-specific, pre-release data artifacts. It does
-not own eval execution or the immutable trajectory evidence itself, and no artifact
-before a final release manifest is authorized for training.
+not own eval execution or the immutable trajectory evidence itself. Construction
+artifacts are never training-authorized. Trainer-shaped materializations are
+`not_authorized` by default; normal authorization belongs to a final release, while
+an explicit, manifest-pinned user override may authorize a non-production exercise
+without claiming that the normal trust gate passed.
 
 ## Package ownership
 
@@ -82,8 +85,11 @@ stand in for the other.
 1. A `TrajectoryRecord` is never rewritten to make it trainable.
 2. Candidate construction and objective-specific review may proceed without a
    current calibration artifact, but their manifests are explicitly
-   `not_authorized`. Only final dataset release may combine materialized examples
-   with matching harness and control evidence and authorize trainer consumption.
+   `not_authorized`. The normal path authorizes trainer consumption only through
+   a final dataset release with matching harness and control evidence. A
+   trainer-shaped materialization may instead carry an atomic
+   `explicit_user_override`; this changes permission, not the recorded trust
+   evidence.
 3. Task success is not required for positive-SFT review. A failed task may contain
    a useful prefix; a successful task may still contain behavior that should not
    receive positive supervision.
@@ -173,12 +179,15 @@ input protocol, sequence policy, materializer code, result counts, and JSONL
 hash. Loading verifies exact source id/record-hash coverage and rebuilds the
 tokens and labels from the pinned inputs before accepting the artifact.
 
-A completed materialization is trainer-shaped, not training-authorized. It
-means that the pinned source and target-model protocol deterministically
-produced a valid, in-budget `input_ids` and `labels` sequence. It does not mean
-that final harness and control evidence is current, that the example should be
-sampled by a trainer, or that training is permitted. Failed materializations
-remain accounting evidence and can never be passed to a trainer as examples.
+A completed materialization is trainer-shaped and is `not_authorized` by
+default. It means that the pinned source and target-model protocol
+deterministically produced a valid, in-budget `input_ids` and `labels`
+sequence. It does not mean that final harness and control evidence is current
+or that the example should be sampled by a trainer. For a non-production
+exercise, the materialization manifest may be marked `authorized` only together
+with an `explicit_user_override` that pins the authorizing identity and reason.
+Failed materializations remain accounting evidence and can never be passed to
+a trainer as examples.
 
 The CLI entrypoint is:
 
@@ -187,13 +196,16 @@ agentenv training positive-sft materialize \
   --source <positive-sft-export> \
   --model-input-protocol <protocol.yaml> \
   --max-sequence-length <tokens> \
+  [--authorization-override-by <identity> \
+   --authorization-override-reason <reason>] \
   --out <materialization-artifact>
 ```
 
-After token materialization, a separate final release manifest will pin the
-materialized artifact plus matching harness-audit and control-calibration
-artifacts. Trainer entrypoints must accept that release manifest rather than a
-candidate, review, positive-SFT source export, or bare token JSONL.
+In the normal path, a separate final release manifest will pin the materialized
+artifact plus matching harness-audit and control-calibration artifacts. A lab
+trainer may also consume an explicitly overridden materialization. It must not
+consume a candidate, review, source export, bare token JSONL, or unoverridden
+materialization.
 
 The first protocol record is
 `configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml`. It applies
@@ -318,6 +330,7 @@ template-owned separator after the response remains masked. If either branch
 cannot be faithfully serialized or exceeds the sequence limit, the pair
 produces one failed record rather than a usable half. Reference-model selection
 is intentionally absent: it belongs to the later DPO training-run contract,
-not token materialization. The persisted artifact is trainer-shaped but remains
-`not_authorized`; DPO remains deferred until pair quantity/quality and a later
-training-run contract justify it.
+not token materialization. The persisted artifact is trainer-shaped and
+`not_authorized` by default. A non-production run may consume it only when its
+manifest atomically records `authorized` and an `explicit_user_override`; this
+does not assert that the ordinary release trust root passed.

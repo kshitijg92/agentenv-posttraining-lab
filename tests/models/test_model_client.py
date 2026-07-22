@@ -41,10 +41,12 @@ def test_scripted_fake_model_satisfies_model_client_protocol() -> None:
         model_id="fake-scripted-v0",
         script=[
             FakeModelScriptStep(
-                output_text=json.dumps({
-                    "action": "final_answer",
-                    "text": "done",
-                }),
+                output_text=json.dumps(
+                    {
+                        "action": "final_answer",
+                        "text": "done",
+                    }
+                ),
             )
         ],
     )

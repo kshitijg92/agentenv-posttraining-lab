@@ -1,0 +1,32 @@
+id: repair_template_expansion
+domain: repo_patch_python
+split: dev
+instruction: "Fix expand_template so template is expanded in one left-to-right pass. `${name}` substitutes a value and `$$` emits one literal `$`; substituted values are not scanned again. Placeholder names and all mapping keys must match ASCII `[A-Za-z_][A-Za-z0-9_]*`. template must be a string and values must be a mapping whose keys and values are strings. Unknown placeholders, lone or otherwise malformed `$` syntax, invalid mapping entries, and invalid input types raise ValueError. An empty template is valid."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: template_expansion_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 20
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_TEMPLATE_EXPANSION_PRIVATE"

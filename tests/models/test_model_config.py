@@ -14,6 +14,7 @@ from agentenv.models.config_schema import (
     OllamaGenerateModelConfig,
     OpenAICompatibleChatModelConfig,
 )
+from agentenv.models.runtime_schema import OllamaProviderRuntimeProvenance
 from agentenv.orchestrators.agent_task_run import (
     decoding_config_provenance_artifact,
     generated_decoding_config_provenance_artifact,
@@ -22,6 +23,7 @@ from agentenv.orchestrators.agent_task_run import (
 
 
 MODEL_CONFIG = Path("configs/models/openai_compatible_chat_placeholder.yaml")
+OLLAMA_MODEL_CONFIG = Path("configs/models/ollama_qwen2_5_coder_14b.yaml")
 DECODING_CONFIG = Path("configs/decoding/greedy_1024.yaml")
 QWEN2_5_3B_MODEL_CONFIG = Path("configs/models/ollama_qwen2_5_coder_3b.yaml")
 QWEN2_5_OPENAI_COMPATIBLE_MODEL_CONFIGS = (
@@ -44,6 +46,15 @@ def test_load_model_config_reads_openai_compatible_chat_config() -> None:
     assert config.capabilities.supports_top_k is False
     assert config.prompt_adapter is None
     assert config.agent_action_format == "prompt_only"
+    assert config.provider_runtime_probe is None
+
+
+def test_load_ollama_model_config_requires_runtime_probe() -> None:
+    config = load_model_config(OLLAMA_MODEL_CONFIG)
+
+    assert isinstance(config, OpenAICompatibleChatModelConfig)
+    assert config.model_id == "qwen2.5-coder:14b"
+    assert config.provider_runtime_probe == "ollama"
 
 
 @pytest.mark.parametrize("config_path", QWEN2_5_OPENAI_COMPATIBLE_MODEL_CONFIGS)
@@ -136,8 +147,10 @@ def test_model_config_provenance_artifact_records_sanitized_config() -> None:
         "agent_action_format": "prompt_only",
         "prompt_adapter": None,
         "provider": "openai_compatible_chat",
+        "provider_runtime_probe": None,
         "version": "model_config_v0",
     }
+    assert artifact["provider_runtime"] is None
     assert artifact["model_input_protocol"] is None
 
 
@@ -155,6 +168,7 @@ def test_ollama_model_config_provenance_persists_resolved_input_protocol() -> No
         model_config_path=QWEN2_5_3B_MODEL_CONFIG,
         model_config_hash="xxh64:modelconfig000",
         model_input_protocol=protocol,
+        provider_runtime_provenance=_ollama_runtime(config),
     ).model_dump(mode="json")
 
     protocol_provenance = artifact["model_input_protocol"]
@@ -166,10 +180,17 @@ def test_ollama_model_config_provenance_persists_resolved_input_protocol() -> No
     assert protocol_provenance["protocol"]["protocol_id"] == (
         "qwen2_5_coder_3b_agentenv_json"
     )
+    assert artifact["provider_runtime"] == {
+        "provider": "ollama",
+        "model_id": config.model_id,
+        "model_digest": config.model_manifest_digest,
+        "server_version": "0.30.11",
+    }
 
 
 def test_ollama_model_config_provenance_requires_resolved_input_protocol() -> None:
     config = load_model_config(QWEN2_5_3B_MODEL_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
 
     with pytest.raises(
         ValidationError,
@@ -179,7 +200,39 @@ def test_ollama_model_config_provenance_requires_resolved_input_protocol() -> No
             model_config=config,
             model_config_path=QWEN2_5_3B_MODEL_CONFIG,
             model_config_hash="xxh64:modelconfig000",
+            provider_runtime_provenance=_ollama_runtime(config),
         )
+
+
+def test_ollama_model_config_provenance_requires_provider_runtime() -> None:
+    config = load_model_config(QWEN2_5_3B_MODEL_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
+    protocol = load_referenced_model_input_protocol(
+        config,
+        QWEN2_5_3B_MODEL_CONFIG,
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="ollama_generate provenance requires provider_runtime",
+    ):
+        model_config_provenance_artifact(
+            model_config=config,
+            model_config_path=QWEN2_5_3B_MODEL_CONFIG,
+            model_config_hash="xxh64:modelconfig000",
+            model_input_protocol=protocol,
+        )
+
+
+def _ollama_runtime(
+    config: OllamaGenerateModelConfig,
+) -> OllamaProviderRuntimeProvenance:
+    return OllamaProviderRuntimeProvenance(
+        provider="ollama",
+        model_id=config.model_id,
+        model_digest=config.model_manifest_digest,
+        server_version="0.30.11",
+    )
 
 
 def test_file_backed_decoding_config_provenance_artifact_records_source() -> None:

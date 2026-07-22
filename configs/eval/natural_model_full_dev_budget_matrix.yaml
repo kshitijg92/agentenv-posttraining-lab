@@ -1,0 +1,199 @@
+name: natural_model_full_dev_budget_matrix
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_jsonl_deduper
+  - preserve_cli_error_codes
+  - repair_config_precedence
+  - repair_header_merge
+  - repair_duration_parser
+  - repair_record_chunking
+  - repair_query_encoding
+  - repair_semver_precedence
+  - repair_csv_projection
+  - repair_relative_path
+  - repair_retry_schedule
+  - repair_interval_coalescing
+  - repair_template_expansion
+split: dev
+policies:
+  qwen2-5-coder-3b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-3b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-3b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-7b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_7b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-7b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_7b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-7b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_7b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-14b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-14b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen2-5-coder-14b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-8b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_8b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-8b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_8b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-8b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_8b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-14b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-14b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-14b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  deepseek-r1-distill-qwen-14b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_deepseek_r1_distill_qwen_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  deepseek-r1-distill-qwen-14b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_deepseek_r1_distill_qwen_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  deepseek-r1-distill-qwen-14b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_deepseek_r1_distill_qwen_14b_q4_k_m.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-coder-30b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-coder-30b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  qwen3-coder-30b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+  devstral-small-2-24b-greedy:
+    type: agent_model
+    model_config: configs/models/ollama_devstral_small_2_24b.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  devstral-small-2-24b-sampling:
+    type: agent_model
+    model_config: configs/models/ollama_devstral_small_2_24b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  devstral-small-2-24b-upper-bound:
+    type: agent_model
+    model_config: configs/models/ollama_devstral_small_2_24b.yaml
+    decoding_config: configs/decoding/sampling_upper_bound_32768.yaml
+    max_turns_override: 50
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

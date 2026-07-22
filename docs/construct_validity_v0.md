@@ -154,8 +154,13 @@ The current task distribution is intentionally small. It is useful for building
 the lab loop and validating measurement discipline, not for estimating broad
 model capability.
 
-The heldout-private split is currently empty, so results should not be described
-as heldout generalization.
+The heldout-private split now contains six newly authored, hash-frozen tasks.
+They were control-calibrated before freeze and have not been run by a natural
+model. They can support only a narrow paired base-versus-adapter claim after
+all training and evaluation choices are frozen; six synthetic tasks are not
+evidence of broad coding-agent generalization.
+
+See `docs/heldout_evaluation_protocol.md` for the access and claim boundary.
 
 ### Public Checks As Feedback
 

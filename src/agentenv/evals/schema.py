@@ -62,6 +62,7 @@ class AgentModelPolicy(EvalPolicyBase):
     type: AgentModelPolicyType
     model_config_path: str = Field(alias="model_config", min_length=1)
     decoding_config_path: str = Field(alias="decoding_config", min_length=1)
+    max_turns_override: int | None = Field(default=None, gt=0)
 
 
 EvalPolicy = ScorerControlPatchPolicy | AgentControlScriptPolicy | AgentModelPolicy

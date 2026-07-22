@@ -109,9 +109,7 @@ def test_repaired_source_pins_repair_and_review_records() -> None:
             source=_source(
                 source_type="repaired",
                 repair_id="repair_001",
-                source_training_candidate_repair_record_hash=(
-                    "xxh64:3333333333333333"
-                ),
+                source_training_candidate_repair_record_hash=("xxh64:3333333333333333"),
                 source_training_candidate_repair_review_record_hash=(
                     "xxh64:4444444444444444"
                 ),

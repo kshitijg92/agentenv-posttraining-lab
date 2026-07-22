@@ -451,8 +451,8 @@ Training authorization is instead a conjunction of independently scoped
 claims. A repaired positive-SFT example still needs an eligible source
 candidate, a completed exact repair, an accepted review bound to that repair
 record, and valid transformed output. A downstream reviewer can validate its
-own layer but cannot erase an upstream split, leakage, reward-hack, or harness
-blocker.
+own layer but cannot erase an upstream split, leakage, task-outcome,
+reward-hack, or harness blocker.
 
 Binding the decision only to a stable ID is also insufficient when the record's
 content can change. The ID identifies which logical repair attempt is under
@@ -538,6 +538,199 @@ future dataset is used for training, the provisional decision must be ratified
 or replaced, and all dependent artifacts must be rebuilt. A numerical data
 target is not a reason to silently upgrade temporary review authority.
 
+### Parsed Values Must Satisfy The Output Contract Too
+
+Syntactic validation is not enough when parsing or arithmetic can create a
+value outside the task's semantic contract. A decimal string may match the
+accepted grammar while conversion to a machine float produces infinity; a
+direct exponential formula may overflow before a cap is applied.
+
+The self-deception trap is:
+
+```text
+input matched the grammar -> output satisfies the contract
+```
+
+Validators and oracle controls must check the post-conversion result and any
+intermediate behavior that can violate the promised invariant. Otherwise a
+passing oracle calibrates the harness against an incomplete specification and
+makes the hidden validator less authoritative than the task instruction.
+
+### Stability Requires Replication, Not One Successful Observation
+
+One matching control execution establishes only that the expected outcome was
+observed once. It cannot distinguish a deterministic harness from a flaky one
+that happened to return the expected result.
+
+```text
+one matching run       -> outcome evidence
+repeated matching runs -> initial stability evidence
+```
+
+Replication still does not prove absence of flakiness, but it changes what the
+artifact is entitled to claim. A `stable` label backed by repeated fresh
+workspaces is materially stronger than the same label derived from one sample.
+The repeat count must remain visible provenance so downstream gates and humans
+can judge that strength rather than trusting the aggregate word alone.
+
+### A Model Tag Is A Locator, Not A Policy Identity
+
+A model configuration hash can pin the text `model_id: qwen:tag` while the
+provider later resolves that tag to different weights. Two trajectories can
+therefore appear configuration-identical even though different policies
+generated them.
+
+Acquisition provenance should record the provider-observed immutable model
+digest, alongside provider runtime identity such as server version. This does
+not independently attest that the provider is honest, but it makes tag drift
+observable and allows later comparability rules to require identical weights.
+The durable distinction is:
+
+```text
+model tag/config bytes -> how the model was requested
+observed model digest  -> which weights the provider said it served
+```
+
+Both are needed before outcome differences can be attributed to decoding or
+behavior rather than silent policy replacement.
+
+### A Timeout Must Terminate The Whole Execution Tree
+
+Recording a command as timed out is not enough if descendant processes remain
+alive. An orphaned validator can continue consuming CPU, writing files, holding
+pipes, or changing timing for later cases after the harness has declared the
+attempt terminal.
+
+The self-deception trap is:
+
+```text
+parent command timed out -> execution stopped
+```
+
+For shell commands and test runners, the real execution unit is the process
+tree. Timeout handling must terminate and reap that unit before the harness
+continues. Otherwise later flake measurements and audit outcomes are no longer
+independent: they are contaminated by work from cases that supposedly ended.
+
+This is both an isolation invariant and an evidence invariant. A trustworthy
+`TIMEOUT` means the bounded computation stopped, not merely that the
+orchestrator stopped waiting for its direct child.
+
+### Scorer Replay And Policy Replay Establish Different Claims
+
+Re-scoring a pinned candidate patch in fresh workspaces can show that the
+scorer outcome is reproducible for that artifact. It does not show that a
+stochastic model would generate the same actions or patch again.
+
+```text
+patch replay  -> scorer determinism for fixed submitted behavior
+policy replay -> behavioral reproducibility under a declared policy interface
+```
+
+For real model trajectories, reconstructing a scripted policy from the observed
+transcript would not be a genuine policy replay. It would turn recorded behavior
+into a control and then "prove" that the control repeats itself. The honest
+fallback is to name the narrower claim: verify the hash-pinned patch and rerun
+the scorer, while leaving model-generation reproducibility unclaimed.
+
+The live patch must also be checked against the trajectory-export content hash
+before rescoring. Pinning only the parent eval manifest while reading mutable
+child files can make a replay look provenance-bound even when the submitted
+artifact has drifted.
+
+### Cross-Status Pair Counts Can Hide A Missing Positive Anchor
+
+A comparison between `HIDDEN_TEST_FAIL` and `PUBLIC_TEST_FAIL` has two different
+outcomes, but neither side is known to be correct. A large number of such pairs
+can therefore make an acquisition pool appear ready for preference training
+without supplying a trustworthy chosen endpoint.
+
+The useful accounting distinction is:
+
+```text
+cross-status pairs       -> outcomes differ
+PASS vs non-PASS pairs   -> one side has trusted task success
+valid preference pairs   -> a reviewer accepts the comparison basis
+```
+
+None of these quantities substitutes for the next one. Failure-versus-failure
+comparisons may still support useful judgments about progress, rationality, or
+tool use, but those judgments require semantic review. They cannot inherit a
+chosen/rejected label from scorer-status ordering alone.
+
+### Exact Action Equality Is Not Exact Trajectory Equality
+
+Two runs can emit byte-identical assistant actions while receiving different
+tool observations because workspace paths, timing, provider metadata, or other
+environment details differ. Clustering on assistant actions is useful for
+reducing duplicated behavioral review, but it does not prove that the full
+training contexts are interchangeable.
+
+```text
+same assistant actions != same environment-conditioned trajectory
+```
+
+This matters for both review and data weighting. Counting duplicate action
+sequences as independent behavioral diversity inflates acquisition yield, while
+discarding every duplicate transcript can hide materially different context.
+The clustering key and what it omits must therefore remain explicit, and member
+artifacts must remain individually inspectable.
+
+### A Privacy Scanner Is Evidence, Not Privacy Clearance
+
+Pattern-based scanning can establish that configured canaries, credential
+shapes, private-key markers, or forbidden paths were not matched. It cannot
+prove that arbitrary private content is absent. Calling a zero-match scan
+"leak-free" would turn detector coverage into a universal claim.
+
+Operational paths are also not harmless merely because they contain no secret.
+When tool observations include scratch directories or a user's home path, those
+bytes become model context. Loss masking later assistant tokens does not remove
+that context, and repeated training can teach environment-specific artifacts.
+
+The conservative boundary is:
+
+```text
+no configured sensitive match -> useful negative evidence
+host/infrastructure path found -> normalize or repair before training
+privacy cleared                -> requires scoped review beyond one scanner
+```
+
+### Public-Contract Probes Produce Review Hypotheses, Not Ground Truth
+
+Independent probes derived from the public instruction can make long failure
+sets reviewable without exposing private validators. Calibrating those probes
+against the oracle checks that they accept known-correct behavior, but it does
+not make them complete or authoritative.
+
+A failed public-contract clause is evidence for a concrete review hypothesis.
+A probe pass alongside hidden failure means only that this probe set did not
+isolate the gap. Treating the taxonomy as hidden-failure truth would quietly
+replace the scorer contract with an incomplete analysis tool.
+
+```text
+oracle accepts probe suite -> probe suite is not obviously over-restrictive
+candidate fails probe      -> public-contract review hypothesis
+candidate passes probes    -> hidden failure remains unresolved
+```
+
+### Reproducibility Requires The Task Bytes As Well As The Submitted Patch
+
+Re-scoring the same patch with a changed seed workspace, public check, hidden
+validator, or oracle is not a replay of the original measurement. Even if the
+terminal status happens to match, the apparent agreement may be coincidental.
+
+The reproducibility claim must bind all inputs that causally determine the
+score:
+
+```text
+same harness runtime + same full task inputs + same candidate patch
+    -> scorer replay is comparable
+```
+
+Pinning only a task id or task manifest is too weak because referenced files can
+drift while those identifiers stay unchanged.
+
 ### Task Failure And Evidence Failure Have Different Data Consequences
 
 A task failure says the policy did not complete the requested objective. It
@@ -572,6 +765,257 @@ recovery data for another, a rejected preference branch, and full-fidelity
 analysis evidence. No general trajectory review can substitute for these
 use-specific decisions.
 
+### Occurrence Identity Is Not Behavioral Drift
+
+Globally unique message ids distinguish two persisted occurrences even when
+their semantic content is identical. A fresh replay should therefore generate
+new ids. Comparing those values as if they were model behavior makes a correct
+replay look flaky.
+
+The correct invariant is:
+
+```text
+fresh occurrence ids may differ
+message count + order + role + content + tool linkage must still match
+```
+
+Normalizing an occurrence id does not mean discarding provenance. Each artifact
+retains its real ids; only the behavioral comparison projects them away. The
+self-deception trap is either demanding byte equality from intentionally fresh
+identity or, in the opposite direction, normalizing so broadly that meaningful
+trajectory changes disappear.
+
+### Missing Historical Provenance Cannot Be Invented Retroactively
+
+When a new required field records evidence that the old runtime never captured,
+backfilling a syntactically valid value does not recreate that evidence. An
+invented message id may make an old JSON object parse, but it cannot prove that
+the id existed, was unique, or was preserved through the original execution.
+
+```text
+old artifact + invented required fields != artifact produced under new invariant
+```
+
+Such traces can remain useful for explicitly labeled historical analysis. They
+must not silently enter the new training pipeline. Training eligibility needs
+current-runtime reacquisition or an explicit, separately reviewed
+transformation whose weaker claim remains visible.
+
+### More Interaction Budget Can Amplify A Limit Cycle
+
+Reaching `max_turns` does not by itself show that the model needed more budget.
+The model may have been making useful progress when the boundary stopped it, or
+it may have entered a repeated policy loop much earlier.
+
+```text
+progressing trajectory + turn limit -> more turns may test a capacity boundary
+periodic state/action cycle         -> more turns amplify the same failure
+```
+
+The distinction requires trajectory evidence, not terminal status alone. Exact
+periodic action signatures, unchanged relevant state, and repeated equivalent
+observations are strong evidence against treating a larger limit as a fair
+"upper bound." Otherwise an acquisition can spend more compute while only
+creating longer, less reviewable negatives.
+
+A narrow mechanical-redundancy detector may legitimately decline to label a
+multi-tool cycle if its contract covers only adjacent identical calls. Detector
+silence then means the cycle lies outside current coverage, not that the
+behavior was efficient. Analysis observations and automated labels must retain
+their different authority.
+
+### Stored Transcript Equality May Omit Provider-Side Prompt Adaptation
+
+Two persisted transcript prefixes can be byte-identical even when the provider
+sent different logical instructions to the models. A prompt adapter may append
+content such as a thinking-mode directive only at request time, after the
+pre-adapter transcript has been recorded.
+
+The self-deception trap is:
+
+```text
+same stored prefix -> same compared prompt
+```
+
+Prompt comparability must include every transformation that affects the model's
+logical input, as well as the action-format contract. Occurrence ids should be
+excluded because they are provenance rather than semantics; provider-side
+instruction changes must be included because they can causally change behavior.
+This matters before counting cross-model outcomes as candidate comparisons.
+
+### Privacy Findings Need A Declared Consumer Boundary
+
+A trajectory artifact can contain both the semantic messages used for training
+and richer audit-only evidence. A path present in raw command-runner stdout but
+absent from the rendered tool observation has a different data consequence from
+a path present in the model's transcript.
+
+```text
+semantic-message finding -> already part of model context
+audit-only finding       -> becomes context only if a consumer serializes it
+```
+
+The second case is not permission to ignore the finding. It means eligibility
+depends on the declared dataset transformation. A consumer that uses only
+semantic messages can establish a narrower clean-context claim; a future
+consumer that embeds raw tool results must normalize or review those fields.
+Privacy audits should therefore report artifact scope and keep conservative
+overall status, rather than collapsing every finding into either harmlessness
+or universal leakage.
+
+### Model Capability Claims Do Not Establish Harness Compatibility
+
+A provider may advertise structured outputs, tool use, or agentic coding while
+still speaking a different action protocol from the evaluator. Compatibility
+must be measured across the full loop, not inferred from a feature label or one
+valid first response.
+
+```text
+valid first action != compatible multi-turn policy
+native tool call    != harness-defined typed action
+JSON-shaped output != schema-valid action
+```
+
+A model can emit native provider `tool_calls` when the harness expects JSON in
+assistant content, or it can follow the schema for two turns and violate it on
+the first write. Silently translating those behaviors or loosening validation
+to increase model coverage changes the policy interface being evaluated.
+
+The conservative acquisition gate is an end-to-end repeated smoke under the
+same adapter and action contract. An incompatible model should remain a
+documented integration result until the interface translation is deliberately
+designed and audited.
+
+### Task Count And Positive-Anchor Coverage Are Different Dataset Properties
+
+A task pack can contain enough tasks while the acquisition pool still has
+success evidence for only a narrow subset. Counting tasks alone hides whether
+positive data spans the intended construct distribution.
+
+```text
+task exists in pack        -> potential measurement support
+task has trusted failures  -> negative and analysis support
+task has trusted successes -> possible positive-anchor support
+```
+
+This distinction matters before post-training. If all positive rows come from
+the easiest task family, a dataset can be numerically large while teaching a
+much narrower behavior than the eval suite claims to measure. Acquisition
+reports should therefore show per-task outcome support and retain zero-positive
+tasks instead of smoothing them into an aggregate pass count.
+
+### Data Availability, Trainability, And Evaluability Are Separate Gates
+
+Having candidate examples does not mean the project can train them, and having
+a trained adapter does not mean the project can measure its effect.
+
+```text
+data availability -> reviewed source examples or comparison ingredients exist
+trainability      -> exact tokenizer, serialization, loss mask, model weights,
+                     objective, and runtime can consume them
+evaluability      -> the exact base and adapted policies can be compared on a
+                     split whose relationship to training is declared
+```
+
+These gates fail independently. A lab can have dozens of potential preference
+comparisons but no trainable checkpoint. It can complete a tiny SFT run yet
+have no way to serve the adapter through the evaluator. It can evaluate the
+adapter on its training tasks yet have no evidence about heldout behavior.
+
+The self-deception trap is to treat completion of the most visible stage as
+proof that the whole experimental loop exists. Downstream readiness should be
+audited from the intended claim backward: what comparison makes that claim
+meaningful, how will both policies be served, what training artifact produces
+one of them, and what authorized data feeds that artifact?
+
+### A Recovered Successful Trajectory Can Still Be A Bad SFT Target
+
+Task success validates the final task outcome, not every action in the path to
+that outcome. A model can issue an invalid tool call, recover, and eventually
+pass the hidden validator. Imitating the full contiguous transcript would then
+teach both the avoidable error and its recovery.
+
+This creates an objective-specific distinction:
+
+```text
+successful endpoint                         -> trustworthy outcome evidence
+clean successful path                       -> possible direct SFT target
+successful path containing an earlier error -> repair, truncate before the
+                                                 error, use for a recovery
+                                                 objective, or reject
+```
+
+Masking only the failed action is not automatically sufficient because later
+assistant behavior remains conditioned on that action and its tool response.
+For a clean-behavior SFT objective, the context itself can be contaminated even
+when the bad action carries no loss.
+
+### An In-Sample Post-Training Eval Has A Narrow But Valid Meaning
+
+Training on dev-task trajectories does not make later evaluation on those same
+tasks worthless. It can still test whether the training loop runs, whether the
+adapter can be served, whether trained examples regress, and whether expected
+behaviors were memorized.
+
+It changes the permissible claim:
+
+```text
+evaluation on training tasks -> plumbing, memorization, and regression evidence
+evaluation on a frozen unseen slice -> possible generalization evidence,
+                                        subject to the rest of the protocol
+```
+
+Relabeling already inspected or trained-on tasks as heldout does not restore
+the missing counterfactual. If the final claim needs unseen-task evidence, the
+slice must be frozen before training and before its outcomes are used to tune
+the data, prompt, decoding, or scorer.
+
+### Heldout Authorship Is Not The Same As Outcome Contamination
+
+A task author must inspect the task instruction, seed bug, hidden validator,
+and controls to establish that the measurement works. Calling those bytes
+"private" cannot mean nobody responsible for the evaluator has ever seen
+them.
+
+The relevant untouched boundary is policy feedback:
+
+```text
+task/scorer author inspects contract before freeze -> necessary calibration
+evaluated policy sees hidden validator             -> leakage
+model outcome changes training or eval choices     -> heldout contamination
+```
+
+Oracle, known-bad, and scripted-agent controls can run before freeze because
+they encode author knowledge and test the harness/scorer contract. Natural-
+model attempts are different: their outcomes reveal how the policy interacts
+with the slice and can influence prompts, data, decoding, or hyperparameters.
+
+This boundary prevents two opposite mistakes: treating an uncalibrated task as
+rigorous merely because nobody inspected it, and spending heldout information
+by iterating on real model failures before the experiment is fixed.
+
+### A Pre-Training Baseline Need Not Be Evaluated Before Training
+
+"Pre-training baseline" should identify the unadapted checkpoint, not impose a
+wall-clock order that leaks heldout outcomes into training decisions.
+
+Running the base model on heldout tasks first and inspecting the result can
+change which examples are selected, which hyperparameters are tried, or which
+prompt is used. The slice is then no longer untouched for the adapted policy.
+
+The safer sequence is:
+
+```text
+freeze tasks
+freeze training and evaluation choices
+train adapter
+run exact base and adapter as one paired evaluation
+inspect both results
+```
+
+If operational constraints require an earlier base run, its outcomes must be
+sealed until the adapter and evaluation protocol are fixed. Causal comparison
+depends on information flow, not just checkpoint timestamps.
 ## SFT Data Preparation
 
 ### A Causal-LM Sequence Contains Many Supervised Predictions
@@ -1645,6 +2089,34 @@ The self-deception trap is to copy the row format of a public system without
 also copying the context policy, loss reduction, weighting, and runtime
 assumptions that make that format meaningful.
 
+### Schema Rebuildability And Training Authorization Are Different Claims
+
+An immutable trajectory can remain valid evidence after a downstream candidate
+or dataset schema changes. Rebuilding the derived record from the same pinned
+trajectory and review can restore schema validity without rerunning the model.
+That does not make the rebuilt row training-authorized.
+
+Final authorization additionally asks whether the source eval ran under the
+same harness runtime that was audited and calibrated for release:
+
+```text
+source evidence still loads
+  != derived artifact still matches the current schema
+  != current harness is authorized to interpret that evidence for training
+```
+
+This distinction matters especially when runtime provenance hashes the full
+package source and dependency lock. Adding training-only code can then change
+the recorded harness runtime even if rollout and scoring behavior did not
+change. Under a strict equality policy, the honest choices are to acquire again
+after the code stabilizes or explicitly design and validate a narrower runtime
+boundary. Silently treating the change as irrelevant defeats the provenance
+gate.
+
+The self-deception trap is to regenerate manifests around old rows and call
+them current. Rebuilding proves deterministic derivation; it cannot manufacture
+the missing runtime equivalence evidence.
+
 ### Complete Rollouts Are Preference Evidence, Not Automatically The Loss Unit
 
 Two agent rollouts may begin from the same task, workspace, tool contract, and
@@ -1947,3 +2419,90 @@ Source model identity and decoding policy remain provenance rather than an
 equality rule. This allows actions sampled from different models to be compared
 under the same logical state while retaining enough evidence to detect style or
 continuation-policy confounds later.
+
+### Review Abstention Is A Data-Quality Decision, Not A Missing Label
+
+A preference reviewer is not required to force every comparison into chosen
+and rejected sides. When the evidence does not isolate which local action is
+better, `ambiguous` is the truthful result. When the alternatives are
+semantically equivalent, `tie` is the truthful result. Neither state should be
+silently converted to a directional pair to meet a dataset-size target.
+
+This creates a useful fail-closed boundary:
+
+```text
+explicit preferred decision -> may become a preference pair
+tie                         -> no directional training claim
+ambiguous                   -> no directional training claim
+invalid                     -> unusable comparison
+```
+
+The self-deception trap is to treat reviewer coverage as the objective. A
+larger fully labeled dataset can contain more invented certainty than a smaller
+dataset with principled abstentions.
+
+### Successful Materialization Proves Representation, Not Authorization
+
+Deterministically rebuilding token records can prove that source references
+resolve, templates and tokenizer bytes are pinned, ownership masks are
+well-defined, sequence limits are respected, and chosen/rejected branches share
+the claimed prompt. These are necessary representation invariants.
+
+They do not prove that the source evidence was acquired under the current
+trusted harness, that a record should be authorized for training, or that
+training on it will improve behavior. Those are separate trust, policy, and
+empirical claims:
+
+```text
+materialization success -> the approved claim has a reproducible token form
+evidence trust          -> every required source and runtime gate passes
+training authorization  -> policy permits a trainer to consume the artifact
+training efficacy       -> a controlled post-training evaluation shows change
+```
+
+Conflating these levels turns a clean serialization audit into an unsupported
+claim about data safety or model quality.
+
+### Re-Derivation Cannot Repair Stale Source Provenance
+
+A derived artifact may be rebuilt perfectly under new code while still relying
+on trajectories acquired under an older harness runtime. The new derivation
+can validate its own transformation, but it cannot retroactively show that the
+old acquisition would have behaved identically under the new runtime.
+
+Provenance trust flows from sources to derivatives. It does not flow backward:
+
+```text
+stale acquisition + current deterministic derivation
+  -> useful development artifact
+  -> not current-runtime trusted evidence
+```
+
+The evidence remedies are to retain the mismatch or reacquire after the runtime
+is frozen. Rehashing or re-exporting the old evidence is not reacquisition. A
+scope-limited owner may separately accept that known risk and authorize a
+non-production exercise, but that policy exception must not relabel the source
+as trusted.
+
+### Authorization Is Permission; Trust Is Evidence
+
+It is useful to default authorization from trust gates, but the concepts are
+not identical. Trust is an evidence claim about how an artifact was produced.
+Authorization is a policy decision about whether a particular consumer may use
+it. In a production path, policy should normally require all trust invariants.
+In a learning lab, an owner may knowingly accept a documented mismatch to
+exercise the trainer.
+
+The safe override preserves both truths:
+
+```text
+source runtime mismatch: still present
+normal trust gate: still failed
+learning-lab trainer permission: explicitly granted
+production suitability: not claimed
+```
+
+Simply replacing `not_authorized` with `authorized` would erase why the normal
+gate failed and make later readers infer stronger evidence than exists. An
+atomic override identity and reason preserve the exception's scope and prevent
+authorization from becoming provenance laundering.

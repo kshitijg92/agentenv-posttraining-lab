@@ -63,8 +63,7 @@ def test_execute_tool_lists_files_inside_workspace(tmp_path: Path) -> None:
     ]
     assert result.output.truncated is False
     assert (
-        result.canonical_workspace_hash_before
-        == result.canonical_workspace_hash_after
+        result.canonical_workspace_hash_before == result.canonical_workspace_hash_after
     )
 
 
@@ -194,9 +193,28 @@ def test_execute_tool_reads_file_inside_workspace(tmp_path: Path) -> None:
     assert result.output.bytes_read == len("print('hello')\n".encode())
     assert result.error_class is None
     assert (
-        result.canonical_workspace_hash_before
-        == result.canonical_workspace_hash_after
+        result.canonical_workspace_hash_before == result.canonical_workspace_hash_after
     )
+
+
+def test_execute_tool_read_error_hides_workspace_path(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    result = execute_tool(
+        ToolCallAction(
+            action="tool_call",
+            tool_name="read_file",
+            arguments={"path": "missing.py"},
+        ),
+        _agent_task_view(workspace),
+    )
+
+    assert result.status == "error"
+    assert result.error_class == "ToolExecutionError"
+    assert result.error_message is not None
+    assert str(workspace) not in result.error_message
+    assert "<WORKSPACE>/missing.py" in result.error_message
 
 
 def test_execute_tool_writes_file_inside_existing_directory(tmp_path: Path) -> None:
@@ -220,8 +238,7 @@ def test_execute_tool_writes_file_inside_existing_directory(tmp_path: Path) -> N
     assert result.output.bytes_written == len("print('fixed')\n".encode())
     assert (workspace / "src.py").read_text() == "print('fixed')\n"
     assert (
-        result.canonical_workspace_hash_before
-        != result.canonical_workspace_hash_after
+        result.canonical_workspace_hash_before != result.canonical_workspace_hash_after
     )
 
 
@@ -268,12 +285,11 @@ def test_execute_tool_runs_allowed_public_check(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert result.stdout == "ok\n"
     assert (
-        result.canonical_workspace_hash_before
-        == result.canonical_workspace_hash_after
+        result.canonical_workspace_hash_before == result.canonical_workspace_hash_after
     )
 
 
-def test_execute_tool_run_tests_uses_fresh_external_runner_temp_root(
+def test_execute_tool_run_tests_hides_workspace_and_runner_temp_paths(
     tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
@@ -283,7 +299,7 @@ def test_execute_tool_run_tests_uses_fresh_external_runner_temp_root(
         'root = os.environ["TMPDIR"]; '
         'assert root == os.environ["TMP"] == os.environ["TEMP"]; '
         "path = tempfile.NamedTemporaryFile(delete=False).name; "
-        "print(root); print(path)'"
+        "print(os.getcwd()); print(root); print(path)'"
     )
 
     results = [
@@ -298,17 +314,15 @@ def test_execute_tool_run_tests_uses_fresh_external_runner_temp_root(
         for _ in range(2)
     ]
 
-    observed_roots: list[Path] = []
     for result in results:
         assert result.status == "ok"
-        runner_temp_root_text, temporary_file_text = result.stdout.splitlines()
-        runner_temp_root = Path(runner_temp_root_text)
-        temporary_file = Path(temporary_file_text)
-        assert temporary_file.is_relative_to(runner_temp_root)
-        assert not runner_temp_root.is_relative_to(workspace)
-        assert not runner_temp_root.exists()
-        observed_roots.append(runner_temp_root)
-    assert len(set(observed_roots)) == 2
+        assert result.stdout.splitlines() == [
+            "<WORKSPACE>",
+            "<AGENTENV_TEMP>",
+            "<AGENTENV_TEMP>",
+        ]
+        assert str(workspace) not in result.stdout
+        assert "/tmp/agentenv-" not in result.stdout
 
 
 def test_execute_tool_run_tests_scrubs_and_redacts_secret_env(
@@ -320,8 +334,8 @@ def test_execute_tool_run_tests_scrubs_and_redacts_secret_env(
     workspace.mkdir()
     command = (
         f"{sys.executable} -c 'import os; "
-        f"print(os.getenv(\"AGENTENV_MODEL_API_KEY\", \"missing\")); "
-        f"print(\"{CANARY}\")'"
+        f'print(os.getenv("AGENTENV_MODEL_API_KEY", "missing")); '
+        f'print("{CANARY}")\''
     )
 
     result = execute_tool(
@@ -412,8 +426,7 @@ def test_execute_tool_reports_invalid_tool_input(tmp_path: Path) -> None:
     assert result.status == "error"
     assert result.error_class == "InvalidToolInput"
     assert (
-        result.canonical_workspace_hash_before
-        == result.canonical_workspace_hash_after
+        result.canonical_workspace_hash_before == result.canonical_workspace_hash_after
     )
 
 

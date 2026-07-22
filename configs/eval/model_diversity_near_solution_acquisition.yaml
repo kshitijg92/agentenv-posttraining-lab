@@ -1,0 +1,35 @@
+name: model_diversity_near_solution_acquisition
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_semver_precedence
+  - repair_interval_coalescing
+  - repair_retry_schedule
+  - repair_relative_path
+split: dev
+policies:
+  devstral-small-2-24b:
+    type: agent_model
+    model_config: configs/models/ollama_devstral_small_2_24b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+  qwen2-5-coder-14b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_14b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+  qwen2-5-coder-7b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_7b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

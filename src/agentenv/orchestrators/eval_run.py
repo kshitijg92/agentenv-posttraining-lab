@@ -61,6 +61,7 @@ from agentenv.models.config import (
     load_referenced_model_input_protocol,
 )
 from agentenv.models.factory import build_model_client
+from agentenv.models.provider_runtime import capture_provider_runtime_provenance
 from agentenv.models.fake import ScriptedFakeModelClient
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.agent_task_run import (
@@ -317,6 +318,7 @@ def run_eval_config(
                     "model_config_hash": _hash_file(model_config_path),
                     "decoding_config_path": str(decoding_config_path),
                     "decoding_config_hash": _hash_file(decoding_config_path),
+                    "max_turns_override": selected_policy.max_turns_override,
                 }
                 _append_trace(
                     trace_events,
@@ -331,6 +333,7 @@ def run_eval_config(
                     eval_attempt_id=eval_attempt_id,
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
+                    max_turns_override=selected_policy.max_turns_override,
                 )
                 agent_attempt = _required_agent(attempt_record)
                 agent_attempt_id = agent_attempt.agent_attempt_id
@@ -747,9 +750,11 @@ def _run_agent_model_eval_attempt(
     eval_attempt_id: str,
     attempt_index: int,
     attempt_dir: Path,
+    max_turns_override: int | None,
 ) -> EvalAttemptRecord:
     model_config = load_model_config(model_config_path)
     decoding_config = load_decoding_config(decoding_config_path)
+    provider_runtime_provenance = capture_provider_runtime_provenance(model_config)
     model_input_protocol = load_referenced_model_input_protocol(
         model_config,
         model_config_path,
@@ -763,10 +768,12 @@ def _run_agent_model_eval_attempt(
         model_client,
         decoding_config,
         attempt_dir,
+        max_turns_override=max_turns_override,
         model_config_provenance=model_config_provenance_artifact(
             model_config=model_config,
             model_config_path=model_config_path,
             model_config_hash=_hash_file(model_config_path),
+            provider_runtime_provenance=provider_runtime_provenance,
             model_input_protocol=model_input_protocol,
         ),
         decoding_config_provenance=decoding_config_provenance_artifact(
@@ -859,6 +866,7 @@ def _policy_metadata(config: EvalConfig, policy_name: str) -> dict[str, object]:
             "control_name": None,
             "model_config": policy.model_config_path,
             "decoding_config": policy.decoding_config_path,
+            "max_turns_override": policy.max_turns_override,
             **common_metadata,
         }
     raise AssertionError(f"Unhandled eval policy type: {policy.type}")

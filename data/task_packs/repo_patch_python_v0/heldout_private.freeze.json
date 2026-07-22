@@ -1,0 +1,85 @@
+{
+  "artifact_type": "heldout_private_freeze",
+  "freeze_version": "heldout_private_freeze_v0",
+  "frozen_at": "2026-07-13T22:33:02Z",
+  "task_pack_id": "repo_patch_python_v0",
+  "manifest_yaml_hash": "xxh64:cff57ad8b0eabd03",
+  "splits_lock_hash": "xxh64:b7dedeaaab64541d",
+  "pack_record_hash_at_freeze": "xxh64:94f99b34f7a24031",
+  "natural_model_attempt_count_at_freeze": 0,
+  "control_gate": {
+    "config_path": "configs/eval/heldout_private_control_gate.yaml",
+    "config_file_hash": "xxh64:8d9bd282d9f55547",
+    "local_eval_manifest_path": "experiments/heldout_control_gate_final_freeze/manifest.json",
+    "local_eval_manifest_hash": "xxh64:11f64366aa06f21c",
+    "attempt_count": 36,
+    "replay_run_count": 6,
+    "replay_run_success_summary": "6/6",
+    "public_check_idempotency_artifact_path": "experiments/heldout_public_check_idempotency_freeze_candidate/calibrations.json",
+    "public_check_idempotency_artifact_hash": "xxh64:94fd9c16f838ab20",
+    "public_check_idempotency_repeat_count": 2,
+    "public_check_idempotent_count": 6,
+    "oracle_pass_count": 6,
+    "bad_noop_public_pass_hidden_fail_count": 6,
+    "bad_public_only_public_pass_hidden_fail_count": 6,
+    "agent_happy_pass_count": 6,
+    "agent_recoverable_pass_count": 6,
+    "agent_malformed_invalid_output_count": 6
+  },
+  "tasks": [
+    {
+      "task_id": "repair_decimal_rounding",
+      "task_yaml_hash": "xxh64:a73243c0c4776e48",
+      "instruction_normalized_hash": "xxh64:0a1688503321c536",
+      "visible_tests_normalized_hash": "xxh64:757c605f7c920f9d",
+      "required_task_files_hash": "xxh64:7cff7903440a286a",
+      "full_task_dir_hash": "xxh64:519a99237599a9bb",
+      "task_record_hash": "xxh64:ff0c15df5ac5bd8b"
+    },
+    {
+      "task_id": "repair_env_assignment_parser",
+      "task_yaml_hash": "xxh64:67c3d470d391e161",
+      "instruction_normalized_hash": "xxh64:21f79f6f7c0ba548",
+      "visible_tests_normalized_hash": "xxh64:7a822357d8a5e8ff",
+      "required_task_files_hash": "xxh64:361ab148ecf35738",
+      "full_task_dir_hash": "xxh64:945bc9c1eb61d06e",
+      "task_record_hash": "xxh64:1e46217a5aeb2704"
+    },
+    {
+      "task_id": "repair_json_pointer_lookup",
+      "task_yaml_hash": "xxh64:3f5822c9fc08b63c",
+      "instruction_normalized_hash": "xxh64:639ef8be0303e6cc",
+      "visible_tests_normalized_hash": "xxh64:cc89677c1f957c5e",
+      "required_task_files_hash": "xxh64:08e6e5d00e71f6d1",
+      "full_task_dir_hash": "xxh64:5a9b9e97cc293ca0",
+      "task_record_hash": "xxh64:8f34d57527d4af51"
+    },
+    {
+      "task_id": "repair_latest_record_selection",
+      "task_yaml_hash": "xxh64:2a5400ec8e4b3324",
+      "instruction_normalized_hash": "xxh64:a69e3ef1047ca46e",
+      "visible_tests_normalized_hash": "xxh64:094b52a071c961a1",
+      "required_task_files_hash": "xxh64:dee428a2e093818d",
+      "full_task_dir_hash": "xxh64:29e1ee05d674e47b",
+      "task_record_hash": "xxh64:00e2d24274457522"
+    },
+    {
+      "task_id": "repair_stable_toposort",
+      "task_yaml_hash": "xxh64:0a00408167f5cf6c",
+      "instruction_normalized_hash": "xxh64:5e792f47d4724739",
+      "visible_tests_normalized_hash": "xxh64:c0b7662493f2379f",
+      "required_task_files_hash": "xxh64:ce6619261dbd5604",
+      "full_task_dir_hash": "xxh64:c3c503dbef5a6c96",
+      "task_record_hash": "xxh64:74b4da410b7ed9d3"
+    },
+    {
+      "task_id": "repair_utf8_batching",
+      "task_yaml_hash": "xxh64:e2418f7c6aa87f5c",
+      "instruction_normalized_hash": "xxh64:142cd65b946b608a",
+      "visible_tests_normalized_hash": "xxh64:db3bbfbd6532b643",
+      "required_task_files_hash": "xxh64:933b867984881fcd",
+      "full_task_dir_hash": "xxh64:7cc259049bdcdc65",
+      "task_record_hash": "xxh64:869424599f3803a9"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"read_file\",\"arguments\":{}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/record_versions.py\",\"content\":\"from collections.abc import Mapping\\n\\n\\ndef select_latest(records: list[dict[str, object]]) -> list[dict[str, object]]:\\n    \\\"\\\"\\\"Select the highest version per id in first-id order.\\\"\\\"\\\"\\n    if isinstance(records, (str, bytes)):\\n        raise ValueError(\\\"records must be a non-string iterable\\\")\\n    try:\\n        values = list(records)\\n    except TypeError as exc:\\n        raise ValueError(\\\"records must be iterable\\\") from exc\\n\\n    first_ids: list[str] = []\\n    latest: dict[str, dict[str, object]] = {}\\n    seen_versions: dict[str, set[int]] = {}\\n    required_keys = {\\\"id\\\", \\\"version\\\", \\\"payload\\\"}\\n    for record in values:\\n        if not isinstance(record, Mapping) or set(record) != required_keys:\\n            raise ValueError(\\\"records must contain exactly id, version, payload\\\")\\n        record_id = record[\\\"id\\\"]\\n        version = record[\\\"version\\\"]\\n        if not isinstance(record_id, str) or not record_id:\\n            raise ValueError(\\\"record id must be a non-empty string\\\")\\n        if (\\n            isinstance(version, bool)\\n            or not isinstance(version, int)\\n            or version < 0\\n        ):\\n            raise ValueError(\\\"record version must be a non-negative integer\\\")\\n        if record_id not in seen_versions:\\n            first_ids.append(record_id)\\n            seen_versions[record_id] = set()\\n        if version in seen_versions[record_id]:\\n            raise ValueError(\\\"duplicate id and version\\\")\\n        seen_versions[record_id].add(version)\\n        previous = latest.get(record_id)\\n        if previous is None or version > previous[\\\"version\\\"]:\\n            latest[record_id] = {\\n                \\\"id\\\": record_id,\\n                \\\"version\\\": version,\\n                \\\"payload\\\": record[\\\"payload\\\"],\\n            }\\n    return [latest[record_id] for record_id in first_ids]\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed",
+    "tool_results": [
+      {
+        "tool_name": "read_file",
+        "status": "error",
+        "error_class": "InvalidToolInput"
+      },
+      {
+        "tool_name": "write_file",
+        "status": "ok"
+      },
+      {
+        "tool_name": "run_tests",
+        "status": "ok"
+      }
+    ]
+  }
+}

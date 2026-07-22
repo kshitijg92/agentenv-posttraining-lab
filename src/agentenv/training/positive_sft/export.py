@@ -62,9 +62,7 @@ def export_positive_sft_examples(
     training_candidate_export = load_training_candidate_export_artifact(
         training_candidate_export_dir
     )
-    review_validation = validate_positive_sft_review_artifact(
-        positive_sft_review_dir
-    )
+    review_validation = validate_positive_sft_review_artifact(positive_sft_review_dir)
     validate_positive_sft_review_matches_candidate_export(
         training_candidate_export,
         review_validation,

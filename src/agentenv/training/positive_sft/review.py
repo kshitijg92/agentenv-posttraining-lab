@@ -8,7 +8,11 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
-from agentenv.artifacts import MANIFEST_FILENAME, ArtifactType, prepare_artifact_output_dir
+from agentenv.artifacts import (
+    MANIFEST_FILENAME,
+    ArtifactType,
+    prepare_artifact_output_dir,
+)
 from agentenv.artifacts.base import load_jsonl_objects, resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import (
     POSITIVE_SFT_REVIEW_ARTIFACT_REFS,
@@ -268,7 +272,9 @@ def validate_positive_sft_review_records(
             continue
         boundary_id = review.last_approved_assistant_message_id
         matching = [
-            message for message in selection.messages if message.message_id == boundary_id
+            message
+            for message in selection.messages
+            if message.message_id == boundary_id
         ]
         if len(matching) != 1:
             raise ValueError(
@@ -327,8 +333,7 @@ def build_positive_sft_review_manifest(
         "manifest_hash": hash_file(candidate_export.out_dir / MANIFEST_FILENAME),
     }
     repaired_count = sum(
-        isinstance(review.source, RepairedPositiveSFTReviewSource)
-        for review in reviews
+        isinstance(review.source, RepairedPositiveSFTReviewSource) for review in reviews
     )
     repair_export_ref: dict[str, str] | None = None
     repair_review_ref: dict[str, str] | None = None
@@ -490,7 +495,9 @@ def _load_pinned_repair_validation(
     if repair_ref is None and review_ref is None:
         return None
     if repair_ref is None or review_ref is None:
-        raise ValueError("Positive-SFT review manifest has incomplete repair provenance")
+        raise ValueError(
+            "Positive-SFT review manifest has incomplete repair provenance"
+        )
     repair_dir = _resolve_pinned_artifact_dir(
         artifact.out_dir,
         repair_ref.artifact_dir,
@@ -533,7 +540,9 @@ def _resolve_pinned_artifact_dir(owner_dir: Path, raw_path: str) -> Path:
     return path.resolve()
 
 
-def _validate_manifest_hash(artifact_dir: Path, expected_hash: str, *, owner: str) -> None:
+def _validate_manifest_hash(
+    artifact_dir: Path, expected_hash: str, *, owner: str
+) -> None:
     observed_hash = hash_file(artifact_dir / MANIFEST_FILENAME)
     if observed_hash != expected_hash:
         raise ValueError(

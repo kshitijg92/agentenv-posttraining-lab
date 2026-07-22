@@ -1,0 +1,18 @@
+name: qwen3_8b_dev_long_output_diagnostic
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_semver_precedence
+split: dev
+policies:
+  qwen3-8b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_8b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

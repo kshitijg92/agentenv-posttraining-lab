@@ -1,0 +1,20 @@
+name: qwen3_coder_30b_task_gap_acquisition
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_interval_coalescing
+  - repair_retry_schedule
+  - repair_semver_precedence
+split: dev
+policies:
+  qwen3-coder-30b:
+    type: agent_model
+    model_config: configs/models/ollama_qwen3_coder_30b.yaml
+    decoding_config: configs/decoding/sampling_8192.yaml
+    attempts: 2
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import agentenv.orchestrators.eval_run as eval_run_module
 from agentenv.agents.prompts import AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
 from agentenv.artifacts import ArtifactDirectoryError
 from agentenv.artifacts.manifests import load_eval_run_manifest
@@ -48,6 +49,7 @@ def _write_agent_model_eval_config(path: Path) -> None:
                 "    type: agent_model",
                 "    model_config: configs/models/openai_compatible_chat_placeholder.yaml",
                 "    decoding_config: configs/decoding/greedy_1024.yaml",
+                "    max_turns_override: 37",
                 "    attempts: 2",
                 "    replay:",
                 "      repeats: 0",
@@ -185,6 +187,7 @@ def test_agent_model_eval_config_loads_and_validates_paths(tmp_path: Path) -> No
         == "configs/models/openai_compatible_chat_placeholder.yaml"
     )
     assert policy.decoding_config_path == "configs/decoding/greedy_1024.yaml"
+    assert policy.max_turns_override == 37
     assert policy.attempts == 2
     assert policy.replay.repeats == 0
     validate_eval_config_paths(config, config_path)
@@ -212,6 +215,7 @@ def test_agent_model_eval_records_missing_model_env_failure(
         "configs/models/openai_compatible_chat_placeholder.yaml"
     )
     assert run_manifest["decoding_config"] == "configs/decoding/greedy_1024.yaml"
+    assert run_manifest["max_turns_override"] == 37
     assert run_manifest["layer_counts"] == {
         "agent_status": {"agent_loop_failed": 2},
         "prompt_loop_status": {"model_error": 2},
@@ -240,6 +244,8 @@ def test_agent_model_eval_records_missing_model_env_failure(
     assert (attempt_dir / "agent_task_view.json").is_file()
     assert (attempt_dir / "model_config.json").is_file()
     assert (attempt_dir / "decoding_config.json").is_file()
+    agent_task_view = json.loads((attempt_dir / "agent_task_view.json").read_text())
+    assert agent_task_view["max_turns"] == 37
     assert (attempt_dir / "prompt_loop_result.json").is_file()
     assert not (attempt_dir / "agent_control_script.json").exists()
     assert not (attempt_dir / "candidate.patch").exists()
@@ -285,9 +291,11 @@ def test_agent_model_eval_records_missing_model_env_failure(
         "model_id": "placeholder-model",
         "prompt_adapter": None,
         "agent_action_format": "prompt_only",
+        "provider_runtime_probe": None,
         "provider": "openai_compatible_chat",
         "version": "model_config_v0",
     }
+    assert model_config_provenance["provider_runtime"] is None
     assert "secret-token" not in (attempt_dir / "model_config.json").read_text()
     validate_trace_file(tmp_path / "eval/trace.jsonl")
     trace_events = load_trace_events(tmp_path / "eval/trace.jsonl")
@@ -573,6 +581,30 @@ def test_run_eval_config_writes_run_manifest(tmp_path: Path) -> None:
     assert (tmp_path / "eval/trace.jsonl").is_file()
 
 
+def test_run_eval_config_refuses_manifest_if_harness_runtime_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = eval_run_module.capture_harness_runtime_provenance(
+        eval_run_module.harness_repo_root()
+    )
+    changed_runtime = runtime.model_copy(
+        update={"python_version": f"{runtime.python_version}-changed"}
+    )
+    captures = iter((runtime, changed_runtime))
+    monkeypatch.setattr(
+        eval_run_module,
+        "capture_harness_runtime_provenance",
+        lambda _repo_root: next(captures),
+    )
+    out_dir = tmp_path / "eval"
+
+    with pytest.raises(ValueError, match="Harness runtime changed while the eval"):
+        run_eval_config(CONTROL_EVAL_CONFIG, "oracle", out_dir)
+
+    assert not (out_dir / "manifest.json").exists()
+
+
 def test_validate_unique_eval_attempt_ids_rejects_duplicates(tmp_path: Path) -> None:
     attempts = [
         EvalAttemptRecord(
@@ -703,6 +735,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "control_name": "oracle",
             "attempts_per_task": 1,
             "replay_repeats": 1,
+            "max_turns_override": None,
             "eval_run_id": eval_matrix.policy_runs[0].eval_run_id,
             "artifact_dir": "policies/oracle",
             "manifest": "policies/oracle/manifest.json",
@@ -721,6 +754,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "control_name": "bad.noop",
             "attempts_per_task": 1,
             "replay_repeats": 1,
+            "max_turns_override": None,
             "eval_run_id": eval_matrix.policy_runs[1].eval_run_id,
             "artifact_dir": "policies/bad-noop",
             "manifest": "policies/bad-noop/manifest.json",
@@ -739,6 +773,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
             "control_name": "bad.public_only",
             "attempts_per_task": 1,
             "replay_repeats": 1,
+            "max_turns_override": None,
             "eval_run_id": eval_matrix.policy_runs[2].eval_run_id,
             "artifact_dir": "policies/bad-public-only",
             "manifest": "policies/bad-public-only/manifest.json",

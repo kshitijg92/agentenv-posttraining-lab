@@ -1,0 +1,19 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {
+    "steps": [
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/json_pointer.py\",\"content\":\"from collections.abc import Mapping\\nimport re\\n\\n\\n_INDEX_RE = re.compile(r\\\"0|[1-9][0-9]*\\\", re.ASCII)\\n\\n\\ndef _decode_segment(segment: str) -> str:\\n    result: list[str] = []\\n    index = 0\\n    while index < len(segment):\\n        character = segment[index]\\n        if character != \\\"~\\\":\\n            result.append(character)\\n            index += 1\\n            continue\\n        if index + 1 >= len(segment):\\n            raise ValueError(\\\"dangling pointer escape\\\")\\n        escaped = segment[index + 1]\\n        if escaped == \\\"0\\\":\\n            result.append(\\\"~\\\")\\n        elif escaped == \\\"1\\\":\\n            result.append(\\\"/\\\")\\n        else:\\n            raise ValueError(\\\"invalid pointer escape\\\")\\n        index += 2\\n    return \\\"\\\".join(result)\\n\\n\\ndef resolve_pointer(document: object, pointer: str) -> object:\\n    \\\"\\\"\\\"Resolve a JSON pointer without mutating the document.\\\"\\\"\\\"\\n    if not isinstance(pointer, str):\\n        raise ValueError(\\\"pointer must be a string\\\")\\n    if pointer == \\\"\\\":\\n        return document\\n    if not pointer.startswith(\\\"/\\\"):\\n        raise ValueError(\\\"non-empty pointer must start with slash\\\")\\n\\n    current = document\\n    for encoded_segment in pointer[1:].split(\\\"/\\\"):\\n        segment = _decode_segment(encoded_segment)\\n        if isinstance(current, Mapping):\\n            if segment not in current:\\n                raise ValueError(\\\"pointer key does not exist\\\")\\n            current = current[segment]\\n        elif isinstance(current, list):\\n            if _INDEX_RE.fullmatch(segment) is None:\\n                raise ValueError(\\\"invalid list index\\\")\\n            index = int(segment)\\n            if index >= len(current):\\n                raise ValueError(\\\"list index out of range\\\")\\n            current = current[index]\\n        else:\\n            raise ValueError(\\\"pointer traverses a scalar\\\")\\n    return current\\n\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"
+      },
+      {
+        "output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"
+      }
+    ]
+  },
+  "expected_result": {
+    "prompt_loop_status": "completed"
+  }
+}

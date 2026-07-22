@@ -1,0 +1,71 @@
+diff --git a/src/dependency_order.py b/src/dependency_order.py
+--- a/src/dependency_order.py
++++ b/src/dependency_order.py
+@@ -1,6 +1,65 @@
++from collections.abc import Mapping
++
++
++def _finite_list(value: object, *, label: str) -> list[object]:
++    if isinstance(value, (str, bytes)):
++        raise ValueError(f"{label} must be a non-string iterable")
++    try:
++        return list(value)  # type: ignore[arg-type]
++    except TypeError as exc:
++        raise ValueError(f"{label} must be iterable") from exc
++
++
+ def stable_toposort(
+     nodes: list[str],
+     dependencies: dict[str, list[str]],
+ ) -> list[str]:
+-    """Return nodes in dependency order."""
+-    return list(nodes)
++    """Return nodes in stable dependency order."""
++    raw_nodes = _finite_list(nodes, label="nodes")
++    ordered_nodes: list[str] = []
++    seen_nodes: set[str] = set()
++    for node in raw_nodes:
++        if not isinstance(node, str) or not node:
++            raise ValueError("nodes must be non-empty strings")
++        if node in seen_nodes:
++            raise ValueError("nodes must be unique")
++        seen_nodes.add(node)
++        ordered_nodes.append(node)
++
++    if not isinstance(dependencies, Mapping):
++        raise ValueError("dependencies must be a mapping")
++    normalized = {node: set() for node in ordered_nodes}
++    for node, raw_dependencies in dependencies.items():
++        if not isinstance(node, str) or node not in seen_nodes:
++            raise ValueError("dependency keys must name known nodes")
++        values = _finite_list(
++            raw_dependencies,
++            label=f"dependencies for {node}",
++        )
++        seen_dependencies: set[str] = set()
++        for dependency in values:
++            if not isinstance(dependency, str) or dependency not in seen_nodes:
++                raise ValueError("dependencies must name known nodes")
++            if dependency == node:
++                raise ValueError("a node cannot depend on itself")
++            if dependency in seen_dependencies:
++                raise ValueError("dependencies must not contain duplicates")
++            seen_dependencies.add(dependency)
++        normalized[node] = seen_dependencies
++
++    result: list[str] = []
++    resolved: set[str] = set()
++    while len(result) < len(ordered_nodes):
++        ready = next(
++            (
++                node
++                for node in ordered_nodes
++                if node not in resolved and normalized[node] <= resolved
++            ),
++            None,
++        )
++        if ready is None:
++            raise ValueError("dependency graph contains a cycle")
++        result.append(ready)
++        resolved.add(ready)
++    return result

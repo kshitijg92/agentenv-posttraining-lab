@@ -71,9 +71,7 @@ def build_positive_sft_examples(
         validate_positive_sft_review_artifact,
     )
 
-    review_validation = validate_positive_sft_review_artifact(
-        positive_sft_review_dir
-    )
+    review_validation = validate_positive_sft_review_artifact(positive_sft_review_dir)
     validate_positive_sft_review_matches_candidate_export(
         training_candidate_export,
         review_validation,
@@ -280,8 +278,7 @@ def build_positive_sft_example_record(
     boundary_indexes = [
         index
         for index, message in enumerate(source_messages)
-        if message.message_id
-        == positive_sft_review.last_approved_assistant_message_id
+        if message.message_id == positive_sft_review.last_approved_assistant_message_id
     ]
     if len(boundary_indexes) != 1:
         raise ValueError(

@@ -885,6 +885,7 @@ def _model_config() -> dict[str, Any]:
         },
         "prompt_adapter": None,
         "agent_action_format": "prompt_only",
+        "provider_runtime_probe": None,
     }
 
 
@@ -908,6 +909,7 @@ def _model_config_provenance() -> dict[str, Any]:
         "source_path": "configs/models/unit.yaml",
         "source_hash": "xxh64:model",
         "config": _model_config(),
+        "provider_runtime": None,
         "model_input_protocol": None,
     }
 

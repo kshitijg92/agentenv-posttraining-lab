@@ -39,3 +39,8 @@ def test_converts_supported_units(value: str, expected: float) -> None:
 def test_invalid_values_raise_value_error(value: object) -> None:
     with pytest.raises(ValueError):
         parse_duration(value)  # type: ignore[arg-type]
+
+
+def test_numeric_overflow_raises_value_error() -> None:
+    with pytest.raises(ValueError):
+        parse_duration(("9" * 400) + "s")

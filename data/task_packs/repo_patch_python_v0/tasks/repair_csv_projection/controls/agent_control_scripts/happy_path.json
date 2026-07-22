@@ -1,0 +1,9 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {"steps": [
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/csv_projection.py\",\"content\":\"import csv\\nimport io\\ndef _columns(value):\\n    if isinstance(value, (str, bytes)): raise ValueError('non-string iterable required')\\n    try: result = list(value)\\n    except TypeError as exc: raise ValueError('iterable required') from exc\\n    if not result or any(not isinstance(item, str) or not item for item in result) or len(set(result)) != len(result): raise ValueError('invalid columns')\\n    return result\\ndef project_csv(text: str, columns: list[str]) -> str:\\n    if not isinstance(text, str) or '\\\\x00' in text: raise ValueError('invalid text')\\n    try: rows = list(csv.reader(io.StringIO(text, newline=''), strict=True))\\n    except csv.Error as exc: raise ValueError('malformed CSV') from exc\\n    if not rows or not rows[0] or any(not name for name in rows[0]) or len(set(rows[0])) != len(rows[0]): raise ValueError('invalid header')\\n    header = rows[0]\\n    if any(len(row) != len(header) for row in rows[1:]): raise ValueError('ragged row')\\n    selected = _columns(columns)\\n    if any(column not in header for column in selected): raise ValueError('unknown column')\\n    indices = [header.index(column) for column in selected]\\n    output = io.StringIO(newline='')\\n    csv.writer(output, lineterminator='\\\\n').writerows([[row[index] for index in indices] for row in rows])\\n    return output.getvalue()\\n\"}}"},
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"},
+    {"output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"}
+  ]},
+  "expected_result": {"prompt_loop_status": "completed"}
+}

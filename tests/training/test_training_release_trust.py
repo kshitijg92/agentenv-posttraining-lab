@@ -46,7 +46,7 @@ def real_training_trust(
     )
     controls = run_controls(
         TASK_PACK,
-        repeats=1,
+        repeats=2,
         out_dir=root / "control-calibration",
     )
     eval_run = run_eval_config(
@@ -168,6 +168,61 @@ def test_training_release_trust_rejects_control_runtime_drift(
             harness_audit_dir=real_training_trust.harness_audit_dir,
             control_calibration_dir=control_dir,
         )
+
+
+def test_training_release_trust_rejects_source_eval_runtime_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    real_training_trust: RealTrainingTrustFixture,
+) -> None:
+    trajectory_manifest = json.loads(
+        (real_training_trust.trajectory_export_dir / "manifest.json").read_text()
+    )
+    source_manifest_path = Path(trajectory_manifest["source_manifest_path"])
+    source_manifest = trust_module.load_eval_artifact_manifest(source_manifest_path)
+    source_runtime = source_manifest.runtime_provenance
+    changed_runtime = source_runtime.model_copy(
+        update={"python_version": f"{source_runtime.python_version}-changed"}
+    )
+    changed_manifest = source_manifest.model_copy(
+        update={"runtime_provenance": changed_runtime}
+    )
+    monkeypatch.setattr(
+        trust_module,
+        "load_eval_artifact_manifest",
+        lambda _path: changed_manifest,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Source eval runtime does not match the audited harness runtime",
+    ):
+        _validate_release_trust(real_training_trust)
+
+
+def test_training_release_trust_rejects_single_control_repeat(
+    monkeypatch: pytest.MonkeyPatch,
+    real_training_trust: RealTrainingTrustFixture,
+) -> None:
+    manifest_path = real_training_trust.control_calibration_dir / "manifest.json"
+    manifest = trust_module.load_control_calibration_manifest(manifest_path)
+    weak_flake_detection = manifest.flake_detection.model_copy(update={"repeats": 1})
+    weak_manifest = manifest.model_copy(
+        update={
+            "repeats": 1,
+            "flake_detection": weak_flake_detection,
+        }
+    )
+    monkeypatch.setattr(
+        trust_module,
+        "load_control_calibration_manifest",
+        lambda _path: weak_manifest,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="requires at least 2 control repeats",
+    ):
+        _validate_release_trust(real_training_trust)
 
 
 def test_training_release_trust_rejects_failed_control_outcome(

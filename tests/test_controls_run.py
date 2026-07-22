@@ -12,11 +12,23 @@ TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
 TASK_IDS = {
     "preserve_cli_error_codes",
     "repair_config_precedence",
+    "repair_csv_projection",
+    "repair_decimal_rounding",
     "repair_duration_parser",
+    "repair_env_assignment_parser",
     "repair_header_merge",
+    "repair_interval_coalescing",
+    "repair_json_pointer_lookup",
     "repair_jsonl_deduper",
+    "repair_latest_record_selection",
     "repair_query_encoding",
     "repair_record_chunking",
+    "repair_relative_path",
+    "repair_retry_schedule",
+    "repair_semver_precedence",
+    "repair_stable_toposort",
+    "repair_template_expansion",
+    "repair_utf8_batching",
     "toy_python_fix_001",
 }
 CONTROL_NAMES = {"oracle", "bad.noop", "bad.public_only"}
@@ -86,6 +98,14 @@ def test_run_controls_writes_manifest_jsonl_report_and_attempt_artifacts(
     assert len(control_run.records) == expected_record_count
     assert control_run.overall_match is True
     assert all(record.match for record in control_run.records)
+
+    single_repeat_flake_detection = controls_run_module._build_flake_detection(
+        task_pack_path=TASK_PACK.resolve(),
+        repeats=1,
+        records=[record for record in control_run.records if record.repeat_index == 0],
+        public_check_idempotency=control_run.public_check_idempotency,
+    )
+    assert single_repeat_flake_detection.status == "inconclusive"
 
     records = [
         json.loads(line)

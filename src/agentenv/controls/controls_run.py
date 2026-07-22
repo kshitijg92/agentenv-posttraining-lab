@@ -63,6 +63,7 @@ _VOLATILE_JSON_KEYS = {
     "duration_ms",
     "ended_at",
     "latency_ms",
+    "message_id",
     "scorer_attempt_id",
     "started_at",
     "stderr_bytes",
@@ -541,7 +542,7 @@ def _build_flake_detection(
     }
     if drifted_groups or "NON_IDEMPOTENT" in public_check_statuses:
         status = "drifted"
-    elif "INCONCLUSIVE" in public_check_statuses:
+    elif repeats < 2 or "INCONCLUSIVE" in public_check_statuses:
         status = "inconclusive"
     else:
         status = "stable"

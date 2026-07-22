@@ -3,6 +3,7 @@ provider: openai_compatible_chat
 model_id: qwen2.5-coder:7b
 api_key_env: null
 base_url_env: AGENTENV_MODEL_BASE_URL
+provider_runtime_probe: ollama
 capabilities:
   token_usage: native
   supports_seed: false

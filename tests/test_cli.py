@@ -105,6 +105,7 @@ def test_positive_sft_materialize_cli_reports_accounted_outcomes(
         "max_sequence_length": 32768,
         "tokenizer_cache_dir": None,
         "local_files_only": True,
+        "authorization_override": None,
         "overwrite": False,
     }
 
@@ -174,8 +175,89 @@ def test_dpo_materialize_cli_reports_accounted_pair_outcomes(
         "max_sequence_length": 32768,
         "tokenizer_cache_dir": None,
         "local_files_only": True,
+        "authorization_override": None,
         "overwrite": False,
     }
+
+
+def test_positive_sft_materialize_cli_passes_explicit_authorization_override(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    captured = {}
+    out_dir = tmp_path / "materialized"
+
+    def fake_export(source, protocol, out, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            out_dir=out_dir,
+            manifest=SimpleNamespace(
+                record_count=1,
+                completed_count=1,
+                failed_count=0,
+                sequence_length_exceeded_count=0,
+                materialization_error_count=0,
+                training_authorization="authorized",
+                artifacts={"materializations": "materializations.jsonl"},
+            ),
+        )
+
+    monkeypatch.setattr(
+        cli_module,
+        "export_positive_sft_training_materializations",
+        fake_export,
+    )
+    result = CliRunner().invoke(
+        app,
+        [
+            "training",
+            "positive-sft",
+            "materialize",
+            "--source",
+            "source-export",
+            "--model-input-protocol",
+            "protocol.yaml",
+            "--max-sequence-length",
+            "32768",
+            "--authorization-override-by",
+            "kshitij",
+            "--authorization-override-reason",
+            "Non-production learning-lab training exercise.",
+            "--out",
+            str(out_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "training_authorization=authorized" in result.output
+    override = captured["authorization_override"]
+    assert override.mode == "explicit_user_override"
+    assert override.authorized_by == "kshitij"
+    assert override.reason == "Non-production learning-lab training exercise."
+
+
+def test_materialize_cli_rejects_partial_authorization_override() -> None:
+    result = CliRunner().invoke(
+        app,
+        [
+            "training",
+            "preferences",
+            "materialize",
+            "--source",
+            "preference-pair-export",
+            "--model-input-protocol",
+            "protocol.yaml",
+            "--max-sequence-length",
+            "32768",
+            "--authorization-override-by",
+            "kshitij",
+            "--out",
+            "unused",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "supplied together" in result.output
 
 
 def test_eval_cli_rejects_non_empty_out_without_overwrite(tmp_path: Path) -> None:

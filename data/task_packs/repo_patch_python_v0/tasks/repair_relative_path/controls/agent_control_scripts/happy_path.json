@@ -1,0 +1,9 @@
+{
+  "schema_version": "agent_control_script_v0",
+  "script": {"steps": [
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"write_file\",\"arguments\":{\"path\":\"src/relative_path.py\",\"content\":\"def normalize_relative_path(path: str) -> str:\\n    if not isinstance(path, str) or not path or path.startswith('/') or chr(92) in path or chr(0) in path: raise ValueError('invalid path')\\n    parts = []\\n    for part in path.split('/'):\\n        if part in ('', '.'): continue\\n        if part == '..':\\n            if not parts: raise ValueError('path escapes root')\\n            parts.pop()\\n        else: parts.append(part)\\n    if not parts: raise ValueError('empty result')\\n    return '/'.join(parts)\\n\"}}"},
+    {"output_text": "{\"action\":\"tool_call\",\"tool_name\":\"run_tests\",\"arguments\":{\"command\":\"uv run --quiet --frozen pytest tests/test_public.py\"}}"},
+    {"output_text": "{\"action\":\"final_answer\",\"text\":\"done\"}"}
+  ]},
+  "expected_result": {"prompt_loop_status": "completed"}
+}

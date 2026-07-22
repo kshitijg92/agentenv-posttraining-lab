@@ -18,6 +18,7 @@ from agentenv.artifacts.manifests import (
     DPO_TRAINING_MATERIALIZATION_ARTIFACT_REFS,
     DPO_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION,
     DPOTrainingMaterializationManifest,
+    TrainingAuthorizationOverride,
     load_dpo_training_materialization_manifest,
     load_preference_pair_export_manifest,
 )
@@ -67,6 +68,7 @@ def export_dpo_training_materializations(
     max_sequence_length: int,
     tokenizer_cache_dir: Path | None = None,
     local_files_only: bool = False,
+    authorization_override: TrainingAuthorizationOverride | None = None,
     overwrite: bool = False,
 ) -> DPOTrainingMaterializationExport:
     source_export = load_preference_pair_export_artifact(preference_pair_export_dir)
@@ -97,6 +99,7 @@ def export_dpo_training_materializations(
         records_path=records_path,
         records=records,
         max_sequence_length=max_sequence_length,
+        authorization_override=authorization_override,
     )
     (out_dir / MANIFEST_FILENAME).write_text(
         json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
@@ -212,6 +215,7 @@ def build_dpo_training_materialization_manifest(
     records_path: Path,
     records: Sequence[DPOTrainingMaterializationRecord],
     max_sequence_length: int,
+    authorization_override: TrainingAuthorizationOverride | None = None,
 ) -> DPOTrainingMaterializationManifest:
     expected_records_path = resolve_relative_artifact_ref(
         out_dir,
@@ -241,7 +245,16 @@ def build_dpo_training_materialization_manifest(
                 DPO_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION
             ),
             "created_at": _utc_now(),
-            "training_authorization": "not_authorized",
+            "training_authorization": (
+                "authorized"
+                if authorization_override is not None
+                else "not_authorized"
+            ),
+            "training_authorization_override": (
+                None
+                if authorization_override is None
+                else authorization_override.model_dump(mode="json")
+            ),
             "source_preference_pair_export": {
                 "artifact_dir": str(source_export.out_dir),
                 "manifest_hash": hash_file(source_manifest_path),

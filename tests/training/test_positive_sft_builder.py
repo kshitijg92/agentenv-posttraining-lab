@@ -8,6 +8,7 @@ import pytest
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.manifests import (
     POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION,
+    TrainingAuthorizationOverride,
     load_positive_sft_export_manifest,
     load_positive_sft_training_materialization_manifest,
     load_trajectory_export_manifest,
@@ -392,6 +393,7 @@ def test_export_positive_sft_training_materializations_persists_accounted_rows(
     )
     assert manifest.artifact_type == "positive_sft_training_materialization"
     assert manifest.training_authorization == "not_authorized"
+    assert manifest.training_authorization_override is None
     assert manifest.record_count == positive_sft_export.manifest.record_count == 1
     assert manifest.completed_count == 1
     assert manifest.failed_count == 0
@@ -407,6 +409,33 @@ def test_export_positive_sft_training_materializations_persists_accounted_rows(
     assert len(export.records) == 1
     assert export.records[0].status == "completed"
     assert (export.out_dir / "materializations.jsonl").is_file()
+
+
+def test_positive_sft_materialization_accepts_explicit_authorization_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    positive_sft_export = build_positive_sft_export(tmp_path)
+    install_character_tokenizer(monkeypatch)
+    override = TrainingAuthorizationOverride(
+        mode="explicit_user_override",
+        authorized_by="learning-lab-owner",
+        reason="Authorize the trainer-shaped artifact for a learning exercise.",
+    )
+
+    export = export_positive_sft_training_materializations(
+        positive_sft_export.out_dir,
+        MODEL_INPUT_PROTOCOL,
+        tmp_path / "positive-sft-training-materialization",
+        max_sequence_length=10_000,
+        authorization_override=override,
+    )
+
+    assert export.manifest.training_authorization == "authorized"
+    assert export.manifest.training_authorization_override == override
+    reloaded = load_positive_sft_training_materialization_artifact(export.out_dir)
+    assert reloaded.manifest.training_authorization == "authorized"
+    assert reloaded.manifest.training_authorization_override == override
 
 
 def test_materialization_export_counts_overlength_without_dropping_source(

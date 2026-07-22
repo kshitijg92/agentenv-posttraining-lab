@@ -4,13 +4,16 @@ from pathlib import Path
 from typing import Any, Sequence, cast
 
 import pytest
+from pydantic import ValidationError
 
 import agentenv.training.preferences.materialization.export as export_module
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.manifests import (
     PREFERENCE_PAIR_EXPORT_ARTIFACT_REFS,
     PREFERENCE_PAIR_EXPORT_ARTIFACT_SCHEMA_VERSION,
+    DPOTrainingMaterializationManifest,
     PreferencePairExportManifest,
+    TrainingAuthorizationOverride,
     load_dpo_training_materialization_manifest,
 )
 from agentenv.hashing import hash_file
@@ -89,6 +92,7 @@ def test_dpo_materialization_export_persists_one_accounted_result_per_pair(
     )
     assert manifest.artifact_type == "dpo_training_materialization"
     assert manifest.training_authorization == "not_authorized"
+    assert manifest.training_authorization_override is None
     assert manifest.record_count == source_export.manifest.record_count == 1
     assert manifest.completed_count == 1
     assert manifest.failed_count == 0
@@ -100,6 +104,65 @@ def test_dpo_materialization_export_persists_one_accounted_result_per_pair(
     assert manifest.artifacts == {"materializations": "materializations.jsonl"}
     assert len(export.records) == 1
     assert export.records[0].status == "completed"
+
+
+def test_dpo_materialization_accepts_explicit_authorization_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_export, _ = _install_source_pair_export(tmp_path, monkeypatch)
+    override = TrainingAuthorizationOverride(
+        mode="explicit_user_override",
+        authorized_by="learning-lab-owner",
+        reason="Authorize the trainer-shaped artifact for a learning exercise.",
+    )
+
+    export = export_dpo_training_materializations(
+        source_export.out_dir,
+        PROTOCOL_PATH,
+        tmp_path / "dpo-materialization",
+        max_sequence_length=10_000,
+        authorization_override=override,
+    )
+
+    assert export.manifest.training_authorization == "authorized"
+    assert export.manifest.training_authorization_override == override
+    reloaded = load_dpo_training_materialization_artifact(export.out_dir)
+    assert reloaded.manifest.training_authorization == "authorized"
+    assert reloaded.manifest.training_authorization_override == override
+
+
+def test_dpo_materialization_authorization_status_and_override_are_atomic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_export, _ = _install_source_pair_export(tmp_path, monkeypatch)
+    export = export_dpo_training_materializations(
+        source_export.out_dir,
+        PROTOCOL_PATH,
+        tmp_path / "dpo-materialization",
+        max_sequence_length=10_000,
+    )
+    payload = export.manifest.model_dump(mode="json")
+
+    payload["training_authorization"] = "authorized"
+    with pytest.raises(
+        ValidationError,
+        match="requires an explicit training_authorization_override",
+    ):
+        DPOTrainingMaterializationManifest.model_validate(payload)
+
+    payload["training_authorization"] = "not_authorized"
+    payload["training_authorization_override"] = {
+        "mode": "explicit_user_override",
+        "authorized_by": "learning-lab-owner",
+        "reason": "Learning exercise.",
+    }
+    with pytest.raises(
+        ValidationError,
+        match="cannot carry a training authorization override",
+    ):
+        DPOTrainingMaterializationManifest.model_validate(payload)
 
 
 def test_dpo_materialization_export_preserves_atomic_overlength_failure(

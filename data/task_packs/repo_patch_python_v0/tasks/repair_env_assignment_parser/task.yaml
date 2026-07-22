@@ -1,0 +1,32 @@
+id: repair_env_assignment_parser
+domain: repo_patch_python
+split: heldout_private
+instruction: "Fix parse_env_assignments for this deterministic format. Input must be a string. Ignore blank lines and lines whose first non-space character is '#'. Every other line is KEY=VALUE split at the first '='. Trim spaces and tabs around the line, key, and value. Keys must match [A-Z_][A-Z0-9_]* and must be unique. Unquoted values are literal and may contain '=' or '#', but may not contain a double quote. Double-quoted values must occupy the whole trimmed value and support only escaped backslash, escaped double quote, newline escape, and tab escape. Reject missing '=', malformed keys, duplicates, stray quotes, dangling or unknown escapes, and malformed quoted values with ValueError. Preserve assignment order in the returned dict."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: repair_env_assignment_parser_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 20
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_ENV_ASSIGNMENT_PARSER_PRIVATE"

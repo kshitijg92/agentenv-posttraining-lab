@@ -1,0 +1,32 @@
+id: repair_latest_record_selection
+domain: repo_patch_python
+split: heldout_private
+instruction: "Fix select_latest so records may be any finite non-string iterable of mappings containing exactly id, version, and payload. id must be a non-empty string and version a non-negative integer other than bool; payload may be any object. Reject malformed records and duplicate (id, version) pairs with ValueError. Select the highest version for each id regardless of input order, and return fresh plain dicts ordered by the first occurrence of each id. Empty input returns an empty list. Do not mutate input records."
+seed_workspace: seed_workspace
+allowed_tools: ["list_files", "read_file", "write_file", "run_tests"]
+public_checks:
+  - command: "uv run --quiet --frozen pytest tests/test_public.py"
+    are_tests_idempotent: true
+hidden_validators:
+  - id: repair_latest_record_selection_pytest
+    type: pytest
+    path: hidden_tests
+scoring:
+  primary: hidden_pytest_pass
+limits:
+  timeout_seconds: 120
+  max_turns: 20
+  network: "off"
+controls:
+  scorer_control_patches:
+    oracle: controls/scorer_control_patches/oracle.patch
+    bad:
+      noop: controls/scorer_control_patches/bad_noop.patch
+      public_only: controls/scorer_control_patches/bad_public_only.patch
+  agent_control_scripts:
+    happy: controls/agent_control_scripts/happy_path.json
+    malformed: controls/agent_control_scripts/malformed_json.json
+    recoverable: controls/agent_control_scripts/bad_tool_input_then_recovery.json
+replay:
+  capture: ["patch", "commands", "stdout", "stderr", "final_diff", "attempt_result"]
+leakage_canary: "CANARY_REPAIR_LATEST_RECORD_SELECTION_PRIVATE"

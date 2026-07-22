@@ -1,0 +1,11 @@
+diff --git a/src/relative_path.py b/src/relative_path.py
+index 27b668d..5ba9cf0 100644
+--- a/src/relative_path.py
++++ b/src/relative_path.py
+@@ -3,4 +3,6 @@ import posixpath
+ 
+ def normalize_relative_path(path: str) -> str:
+     """Normalize a path for storage as a relative POSIX path."""
++    if not isinstance(path, str) or not path:
++        raise ValueError("path must be a non-empty string")
+     return posixpath.normpath(path).lstrip("/")

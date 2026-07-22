@@ -1,0 +1,55 @@
+diff --git a/src/csv_projection.py b/src/csv_projection.py
+index a5d8609..7c70f1a 100644
+--- a/src/csv_projection.py
++++ b/src/csv_projection.py
+@@ -1,7 +1,45 @@
++import csv
++import io
++
++
++def _validated_columns(columns: object) -> list[str]:
++    if isinstance(columns, (str, bytes)):
++        raise ValueError("columns must be a non-string iterable")
++    try:
++        selected = list(columns)  # type: ignore[arg-type]
++    except TypeError as exc:
++        raise ValueError("columns must be iterable") from exc
++    if not selected:
++        raise ValueError("at least one column is required")
++    if any(not isinstance(column, str) or not column for column in selected):
++        raise ValueError("column names must be non-empty strings")
++    if len(set(selected)) != len(selected):
++        raise ValueError("requested columns must be unique")
++    return selected
++
++
+ def project_csv(text: str, columns: list[str]) -> str:
+     """Return selected CSV columns."""
+-    lines = text.strip().splitlines()
+-    header = lines[0].split(",")
+-    indices = [header.index(column) for column in columns]
+-    projected = [[row.split(",")[index] for index in indices] for row in lines]
+-    return "\n".join(",".join(row) for row in projected) + "\n"
++    if not isinstance(text, str):
++        raise ValueError("CSV text must be a string")
++    if "\x00" in text:
++        raise ValueError("CSV text cannot contain NUL")
++    try:
++        rows = list(csv.reader(io.StringIO(text, newline=""), strict=True))
++    except csv.Error as exc:
++        raise ValueError("malformed CSV") from exc
++    if not rows or not rows[0] or any(name == "" for name in rows[0]):
++        raise ValueError("CSV requires a non-empty header")
++    header = rows[0]
++    if len(set(header)) != len(header):
++        raise ValueError("CSV header names must be unique")
++    if any(len(row) != len(header) for row in rows[1:]):
++        raise ValueError("CSV rows must match the header width")
++    selected = _validated_columns(columns)
++    if any(column not in header for column in selected):
++        raise ValueError("unknown requested column")
++    indices = [header.index(column) for column in selected]
++    output = io.StringIO(newline="")
++    writer = csv.writer(output, lineterminator="\n")
++    writer.writerows([[row[index] for index in indices] for row in rows])
++    return output.getvalue()

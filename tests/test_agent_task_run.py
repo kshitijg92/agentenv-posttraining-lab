@@ -284,11 +284,13 @@ def test_run_agent_task_attempt_maps_prompt_loop_hash_failure_to_orchestrator_er
         model_id="fake-scripted-v0",
         script=[
             FakeModelScriptStep(
-                output_text=_action({
-                    "action": "tool_call",
-                    "tool_name": "read_file",
-                    "arguments": {"path": "src/mathlib.py"},
-                }),
+                output_text=_action(
+                    {
+                        "action": "tool_call",
+                        "tool_name": "read_file",
+                        "arguments": {"path": "src/mathlib.py"},
+                    }
+                ),
             )
         ],
     )

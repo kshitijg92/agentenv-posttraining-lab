@@ -1,0 +1,10 @@
+diff --git a/src/decimal_format.py b/src/decimal_format.py
+--- a/src/decimal_format.py
++++ b/src/decimal_format.py
+@@ -1,3 +1,4 @@
+-def round_decimal(value: str, places: int) -> str:
+-    """Round decimal text for display."""
++def round_decimal(value, places):
++    if not isinstance(value, str) or not isinstance(places, int):
++        raise ValueError("invalid input")
+     return f"{float(value):.{places}f}"

@@ -38,6 +38,9 @@ from agentenv.tasks.validate import load_task_manifest, load_task_pack_manifest
 from agentenv.trajectories.review import TrajectoryReviewValidation
 
 
+MINIMUM_TRAINING_CONTROL_REPEATS = 2
+
+
 @dataclass(frozen=True)
 class TrainingReleaseTrustValidation:
     harness_audit: TrainingReleaseHarnessAuditManifestRef
@@ -144,6 +147,12 @@ def _require_successful_control_calibration(
     artifact_dir: Path,
     manifest: ControlCalibrationManifest,
 ) -> None:
+    if manifest.repeats < MINIMUM_TRAINING_CONTROL_REPEATS:
+        raise ValueError(
+            "Training-data release requires at least "
+            f"{MINIMUM_TRAINING_CONTROL_REPEATS} control repeats; observed "
+            f"{manifest.repeats}"
+        )
     if not manifest.overall_match:
         raise ValueError(
             "Training-data release requires control calibration overall_match=true"

@@ -359,7 +359,8 @@ Current state:
 - a real Qwen2.5-Coder-3B practice prefix materialized successfully with the
   pinned tokenizer into 843 tokens, including assistant-only end-of-turn loss;
 - target-model positive-SFT token materialization is complete; final training
-  authorization and the smoke-training decision remain separate boundaries.
+  authorization, trainer consumption, and the smoke-training decision remain
+  separate boundaries.
 
 Self-deception trap:
 
@@ -444,8 +445,10 @@ Done when:
   source-validated but materialize as one pair rather than frequency-weighted
   duplicates;
 - the materialization export writes one completed or failed row per source pair,
-  pins the target-model input protocol, and remains unauthorized for training;
-- DPO remains deferred unless at least 20 auditable pairs exist.
+  pins the target-model input protocol, defaults to unauthorized, and requires
+  a recorded explicit override for learning-lab trainer consumption;
+- DPO training remains deferred unless at least 20 auditable pairs exist; the
+  present review has now met that minimum with 29 pairs across 20 contexts.
 
 Self-deception trap:
 
@@ -530,3 +533,233 @@ If GPU training or positive data is blocked:
 - continue filtering and preference-schema work.
 
 Do not claim model improvement from this week.
+
+## Current Acquisition Checkpoint (2026-07-13)
+
+Two current-runtime acquisition suites now cover all 13 dev tasks:
+
+```text
+156 trajectories
+20 hidden PASS
+116 scored test failures plus one blocked INVALID_SHORTCUT
+19 unscored model-loop failures
+49 PASS-vs-non-PASS combinations with matching logical initial context
+41 such combinations after exact assistant-behavior distinction
+36 such combinations after exact patch distinction
+```
+
+Seven of thirteen dev tasks have at least one trusted positive anchor. The
+second acquisition added the first passes for `repair_query_encoding` and
+`repair_template_expansion`; six harder tasks still have no pass.
+
+The aggregate harness audit passes, control calibration is stable at three
+repeats, and all 14 declared public checks are idempotent across two seed-state
+runs. All 156 trajectory reviews remain `not_reviewed`, so all 156 training
+candidates remain analysis-only.
+
+Newer-model practice gates did not justify further acquisition: `gpt-oss:20b`
+used an unsupported provider-native tool-call channel, and Qwen3.5-27B ended
+three of three repeated smokes in invalid model output. Neither model was
+admitted by weakening the existing action contract.
+
+This satisfies the acquisition-groundwork objective for later review of at
+least 20 comparison candidates. It does not satisfy Checkpoint 3: no
+chosen/rejected authority, comparability rule beyond initial context, review
+decision, preference record, serialization contract, or DPO loss policy has
+been designed.
+
+The next guided design question remains:
+
+```text
+Which differences between two trajectories with the same logical initial
+context are allowed before a human preference judgment becomes too confounded
+to support one chosen/rejected label?
+```
+
+## Review And Downstream-Readiness Checkpoint (2026-07-13)
+
+The `not_reviewed` counts above describe the acquisition checkpoint before the
+AI-proxy review pass. They are superseded by this later state:
+
+```text
+trajectory reviews:
+  accepted for objective-specific consideration: 101
+  needs_followup: 55
+
+rebuilt training-candidate eligibility:
+  positive-SFT prefix review: 100
+  negative-example use: 81
+  preference pairing: 82
+
+positive-SFT-specific reviews:
+  accepted: 18
+  needs_followup: 80
+  rejected: 2
+
+positive-SFT source-level exports: 18 examples
+```
+
+The reviewer identity is explicitly recorded as an AI proxy acting on the
+user's behalf. General trajectory acceptance permits only objective-specific
+consideration. It is not an approval to imitate the entire transcript, and it
+does not establish a preference direction.
+
+The two rejected successful trajectories each contained a failed tool action
+in the contiguous history before recovery. This is expected evidence that task
+success alone does not make a transcript a clean positive target.
+
+The acquisition foundation is now sufficient for the remaining SFT and
+preference design. A separate downstream-readiness audit found that additional
+natural-model acquisition is not the next blocker. The pre-training foundations
+still missing are:
+
+```text
+an exact trainable base checkpoint and tokenizer
+a minimal training runtime
+a same-stack path for evaluating the base model and trained adapter
+an exact pre-training baseline
+an untouched evaluation slice if the experiment intends to measure anything
+  beyond in-sample plumbing, memorization, or trained-example regression
+```
+
+The current environment has a 16 GiB RTX 4080 SUPER and enough host memory and
+disk for a small smoke, but contains none of the expected PyTorch/Hugging Face/
+PEFT training packages. `agentenv training` currently constructs data
+artifacts; it does not train a model.
+
+Do not solve these gaps by selecting a checkpoint, serving architecture, or
+heldout task distribution without the corresponding guided design decision.
+In particular, do not relabel any of the 13 inspected dev tasks as heldout.
+
+Readiness audit:
+
+```text
+experiments/analysis/downstream_foundation_readiness.md
+```
+
+## Heldout-Private Foundation Checkpoint (2026-07-13)
+
+The untouched-evaluation prerequisite above is now established without running
+any natural-model policy on it.
+
+Six newly authored tasks were added directly to `heldout_private`; no inspected
+dev task was relabeled. Before freeze, only deterministic scorer and scripted-
+agent controls were run:
+
+```text
+task pack: 1 practice, 13 dev, 6 heldout-private
+oracle: 6/6 hidden PASS
+no-op: 6/6 public PASS, hidden FAIL
+public-only: 6/6 public PASS, hidden FAIL
+happy agent control: 6/6 hidden PASS
+recoverable agent control: 6/6 hidden PASS
+malformed agent control: 6/6 invalid model output
+replay groups: 6/6 PASS, 0 mismatches
+public checks: 6/6 IDEMPOTENT at repeat_count=2
+natural-model attempts before freeze: 0
+```
+
+The task bytes and split are pinned by:
+
+```text
+data/task_packs/repo_patch_python_v0/heldout_private.freeze.json
+docs/heldout_evaluation_protocol.md
+tests/test_heldout_freeze.py
+```
+
+The heldout slice may not influence training data, filtering, prompts,
+decoding, budgets, hyperparameters, scorer changes, or task selection. The
+base checkpoint and adapter should be evaluated only after all such choices
+are frozen, preferably as one paired operation through the same serving path.
+
+The remaining hard execution foundation is therefore the trainable-model
+round trip:
+
+```text
+exact base checkpoint + tokenizer
+tokenizer-level serialization and loss mask
+minimal adapter training runtime
+same-path base and adapter serving
+paired heldout evaluation after all choices are frozen
+```
+
+Checkpoint/model selection, loss-bearing spans, and adapter/serving semantics
+remain guided post-training design questions. Task-pack authoring and control
+mechanics do not require user design time.
+
+## Materialization Merge And Catch-Up Checkpoint (2026-07-17)
+
+The heldout-foundation statement above is superseded for tokenizer plumbing:
+Qwen2.5-Coder-3B now has a hash-pinned model-input protocol, immutable tokenizer
+revision, canonical/ownership templates, assistant-only label materialization,
+and a native raw-prompt Ollama inference path. It still has no trainer or final
+training-authorized release artifact.
+
+The acquisition and materialization branches are now reconciled. Existing raw
+trajectories and trajectory reviews remain valid development evidence, but the
+candidate and positive-SFT derivatives must be regenerated under the current
+schemas. Their source eval runtime predates the merged tree, so regeneration
+alone cannot authorize training.
+
+Catch-up order:
+
+```text
+1. use existing evidence to finish release/trainer and preference design
+2. rebuild candidates/reviews/source exports for development as needed
+3. materialize accepted SFT sources under the pinned target protocol
+4. stabilize all source and dependency changes that enter runtime provenance
+5. reacquire the selected model/task evidence under that final runtime
+6. run final harness audit and repeated control calibration
+7. rebuild, review, materialize, and issue the first authorized release
+8. train and evaluate base versus adapter through the frozen heldout protocol
+```
+
+Do not spend another full natural-model acquisition before step 4: the current
+strict runtime-equality gate would invalidate it after the next package or lock
+change.
+
+## Integrated SFT And DPO Materialization Checkpoint (2026-07-21)
+
+The latest `week9` implementation has been merged into the acquisition
+foundation. The current development evidence has been regenerated through both
+training-data paths:
+
+```text
+source trajectories: 156
+
+positive-SFT review opportunities: 100
+  accepted: 18
+  needs_followup: 80
+  rejected: 2
+positive-SFT materializations: 18 completed, 0 failed
+
+preference comparison candidates: 117
+comparison shared contexts: 63
+  preferred: 29
+  tie: 16
+  ambiguous: 72
+preferred-pair shared contexts: 20
+DPO materializations: 29 completed, 0 failed
+```
+
+The reviewer provenance identifies Codex as an AI proxy acting under the
+user's explicit authorization. Preference labels were based on local action
+quality and available rollout evidence, never copied from terminal task
+outcomes. Ambiguous comparisons remain abstentions: only explicitly preferred
+adjudications can produce chosen/rejected pair records.
+
+All 18 SFT records and 29 DPO pairs were deterministically reloaded through
+their full pinned source chains. Token/label ownership, shared DPO prompt
+prefixes, response-only labels, sequence bounds, and chosen/rejected inequality
+were rechecked. On 2026-07-21 the user explicitly accepted the known source-
+runtime mismatch for this non-production learning exercise. The 16 trainer-
+shaped materialization manifests now record
+`training_authorization=authorized` together with an
+`explicit_user_override`, authorizer `kshitij`, and the exception rationale.
+Upstream candidate, review, source, comparison, and pair artifacts remain
+`not_authorized` construction evidence.
+
+The next boundary is no longer data-contract or token-materialization plumbing.
+It is target and reference checkpoint semantics, a minimal trainer, and paired
+base-versus-adapter evaluation through the frozen heldout protocol. A normal
+trust-gated release remains necessary before any production-style claim.

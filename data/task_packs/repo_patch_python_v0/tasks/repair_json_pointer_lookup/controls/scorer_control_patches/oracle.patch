@@ -1,0 +1,62 @@
+diff --git a/src/json_pointer.py b/src/json_pointer.py
+--- a/src/json_pointer.py
++++ b/src/json_pointer.py
+@@ -1,8 +1,55 @@
++from collections.abc import Mapping
++import re
++
++
++_INDEX_RE = re.compile(r"0|[1-9][0-9]*", re.ASCII)
++
++
++def _decode_segment(segment: str) -> str:
++    result: list[str] = []
++    index = 0
++    while index < len(segment):
++        character = segment[index]
++        if character != "~":
++            result.append(character)
++            index += 1
++            continue
++        if index + 1 >= len(segment):
++            raise ValueError("dangling pointer escape")
++        escaped = segment[index + 1]
++        if escaped == "0":
++            result.append("~")
++        elif escaped == "1":
++            result.append("/")
++        else:
++            raise ValueError("invalid pointer escape")
++        index += 2
++    return "".join(result)
++
++
+ def resolve_pointer(document: object, pointer: str) -> object:
+-    """Resolve a slash-separated path in a JSON-like value."""
++    """Resolve a JSON pointer without mutating the document."""
++    if not isinstance(pointer, str):
++        raise ValueError("pointer must be a string")
+     if pointer == "":
+         return document
++    if not pointer.startswith("/"):
++        raise ValueError("non-empty pointer must start with slash")
++
+     current = document
+-    for part in pointer.strip("/").split("/"):
+-        current = current[part]  # type: ignore[index]
++    for encoded_segment in pointer[1:].split("/"):
++        segment = _decode_segment(encoded_segment)
++        if isinstance(current, Mapping):
++            if segment not in current:
++                raise ValueError("pointer key does not exist")
++            current = current[segment]
++        elif isinstance(current, list):
++            if _INDEX_RE.fullmatch(segment) is None:
++                raise ValueError("invalid list index")
++            index = int(segment)
++            if index >= len(current):
++                raise ValueError("list index out of range")
++            current = current[index]
++        else:
++            raise ValueError("pointer traverses a scalar")
+     return current
