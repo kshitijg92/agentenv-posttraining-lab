@@ -2506,3 +2506,681 @@ Simply replacing `not_authorized` with `authorized` would erase why the normal
 gate failed and make later readers infer stronger evidence than exists. An
 atomic override identity and reason preserve the exception's scope and prevent
 authorization from becoming provenance laundering.
+
+### LoRA Compresses The Learned Update, Not The Base Model
+
+Parameter-efficient fine-tuning (PEFT) is a family of adaptation methods;
+LoRA is one PEFT method. For a selected pretrained weight matrix `W`, ordinary
+full fine-tuning may learn an unconstrained update having the same shape as
+`W`. LoRA freezes `W` and learns the update through two smaller matrices:
+
+```text
+W:  d_out x d_in
+A:  r x d_in
+B:  d_out x r
+
+delta_W = (alpha / r) B A
+adapted_W = W + delta_W
+```
+
+The rank of a matrix is the number of independent directions in its linear
+transformation, equivalently the dimension of its output space. Because the
+LoRA update passes through an `r`-dimensional bottleneck:
+
+```text
+rank(delta_W) <= r
+```
+
+For `r = 1`, the update has the form `b a_transpose`. It first measures how
+much an input points along direction `a`, producing one scalar, and then
+changes the output along direction `b`. Rank `r` permits up to `r` such
+intermediate directions. "Low-rank" means that `r` is much smaller than
+`min(d_in, d_out)`; it is not another name for merely having fewer scalar
+parameters.
+
+Crucially, LoRA makes no claim that the pretrained matrix is low-rank. The
+three ranks are different facts:
+
+```text
+rank(W)         may be 4096
+rank(delta_W)   may be at most 8
+rank(adapted_W) may still be 4096
+```
+
+The hypothesis is that an already capable model can be adapted by changing a
+small number of directions, not that the knowledge in the original model fits
+in that small subspace. Conflating these claims makes LoRA sound as though it
+replaces a rich base transformation with a tiny one; it actually overlays a
+constrained correction on that transformation.
+
+The parameter saving follows from the factorization. For one `4096 x 4096`
+weight matrix:
+
+```text
+unconstrained full update: 4096 * 4096             = 16,777,216 parameters
+rank-8 LoRA update:        8 * 4096 + 4096 * 8     =     65,536 parameters
+```
+
+Only `A` and `B` receive optimizer updates, but the frozen base weight still
+participates in the forward computation and in propagating gradients to the
+adapters. "Frozen" therefore means "not updated," not "absent from training."
+The smaller trainable state reduces gradient storage, optimizer state,
+distributed gradient communication, and per-adaptation checkpoint storage.
+It does not eliminate most base-model computation or all activation memory.
+
+Loss ownership and LoRA answer orthogonal questions:
+
+```text
+loss mask -> which token errors are allowed to create a learning signal?
+LoRA      -> which parameters are allowed to respond to that signal?
+objective -> what learning signal is computed, such as SFT or DPO?
+```
+
+The same LoRA parameterization can therefore be used with positive SFT, DPO,
+or another objective. It does not itself determine which behavior is good or
+which assistant tokens should receive loss.
+
+LoRA also does not make the base model disappear at inference. If a toy base
+model has 100 parameters and its adapter has 10, unmerged serving needs the
+100 base parameters plus the 10 adapter parameters and computes both branches:
+
+```text
+y = W x + (alpha / r) B(Ax)
+```
+
+Alternatively, the adapter can be merged before serving:
+
+```text
+adapted_W = W + (alpha / r) B A
+y = adapted_W x
+```
+
+The merged matrix has the original dense shape, so this can remove the adapter
+branch's small latency overhead, but serving still requires a full base-sized
+model. The adapter is small; the adapted policy is not a ten-parameter model.
+QLoRA addresses a different bottleneck by storing the frozen base weights in a
+quantized representation while training higher-precision LoRA adapters.
+
+The durable distinction is:
+
+```text
+LoRA reduces adaptation cost and adaptation artifact size.
+It does not by itself reduce the underlying model's inference size.
+```
+
+### LoRA Target Coverage Is An Experimental Hypothesis, Not A Compute Default
+
+Choosing where to attach LoRA is not one decision called "adapter size." At
+least four distinct choices are involved:
+
+```text
+target coverage -> which weight matrices may change
+depth coverage  -> which repeated transformer blocks may change
+rank            -> dimensionality available to each low-rank update
+scale           -> strength with which each learned product enters the model
+```
+
+Available memory and compute constrain these choices, but they do not determine
+which choice is correct. If compute were unlimited, full fine-tuning would
+become another candidate; it would not prove that updating every parameter is
+better for a small or narrow dataset. Broader trainable capacity can fit more
+behavior, but it can also memorize the training set, disturb useful pretrained
+behavior, and make a weak evaluation look convincing.
+
+The common target scopes in a dense decoder illustrate the different
+hypotheses:
+
+```text
+query + value projections   -> narrow historical LoRA baseline
+all attention projections   -> adaptation throughout attention
+attention + MLP projections -> adaptation throughout transformer-block linears
+embeddings or output head   -> separate vocabulary/output-distribution decision
+```
+
+Descriptions such as "attention changes routing" and "MLPs change features"
+are useful intuitions, not causal guarantees about where tool use, reasoning,
+or instruction following lives. Those behaviors emerge from interacting
+components across depth. Arbitrarily adapting only late layers, or only query
+and value projections, therefore introduces an inductive assumption that must
+be tested rather than presented as architectural fact.
+
+The original LoRA experiments made narrow attention targeting a familiar
+default. The [QLoRA experiments](https://arxiv.org/abs/2305.14314) later found
+that covering all linear transformer-block layers was important for matching
+full fine-tuning in their setting. This supports all-block-linears as a strong
+baseline, not as a universal theorem. Applying that target pattern to an
+unquantized base is still ordinary LoRA; QLoRA specifically adds quantized
+storage and computation for the frozen base weights.
+
+Controlled comparisons must also say what is being held constant. A same-rank
+comparison answers which complete practical configuration works better, but
+the broader target also receives more trainable parameters. An approximately
+parameter-matched comparison asks a different question about where a similar
+capacity budget should be distributed. For the pinned Qwen model, for example:
+
+```text
+q_proj + v_proj at rank 64:       14,745,600 adapter parameters
+all attention at rank 32:         14,745,600 adapter parameters
+all block linears at rank 8:      14,966,784 adapter parameters
+```
+
+Even this comparison is not perfectly assumption-free: target coverage and
+rank distribution necessarily change together. The correct conclusion is not
+that one experiment isolates a timeless property, but that its controlled
+variables and remaining confounds are visible.
+
+Training loss is especially weak evidence for selecting among these scopes.
+A higher-capacity adapter may simply memorize the supervised examples more
+quickly. Target selection requires an unchanged base-model comparison and
+heldout behavioral evaluation; multiple seeds become important once the goal
+advances beyond verifying that the training path works.
+
+### LoRA Optimizes Two Factors, While The Model Experiences Their Product
+
+LoRA does not directly optimize the effective weight update. It parameterizes
+that update through two trainable matrices:
+
+```text
+scale = alpha / r
+delta_W = scale * B A
+adapted_W = W + delta_W
+```
+
+The map from `(A, B)` to `B A` is bilinear. It is linear in either factor when
+the other is fixed:
+
+```text
+B (2A) = 2 B A
+(2B) A = 2 B A
+```
+
+It is not jointly linear in both factors:
+
+```text
+(2B) (2A) = 4 B A
+
+(B1 + B2) (A1 + A2)
+  = B1 A1 + B1 A2 + B2 A1 + B2 A2
+```
+
+The cross terms matter for optimization. A learning rate controls the
+optimizer's separate steps in `A` and `B`; it is not a direct learning rate on
+`delta_W`. The gradient of each factor also depends on the current value of the
+other factor. Consequently, changing a forward scale and changing the optimizer
+learning rate can have related effects without producing identical training
+dynamics.
+
+The standard initialization makes this concrete:
+
+```text
+A = small random values
+B = zero
+delta_W = zero
+```
+
+Initially, `B` can receive a gradient because `A` is nonzero, while `A` receives
+no gradient through the zero `B`. After `B` moves away from zero, both factors
+can learn. Under a plain first SGD step, with `G` denoting the loss gradient at
+the effective weight:
+
+```text
+gradient_B = scale * G * A_transpose
+B_after_step = -learning_rate * scale * G * A_transpose
+
+delta_W_after_step
+  = scale * B_after_step * A
+  = -learning_rate * scale^2 * G * A_transpose * A
+```
+
+This example is deliberately simplified, but it shows why doubling `scale` is
+not generally equivalent to doubling the learning rate. Adam, clipping, weight
+decay, schedules, and later updates make the relationship still less exact.
+The [original LoRA paper](https://arxiv.org/html/2106.09685#S4) describes tuning
+the scaling constant as *roughly* equivalent to tuning learning rate when
+initialization is adjusted appropriately; the qualification is important.
+
+The scaling factor is therefore not required for LoRA's expressive power. A
+fixed nonzero scale can be absorbed into one factor. It is an optimization and
+normalization convention. Keeping it separate from optimizer learning rate is
+useful because the controls act at different boundaries:
+
+```text
+learning rate -> optimizer motion in the stored A and B parameterization
+scale         -> contribution of their product to the model's forward function
+```
+
+The learning rate exists only during training. The scale remains part of the
+trained adapter's meaning at inference and determines the contribution merged
+into the base weight. It also gives rank changes an explicit normalization
+policy, permits a common optimizer schedule across adapters, and makes adapter
+strength visible rather than hiding it in the norms produced by a particular
+initialization and training run.
+
+These benefits do not make scale and learning rate fully independent
+hyperparameters. They are strongly coupled, and under particular
+initialization and optimization assumptions one can partially compensate for
+the other. The value of the separate scale is that it defines the function
+represented by fixed adapter tensors, while the learning rate defines how the
+optimizer searches for those tensors. Treating the two as identical confuses
+function-space magnitude with parameter-space motion.
+
+Rank and scale must not be changed accidentally in the same experiment. If
+`alpha` remains fixed while `r` increases under conventional LoRA, then
+`alpha / r` decreases; an observed difference can no longer be attributed to
+rank alone. The lab therefore holds the explicit forward scale constant across
+rank comparisons:
+
+```text
+alpha / r = 1
+alpha = r
+```
+
+This value is a transparent experimental invariant, not a claim that scale one
+is universally optimal. Adapter rank controls the dimensionality available to
+the update, target coverage controls where updates can enter the network,
+forward scale controls how strongly their product participates, and learning
+rate controls optimizer motion in factor space. Treating those four choices as
+one vague "LoRA size" knob makes ablation results uninterpretable.
+
+### A Loss Mask Selects Prediction Errors, Not Model Context
+
+Three different masks or alignments are easy to conflate in causal-language-
+model SFT:
+
+```text
+causal mask     -> a position may attend only to allowed earlier positions
+attention mask  -> real tokens are visible; padding tokens are not
+loss labels     -> selected next-token predictions contribute cross-entropy
+```
+
+For the initial positive-SFT policy, the important combinations are:
+
+| Token role | Attention mask | Training label | Meaning |
+| --- | ---: | ---: | --- |
+| System, user, or tool observation | `1` | `-100` | Visible context, no direct loss term |
+| Approved assistant-generated token | `1` | That token's id | Visible context and supervised target |
+| Batch padding | `0` | `-100` | Neither visible context nor a target |
+
+Changing a context token's attention mask to zero would remove information from
+the model. Assigning it label `-100` does not remove it: the model may still use
+that token to predict every later supervised assistant token. This is why
+"masked token" should be read as "loss-masked token," not "token hidden from
+the model."
+
+#### The causal shift
+
+A causal model emits one vocabulary distribution at every input position. The
+distribution emitted after position `t` predicts the token at position `t+1`.
+Trainer APIs conventionally accept `labels` aligned with `input_ids`, then
+perform the one-position shift inside the causal-LM loss.
+
+Consider this toy serialized transcript:
+
+| Position | Token | Token id | Stored label |
+| ---: | --- | ---: | ---: |
+| 0 | system token | 10 | `-100` |
+| 1 | user token | 20 | `-100` |
+| 2 | question terminator | 21 | `-100` |
+| 3 | assistant token `4` | 40 | `40` |
+| 4 | assistant token `!` | 41 | `41` |
+| 5 | assistant end-of-turn | 99 | `99` |
+
+The stored arrays are:
+
+```text
+input_ids = [10,   20,   21, 40, 41, 99]
+labels    = [-100, -100, -100, 40, 41, 99]
+```
+
+The causal loss pads the labels on the right and shifts them left relative to
+the logits. The comparisons actually made are:
+
+| Logit position | Context ends with | Shifted target | Direct loss? |
+| ---: | --- | ---: | --- |
+| 0 | system token | `-100` | no |
+| 1 | user token | `-100` | no |
+| 2 | question terminator | `40` | yes: predict first assistant token |
+| 3 | assistant `4` | `41` | yes: predict next assistant token |
+| 4 | assistant `!` | `99` | yes: predict assistant end-of-turn |
+| 5 | end-of-turn | padded `-100` | no |
+
+Equivalently:
+
+```text
+shifted_labels = [-100, -100, 40, 41, 99, -100]
+```
+
+This is why checking the unshifted mask alone is insufficient. A one-position
+mistake could train on the last user token, omit the first assistant token, or
+teach the model to continue after the intended end of turn.
+
+Suppose the model assigns these probabilities to the correct targets at the
+three supervised comparisons:
+
+```text
+p(40 | tokens 0..2) = 0.50
+p(41 | tokens 0..3) = 0.25
+p(99 | tokens 0..4) = 0.80
+```
+
+With the usual mean reduction over non-ignored targets:
+
+```text
+loss_40 = -log(0.50) = 0.6931
+loss_41 = -log(0.25) = 1.3863
+loss_99 = -log(0.80) = 0.2231
+
+total_loss = (0.6931 + 1.3863 + 0.2231) / 3
+           = 0.7675
+```
+
+The denominator is three supervised token targets, not six sequence tokens.
+At an ignored logit position, the direct derivative of the loss with respect
+to that position's logits is zero. PyTorch's `ignore_index=-100` implements
+this omission, and the pinned Transformers causal-LM loss performs the shift
+before applying that cross-entropy.
+
+#### Direct loss and indirect influence are different
+
+The zero direct derivative at an ignored prediction position does not imply
+that its input token has no effect on gradients. In a causal transformer, the
+representations of earlier context tokens supply keys and values used by later
+assistant positions. A supervised loss at a later position can therefore send
+a gradient backward through attention to computations involving earlier
+system, user, and tool-observation tokens.
+
+The distinction is:
+
+```text
+predicting a context token itself -> no supervised error term
+using that context to predict an assistant token -> part of the gradient path
+```
+
+If the user token in the toy example changed, the probabilities assigned to
+tokens `40`, `41`, and `99` could change, so the supervised loss could change.
+That is intended: the model must learn the assistant behavior *conditional on*
+the user request. What positive SFT avoids is teaching the model to generate
+the user request or the environment's tool observation.
+
+The same assistant token can have both roles. Its own identity may be a direct
+supervised target, and after it is present in the prefix it becomes context for
+predicting the next assistant token. Token-level causal loss therefore creates
+many next-token learning signals from one transcript without treating each
+message as an independent example.
+
+#### A frozen token embedding does not freeze its contextual representation
+
+The phrase "a context token receives gradient" can hide four different objects:
+
+```text
+token id                 -> a discrete integer in the serialized input
+embedding row            -> a persistent parameter looked up for that id
+contextual representation -> a temporary activation produced at a model layer
+adapter weights          -> persistent trainable parameters used in that computation
+```
+
+The token id is data and cannot receive an optimizer update. A hidden-state
+activation can have a nonzero derivative during backpropagation, but it is not
+a persistent parameter: it is discarded after the training step. The optimizer
+updates only trainable parameters reached by that derivative.
+
+Under LoRA, the base embedding table and base transformer weights are normally
+frozen. The initial embedding lookup for a system token therefore remains
+identical:
+
+```text
+system_token_id = 10
+embedding_before = frozen_embedding_table[10]
+embedding_after  = frozen_embedding_table[10]
+
+embedding_before == embedding_after
+```
+
+That fixed vector is subsequently processed by layers whose effective linear
+maps include trainable adapters:
+
+```text
+effective_weight = frozen_weight + adapter_update
+contextual_state = effective_weight * preceding_state
+```
+
+After the adapter changes, the same fixed input can produce a different
+activation. In a scalar toy layer:
+
+```text
+frozen embedding e = 2
+frozen base weight w = 3
+LoRA factors a = 1 and b = 0 at step 0
+
+state_before = (w + b*a) * e
+             = (3 + 0*1) * 2
+             = 6
+```
+
+Suppose assistant-token loss propagates through this system-token computation
+and the optimizer changes only `b` to `-0.25`:
+
+```text
+state_after = (w + b*a) * e
+            = (3 - 0.25*1) * 2
+            = 5.5
+```
+
+The token id is still `10`, the frozen embedding is still `2`, and the frozen
+base weight is still `3`. Only the adapter changed, yet the contextual state is
+now `5.5` instead of `6`. Later assistant positions can attend to the keys and
+values derived from that changed state, so their predicted distributions can
+also change.
+
+This is precisely how a loss-masked system instruction can shape learning. The
+model is not trained to reproduce the instruction as an output target. Instead,
+assistant-token losses teach the trainable adapters how that instruction should
+affect later assistant behavior:
+
+```text
+system-token label is ignored
+-> no direct error for predicting the system token
+-> system-token computation influences a supervised assistant prediction
+-> backward signal passes through that computation
+-> adapter parameters on the path may be updated
+-> the same instruction can induce different future behavior after training
+```
+
+The raw embedding and any computation before the first adapted operation remain
+unchanged. Contextual states downstream of adapted operations may change. It is
+therefore more precise to say that activations *carry gradients* and parameters
+*receive updates*; tokens themselves do neither.
+
+### Frozen Parameters Can Transmit Gradient Without Receiving Updates
+
+"Frozen" means that a parameter is not an optimization variable. It does not
+mean deleting its operation from the forward pass, detaching its output, or
+running the whole frozen model under `no_grad`.
+
+For a frozen linear transformation:
+
+```text
+y = W_frozen x
+```
+
+backpropagation may still need the value of `W_frozen` to carry the downstream
+gradient to an earlier trainable component:
+
+```text
+gradient_x = W_frozen_transpose * gradient_y
+```
+
+What freezing suppresses is accumulation and optimization of the parameter's
+own gradient:
+
+```text
+W_frozen.requires_grad = false
+W_frozen.grad = None
+W_frozen is absent from optimizer parameter groups
+```
+
+The mathematical derivative with respect to `W_frozen` exists, but the training
+runtime need not construct or store it. PyTorch records the parts of the graph
+needed to reach leaves with `requires_grad=true`; intermediate vector-Jacobian
+products can pass through operations involving frozen values without producing
+a `.grad` tensor for those frozen parameter leaves.
+
+This differs from wrapping the base forward pass in `torch.no_grad()` or
+calling `detach()` at a block boundary. Those operations can sever the graph
+and prevent the loss from reaching adapters earlier in the network. Parameter
+freezing is selective; no-grad execution is a graph-level operation.
+
+Also, intermediate activations normally do not retain a public `.grad` field
+unless explicitly requested. Observing `activation.grad is None` is therefore
+not proof that the gradient path was absent. Gradient flow is established by
+the dependency graph, adapter gradients, and resulting updates—not by expecting
+every intermediate tensor to retain a gradient buffer.
+
+#### Worked two-layer LoRA example
+
+Take a scalar two-layer network with one rank-one LoRA adapter at each layer
+and scale one:
+
+```text
+h = (w1 + b1*a1) * x
+y = (w2 + b2*a2) * h
+loss = 0.5 * (y - target)^2
+```
+
+Use:
+
+```text
+x = 2
+target = 20
+
+w1 = 3    frozen
+w2 = 4    frozen
+
+a1 = 1    trainable
+a2 = 1    trainable
+b1 = 0    trainable
+b2 = 0    trainable
+```
+
+The zero `b` factors make both effective LoRA updates zero at step 0. The
+adapter-enabled model is therefore initially identical to the frozen base:
+
+```text
+h = (3 + 0*1) * 2 = 6
+y = (4 + 0*1) * 6 = 24
+loss = 0.5 * (24 - 20)^2 = 8
+```
+
+Start backward propagation at the supervised output:
+
+```text
+gradient_y = y - target = 4
+```
+
+At layer 2:
+
+```text
+gradient_b2 = gradient_y * a2 * h
+            = 4 * 1 * 6
+            = 24
+
+gradient_a2 = gradient_y * b2 * h
+            = 4 * 0 * 6
+            = 0
+```
+
+The gradient that continues through the second layer to `h` uses the frozen
+base value `w2`:
+
+```text
+gradient_h = gradient_y * (w2 + b2*a2)
+           = 4 * (4 + 0)
+           = 16
+```
+
+That transmitted gradient reaches the adapter in layer 1:
+
+```text
+gradient_b1 = gradient_h * a1 * x
+            = 16 * 1 * 2
+            = 32
+
+gradient_a1 = gradient_h * b1 * x
+            = 16 * 0 * 2
+            = 0
+```
+
+The mathematical derivatives with respect to the frozen weights would be:
+
+```text
+derivative_with_respect_to_w2 = gradient_y * h = 24
+derivative_with_respect_to_w1 = gradient_h * x = 32
+```
+
+But because `w1` and `w2` are frozen leaves, the runtime does not accumulate
+those values into `w1.grad` or `w2.grad`, and the optimizer cannot update them.
+Their values still carried the error signal to both adapters.
+
+With plain SGD and learning rate `0.01`, the first update is:
+
+```text
+b1 = 0 - 0.01*32 = -0.32
+b2 = 0 - 0.01*24 = -0.24
+a1 = 1 - 0.01*0  =  1
+a2 = 1 - 0.01*0  =  1
+```
+
+The next forward pass is:
+
+```text
+h = (3 - 0.32) * 2 = 5.36
+y = (4 - 0.24) * 5.36 = 20.1536
+```
+
+The example happens to reduce the loss sharply, but loss reduction is not the
+point of the example and is not an operational smoke-success requirement. The
+important observations are:
+
+```text
+the loss reached adapters in both layers
+the frozen second layer transmitted gradient to the first adapter
+the zero-initialized b factors changed on the first step
+the a factors correctly had zero first-step gradients
+w1 remained exactly 3 and w2 remained exactly 4
+```
+
+On later steps, nonzero `b1` and `b2` allow `a1` and `a2` to receive gradients.
+Requiring every LoRA factor to have a nonzero gradient on the first backward
+pass would therefore incorrectly reject standard initialization. A stronger
+run-level check is that every intended logical adapter is connected, receives
+finite gradient evidence when mathematically expected, and changes in at least
+one factor over the training run, while every non-adapter parameter remains
+exactly unchanged.
+
+### Operational Training Success Is Not Training Efficacy
+
+These mechanics define whether a training operation really occurred:
+
+```text
+nonempty supervised-token set
+correct shifted masked loss
+finite backward pass connected to intended adapters
+adapter-only optimizer ownership
+changed adapter state
+unchanged frozen state
+correct save and reload
+```
+
+They do not establish that the model improved. A smoke run need not have a
+monotonically decreasing loss, beat the base policy, or generalize to heldout
+tasks to satisfy the operational contract. Requiring such an outcome would
+encourage hyperparameter tuning against what should be an implementation
+check. Efficacy remains a separate paired evaluation claim made only after the
+training and evaluation policy is frozen.
+
+Sources for the library semantics used above:
+
+- [PyTorch `CrossEntropyLoss` and `ignore_index`](https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html)
+- [Transformers 4.57.3 causal-LM loss shift](https://github.com/huggingface/transformers/blob/v4.57.3/src/transformers/loss/loss_utils.py)
+- [PyTorch autograd mechanics and parameter freezing](https://docs.pytorch.org/docs/stable/notes/autograd)
+- [PEFT LoRA scaling, initialization, and forward path](https://github.com/huggingface/peft/blob/v0.18.0/src/peft/tuners/lora/layer.py)
