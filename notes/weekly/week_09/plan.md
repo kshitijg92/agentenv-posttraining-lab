@@ -445,8 +445,10 @@ Done when:
   source-validated but materialize as one pair rather than frequency-weighted
   duplicates;
 - the materialization export writes one completed or failed row per source pair,
-  pins the target-model input protocol, and remains unauthorized for training;
-- DPO remains deferred unless at least 20 auditable pairs exist.
+  pins the target-model input protocol, defaults to unauthorized, and requires
+  a recorded explicit override for learning-lab trainer consumption;
+- DPO training remains deferred unless at least 20 auditable pairs exist; the
+  present review has now met that minimum with 29 pairs across 20 contexts.
 
 Self-deception trap:
 
@@ -749,12 +751,15 @@ adjudications can produce chosen/rejected pair records.
 All 18 SFT records and 29 DPO pairs were deterministically reloaded through
 their full pinned source chains. Token/label ownership, shared DPO prompt
 prefixes, response-only labels, sequence bounds, and chosen/rejected inequality
-were rechecked. The materialized artifacts remain
-`training_authorization=not_authorized`: their source eval runtime predates the
-merged source tree, and downstream regeneration cannot repair that provenance
-mismatch.
+were rechecked. On 2026-07-21 the user explicitly accepted the known source-
+runtime mismatch for this non-production learning exercise. The 16 trainer-
+shaped materialization manifests now record
+`training_authorization=authorized` together with an
+`explicit_user_override`, authorizer `kshitij`, and the exception rationale.
+Upstream candidate, review, source, comparison, and pair artifacts remain
+`not_authorized` construction evidence.
 
 The next boundary is no longer data-contract or token-materialization plumbing.
-It is the guided design and execution of a final authorized release, target and
-reference checkpoint semantics, a minimal trainer, and paired base-versus-
-adapter evaluation through the frozen heldout protocol.
+It is target and reference checkpoint semantics, a minimal trainer, and paired
+base-versus-adapter evaluation through the frozen heldout protocol. A normal
+trust-gated release remains necessary before any production-style claim.

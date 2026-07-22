@@ -2449,12 +2449,14 @@ well-defined, sequence limits are respected, and chosen/rejected branches share
 the claimed prompt. These are necessary representation invariants.
 
 They do not prove that the source evidence was acquired under the current
-trusted harness, that a record is authorized for training, or that training on
-it will improve behavior. Those are separate trust and empirical claims:
+trusted harness, that a record should be authorized for training, or that
+training on it will improve behavior. Those are separate trust, policy, and
+empirical claims:
 
 ```text
 materialization success -> the approved claim has a reproducible token form
-training authorization  -> every required source and runtime gate passes
+evidence trust          -> every required source and runtime gate passes
+training authorization  -> policy permits a trainer to consume the artifact
 training efficacy       -> a controlled post-training evaluation shows change
 ```
 
@@ -2473,9 +2475,34 @@ Provenance trust flows from sources to derivatives. It does not flow backward:
 ```text
 stale acquisition + current deterministic derivation
   -> useful development artifact
-  -> not a current-runtime training authorization
+  -> not current-runtime trusted evidence
 ```
 
-The honest remedies are to keep the artifact non-authorized or reacquire the
-source evidence after the runtime is frozen. Rehashing or re-exporting the old
-evidence is not reacquisition.
+The evidence remedies are to retain the mismatch or reacquire after the runtime
+is frozen. Rehashing or re-exporting the old evidence is not reacquisition. A
+scope-limited owner may separately accept that known risk and authorize a
+non-production exercise, but that policy exception must not relabel the source
+as trusted.
+
+### Authorization Is Permission; Trust Is Evidence
+
+It is useful to default authorization from trust gates, but the concepts are
+not identical. Trust is an evidence claim about how an artifact was produced.
+Authorization is a policy decision about whether a particular consumer may use
+it. In a production path, policy should normally require all trust invariants.
+In a learning lab, an owner may knowingly accept a documented mismatch to
+exercise the trainer.
+
+The safe override preserves both truths:
+
+```text
+source runtime mismatch: still present
+normal trust gate: still failed
+learning-lab trainer permission: explicitly granted
+production suitability: not claimed
+```
+
+Simply replacing `not_authorized` with `authorized` would erase why the normal
+gate failed and make later readers infer stronger evidence than exists. An
+atomic override identity and reason preserve the exception's scope and prevent
+authorization from becoming provenance laundering.

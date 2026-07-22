@@ -8,6 +8,7 @@ from agentenv.audits.agent_task import run_agent_task_audit_layer
 from agentenv.audits.runner import run_harness_audit
 from agentenv.audits.scorer import run_scorer_audit_layer
 from agentenv.artifacts import MANIFEST_FILENAME, ArtifactDirectoryError
+from agentenv.artifacts.manifests import TrainingAuthorizationOverride
 from agentenv.controls.controls_run import run_controls
 from agentenv.controls.public_check_idempotency_runner import (
     DEFAULT_PUBLIC_CHECK_IDEMPOTENCY_REPEATS,
@@ -112,6 +113,33 @@ training_app.add_typer(training_preferences_app, name="preferences")
 local_model_app.add_typer(ollama_app, name="ollama")
 
 console = Console()
+
+
+def _build_training_authorization_override(
+    *,
+    authorized_by: str | None,
+    reason: str | None,
+) -> TrainingAuthorizationOverride | None:
+    if authorized_by is None and reason is None:
+        return None
+    if authorized_by is None or reason is None:
+        raise typer.BadParameter(
+            "--authorization-override-by and --authorization-override-reason "
+            "must be supplied together",
+            param_hint="--authorization-override-by/--authorization-override-reason",
+        )
+    authorized_by = authorized_by.strip()
+    reason = reason.strip()
+    if not authorized_by or not reason:
+        raise typer.BadParameter(
+            "training authorization override identity and reason must be nonempty",
+            param_hint="--authorization-override-by/--authorization-override-reason",
+        )
+    return TrainingAuthorizationOverride(
+        mode="explicit_user_override",
+        authorized_by=authorized_by,
+        reason=reason,
+    )
 
 
 @tasks_app.command("validate")
@@ -1030,6 +1058,16 @@ def materialize_training_preference_pairs(
         "--local-files-only",
         help="Require the pinned tokenizer revision to be present locally.",
     ),
+    authorization_override_by: str | None = typer.Option(
+        None,
+        "--authorization-override-by",
+        help="Identity explicitly authorizing this trainer-shaped artifact.",
+    ),
+    authorization_override_reason: str | None = typer.Option(
+        None,
+        "--authorization-override-reason",
+        help="Reason the normal training-release trust gate is being overridden.",
+    ),
     out: Path = typer.Option(
         ...,
         "--out",
@@ -1041,6 +1079,10 @@ def materialize_training_preference_pairs(
         help="Delete and recreate a non-empty --out directory before exporting.",
     ),
 ) -> None:
+    authorization_override = _build_training_authorization_override(
+        authorized_by=authorization_override_by,
+        reason=authorization_override_reason,
+    )
     try:
         export = export_dpo_training_materializations(
             source,
@@ -1049,6 +1091,7 @@ def materialize_training_preference_pairs(
             max_sequence_length=max_sequence_length,
             tokenizer_cache_dir=tokenizer_cache_dir,
             local_files_only=local_files_only,
+            authorization_override=authorization_override,
             overwrite=overwrite,
         )
     except ArtifactDirectoryError as exc:
@@ -1246,6 +1289,16 @@ def materialize_training_positive_sft(
         "--local-files-only",
         help="Require the pinned tokenizer revision to be present locally.",
     ),
+    authorization_override_by: str | None = typer.Option(
+        None,
+        "--authorization-override-by",
+        help="Identity explicitly authorizing this trainer-shaped artifact.",
+    ),
+    authorization_override_reason: str | None = typer.Option(
+        None,
+        "--authorization-override-reason",
+        help="Reason the normal training-release trust gate is being overridden.",
+    ),
     out: Path = typer.Option(
         ...,
         "--out",
@@ -1257,6 +1310,10 @@ def materialize_training_positive_sft(
         help="Delete and recreate a non-empty --out directory before exporting.",
     ),
 ) -> None:
+    authorization_override = _build_training_authorization_override(
+        authorized_by=authorization_override_by,
+        reason=authorization_override_reason,
+    )
     try:
         export = export_positive_sft_training_materializations(
             source,
@@ -1265,6 +1322,7 @@ def materialize_training_positive_sft(
             max_sequence_length=max_sequence_length,
             tokenizer_cache_dir=tokenizer_cache_dir,
             local_files_only=local_files_only,
+            authorization_override=authorization_override,
             overwrite=overwrite,
         )
     except ArtifactDirectoryError as exc:

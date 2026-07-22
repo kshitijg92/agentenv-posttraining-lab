@@ -108,6 +108,33 @@ PositiveInt = Annotated[int, Field(gt=0, strict=True)]
 LayerCounts = dict[str, dict[str, NonNegativeInt]]
 ManifestModel = TypeVar("ManifestModel", bound=BaseModel)
 
+
+class TrainingAuthorizationOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["explicit_user_override"]
+    authorized_by: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+def _validate_training_authorization_override(
+    *,
+    training_authorization: Literal["not_authorized", "authorized"],
+    training_authorization_override: TrainingAuthorizationOverride | None,
+) -> None:
+    if training_authorization == "authorized":
+        if training_authorization_override is None:
+            raise ValueError(
+                "authorized training materialization requires an explicit "
+                "training_authorization_override"
+            )
+        return
+    if training_authorization_override is not None:
+        raise ValueError(
+            "not-authorized training materialization cannot carry a training "
+            "authorization override"
+        )
+
 SCORER_ATTEMPT_ARTIFACT_REFS = {
     "attempt": "attempt.json",
     "stdout": "stdout.txt",
@@ -1480,7 +1507,8 @@ class DPOTrainingMaterializationManifest(ArtifactManifest):
     )
 
     created_at: str = Field(min_length=1)
-    training_authorization: Literal["not_authorized"]
+    training_authorization: Literal["not_authorized", "authorized"]
+    training_authorization_override: TrainingAuthorizationOverride | None
     source_preference_pair_export: PreferencePairExportArtifactRef
     model_input_protocol_path: str = Field(min_length=1)
     model_input_protocol_id: str = Field(
@@ -1507,6 +1535,10 @@ class DPOTrainingMaterializationManifest(ArtifactManifest):
     def validate_dpo_training_materialization_contract(
         self,
     ) -> "DPOTrainingMaterializationManifest":
+        _validate_training_authorization_override(
+            training_authorization=self.training_authorization,
+            training_authorization_override=self.training_authorization_override,
+        )
         self.validate_artifacts_map(self.artifacts)
         _validate_artifact_ref_contract(
             self.artifacts,
@@ -1783,7 +1815,8 @@ class PositiveSFTTrainingMaterializationManifest(ArtifactManifest):
     )
 
     created_at: str = Field(min_length=1)
-    training_authorization: Literal["not_authorized"]
+    training_authorization: Literal["not_authorized", "authorized"]
+    training_authorization_override: TrainingAuthorizationOverride | None
     source_positive_sft_export: PositiveSFTExportArtifactRef
     model_input_protocol_path: str = Field(min_length=1)
     model_input_protocol_id: str = Field(
@@ -1810,6 +1843,10 @@ class PositiveSFTTrainingMaterializationManifest(ArtifactManifest):
     def validate_positive_sft_training_materialization_contract(
         self,
     ) -> "PositiveSFTTrainingMaterializationManifest":
+        _validate_training_authorization_override(
+            training_authorization=self.training_authorization,
+            training_authorization_override=self.training_authorization_override,
+        )
         self.validate_artifacts_map(self.artifacts)
         _validate_artifact_ref_contract(
             self.artifacts,

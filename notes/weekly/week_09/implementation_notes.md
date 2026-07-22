@@ -3987,3 +3987,67 @@ repository-wide Ruff: passed
 repository-wide Pyright: 0 errors, 0 warnings
 git diff --check: passed
 ```
+
+### Explicit Learning-Lab Training Authorization Override
+
+The user explicitly authorized the current trainer-shaped SFT and DPO
+materializations for the non-production learning exercise despite the known
+source-runtime mismatch. Upstream construction artifacts remain
+`not_authorized`; the exception applies only to
+`PositiveSFTTrainingMaterializationManifest` and
+`DPOTrainingMaterializationManifest`.
+
+Added a required atomic authorization pair to both materialization schemas:
+
+```text
+training_authorization: not_authorized
+training_authorization_override: null
+
+or
+
+training_authorization: authorized
+training_authorization_override:
+  mode: explicit_user_override
+  authorized_by: <nonempty identity>
+  reason: <nonempty rationale>
+```
+
+Validation rejects `authorized` without the override and rejects an override
+attached to `not_authorized`. The materialization APIs default to the first
+state. Both CLI commands accept
+`--authorization-override-by` and `--authorization-override-reason`, require
+them together, and derive the authorized state from their presence.
+
+Regenerated all eight positive-SFT and eight DPO materialization artifacts with:
+
+```text
+mode: explicit_user_override
+authorized_by: kshitij
+reason: Explicit user authorization for this non-production learning-lab
+  training exercise; the known source-runtime mismatch is accepted.
+```
+
+Observed authorization and outcome totals:
+
+```text
+positive-SFT materialization manifests: 8 authorized
+positive-SFT completed records: 18
+positive-SFT failed records: 0
+DPO materialization manifests: 8 authorized
+DPO completed records: 29
+DPO failed records: 0
+```
+
+The exception changes trainer permission only. Source eval runtime hashes,
+upstream `not_authorized` states, artifact references, token records, masks, and
+the documented provenance mismatch remain intact.
+
+Focused verification:
+
+```text
+authorization + SFT + DPO + CLI slice: 42 passed
+broader training + artifact regression: 257 passed in 246.28 seconds
+repository-wide Ruff: passed
+repository-wide Pyright: 0 errors, 0 warnings
+git diff --check: passed
+```

@@ -67,11 +67,13 @@ root:
 - the task manifest, split lock, eval config, and referenced trajectory
   artifacts match their recorded hashes.
 
-If this trust root is missing, failed, stale, or mismatched, the pipeline must
-produce no training-authorized release. Hash-pinned candidate, review, source,
-and materialization artifacts may still be constructed for development, but
-they must remain explicitly `not_authorized` and must not be consumed by a
-trainer.
+If this trust root is missing, failed, stale, or mismatched, the normal pipeline
+must produce no training-authorized release. Hash-pinned candidate, review, and
+source artifacts remain explicitly `not_authorized`. A trainer-shaped SFT or
+DPO materialization is also `not_authorized` by default, but a non-production
+exercise may authorize it through an atomic `explicit_user_override` that pins
+the authorizing identity and reason. This override changes permission; it does
+not change or erase the failed, stale, or mismatched trust evidence.
 
 Raw audit and eval artifacts may still be inspected to diagnose and repair the
 harness. That debugging activity is outside the training-data pipeline.
@@ -678,9 +680,10 @@ comparison export, reviewer-specific adjudication schema, persisted review
 queue, exhaustive reference-only pair export, atomic DPO-materialization record,
 source reconstruction, materializer, and persisted DPO materialization export
 are implemented. Sampling and weighting are not. Empty comparison, review,
-pair, and materialization artifacts remain valid. DPO remains deferred unless
-at least 20 auditable pairs exist, and combinatorial pairs from one shared
-context must not be misreported as independent data diversity.
+pair, and materialization artifacts remain valid. The current learning-lab
+review has 29 explicit preferred pairs across 20 shared contexts, meeting the
+minimum for a trainer exercise. Combinatorial pairs from one shared context
+must still not be misreported as independent data diversity.
 
 One completed DPO materialization record contains two complete target-protocol
 token sequences: the exact shared prompt followed by the chosen action, and the
@@ -806,10 +809,11 @@ historical artifact count != current training-data eligibility
 | Human-repair provenance contract | Not implemented |
 | External-data license/source contract | Out of scope |
 
-The preference-data plumbing now stops at a trainer-shaped but unauthorized DPO
-materialization artifact. Across all objectives, only the later final
-release/trainer boundary may combine completed materializations with matching
-trust evidence and authorize consumption.
+The preference-data plumbing now reaches a trainer-shaped DPO materialization
+artifact. It is unauthorized by default. The normal path authorizes consumption
+through the later final release/trainer boundary with matching trust evidence;
+the non-production learning path may instead carry a manifest-pinned explicit
+user override.
 
 ## Non-Claims
 
@@ -821,5 +825,6 @@ This contract does not claim:
 - that failed trajectories provide token-level negative targets;
 - that a candidate permitted for preference use has a valid pair;
 - that practice or dev re-evaluation measures generalization after training;
-- that current records are ready for DPO, RL, or production training;
+- that explicit learning-lab authorization makes current records suitable for
+  production training;
 - that the current task suite measures broad coding-agent capability.
