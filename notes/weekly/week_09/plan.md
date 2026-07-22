@@ -478,6 +478,26 @@ Run a smoke only if:
 If positive SFT remains empty, do not force training. Preserve the blocker note
 and continue with filtering, preference, and masking work.
 
+Checkpoint status on 2026-07-22: completed as an operational LoRA smoke. An
+explicitly authorized positive-SFT materialization supplied one 1,404-token
+example with 497 effective shifted assistant targets. The pinned
+Qwen2.5-Coder-3B-Instruct checkpoint completed three optimizer steps with
+ordinary rank-8 LoRA adapters on `q_proj`, `k_proj`, `v_proj`, and `o_proj`,
+using `alpha / rank = 1`. A separate two-step diagnostic run qualified the
+training setup and was discarded. A freshly initialized adapter and optimizer
+then performed all three real optimizer steps beginning at step 0.
+
+The run artifact proves the intended mechanics: the optimizer contained exactly
+the adapter parameters; every intended adapter received finite, nonzero gradient
+evidence and changed during the configured two-step qualification run; the
+fresh real-training adapter, frozen base, and optimizer isolation matched the
+qualified initialization; every frozen base tensor remained bitwise unchanged;
+and the saved adapter reloaded over the pinned base with exactly identical
+adapter state, base state, and probe logits. Detailed per-parameter inspection
+is confined to the discarded qualification run rather than imposed on real
+training steps. This is an execution and invariant check, not evidence that
+task quality improved.
+
 ## Verification Plan
 
 Focused checks after each implementation checkpoint:

@@ -82,6 +82,11 @@ from agentenv.training.positive_sft.materialization.schema import (
     POSITIVE_SFT_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION,
     PositiveSFTTrainingMaterializationRecordSchemaVersion,
 )
+from agentenv.training.positive_sft.lora.schema import (
+    POSITIVE_SFT_LORA_TRAINING_RESULT_SCHEMA_VERSION,
+    POSITIVE_SFT_LORA_TRAINING_STEP_SCHEMA_VERSION,
+)
+from agentenv.models.input_protocol_schema import HuggingFaceRevisionPin
 from agentenv.training.preferences.schema import (
     PREFERENCE_ADJUDICATION_RECORD_SCHEMA_VERSION,
     PREFERENCE_COMPARISON_CANDIDATE_RECORD_SCHEMA_VERSION,
@@ -134,6 +139,7 @@ def _validate_training_authorization_override(
             "not-authorized training materialization cannot carry a training "
             "authorization override"
         )
+
 
 SCORER_ATTEMPT_ARTIFACT_REFS = {
     "attempt": "attempt.json",
@@ -210,6 +216,11 @@ POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
 POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS = {
     "materializations": "materializations.jsonl",
 }
+POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_REFS = {
+    "training_result": "training_result.json",
+    "training_steps": "training_steps.jsonl",
+    "adapter": "adapter",
+}
 PREFERENCE_COMPARISON_EXPORT_ARTIFACT_REFS = {
     "comparison_candidates": "comparison_candidates.jsonl",
 }
@@ -263,6 +274,9 @@ POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_
 POSITIVE_SFT_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS = frozenset(
     POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS
 )
+POSITIVE_SFT_LORA_TRAINING_RUN_BASE_REQUIRED_ARTIFACTS = frozenset(
+    {"training_result", "training_steps"}
+)
 PREFERENCE_COMPARISON_EXPORT_REQUIRED_ARTIFACTS = frozenset(
     PREFERENCE_COMPARISON_EXPORT_ARTIFACT_REFS
 )
@@ -302,6 +316,9 @@ PositiveSFTReviewArtifactSchemaVersion = Literal["positive_sft_review_artifact_v
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 PositiveSFTTrainingMaterializationArtifactSchemaVersion = Literal[
     "positive_sft_training_materialization_artifact_v0"
+]
+PositiveSFTLoRATrainingRunArtifactSchemaVersion = Literal[
+    "positive_sft_lora_training_run_artifact_v0"
 ]
 PreferenceComparisonExportArtifactSchemaVersion = Literal[
     "preference_comparison_export_artifact_v0"
@@ -354,6 +371,7 @@ POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVers
     "positive_sft_export_artifact_v0"
 )
 POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION: PositiveSFTTrainingMaterializationArtifactSchemaVersion = "positive_sft_training_materialization_artifact_v0"
+POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_SCHEMA_VERSION: PositiveSFTLoRATrainingRunArtifactSchemaVersion = "positive_sft_lora_training_run_artifact_v0"
 PREFERENCE_COMPARISON_EXPORT_ARTIFACT_SCHEMA_VERSION: PreferenceComparisonExportArtifactSchemaVersion = "preference_comparison_export_artifact_v0"
 PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_SCHEMA_VERSION: PreferenceAdjudicationReviewArtifactSchemaVersion = "preference_adjudication_review_artifact_v0"
 PREFERENCE_PAIR_EXPORT_ARTIFACT_SCHEMA_VERSION: PreferencePairExportArtifactSchemaVersion = "preference_pair_export_artifact_v0"
@@ -1883,6 +1901,111 @@ class PositiveSFTTrainingMaterializationManifest(ArtifactManifest):
         return self
 
 
+class PositiveSFTTrainingMaterializationArtifactRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    materializations_jsonl_hash: ContentHash
+
+
+class PositiveSFTLoRATrainingConfigRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    content_hash: ContentHash
+    config_id: str = Field(min_length=1, pattern=r"^[a-z0-9_]+$")
+
+
+class PositiveSFTLoRATrainingRunManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.POSITIVE_SFT_LORA_TRAINING_RUN.value
+    expected_artifact_schema_version = (
+        POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    training_run_id: str = Field(
+        min_length=1,
+        pattern=r"^positive_sft_lora_run_[0-9a-f]{32}$",
+    )
+    purpose: Literal["operational_smoke"]
+    status: Literal["completed", "failed"]
+    source_positive_sft_training_materialization: (
+        PositiveSFTTrainingMaterializationArtifactRef
+    )
+    training_config: PositiveSFTLoRATrainingConfigRef
+    model_input_protocol_id: str = Field(
+        min_length=1,
+        pattern=r"^[a-z0-9_]+$",
+    )
+    model_input_protocol_hash: ContentHash
+    base_model: HuggingFaceRevisionPin
+    trainer_code_hash: ContentHash
+    training_result_schema_version: Literal["positive_sft_lora_training_result_v0"]
+    training_step_schema_version: Literal["positive_sft_lora_training_step_v0"]
+    selected_example_count: NonNegativeInt
+    requested_step_count: PositiveInt
+    completed_step_count: NonNegativeInt
+    training_result_hash: ContentHash
+    training_steps_hash: ContentHash
+    adapter_directory_hash: ContentHash | None
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_lora_training_run_contract(
+        self,
+    ) -> "PositiveSFTLoRATrainingRunManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_REFS,
+            owner="positive-SFT LoRA training-run manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=(POSITIVE_SFT_LORA_TRAINING_RUN_BASE_REQUIRED_ARTIFACTS),
+            owner="positive-SFT LoRA training-run manifests",
+        )
+        if (
+            self.training_result_schema_version
+            != POSITIVE_SFT_LORA_TRAINING_RESULT_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "training_result_schema_version must match the current result schema"
+            )
+        if (
+            self.training_step_schema_version
+            != POSITIVE_SFT_LORA_TRAINING_STEP_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "training_step_schema_version must match the current step schema"
+            )
+        has_adapter_ref = "adapter" in self.artifacts
+        if self.status == "completed":
+            if not has_adapter_ref or self.adapter_directory_hash is None:
+                raise ValueError(
+                    "completed LoRA training runs require a hash-pinned adapter"
+                )
+            if self.completed_step_count != self.requested_step_count:
+                raise ValueError(
+                    "completed LoRA training runs require every requested step"
+                )
+            if self.selected_example_count == 0:
+                raise ValueError(
+                    "completed LoRA training runs require selected examples"
+                )
+        else:
+            if has_adapter_ref or self.adapter_directory_hash is not None:
+                raise ValueError(
+                    "failed LoRA training runs cannot publish a trainable adapter"
+                )
+            if self.completed_step_count > self.requested_step_count:
+                raise ValueError(
+                    "completed_step_count cannot exceed requested_step_count"
+                )
+        return self
+
+
 class ScorerAuditManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.SCORER_AUDIT.value
     expected_artifact_schema_version = SCORER_AUDIT_ARTIFACT_SCHEMA_VERSION
@@ -2234,6 +2357,12 @@ def load_positive_sft_training_materialization_manifest(
     path: Path,
 ) -> PositiveSFTTrainingMaterializationManifest:
     return _validate_manifest(PositiveSFTTrainingMaterializationManifest, path)
+
+
+def load_positive_sft_lora_training_run_manifest(
+    path: Path,
+) -> PositiveSFTLoRATrainingRunManifest:
+    return _validate_manifest(PositiveSFTLoRATrainingRunManifest, path)
 
 
 def load_scorer_audit_manifest(path: Path) -> ScorerAuditManifest:

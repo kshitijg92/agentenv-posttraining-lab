@@ -20,8 +20,8 @@ without claiming that the normal trust gate passed.
   source trajectory.
 - `positive_sft/` selects an exact original or accepted repaired source, runs the
   objective-specific prefix review, exports approved positive-SFT prefixes, and
-  owns their target-model materialization contract. It owns positive-SFT
-  semantics rather than generic “SFT” semantics.
+  owns their target-model materialization and LoRA training-run contracts. It
+  owns positive-SFT semantics rather than generic “SFT” semantics.
 - `preferences/` mines original rollout evidence for distinct assistant actions
   under an exact shared decision state, persists unordered comparison exports,
   and owns the separate adjudication-review artifact that may label a
@@ -72,6 +72,8 @@ flowchart TD
     HA[Harness audit] --> DR
     CC[Control calibration] --> DR
     DR -->|all trust checks pass| AU[Training-authorized manifest]
+    TS -->|explicitly authorized materialization| LR[Positive-SFT LoRA run]
+    LR -->|all mechanical invariants pass| LA[Hash-pinned adapter]
 ```
 
 Clean candidates bypass repair. Candidates with a selected repair must pin both
@@ -136,6 +138,11 @@ stand in for the other.
     no other decision. It stores only hash-pinned source-record references;
     shared context and alternative content stay in upstream artifacts. Sampling
     and per-context weighting are later policies, not hidden export filters.
+15. The positive-SFT LoRA trainer consumes only an authorized target-model
+    materialization. It uses the stored labels directly, applies shifted causal
+    loss over non-`-100` targets, and refuses to publish `adapter/` unless
+    optimizer ownership, gradient connectivity, frozen-state equality, adapter
+    mutation, and save/reload equivalence all pass.
 
 ## What an exported positive-SFT record means
 
@@ -223,6 +230,102 @@ Ollama's native generate endpoint with raw templating mode mandatory. The
 OpenAI-compatible client remains a separate provider-owned serialization path;
 the 7B and 14B Qwen2.5 configs remain on that path until they have their own
 pinned input-protocol records.
+
+## Positive-SFT LoRA operational smoke
+
+The first trainer is deliberately an operational smoke rather than an efficacy
+experiment. Its input is an authorized
+`PositiveSFTTrainingMaterializationManifest`, not a loose JSONL file. The run
+pins the exact materialization manifest and token file, training config, target
+checkpoint, source input protocol, package runtime, Git state, trainer code,
+hardware, selected records, and optimization steps.
+
+The training config is an input, not a generated run artifact. The run manifest
+stores its path, content hash, and config id. It does not copy the YAML into the
+output directory; this follows the same hash-pinned-reference convention as
+task and model-input-protocol configuration.
+
+The reusable config is
+`configs/train/positive_sft_lora_smoke.yaml`. It uses ordinary rank-8 LoRA on
+all four attention projections with `scale = alpha / rank = 1`. This target set
+is a declared plumbing choice for the smoke; it is not evidence that
+attention-only adaptation is better than narrower or attention-plus-MLP
+alternatives.
+
+Each step uses batch size one and the materialized trajectory as one causal
+sequence. The trainer shifts labels by one position and computes mean
+cross-entropy only where the shifted label is not `-100`. System, user, and tool
+tokens remain visible context. Their input activations may carry gradients from
+later supervised assistant predictions, but they do not create direct target
+losses.
+
+Before real training, the runner performs a separate
+`qualification_step_count`-step diagnostic run. During that bounded run, it
+inspects every LoRA parameter for observed, finite, nonzero gradients and
+compares its state with initialization. The smoke uses two qualification steps
+because ordinary LoRA initializes the B factor to zero: the first step can
+update B before the A factor receives a useful gradient on a later step.
+
+The qualification model and optimizer are then discarded. The runner reloads
+the pinned base, resets the seed, constructs a fresh adapter and optimizer, and
+requires their initial adapter hash, frozen-base hash, and optimizer-isolation
+record to match the qualified setup exactly. Real training then starts at step
+0 and runs all `max_steps` without detailed per-parameter gradient inspection.
+`qualification_step_count` and `max_steps` describe separate runs, so neither
+limits the other. A failed qualification prevents real training from starting.
+
+Ordinary training still retains finite-loss checking, aggregate gradient-norm
+checking, and clipping. Exact frozen-state hashing and adapter save/reload
+verification occur once at run boundaries rather than inside the step loop.
+
+A completed run requires all of these mechanical claims:
+
+```text
+optimizer parameters == trainable parameters == LoRA A/B parameters
+every intended logical adapter has finite nonzero gradient evidence during qualification
+at least one factor in every intended logical adapter changes during qualification
+real-training adapter initialization == qualification adapter initialization
+real-training frozen-base initialization == qualification frozen-base initialization
+real-training optimizer isolation == qualification optimizer isolation
+aggregate adapter state at step 0 != aggregate adapter state after training
+aggregate frozen state at step 0 == aggregate frozen state after training
+saved adapter state == reloaded adapter state
+reloaded frozen base state == trained frozen base state
+fixed-input trained logits == fixed-input reloaded logits
+```
+
+The real-training step log starts at step 0 and contains no discarded
+qualification steps. The result separately nests the qualification step
+records, per-factor evidence, and exact initial/final tensor-state hashes. It
+also records the initial-state equality checks, adapter-directory hash, and
+reload probe. Qualification fields make no claim that every real-training
+gradient was individually inspected. Frozen parameters are not expected to
+expose `.grad`; the relevant claim is that frozen operations remain in the
+graph, intended adapters receive signal, and frozen parameter bytes never
+change.
+
+The canonical `adapter/` package contains the safetensors weights and PEFT
+configuration required for reload. PEFT's generic generated `README.md` is
+removed before hashing because it is neither loading state nor authoritative
+experiment documentation. The saved `adapter_config.json` must identify the
+canonical Hugging Face repository and exact pinned revision; local cache paths
+and an unpinned revision are rejected. The training manifest and result remain
+the authoritative experiment record.
+
+If any invariant or runtime stage fails, the run records a failed result and
+does not publish the canonical `adapter/` artifact reference. A passing smoke
+means only that the intended training operation occurred and round-tripped. It
+does not claim lower loss on future batches, improved task completion, or
+generalization.
+
+The CLI entrypoint is:
+
+```text
+agentenv training positive-sft train-lora \
+  --source <authorized-positive-sft-materialization> \
+  --config configs/train/positive_sft_lora_smoke.yaml \
+  --out <training-run-artifact>
+```
 
 ## Preference discovery boundary
 

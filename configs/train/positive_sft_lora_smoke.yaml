@@ -1,0 +1,46 @@
+schema_version: positive_sft_lora_training_config_v0
+config_id: positive_sft_lora_smoke
+purpose: operational_smoke
+model_input_protocol_id: qwen2_5_coder_3b_agentenv_json
+base_model:
+  repository_id: Qwen/Qwen2.5-Coder-3B-Instruct
+  revision: 89fe5444e8baf5736e70f528f1edcc79e6616ef6
+lora:
+  rank: 8
+  scale: 1.0
+  dropout: 0.0
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+  bias: none
+  use_rslora: false
+  use_dora: false
+  init_lora_weights: true
+optimizer:
+  optimizer: adamw
+  learning_rate: 0.0002
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1.0e-8
+  weight_decay: 0.0
+  max_gradient_norm: 1.0
+  schedule: constant
+data:
+  selection_policy: completed_manifest_order_prefix
+  max_examples: 1
+  shuffle: false
+  micro_batch_size: 1
+runtime:
+  device: cuda
+  weight_dtype: bfloat16
+  attention_implementation: sdpa
+  gradient_checkpointing: true
+  deterministic_algorithms: true
+  cublas_workspace_config: ":4096:8"
+seed: 42
+max_steps: 3
+qualification_step_count: 2
+gradient_accumulation_steps: 1
+reload_probe_token_count: 64

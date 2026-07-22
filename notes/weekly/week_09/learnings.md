@@ -3152,10 +3152,40 @@ w1 remained exactly 3 and w2 remained exactly 4
 On later steps, nonzero `b1` and `b2` allow `a1` and `a2` to receive gradients.
 Requiring every LoRA factor to have a nonzero gradient on the first backward
 pass would therefore incorrectly reject standard initialization. A stronger
-run-level check is that every intended logical adapter is connected, receives
-finite gradient evidence when mathematically expected, and changes in at least
-one factor over the training run, while every non-adapter parameter remains
-exactly unchanged.
+qualification check spans at least two optimizer steps: every intended logical
+adapter must be connected, receive finite gradient evidence when mathematically
+expected, and change in at least one factor.
+
+That detailed inspection is qualification evidence, not an operation that must
+run throughout a long training job. Inspecting every parameter tensor and
+bringing each reduction result back to the host can repeatedly synchronize the
+accelerator and substantially reduce throughput.
+
+Qualification steps also change the adapter and optimizer state. Treating those
+same steps as the beginning of the real run makes diagnostic work an implicit
+part of the learned checkpoint. A cleaner boundary is to qualify one setup,
+discard it, reconstruct the setup from the same pinned base, configuration, and
+seed, and require the fresh initial hashes and optimizer membership to match.
+Real training can then start at step 0 without detailed tensor inspection. The
+extra short run buys a sharper claim:
+
+```text
+qualified setup -> proved that this exact initialization and wiring can learn
+discarded state -> diagnostic updates do not become hidden training warmup
+fresh setup      -> exact initial state matches what was qualified
+real training    -> begins at step 0 under ordinary runtime checks
+```
+
+Ordinary training can retain cheap continuous health checks such as finite loss
+and finite aggregate gradient norm. Exact frozen-base comparison and adapter
+save/reload checks belong at run boundaries. This keeps three different claims
+separate:
+
+```text
+qualification: the intended fresh trainable setup is wired and updates
+runtime health: real optimization has not become numerically invalid
+boundary integrity: initialization parity, frozen state, and persisted adapter semantics are correct
+```
 
 ### Operational Training Success Is Not Training Efficacy
 

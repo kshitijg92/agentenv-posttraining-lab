@@ -24,6 +24,7 @@ class ArtifactType(StrEnum):
     POSITIVE_SFT_REVIEW = "positive_sft_review"
     POSITIVE_SFT_EXPORT = "positive_sft_export"
     POSITIVE_SFT_TRAINING_MATERIALIZATION = "positive_sft_training_materialization"
+    POSITIVE_SFT_LORA_TRAINING_RUN = "positive_sft_lora_training_run"
     PREFERENCE_COMPARISON_EXPORT = "preference_comparison_export"
     PREFERENCE_ADJUDICATION_REVIEW = "preference_adjudication_review"
     PREFERENCE_PAIR_EXPORT = "preference_pair_export"

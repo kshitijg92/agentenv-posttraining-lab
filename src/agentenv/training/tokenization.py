@@ -123,7 +123,7 @@ class MaterializationTokenizer(TokenizerWithBackend, Protocol):
 
     def decode(
         self,
-        token_ids: Sequence[int],
+        token_ids: list[int],
         *,
         skip_special_tokens: bool,
         clean_up_tokenization_spaces: bool,

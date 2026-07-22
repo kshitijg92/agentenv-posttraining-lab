@@ -43,3 +43,7 @@ def new_replay_run_id() -> str:
 
 def new_message_id() -> str:
     return _new_id("message")
+
+
+def new_positive_sft_lora_training_run_id() -> str:
+    return _new_id("positive_sft_lora_run")

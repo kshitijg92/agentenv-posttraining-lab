@@ -4051,3 +4051,237 @@ repository-wide Ruff: passed
 repository-wide Pyright: 0 errors, 0 warnings
 git diff --check: passed
 ```
+
+### Positive-SFT LoRA Operational Smoke
+
+Implemented the first trainer-facing positive-SFT LoRA checkpoint for the
+pinned `Qwen/Qwen2.5-Coder-3B-Instruct` revision. The run consumes only an
+authorized `PositiveSFTTrainingMaterializationManifest`, verifies its pinned
+model-input protocol, and selects the first completed example without shuffling.
+
+The checked-in smoke configuration uses ordinary rank-8 LoRA on all 36 layers'
+`q_proj`, `k_proj`, `v_proj`, and `o_proj` modules. `lora_alpha` is also 8, so
+the adapter scale is exactly 1. It requests CUDA/bfloat16, SDPA, gradient
+checkpointing, deterministic algorithms, seed 42, and three optimizer steps.
+The first two steps form the bounded qualification prefix; the third exercises
+the ordinary post-qualification path without detailed tensor inspection.
+
+Added trainer result and artifact contracts for:
+
+- exact adapter-only optimizer membership;
+- shifted causal-loss token accounting;
+- finite and nonzero gradient evidence during the qualification prefix;
+- exact before/after hashes for frozen and adapter parameter state;
+- per-step loss and gradient-norm records;
+- adapter persistence and pinned-base reload;
+- exact fixed-input logits before and after reload;
+- package, accelerator, git, dirty-diff, code, source, and config provenance;
+- typed failure records that never publish a failed adapter as the canonical
+  `adapter/` artifact.
+
+The first real attempt correctly failed before completing step 1 because
+deterministic CUDA matrix multiplication requires a CuBLAS workspace setting.
+The smoke contract now pins `CUBLAS_WORKSPACE_CONFIG=:4096:8` and applies it
+before CUDA initialization. The subsequent run completed at:
+
+```text
+experiments/models/week_09_positive_sft_lora_smoke_qwen2_5_coder_3b
+```
+
+Observed result:
+
+```text
+training run: positive_sft_lora_run_b30656fab9ca46f7918e77243bb4e558
+selected examples: 1
+sequence length: 1,404
+effective shifted supervised targets: 497
+ignored shifted targets: 906
+optimizer steps: 3/3
+qualification steps: 2
+logged losses: 0.3765343129634857, 0.37346434593200684,
+  0.3636542558670044
+
+logical LoRA adapters: 144
+LoRA parameter tensors: 288
+trainable LoRA elements: 3,686,400
+adapter tensors with finite, nonzero qualification gradient evidence: 288/288
+adapter tensors changed during qualification: 288/288
+
+frozen parameter tensors: 434
+frozen elements: 3,085,938,688
+frozen state exactly unchanged: true
+adapter state changed: true
+adapter state exactly reloaded: true
+frozen base state exactly reloaded: true
+reload probe logits exactly equal: true
+maximum reload-logit difference: 0.0
+persisted adapter directory hash: xxh64:7346e084598bbef0
+```
+
+The loss values are recorded as execution evidence only. A three-step,
+single-example smoke does not establish convergence or model-quality
+improvement.
+
+Verification:
+
+```text
+focused LoRA schema/objective/engine/artifact tests: 16 passed
+serial training regression suite: 272 passed in 242.03 seconds
+final materialization + LoRA regression slice: 34 passed
+```
+
+### Bounded LoRA Qualification And Config Reference (Superseded Execution Shape)
+
+Moved detailed per-parameter gradient inspection out of the unbounded training
+loop. `qualification_step_count` defines the initial optimizer-step prefix; the
+current contract requires at least two steps and rejects a qualification prefix
+longer than the complete run. The tracker is released immediately after the
+qualification audit passes. Later steps retain finite-loss checking, aggregate
+gradient-norm validation, and clipping without scanning and synchronizing every
+LoRA gradient tensor.
+
+Renamed the result fields so their scope cannot be mistaken for whole-run
+coverage. Per-parameter rows now record gradient presence, nonzero evidence,
+finiteness, and mutation specifically `during_qualification`. Exact frozen-base
+state comparison and adapter save/reload verification remain boundary checks.
+
+Removed the copied `training_config.yaml` from the run output. The manifest now
+has one training-config input reference containing its path, content hash, and
+config id. Loading follows that reference and rejects content or identity drift.
+The output artifact contains only the result, step log, and—on success—the
+adapter.
+
+The regenerated real Qwen smoke completed three steps. All 288 adapter tensors
+had finite, nonzero gradient evidence and changed during the first two steps;
+the third step completed after the detailed tracker had been released. The
+final frozen-state hashes remained equal, and adapter/base state plus probe
+logits still matched exactly after reload. The run artifact reloads through the
+new config reference and contains no copied configuration file.
+
+Verification:
+
+```text
+revised LoRA focused slice: 20 passed
+serial training regression suite: 276 passed in 240.84 seconds
+repository-wide Ruff: passed
+repository-wide Pyright: 0 errors, 0 warnings
+git diff --check: passed
+```
+
+### Discarded Qualification Followed By Fresh Step-Zero Training
+
+Replaced the in-run qualification prefix with two explicit engine phases. The
+runner first loads the pinned base, creates a fresh LoRA adapter and optimizer,
+and executes only `qualification_step_count` audited steps. It persists the
+qualification step records and per-parameter evidence, then discards that
+model and optimizer completely.
+
+The runner next reloads the pinned base, resets the same seed, constructs a new
+adapter and optimizer, and compares its initial adapter hash, frozen-base hash,
+and optimizer-isolation record with the qualification setup. Only after those
+checks match does real training begin at step 0. The real `training_steps.jsonl`
+contains exactly `max_steps` real-training rows; qualification rows remain
+nested in the result and never appear in that log.
+
+Because these are separate executions, `qualification_step_count` is no longer
+constrained by `max_steps`. The detailed tracker is instantiated only by the
+qualification engine. The real engine retains finite masked loss, aggregate
+gradient-norm validation and clipping, final frozen/adapter state comparison,
+and adapter save/reload verification.
+
+Failure records distinguish model loading before qualification from model
+loading before real training. A failure after successful qualification retains
+the completed qualification evidence while publishing no canonical adapter.
+
+Regenerated the authorized Qwen materialization after the trainer source
+changed, then overwrote the real smoke artifact at:
+
+```text
+experiments/models/week_09_positive_sft_lora_smoke_qwen2_5_coder_3b
+```
+
+Observed result:
+
+```text
+training run: positive_sft_lora_run_b54e23a6ca7147d593df72f390a9f2f6
+qualification optimizer steps: 2 (discarded)
+qualification step indexes: 0, 1
+qualification losses: 0.3765343129634857, 0.37346434593200684
+
+real optimizer steps: 3/3
+real step indexes in training_steps.jsonl: 0, 1, 2
+real losses: 0.3765343129634857, 0.37346434593200684,
+  0.3636542558670044
+
+qualification initial adapter hash: xxh64:cfa5493f49afb0cf
+real-training initial adapter hash: xxh64:cfa5493f49afb0cf
+qualification initial frozen-base hash: xxh64:da0d2b53497821fd
+real-training initial frozen-base hash: xxh64:da0d2b53497821fd
+
+logical LoRA adapters: 144
+LoRA parameter tensors: 288
+trainable LoRA elements: 3,686,400
+qualification tensors with finite nonzero gradient evidence: 288/288
+qualification tensors changed: 288/288
+
+frozen parameter tensors: 434
+frozen elements: 3,085,938,688
+frozen state exactly unchanged: true
+adapter state exactly reloaded: true
+frozen base state exactly reloaded: true
+reload probe logits exactly equal: true
+maximum reload-logit difference: 0.0
+persisted adapter directory hash: xxh64:a5ec79df891d7f78
+```
+
+The matching first two qualification and real-training losses are expected
+evidence of deterministic restart: both phases begin from identical parameter
+and optimizer state and consume the same ordered examples. Only the adapter
+produced by the three real steps is persisted.
+
+Verification:
+
+```text
+focused LoRA schema/objective/engine/artifact/manifest slice: 21 passed
+serial training regression suite: 277 passed in 237.46 seconds
+repository-wide Ruff: passed
+repository-wide Pyright: 0 errors, 0 warnings
+git diff --check: passed
+```
+
+### Canonical LoRA Adapter Package Metadata
+
+PEFT 0.18 automatically wrote a generic Hugging Face model-card template into
+every `save_pretrained` adapter directory. The template contained mostly empty
+placeholders and embedded the machine-local Hugging Face snapshot path. PEFT
+also copied that local path into `adapter_config.json` and left its `revision`
+unset.
+
+The trainer now constructs `LoraConfig` with the canonical repository id and
+pinned revision from the training config. PEFT replaces that metadata from the
+runtime model during wrapping, so the trainer reapplies the canonical pin to
+the constructed adapter before persistence. It also sets
+`save_embedding_layers=False`: this ordinary LoRA configuration targets only
+attention projections, and PEFT's `auto` mode would otherwise perform an
+unwanted Hub lookup after receiving the canonical repository id.
+
+After `save_pretrained`, the trainer removes the generated `README.md`,
+validates the saved adapter metadata, and only then hashes and reloads the
+package. Artifact loading repeats the semantic metadata validation in addition
+to checking the directory hash. A published model card, if needed later, is a
+separate release artifact rather than duplicated experiment authority inside
+the adapter checkpoint.
+
+The real Qwen smoke artifact was regenerated after applying this package
+contract:
+
+```text
+training run: positive_sft_lora_run_c6708fab007e4c3e8ea2b77628ef72ad
+adapter files: adapter_config.json, adapter_model.safetensors
+generated README.md present: false
+base_model_name_or_path: Qwen/Qwen2.5-Coder-3B-Instruct
+revision: 89fe5444e8baf5736e70f528f1edcc79e6616ef6
+adapter directory hash: xxh64:ccd2828a4bc5fbe1
+adapter state exactly reloaded: true
+reload probe logits exactly equal: true
+```

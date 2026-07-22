@@ -56,6 +56,9 @@ from agentenv.training.positive_sft.export import export_positive_sft_examples
 from agentenv.training.positive_sft.materialization.export import (
     export_positive_sft_training_materializations,
 )
+from agentenv.training.positive_sft.lora.workflow import (
+    run_positive_sft_lora_training,
+)
 from agentenv.training.positive_sft.review import (
     initialize_positive_sft_review_artifact,
     validate_positive_sft_review_artifact,
@@ -1348,6 +1351,78 @@ def materialize_training_positive_sft(
         f"wrote {export.out_dir / manifest.artifacts['materializations']}",
         soft_wrap=True,
     )
+
+
+@training_positive_sft_app.command("train-lora")
+def train_positive_sft_lora(
+    source: Path = typer.Option(
+        ...,
+        "--source",
+        help="Authorized positive-SFT training materialization artifact directory.",
+    ),
+    config: Path = typer.Option(
+        ...,
+        "--config",
+        help="Pinned positive-SFT LoRA training config YAML.",
+    ),
+    model_cache_dir: Path | None = typer.Option(
+        None,
+        "--model-cache-dir",
+        help="Optional Hugging Face base-model cache directory.",
+    ),
+    tokenizer_cache_dir: Path | None = typer.Option(
+        None,
+        "--tokenizer-cache-dir",
+        help="Optional Hugging Face tokenizer cache directory.",
+    ),
+    local_files_only: bool = typer.Option(
+        False,
+        "--local-files-only",
+        help="Require the pinned model and tokenizer revisions to be cached locally.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for the LoRA training-run artifact.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before training.",
+    ),
+) -> None:
+    try:
+        artifact = run_positive_sft_lora_training(
+            source,
+            config,
+            out,
+            model_cache_dir=model_cache_dir,
+            tokenizer_cache_dir=tokenizer_cache_dir,
+            local_files_only=local_files_only,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(
+            str(exc),
+            param_hint="--source/--config",
+        ) from exc
+
+    manifest = artifact.manifest
+    style = "green" if manifest.status == "completed" else "red"
+    console.print(
+        f"[{style}]positive SFT LoRA training {manifest.status}[/{style}] "
+        f"examples={manifest.selected_example_count} "
+        f"steps={manifest.completed_step_count}/{manifest.requested_step_count}"
+    )
+    console.print(f"wrote {artifact.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['training_result']}",
+        soft_wrap=True,
+    )
+    if manifest.status == "failed":
+        raise typer.Exit(code=1)
 
 
 @app.command("replay")
