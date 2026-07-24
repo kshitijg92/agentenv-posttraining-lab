@@ -1,9 +1,9 @@
 # Week 10 Plan
 
-Status: in progress on 2026-07-22. The source-record boundary, planned
-train/selection disjointness, efficiency-review contract, and initialized
-18-row queue are complete. Review decisions, filtering, training, and policy
-evaluation have not started.
+Status: in progress on 2026-07-23. The source-record boundary, planned
+train/selection disjointness, and combined positive-SFT review contract are
+complete. Eighteen accepted prefixes are efficiency-pending. Filtering,
+training, and policy evaluation have not started.
 
 ## Theme
 
@@ -164,7 +164,8 @@ S_raw
 
 S_filtered
   B0 plus a separate fresh LoRA adapter
-  trained from the subset accepted by the frozen efficiency-review policy
+  trained from prefix-accepted examples whose embedded efficiency judgment
+  is accepted
   restricted to the same frozen train-dev task ids and hashes
 ```
 
@@ -252,27 +253,27 @@ policy. Comparator-supported shorter trajectories are evidence for review, but
 the existence of a shorter successful path does not by itself prove that every
 extra exploratory action was imprudent.
 
-## Resolved Review Boundary
+## Resolved Combined Review Boundary
 
 Efficiency review is reviewer-agnostic. A human or LLM may populate the queue.
 Reviewer identity and notes are provenance; reviewer type does not change the
 artifact contract.
 
-Reuse the repository's shared review vocabulary and provenance machinery:
+The existing `PositiveSFTReviewRecord` owns both judgments:
 
 ```text
-review_status:
-  not_reviewed
-  reviewed
+prefix review
+  existing review status, reviewer provenance, decision, and approved boundary
 
-review_decision:
-  accepted
-  rejected
-  needs_followup
+efficiency_judgment
+  absent while an accepted prefix is pending
+  otherwise owns rubric id, reviewer provenance, decision, rationale, and
+  exact avoidable assistant message ids
 ```
 
-Week 10 must use a distinct efficiency-review artifact rather than mutate or
-overload the Week 9 positive-SFT prefix-review artifact.
+There is no standalone efficiency-review record, manifest, artifact type, or
+CLI. The efficiency rubric is a second dimension of the same review over the
+exact prefix that the first dimension approves.
 
 Decision semantics:
 
@@ -289,15 +290,16 @@ needs_followup
   reviewer abstains because the efficiency judgment is not trustworthy
   source example remains available to S_raw but not S_filtered
 
-not_reviewed
-  queue is incomplete
+missing efficiency_judgment on an accepted prefix
+  combined review is incomplete
   filtered export and S_filtered training are blocked
 ```
 
-The semantic efficiency decision binds to the exact source-level
-`PositiveSFTExampleRecord` hash, not to target-tokenizer-specific token ids.
-The filtered materialization export must separately prove that every selected
-materialized row points back to the exact reviewed source hash.
+The semantic efficiency decision binds to the exact retained messages through
+`last_approved_assistant_message_id`, not to target-tokenizer-specific token
+ids. The training consumer must prove that every selected materialized row
+points back to the exact prefix-approved source example and completed embedded
+judgment.
 
 This ownership split means:
 
@@ -310,15 +312,16 @@ tokenizer or materializer implementation changed, source messages unchanged
   -> target-model materialization and experiment snapshot must be resolved again
 ```
 
-Queue completeness is a pre-training gate:
+Combined-review completeness is a pre-training gate:
 
-- exactly one row exists for every train-dev positive-SFT source example;
-- every row resolves to the exact source hash;
-- `not_reviewed` count is zero before filtered export;
-- every reviewed row has review id, reviewer id, decision, and reason provenance;
+- the existing eight positive-SFT review artifacts remain the only review
+  authorities;
+- all 18 prefix-accepted rows have one embedded efficiency judgment;
+- no separate row duplicates source identity, messages, or materializations;
+- every judgment has rubric id, review id, reviewer id, decision, and reason;
 - every rejection names at least one exact assistant message id;
 - rejected message ids must exist, be unique, and have role `assistant` in the
-  source example;
+  retained prefix;
 - `needs_followup` remains a countable abstention rather than an implicit tie or
   acceptance;
 - source messages remain immutable.
@@ -372,8 +375,11 @@ Ownership remains at existing boundaries:
 PositiveSFTExampleRecord
   -> owns the exact messages, source identity, task id, and upstream provenance
 
-efficiency-review and raw/filtered manifests
-  -> pin the exact source example ids and record hashes they consume
+PositiveSFTReviewRecord
+  -> owns prefix authorization and its embedded efficiency judgment
+
+training-run manifests
+  -> pin the exact materialization and final combined-review inputs consumed
 
 selection eval config and eval manifests
   -> own the thirteen selection ids and exact selected-task hashes
@@ -384,9 +390,9 @@ policy comparison
 
 Required gates:
 
-- every one of the 18 current source records appears exactly once in the
-  initialized efficiency-review queue;
-- raw and filtered construction pins exact source record hashes;
+- every one of the 18 accepted prefixes appears exactly once across the
+  existing combined review queues;
+- raw and filtered training input resolution pins exact source record hashes;
 - train task ids are derived from the consumed source records rather than
   copied into a second config;
 - every selection eval attempt belongs to one of the thirteen configured
@@ -430,8 +436,8 @@ metrics, and selection rule are approved.
 
 Practical invalidation rules:
 
-- changing source messages invalidates review and dataset artifacts that pin
-  the prior source record;
+- changing source messages invalidates review, example, and materialization
+  artifacts that pin the prior source record;
 - changing a selection task invalidates eval artifacts that pin the prior task
   hash;
 - adding an unrelated task or editing an unrelated task does not invalidate
@@ -728,10 +734,6 @@ notes/weekly/week_10/plan.md
 notes/weekly/week_10/implementation_notes.md
 notes/weekly/week_10/learnings.md
 notes/weekly/week_10/closure_audit.md
-experiments/plans/week_10_positive_sft_matched_schedule/
-experiments/runs/week_10_positive_sft_efficiency_review/
-experiments/runs/week_10_positive_sft_raw/
-experiments/runs/week_10_positive_sft_filtered/
 experiments/models/week_10_positive_sft_raw_lora/
 experiments/models/week_10_positive_sft_filtered_lora/
 experiments/runs/week_10_selection_base/
@@ -793,8 +795,8 @@ Work:
 - declare the thirteen selection ids in the planned selection eval config;
 - preflight that the derived train ids and planned selection ids are disjoint;
 - confirm that their current union is the 19 dev tasks;
-- leave source hashes to review/dataset artifacts and selection hashes to eval
-  artifacts;
+- leave source hashes to review/training-run artifacts and selection hashes to
+  eval artifacts;
 - remove the redundant task-partition implementation and generated snapshot.
 
 Done when:
@@ -815,42 +817,41 @@ can drift from the exact SFT records and eval manifests that already own the
 relevant facts.
 ```
 
-### Checkpoint 2: Efficiency Review Contract And Queue
+### Checkpoint 2: Combine Prefix And Efficiency Review
 
-Status on 2026-07-22: implemented. The queue contains all 18 exact source
-examples and validates with 18 `not_reviewed` rows. Populating decisions remains
-Checkpoint 3 work.
+Status on 2026-07-23: implemented. The standalone efficiency-review layer was
+removed. The existing eight positive-SFT review artifacts contain 100 rows:
+18 prefix-accepted rows are efficiency-pending and 82 rows are not applicable.
 
 Purpose:
 
 ```text
-Represent one objective-specific efficiency judgment per exact train-dev
-PositiveSFTExampleRecord.
+Add one objective-specific efficiency judgment to the review row that already
+authorizes each exact retained positive-SFT prefix.
 ```
 
 Work:
 
-- reuse shared review status, decision, id, reviewer, and notes provenance;
-- define a distinct efficiency-review record and manifest;
-- bind every row to exact source example id and record hash;
+- keep the existing positive-SFT review record and artifact;
+- embed one optional `efficiency_judgment` value;
 - define exact avoidable-action evidence using assistant message ids;
-- pin the efficiency rubric id/config hash;
-- initialize one queue row per source example;
+- pin the efficiency rubric id in each completed judgment;
+- render exact retained prefix messages in the existing review queue;
 - render enough context for human or LLM review without exposing hidden
   validator content;
-- validate total accounting and source reconstruction;
-- make `not_reviewed` a hard filtered-export blocker;
+- derive pending/not-applicable/reviewed state rather than persist another
+  status field;
+- make a missing judgment on an accepted prefix a filtered-training blocker;
 - keep `needs_followup` as an explicit abstention.
 
 Done when:
 
-- all 18 source examples appear exactly once in the initialized queue;
-- malformed or hash-mismatched rows fail;
-- rejected rows without valid assistant-message witnesses fail;
+- all 18 accepted prefixes appear exactly once across the existing queues;
+- all other review rows are efficiency-not-applicable;
+- malformed judgments and invalid assistant-message witnesses fail;
 - source messages cannot be mutated through review;
 - reviewer identity remains provenance rather than pipeline authority;
-- focused tests cover accepted, rejected, abstained, missing, duplicate, and
-  unknown rows.
+- no standalone efficiency schema, manifest, artifact, or CLI remains.
 
 ### Checkpoint 3: Populate And Validate The Efficiency Review
 
@@ -873,7 +874,7 @@ Work:
 
 Done when:
 
-- `not_reviewed` count is zero;
+- no prefix-accepted row has a missing `efficiency_judgment`;
 - every rejection has exact assistant-message evidence;
 - every abstention has a non-empty uncertainty reason;
 - all source hashes reconstruct;
@@ -888,20 +889,19 @@ Filling the queue to obtain a desired filtered count is post-hoc dataset
 construction. Zero or few filtered exclusions are valid results.
 ```
 
-### Checkpoint 4: Raw And Filtered Dataset Artifacts
+### Checkpoint 4: Resolve Raw And Filtered Training Inputs
 
 Purpose:
 
 ```text
-Construct two exact trainer-source populations from one shared authorized
-materialization inventory.
+Resolve two exact trainer-source populations from the same authorized
+materialization inventory without introducing copied training records.
 ```
 
 Work:
 
 - resolve `S_raw` from all frozen train-dev authorized materializations;
-- resolve `S_filtered` by joining accepted efficiency reviews through exact
-  source-example hashes;
+- resolve `S_filtered` from embedded accepted efficiency judgments;
 - preserve one result per source row in accounting;
 - emit machine-readable exclusion reasons for rejected and abstained rows;
 - compute unique task, source policy, example, context-token, and supervised-
@@ -911,7 +911,8 @@ Work:
 
 Done when:
 
-- raw and filtered manifests are hash-pinned and reloadable;
+- training-run manifests pin the exact materializations and final review JSONL
+  hashes consumed;
 - every raw row is either selected or explicitly excluded from filtered;
 - no source row disappears silently;
 - the raw count is expected to be 18 unless upstream current contracts are
@@ -1179,56 +1180,28 @@ uv run agentenv tasks check-splits \
   data/task_packs/repo_patch_python_v0/splits.lock.json
 ```
 
-Initialize and validate efficiency review:
+Populate and validate the existing combined positive-SFT reviews:
 
 ```bash
-uv run agentenv training positive-sft efficiency-review-init \
-  --materialization experiments/runs/natural_model_anchor_contrast_acquisition/positive_sft_materializations/devstral-sampling \
-  --materialization experiments/runs/natural_model_anchor_contrast_acquisition/positive_sft_materializations/qwen2-5-coder-14b-sampling \
-  --materialization experiments/runs/natural_model_anchor_contrast_acquisition/positive_sft_materializations/qwen3-coder-30b-sampling \
-  --materialization experiments/runs/natural_model_dev_coverage_acquisition/positive_sft_materializations/devstral-sampling \
-  --out experiments/runs/week_10_positive_sft_efficiency_review \
-  --overwrite
-
-uv run agentenv training positive-sft efficiency-review-validate \
-  --reviews experiments/runs/week_10_positive_sft_efficiency_review
+uv run agentenv training positive-sft review-validate \
+  --reviews <existing-positive-sft-review-artifact>
 ```
 
-Construct raw and filtered artifacts:
+Resolve raw and filtered inputs at the training consumer:
 
-```bash
-uv run agentenv training positive-sft filter \
-  --reviews experiments/runs/week_10_positive_sft_efficiency_review \
-  --raw-out experiments/runs/week_10_positive_sft_raw \
-  --filtered-out experiments/runs/week_10_positive_sft_filtered \
-  --report-out experiments/reports/week_10_filtering_quality.md \
-  --overwrite
-```
-
-Resolve matched schedules:
-
-```bash
-uv run agentenv training positive-sft schedule \
-  --raw experiments/runs/week_10_positive_sft_raw \
-  --filtered experiments/runs/week_10_positive_sft_filtered \
-  --out experiments/plans/week_10_positive_sft_matched_schedule \
-  --overwrite
+```text
+S_raw      = every completed prefix-accepted materialization
+S_filtered = S_raw rows whose embedded efficiency judgment is accepted
 ```
 
 Train the SFT arms:
 
-```bash
-uv run agentenv training positive-sft train-lora \
-  --config configs/train/positive_sft_lora_raw.yaml \
-  --source experiments/runs/week_10_positive_sft_raw \
-  --out experiments/models/week_10_positive_sft_raw_lora \
-  --overwrite
-
-uv run agentenv training positive-sft train-lora \
-  --config configs/train/positive_sft_lora_filtered.yaml \
-  --source experiments/runs/week_10_positive_sft_filtered \
-  --out experiments/models/week_10_positive_sft_filtered_lora \
-  --overwrite
+```text
+The same training consumer receives the same materialization and combined
+review inputs for both arms. `raw` versus `filtered` is a validated selection
+mode, not a separately copied dataset. Each training-run manifest records the
+exact consumed materialization hashes, final reviews JSONL hashes, and resolved
+supervised-token schedule.
 ```
 
 Run deterministic selection evaluation:
@@ -1290,7 +1263,7 @@ Artifact validation must cover:
 
 - positive-SFT source reconstruction;
 - train task ids derived from exact consumed source records;
-- efficiency-review total accounting and evidence references;
+- embedded efficiency-judgment accounting and evidence references;
 - raw/filtered total accounting;
 - matched training schedules;
 - training authorization and adapter provenance;
@@ -1316,7 +1289,7 @@ Do not cut:
 - train/selection task disjointness at dataset/eval consumption;
 - exact selected-task hashes;
 - Week 9 hard eligibility gates;
-- complete efficiency-review accounting;
+- complete embedded efficiency-judgment accounting;
 - same-path base/adapter serving;
 - matched supervised-token exposure;
 - paired regression reporting;
@@ -1395,11 +1368,13 @@ Week 10 is complete when:
 - the selection eval config and eval manifests pin the exact thirteen
   selection-dev ids and task hashes;
 - train and selection task ids are disjoint;
-- every train-dev positive-SFT source has one completed efficiency-review row;
+- every train-dev prefix-accepted review has one completed embedded efficiency
+  judgment;
 - every rejection has a machine-readable reason and exact action evidence;
 - no selection-dev, heldout, practice, or public-calibration example enters
   training;
-- raw and filtered artifacts have complete accounting;
+- raw and filtered training inputs have complete accounting in their run
+  manifests;
 - one raw pass defines the supervised-token budget;
 - the filtered schedule deterministically matches that budget within the frozen
   full-example tolerance;

@@ -1,5 +1,10 @@
 # Week 10 Implementation Notes
 
+Current boundary as of 2026-07-23: action efficiency is an embedded judgment
+on the existing `PositiveSFTReviewRecord`. There is no standalone efficiency
+review artifact, schema, manifest, or CLI. The earlier standalone implementation
+below is retained only as design history and is explicitly superseded.
+
 ## 2026-07-22 Source-Boundary Correction
 
 ### Decision
@@ -102,6 +107,9 @@ contract and initialized 18-row queue over the existing
 
 ## 2026-07-22 Checkpoint 2: Efficiency Review Queue
 
+Status: superseded and removed on 2026-07-23. See the boundary-collapse note
+below.
+
 ### Outcome
 
 Checkpoint 2 is implemented. The existing positive-SFT training
@@ -200,3 +208,113 @@ git diff --check: passed
 Populate all 18 decisions under the frozen rubric, validate zero
 `not_reviewed` rows, and report accepted, rejected, and `needs_followup`
 counts. Stop before building raw or filtered training artifacts.
+
+## 2026-07-23 Boundary Collapse: One Positive-SFT Review
+
+### Decision
+
+The positive-SFT prefix review and action-efficiency review are two judgments
+over the same semantic object: the exact retained assistant prefix.
+Materialization only tokenizes that prefix; it does not create a new semantic
+review unit. Therefore efficiency now lives inside the existing
+`PositiveSFTReviewRecord`.
+
+The combined row keeps the existing prefix fields and adds one optional:
+
+```text
+efficiency_judgment
+  rubric_id
+  review_id
+  reviewer_id
+  review_decision
+  decision_reason
+  review_notes_ref
+  avoidable_assistant_message_ids
+```
+
+The absence of `efficiency_judgment` is sufficient state:
+
+```text
+prefix not yet reviewed       -> efficiency blocked
+prefix rejected or unresolved -> efficiency not applicable
+prefix accepted + null        -> efficiency not reviewed
+prefix accepted + judgment    -> efficiency reviewed
+```
+
+No second persisted review status or source identity is necessary.
+
+### Removed Surface
+
+The refactor removed:
+
+- `PositiveSFTEfficiencyReviewRecord`;
+- `PositiveSFTEfficiencyReviewManifest`;
+- the `positive_sft_efficiency_review` artifact type;
+- the standalone efficiency review implementation module;
+- `efficiency-review-init` and `efficiency-review-validate`;
+- the standalone efficiency review test module;
+- `experiments/runs/week_10_positive_sft_efficiency_review`.
+
+The change removes roughly 1,500 lines of standalone implementation and tests.
+
+### Existing Artifact Migration
+
+The eight existing positive-SFT review artifacts contain 100 prefix-review
+rows:
+
+```text
+prefix accepted / efficiency pending: 18
+prefix rejected or needs_followup / efficiency not applicable: 82
+```
+
+All rows now contain explicit `efficiency_judgment: null`. The existing queue
+files were refreshed so the 18 eligible rows show:
+
+- the combined review row;
+- the frozen efficiency rubric id;
+- the exact retained prefix messages;
+- exact assistant message ids and action count.
+
+The old recursive review provenance contains absolute paths to a retired
+worktree. The one-time queue refresh therefore used the adjacent hash-pinned
+positive-SFT exports, whose messages are exactly the previously approved
+prefixes. No compatibility path resolver was added.
+
+The existing positive-SFT exports and token materializations are intentionally
+not regenerated while judgments remain editable. They will be regenerated
+once, after all 18 judgments are complete, so review edits do not cause
+repeated artifact churn. No trajectory, harness-audit, or agent execution must
+be rerun.
+
+### Current Invariants
+
+- Efficiency applies only when the prefix decision is `accepted`.
+- Every completed judgment pins
+  `positive_sft_action_efficiency_v0`.
+- A rejected judgment requires at least one unique assistant message id.
+- Evidence must identify an assistant message inside the retained prefix.
+- Accepted and `needs_followup` judgments cannot claim avoidable actions.
+- Raw training uses every prefix-accepted materialization.
+- Filtered training uses only rows with an accepted embedded judgment.
+- Training consumes existing materialization records; no copied
+  `PositiveSFTTrainingSelectionRecord` is introduced.
+
+### Verification Policy
+
+Focused checks are the default during this checkpoint. The full repository
+suite is deferred until the Week 10 integration boundary.
+
+```text
+positive-SFT schema/review/artifact/CLI focused tests: 33 passed
+Ruff focused checks: passed
+Pyright focused checks: 0 errors, 0 warnings
+combined artifact accounting: 8 artifacts, 100 rows, 18 pending
+standalone efficiency artifact absent
+full repository suite: deferred until the Week 10 integration boundary
+```
+
+### Next Small Step
+
+Populate the 18 embedded judgments, starting with the four calibration
+candidates. Then validate complete accounting and regenerate dependent exports
+and token materializations exactly once.

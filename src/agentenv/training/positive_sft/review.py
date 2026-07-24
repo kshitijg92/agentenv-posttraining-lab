@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 
@@ -52,6 +52,7 @@ from agentenv.training.positive_sft.source_selection import (
     validate_positive_sft_repair_source_matches_candidate_export,
 )
 from agentenv.training.positive_sft.schema import (
+    POSITIVE_SFT_ACTION_EFFICIENCY_RUBRIC_ID,
     POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION,
     OriginalPositiveSFTReviewSource,
     PositiveSFTReviewRecord,
@@ -59,6 +60,39 @@ from agentenv.training.positive_sft.schema import (
     RepairedPositiveSFTReviewSource,
 )
 from agentenv.trajectories.schema import TrajectoryRecord
+
+
+POSITIVE_SFT_REVIEW_RUBRIC = """## Positive-SFT Prefix And Action-Efficiency Rubric
+
+### Prefix decision
+
+Review assistant actions from the start of the selected source. `accepted`
+requires one exact assistant-message boundary that ends a contiguous,
+training-eligible prefix. `rejected` means no such prefix should be used.
+`needs_followup` records uncertainty without authorizing a prefix.
+
+### Efficiency judgment
+
+Apply this dimension only to an accepted prefix, including every assistant
+action through the approved boundary.
+
+- `accepted`: every retained assistant action has a defensible causal role.
+- `rejected`: at least one exact retained assistant action is avoidable, and
+  removing it would preserve coherence, useful information, state changes, and
+  validation evidence.
+- `needs_followup`: the reviewer cannot judge efficiency confidently.
+
+An action has a defensible role when it acquires task-relevant information,
+changes the workspace toward the solution, or validates or diagnoses relevant
+state. A passing pre-edit public-check run may be prudent baseline diagnosis.
+Do not prefer a shorter trajectory merely because it is shorter, and do not
+use hindsight alone to declare exploration avoidable.
+
+Efficiency rejection requires exact avoidable assistant message ids. The raw
+SFT population is every prefix-accepted row. The filtered population is every
+prefix-accepted row whose efficiency judgment is `accepted`. Reviews never
+rewrite or delete individual messages.
+"""
 
 
 @dataclass(frozen=True)
@@ -112,6 +146,7 @@ def initialize_positive_sft_review_artifact(
             source_training_candidate_record_hash=selection.candidate_hash,
             source=selection.source,
             review_status="not_reviewed",
+            efficiency_judgment=None,
         )
         for selection in selections
     )
@@ -286,6 +321,30 @@ def validate_positive_sft_review_records(
                 "Accepted positive-SFT review boundary must identify an assistant "
                 f"message for candidate {candidate_hash}"
             )
+        boundary_index = next(
+            index
+            for index, message in enumerate(selection.messages)
+            if message.message_id == boundary_id
+        )
+        retained_messages = selection.messages[: boundary_index + 1]
+        efficiency = review.efficiency_judgment
+        if efficiency is None or efficiency.review_decision != "rejected":
+            continue
+        retained_messages_by_id = {
+            message.message_id: message for message in retained_messages
+        }
+        for message_id in efficiency.avoidable_assistant_message_ids:
+            message = retained_messages_by_id.get(message_id)
+            if message is None:
+                raise ValueError(
+                    "Positive-SFT efficiency evidence must identify a retained "
+                    f"prefix message for candidate {candidate_hash}: {message_id}"
+                )
+            if message.role != "assistant":
+                raise ValueError(
+                    "Positive-SFT efficiency evidence must identify an assistant "
+                    f"message for candidate {candidate_hash}: {message_id}"
+                )
 
 
 def hash_positive_sft_review_record(record: PositiveSFTReviewRecord) -> str:
@@ -380,19 +439,46 @@ def render_positive_sft_review_queue(
 ) -> str:
     reviews_by_candidate = _index_reviews(reviews)
     lines = [
-        "# Positive-SFT Prefix Review Queue",
+        "# Positive-SFT Combined Review Queue",
         "",
-        "Review every assistant action from the start of the selected source through ",
-        "the proposed boundary. Accept only a contiguous clean-behavior prefix.",
+        "This one row owns both the prefix decision and, when that prefix is",
+        "accepted, the action-efficiency judgment. Edit `reviews.jsonl`.",
+        "",
+        *POSITIVE_SFT_REVIEW_RUBRIC.splitlines(),
+        "",
+        "An accepted prefix with `efficiency_judgment: null` is still pending.",
+        "Fill it using this shape:",
+        "",
+        "```json",
+        json.dumps(
+            {
+                "rubric_id": POSITIVE_SFT_ACTION_EFFICIENCY_RUBRIC_ID,
+                "review_id": "<review id>",
+                "reviewer_id": "<reviewer id>",
+                "review_decision": "accepted|rejected|needs_followup",
+                "decision_reason": "<brief reason>",
+                "review_notes_ref": None,
+                "avoidable_assistant_message_ids": [],
+            },
+            sort_keys=True,
+        ),
+        "```",
         "",
     ]
     for index, selection in enumerate(selections, start=1):
         review = reviews_by_candidate[selection.candidate_hash]
+        review_messages = _positive_sft_review_context_messages(selection, review)
         assistant_ids = [
             message.message_id
-            for message in selection.messages
+            for message in review_messages
             if message.role == "assistant"
         ]
+        efficiency_status = derive_positive_sft_efficiency_review_status(review)
+        context_label = (
+            "Exact retained prefix"
+            if review.review_decision == "accepted"
+            else "Exact source messages"
+        )
         lines.extend(
             [
                 f"## {index}. `{selection.candidate_hash}`",
@@ -400,6 +486,10 @@ def render_positive_sft_review_queue(
                 f"- task_id: `{selection.task_id}`",
                 f"- task_success: `{str(selection.task_success).lower()}`",
                 f"- source_type: `{selection.source.source_type}`",
+                f"- prefix_review_status: `{review.review_status}`",
+                f"- prefix_decision: `{review.review_decision}`",
+                f"- efficiency_review_status: `{efficiency_status}`",
+                f"- assistant_action_count: `{len(assistant_ids)}`",
                 f"- assistant_message_ids: `{json.dumps(assistant_ids)}`",
                 "",
                 "Review row:",
@@ -408,9 +498,51 @@ def render_positive_sft_review_queue(
                 json.dumps(review.model_dump(mode="json"), sort_keys=True),
                 "```",
                 "",
+                f"{context_label}:",
+                "",
+                "```json",
+                json.dumps(
+                    [message.model_dump(mode="json") for message in review_messages],
+                    indent=2,
+                    sort_keys=True,
+                ),
+                "```",
+                "",
             ]
         )
     return "\n".join(lines)
+
+
+def derive_positive_sft_efficiency_review_status(
+    review: PositiveSFTReviewRecord,
+) -> Literal["blocked", "not_applicable", "not_reviewed", "reviewed"]:
+    if review.review_status != "reviewed":
+        return "blocked"
+    if review.review_decision != "accepted":
+        return "not_applicable"
+    if review.efficiency_judgment is None:
+        return "not_reviewed"
+    return "reviewed"
+
+
+def _positive_sft_review_context_messages(
+    selection: PositiveSFTReviewSelection,
+    review: PositiveSFTReviewRecord,
+) -> tuple[Message, ...]:
+    boundary_id = review.last_approved_assistant_message_id
+    if review.review_decision != "accepted" or boundary_id is None:
+        return selection.messages
+    boundary_index = next(
+        (
+            index
+            for index, message in enumerate(selection.messages)
+            if message.message_id == boundary_id
+        ),
+        None,
+    )
+    if boundary_index is None:
+        return selection.messages
+    return selection.messages[: boundary_index + 1]
 
 
 def _build_review_source(

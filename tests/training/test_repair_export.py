@@ -50,6 +50,7 @@ from agentenv.training.positive_sft.review import (
     validate_positive_sft_review_artifact,
     write_positive_sft_review_records_jsonl,
 )
+from agentenv.training.positive_sft.schema import PositiveSFTReviewRecord
 from agentenv.trajectories.export import (
     export_trajectory_records_from_eval_artifact,
     hash_file,
@@ -153,8 +154,13 @@ def test_positive_sft_review_initializes_exact_original_source(
     assert artifact.manifest.repaired_record_count == 0
     review = artifact.reviews[0]
     assert review.review_status == "not_reviewed"
+    assert review.efficiency_judgment is None
     assert review.source.source_type == "original"
     assert review.source.source_artifact_ref.content_hash is not None
+    queue = (artifact.out_dir / artifact.manifest.artifacts["review_queue"]).read_text()
+    assert "Prefix And Action-Efficiency Rubric" in queue
+    assert "positive_sft_action_efficiency_v0" in queue
+    assert '"role": "assistant"' in queue
 
 
 def test_positive_sft_review_accepts_existing_assistant_boundary(
@@ -239,6 +245,59 @@ def test_positive_sft_review_rejects_non_assistant_boundary(
     )
 
     with pytest.raises(ValueError, match="must identify an assistant message"):
+        validate_positive_sft_review_artifact(artifact.out_dir)
+
+
+def test_positive_sft_review_rejects_efficiency_evidence_after_prefix_boundary(
+    tmp_path: Path,
+) -> None:
+    candidate_export_dir = _build_candidate_export(
+        tmp_path,
+        add_redundancy=False,
+    )
+    artifact = initialize_positive_sft_review_artifact(
+        candidate_export_dir,
+        tmp_path / "positive-sft-review",
+    )
+    initial_validation = validate_positive_sft_review_artifact(artifact.out_dir)
+    selections = build_positive_sft_review_selections(
+        initial_validation.source_candidate_export,
+        repair_validation=None,
+        selected_repair_ids=(),
+    )
+    assistant_ids = [
+        message.message_id
+        for message in selections[0].messages
+        if message.role == "assistant"
+    ]
+    payload = artifact.reviews[0].model_dump(mode="json")
+    payload.update(
+        {
+            "review_status": "reviewed",
+            "review_id": "positive_sft_review_001",
+            "reviewer_id": "reviewer_001",
+            "review_decision": "accepted",
+            "last_approved_assistant_message_id": assistant_ids[0],
+            "efficiency_judgment": {
+                "review_id": "efficiency_review_001",
+                "reviewer_id": "reviewer_002",
+                "review_decision": "rejected",
+                "decision_reason": "A later action was avoidable.",
+                "review_notes_ref": None,
+                "avoidable_assistant_message_ids": [assistant_ids[-1]],
+            },
+        }
+    )
+    invalid = PositiveSFTReviewRecord.model_validate(payload)
+    write_positive_sft_review_records_jsonl(
+        artifact.out_dir / artifact.manifest.artifacts["reviews"],
+        (invalid,),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="efficiency evidence must identify a retained prefix message",
+    ):
         validate_positive_sft_review_artifact(artifact.out_dir)
 
 

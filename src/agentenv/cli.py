@@ -53,10 +53,6 @@ from agentenv.training.candidates.export import (
     export_training_candidate_records,
 )
 from agentenv.training.positive_sft.export import export_positive_sft_examples
-from agentenv.training.positive_sft.efficiency_review import (
-    initialize_positive_sft_efficiency_review_artifact,
-    validate_positive_sft_efficiency_review_artifact,
-)
 from agentenv.training.positive_sft.materialization.export import (
     export_positive_sft_training_materializations,
 )
@@ -64,6 +60,7 @@ from agentenv.training.positive_sft.lora.workflow import (
     run_positive_sft_lora_training,
 )
 from agentenv.training.positive_sft.review import (
+    derive_positive_sft_efficiency_review_status,
     initialize_positive_sft_review_artifact,
     validate_positive_sft_review_artifact,
 )
@@ -1151,7 +1148,7 @@ def initialize_training_positive_sft_review(
     out: Path = typer.Option(
         ...,
         "--out",
-        help="Directory for positive-SFT prefix review artifacts.",
+        help="Directory for combined positive-SFT review artifacts.",
     ),
     overwrite: bool = typer.Option(
         False,
@@ -1191,100 +1188,12 @@ def initialize_training_positive_sft_review(
     )
 
 
-@training_positive_sft_app.command("efficiency-review-init")
-def initialize_training_positive_sft_efficiency_review(
-    materialization: list[Path] | None = typer.Option(
-        None,
-        "--materialization",
-        help=(
-            "Completed positive-SFT training materialization artifact directory; "
-            "repeat for each source artifact."
-        ),
-    ),
-    out: Path = typer.Option(
-        ...,
-        "--out",
-        help="Directory for positive-SFT efficiency review artifacts.",
-    ),
-    overwrite: bool = typer.Option(
-        False,
-        "--overwrite",
-        help="Delete and recreate a non-empty --out directory before initializing.",
-    ),
-) -> None:
-    if not materialization:
-        raise typer.BadParameter(
-            "At least one --materialization is required",
-            param_hint="--materialization",
-        )
-    try:
-        artifact = initialize_positive_sft_efficiency_review_artifact(
-            materialization,
-            out,
-            overwrite=overwrite,
-        )
-    except ArtifactDirectoryError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--out") from exc
-    except (OSError, ValueError) as exc:
-        raise typer.BadParameter(
-            str(exc),
-            param_hint="--materialization",
-        ) from exc
-
-    manifest = artifact.manifest
-    console.print(
-        "[green]positive SFT efficiency review initialized[/green] "
-        f"records={manifest.record_count} "
-        "not_reviewed="
-        f"{sum(review.review_status == 'not_reviewed' for review in artifact.reviews)}"
-    )
-    console.print(f"wrote {artifact.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
-    console.print(
-        f"wrote {artifact.out_dir / manifest.artifacts['reviews']}",
-        soft_wrap=True,
-    )
-    console.print(
-        f"wrote {artifact.out_dir / manifest.artifacts['review_queue']}",
-        soft_wrap=True,
-    )
-    console.print(
-        f"wrote {artifact.out_dir / manifest.artifacts['rubric']}",
-        soft_wrap=True,
-    )
-
-
-@training_positive_sft_app.command("efficiency-review-validate")
-def validate_training_positive_sft_efficiency_review(
-    reviews: Path = typer.Option(
-        ...,
-        "--reviews",
-        help="Positive-SFT efficiency review artifact directory.",
-    ),
-) -> None:
-    try:
-        validation = validate_positive_sft_efficiency_review_artifact(reviews)
-    except (OSError, ValueError) as exc:
-        raise typer.BadParameter(str(exc), param_hint="--reviews") from exc
-
-    status_counts = validation.review_status_counts
-    decision_counts = validation.review_decision_counts
-    console.print(
-        "[green]positive SFT efficiency review valid[/green] "
-        f"records={validation.artifact.manifest.record_count} "
-        f"not_reviewed={status_counts['not_reviewed']} "
-        f"reviewed={status_counts['reviewed']} "
-        f"accepted={decision_counts['accepted']} "
-        f"rejected={decision_counts['rejected']} "
-        f"needs_followup={decision_counts['needs_followup']}"
-    )
-
-
 @training_positive_sft_app.command("review-validate")
 def validate_training_positive_sft_review(
     reviews: Path = typer.Option(
         ...,
         "--reviews",
-        help="Positive-SFT prefix review artifact directory.",
+        help="Combined positive-SFT review artifact directory.",
     ),
 ) -> None:
     try:
@@ -1296,12 +1205,28 @@ def validate_training_positive_sft_review(
         for review in validation.review_artifact.reviews
         if review.review_decision is not None
     ]
+    efficiency_statuses = [
+        derive_positive_sft_efficiency_review_status(review)
+        for review in validation.review_artifact.reviews
+    ]
+    efficiency_decisions = [
+        review.efficiency_judgment.review_decision
+        for review in validation.review_artifact.reviews
+        if review.efficiency_judgment is not None
+    ]
     console.print(
         "[green]positive SFT review valid[/green] "
         f"records={len(validation.review_artifact.reviews)} "
-        f"accepted={decisions.count('accepted')} "
-        f"rejected={decisions.count('rejected')} "
-        f"needs_followup={decisions.count('needs_followup')}"
+        f"prefix_accepted={decisions.count('accepted')} "
+        f"prefix_rejected={decisions.count('rejected')} "
+        f"prefix_needs_followup={decisions.count('needs_followup')} "
+        f"efficiency_blocked={efficiency_statuses.count('blocked')} "
+        f"efficiency_not_reviewed={efficiency_statuses.count('not_reviewed')} "
+        f"efficiency_reviewed={efficiency_statuses.count('reviewed')} "
+        f"efficiency_accepted={efficiency_decisions.count('accepted')} "
+        f"efficiency_rejected={efficiency_decisions.count('rejected')} "
+        "efficiency_needs_followup="
+        f"{efficiency_decisions.count('needs_followup')}"
     )
 
 
@@ -1315,7 +1240,7 @@ def export_training_positive_sft(
     reviews: Path = typer.Option(
         ...,
         "--reviews",
-        help="Validated positive-SFT prefix review artifact directory.",
+        help="Validated combined positive-SFT review artifact directory.",
     ),
     out: Path = typer.Option(
         ...,

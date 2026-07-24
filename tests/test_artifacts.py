@@ -27,9 +27,6 @@ def test_artifact_type_values_are_stable_json_strings() -> None:
         ArtifactType.POSITIVE_SFT_TRAINING_MATERIALIZATION
         == "positive_sft_training_materialization"
     )
-    assert (
-        ArtifactType.POSITIVE_SFT_EFFICIENCY_REVIEW == "positive_sft_efficiency_review"
-    )
     assert ArtifactType.PREFERENCE_COMPARISON_EXPORT == "preference_comparison_export"
     assert (
         ArtifactType.PREFERENCE_ADJUDICATION_REVIEW == "preference_adjudication_review"

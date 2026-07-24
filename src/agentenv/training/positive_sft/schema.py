@@ -10,9 +10,7 @@ from agentenv.trajectories.schema import ArtifactRef, ReviewDecision, ReviewStat
 
 PositiveSFTReviewRecordSchemaVersion = Literal["positive_sft_review_record_v0"]
 PositiveSFTExampleRecordSchemaVersion = Literal["positive_sft_example_record_v0"]
-PositiveSFTEfficiencyReviewRecordSchemaVersion = Literal[
-    "positive_sft_efficiency_review_record_v0"
-]
+PositiveSFTEfficiencyRubricId = Literal["positive_sft_action_efficiency_v0"]
 
 POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION: PositiveSFTReviewRecordSchemaVersion = (
     "positive_sft_review_record_v0"
@@ -20,7 +18,9 @@ POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION: PositiveSFTReviewRecordSchemaVersion 
 POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION: PositiveSFTExampleRecordSchemaVersion = (
     "positive_sft_example_record_v0"
 )
-POSITIVE_SFT_EFFICIENCY_REVIEW_RECORD_SCHEMA_VERSION: PositiveSFTEfficiencyReviewRecordSchemaVersion = "positive_sft_efficiency_review_record_v0"
+POSITIVE_SFT_ACTION_EFFICIENCY_RUBRIC_ID: PositiveSFTEfficiencyRubricId = (
+    "positive_sft_action_efficiency_v0"
+)
 
 
 class _PositiveSFTReviewSource(BaseModel):
@@ -59,6 +59,49 @@ PositiveSFTReviewSource: TypeAlias = Annotated[
 ]
 
 
+class PositiveSFTEfficiencyJudgment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rubric_id: PositiveSFTEfficiencyRubricId = POSITIVE_SFT_ACTION_EFFICIENCY_RUBRIC_ID
+    review_id: str = Field(min_length=1)
+    reviewer_id: str = Field(min_length=1)
+    review_decision: ReviewDecision
+    decision_reason: str = Field(min_length=1)
+    review_notes_ref: ArtifactRef | None = None
+    avoidable_assistant_message_ids: tuple[MessageId, ...] = ()
+
+    @field_validator("decision_reason")
+    @classmethod
+    def validate_nonblank_decision_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("decision_reason must contain non-whitespace text")
+        return value
+
+    @model_validator(mode="after")
+    def validate_judgment(self) -> "PositiveSFTEfficiencyJudgment":
+        message_ids = self.avoidable_assistant_message_ids
+        if len(message_ids) != len(set(message_ids)):
+            raise ValueError("avoidable assistant message ids must be unique")
+        if (
+            self.review_notes_ref is not None
+            and self.review_notes_ref.content_hash is None
+        ):
+            raise ValueError("efficiency review notes must be hash-pinned")
+        if self.review_decision == "rejected":
+            if not message_ids:
+                raise ValueError(
+                    "rejected efficiency judgments require at least one exact "
+                    "avoidable assistant message id"
+                )
+        elif message_ids:
+            raise ValueError(
+                "only rejected efficiency judgments can identify avoidable "
+                "assistant messages"
+            )
+        return self
+
+
 class PositiveSFTReviewRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -76,6 +119,7 @@ class PositiveSFTReviewRecord(BaseModel):
     review_decision: ReviewDecision | None = None
     review_notes_ref: ArtifactRef | None = None
     last_approved_assistant_message_id: MessageId | None = None
+    efficiency_judgment: PositiveSFTEfficiencyJudgment | None
 
     @model_validator(mode="after")
     def validate_review_state(self) -> "PositiveSFTReviewRecord":
@@ -85,6 +129,7 @@ class PositiveSFTReviewRecord(BaseModel):
             self.review_decision,
             self.review_notes_ref,
             self.last_approved_assistant_message_id,
+            self.efficiency_judgment,
         )
         if self.review_status == "not_reviewed":
             if any(value is not None for value in review_details):
@@ -105,86 +150,16 @@ class PositiveSFTReviewRecord(BaseModel):
                     "accepted positive-SFT reviews require an approved assistant "
                     "message boundary"
                 )
-        elif self.last_approved_assistant_message_id is not None:
+            return self
+
+        if self.last_approved_assistant_message_id is not None:
             raise ValueError(
                 "non-accepted positive-SFT reviews cannot authorize a message boundary"
             )
-        return self
-
-
-class PositiveSFTEfficiencyReviewRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: PositiveSFTEfficiencyReviewRecordSchemaVersion = (
-        POSITIVE_SFT_EFFICIENCY_REVIEW_RECORD_SCHEMA_VERSION
-    )
-    source_positive_sft_example_id: str = Field(min_length=1)
-    source_positive_sft_example_record_hash: str = Field(
-        pattern=r"^xxh64:[0-9a-f]{16}$",
-        strict=True,
-    )
-    review_status: ReviewStatus
-    review_id: str | None = Field(default=None, min_length=1)
-    reviewer_id: str | None = Field(default=None, min_length=1)
-    review_decision: ReviewDecision | None = None
-    decision_reason: str | None = Field(default=None, min_length=1)
-    review_notes_ref: ArtifactRef | None = None
-    avoidable_assistant_message_ids: tuple[MessageId, ...] = ()
-
-    @field_validator("decision_reason")
-    @classmethod
-    def validate_nonblank_decision_reason(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError("decision_reason must contain non-whitespace text")
-        return value
-
-    @model_validator(mode="after")
-    def validate_review_state(self) -> "PositiveSFTEfficiencyReviewRecord":
-        message_ids = self.avoidable_assistant_message_ids
-        if len(message_ids) != len(set(message_ids)):
-            raise ValueError("avoidable assistant message ids must be unique")
-
-        review_details = (
-            self.review_id,
-            self.reviewer_id,
-            self.review_decision,
-            self.decision_reason,
-            self.review_notes_ref,
-        )
-        if self.review_status == "not_reviewed":
-            if any(value is not None for value in review_details) or message_ids:
-                raise ValueError(
-                    "not_reviewed efficiency reviews cannot include review details"
-                )
-            return self
-
-        if self.review_id is None:
-            raise ValueError("reviewed efficiency reviews require review_id")
-        if self.reviewer_id is None:
-            raise ValueError("reviewed efficiency reviews require reviewer_id")
-        if self.review_decision is None:
-            raise ValueError("reviewed efficiency reviews require review_decision")
-        if self.decision_reason is None:
-            raise ValueError("reviewed efficiency reviews require decision_reason")
-        if (
-            self.review_notes_ref is not None
-            and self.review_notes_ref.content_hash is None
-        ):
-            raise ValueError("efficiency review notes must be hash-pinned")
-
-        if self.review_decision == "rejected":
-            if not message_ids:
-                raise ValueError(
-                    "rejected efficiency reviews require at least one exact "
-                    "avoidable assistant message id"
-                )
-        elif message_ids:
+        if self.efficiency_judgment is not None:
             raise ValueError(
-                "only rejected efficiency reviews can identify avoidable "
-                "assistant messages"
+                "only prefix-accepted positive-SFT reviews can include an "
+                "efficiency judgment"
             )
         return self
 
