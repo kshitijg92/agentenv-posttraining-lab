@@ -69,7 +69,8 @@ POSITIVE_SFT_REVIEW_RUBRIC = """## Positive-SFT Prefix And Action-Efficiency Rub
 Review assistant actions from the start of the selected source. `accepted`
 requires one exact assistant-message boundary that ends a contiguous,
 training-eligible prefix. `rejected` means no such prefix should be used.
-`needs_followup` records uncertainty without authorizing a prefix.
+The persisted `needs_followup` value is reported as an unresolved prefix:
+uncertainty remains and no prefix is authorized.
 
 ### Efficiency judgment
 
@@ -80,7 +81,8 @@ action through the approved boundary.
 - `rejected`: at least one exact retained assistant action is avoidable, and
   removing it would preserve coherence, useful information, state changes, and
   validation evidence.
-- `needs_followup`: the reviewer cannot judge efficiency confidently.
+- `needs_followup`: the reviewer abstains because efficiency cannot be judged
+  confidently; reports call this an efficiency abstention.
 
 An action has a defensible role when it acquires task-relevant information,
 changes the workspace toward the solution, or validates or diagnoses relevant

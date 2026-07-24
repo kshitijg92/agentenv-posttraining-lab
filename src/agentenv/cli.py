@@ -1219,13 +1219,13 @@ def validate_training_positive_sft_review(
         f"records={len(validation.review_artifact.reviews)} "
         f"prefix_accepted={decisions.count('accepted')} "
         f"prefix_rejected={decisions.count('rejected')} "
-        f"prefix_needs_followup={decisions.count('needs_followup')} "
+        f"prefix_unresolved={decisions.count('needs_followup')} "
         f"efficiency_blocked={efficiency_statuses.count('blocked')} "
         f"efficiency_not_reviewed={efficiency_statuses.count('not_reviewed')} "
         f"efficiency_reviewed={efficiency_statuses.count('reviewed')} "
         f"efficiency_accepted={efficiency_decisions.count('accepted')} "
         f"efficiency_rejected={efficiency_decisions.count('rejected')} "
-        "efficiency_needs_followup="
+        "efficiency_abstained="
         f"{efficiency_decisions.count('needs_followup')}"
     )
 

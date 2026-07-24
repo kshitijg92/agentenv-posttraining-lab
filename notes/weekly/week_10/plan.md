@@ -2,8 +2,12 @@
 
 Status: in progress on 2026-07-23. The source-record boundary, planned
 train/selection disjointness, and combined positive-SFT review contract are
-complete. Eighteen accepted prefixes are efficiency-pending. Filtering,
-training, and policy evaluation have not started.
+complete. The 100-row review universe now has 98 accepted prefixes, 2 rejected
+sources, and 0 unresolved prefix decisions. Embedded efficiency judgments are
+94 accepted, 4 rejected, and 0 abstained. Because training and policy
+evaluation have not started, the Week 10 experiment will use all reviewed
+prefixes: 98 raw and 94 efficiency-filtered. The stale 18-row exports and
+materializations must be regenerated before training.
 
 ## Theme
 
@@ -95,7 +99,7 @@ eval attempts
 -> operational LoRA smoke
 ```
 
-Current trainer-shaped SFT inventory:
+Pre-adjudication trainer-shaped SFT inventory:
 
 ```text
 positive-SFT manifests: 8
@@ -105,7 +109,7 @@ sequence-length exclusions: 0
 materialization errors: 0
 ```
 
-The 18 source examples come from six dev tasks:
+Those stale 18 source examples came from six dev tasks:
 
 ```text
 preserve_cli_error_codes: 5
@@ -116,10 +120,20 @@ repair_relative_path: 3
 repair_template_expansion: 1
 ```
 
-The current materialized rows contain 10,205 supervised assistant tokens in
-one complete pass. This number is preflight context, not the frozen Week 10
-budget. The resolved raw-treatment manifest must compute and pin the authority
-used by training.
+Those materialized rows contain 10,205 supervised assistant tokens in one
+complete pass. This number is historical preflight context, not the Week 10
+budget. Regenerating all 98 accepted prefixes will produce the actual raw
+token budget.
+
+Current combined-review authorization:
+
+```text
+prefix accepted / S_raw: 98
+efficiency accepted / S_filtered: 94
+prefix rejected: 2
+efficiency rejected: 4
+training tasks after regeneration: 11
+```
 
 All eight current SFT materialization manifests use the Week 9
 `explicit_user_override` authorization for a known source-runtime mismatch.
@@ -232,7 +246,7 @@ Resolved policy details:
 - a future behavior-changing repair would require its own provenance and
   outcome contract and is not part of this treatment.
 
-Current calibration candidates include:
+The four calibration candidates reviewed first were:
 
 ```text
 positive_sft_example_a5ef0f3a430cc454
@@ -245,8 +259,9 @@ positive_sft_example_bf8626bdcb21216d
   later dependence on that observation
 ```
 
-These are calibration candidates, not pre-populated decisions. The frozen
-review artifact remains the decision authority.
+These were calibration candidates rather than pre-populated decisions. The
+completed review records are the decision authority, and all four were
+rejected with one exact avoidable assistant-message witness each.
 
 Passing pre-edit checks in these examples remain allowed under the resolved v1
 policy. Comparator-supported shorter trajectories are evidence for review, but
@@ -287,7 +302,8 @@ rejected
   source example remains available to S_raw but not S_filtered
 
 needs_followup
-  reviewer abstains because the efficiency judgment is not trustworthy
+  persisted shared decision value for a reviewer abstention
+  reported as efficiency_abstained for this dimension
   source example remains available to S_raw but not S_filtered
 
 missing efficiency_judgment on an accepted prefix
@@ -316,14 +332,17 @@ Combined-review completeness is a pre-training gate:
 
 - the existing eight positive-SFT review artifacts remain the only review
   authorities;
-- all 18 prefix-accepted rows have one embedded efficiency judgment;
+- all 98 prefix-accepted rows have one embedded efficiency judgment;
 - no separate row duplicates source identity, messages, or materializations;
 - every judgment has rubric id, review id, reviewer id, decision, and reason;
 - every rejection names at least one exact assistant message id;
 - rejected message ids must exist, be unique, and have role `assistant` in the
   retained prefix;
-- `needs_followup` remains a countable abstention rather than an implicit tie or
-  acceptance;
+- the shared persisted `needs_followup` value is reported as
+  `prefix_unresolved` for prefix review and `efficiency_abstained` for the
+  efficiency dimension;
+- unresolved prefixes and efficiency abstentions remain countable rather than
+  becoming implicit acceptance;
 - source messages remain immutable.
 
 ## Derived Training Tasks And Planned Selection Tasks
@@ -331,25 +350,25 @@ Combined-review completeness is a pre-training gate:
 The exact filtering unit is the existing `PositiveSFTExampleRecord`. There is
 no separate task-partition config, schema, manifest, or CLI.
 
-Training task ids are derived from the 18 exact source records:
+Training task ids are derived from all 98 accepted source records:
 
 ```text
 preserve_cli_error_codes
+repair_config_precedence
+repair_csv_projection
+repair_duration_parser
+repair_header_merge
 repair_jsonl_deduper
 repair_query_encoding
 repair_record_chunking
 repair_relative_path
+repair_semver_precedence
 repair_template_expansion
 ```
 
 Selection task ids are declared by the future selection eval config:
 
 ```text
-repair_config_precedence
-repair_header_merge
-repair_duration_parser
-repair_semver_precedence
-repair_csv_projection
 repair_retry_schedule
 repair_interval_coalescing
 repair_alias_chain
@@ -363,8 +382,8 @@ repair_job_dispatch
 Current preflight:
 
 ```text
-train-dev count: 6
-selection-dev count: 13
+train-dev count: 11
+selection-dev count: 8
 intersection: empty
 union: the 19 then-current dev tasks
 ```
@@ -382,7 +401,7 @@ training-run manifests
   -> pin the exact materialization and final combined-review inputs consumed
 
 selection eval config and eval manifests
-  -> own the thirteen selection ids and exact selected-task hashes
+  -> own the eight selection ids and exact selected-task hashes
 
 policy comparison
   -> verifies that every arm used the same selection-task hash set
@@ -390,18 +409,29 @@ policy comparison
 
 Required gates:
 
-- every one of the 18 accepted prefixes appears exactly once across the
+- every one of the 98 accepted prefixes appears exactly once across the
   existing combined review queues;
+- the regenerated Week 10 raw input resolves all 98 accepted prefixes;
+- the filtered input resolves the 94 efficiency-accepted members of that same
+  population;
 - raw and filtered training input resolution pins exact source record hashes;
 - train task ids are derived from the consumed source records rather than
   copied into a second config;
-- every selection eval attempt belongs to one of the thirteen configured
+- every selection eval attempt belongs to one of the eight configured
   selection-dev tasks and is hash-pinned by the eval manifest;
 - derived train task ids and configured selection task ids are disjoint;
 - no practice, heldout-private, or public-calibration task appears;
 - selection-task hash mismatch blocks the affected eval/comparison snapshot;
 - unrelated repository or task-pack additions do not invalidate existing
   source-record, dataset, or eval artifacts.
+
+The earlier six-train-task/thirteen-selection-task split was provisional and
+preceded completion of prefix review. Because no training or policy evaluation
+has started, use all newly accepted prefixes and derive the split again. The
+98-row raw pool spans 11 tasks; the other 8 dev tasks become the policy
+selection set. If those eight are not sufficiently difficulty-comparable, add
+new dev tasks before evaluation rather than discard valid reviewed prefixes or
+reuse a training task for selection.
 
 The current 26-task pack hashes to:
 
@@ -538,8 +568,8 @@ selection task and policy:
 
 ```text
 policies: 3
-selection tasks: 13
-primary model-policy attempts: 39
+selection tasks: 8
+primary model-policy attempts: 24
 ```
 
 Do not claim sampling variance, training-seed robustness, or statistical
@@ -778,7 +808,9 @@ reference-policy contract is ready.
 ### Checkpoint 1: Confirm The Existing Source And Selection Boundaries
 
 Status: complete on 2026-07-22. No new source code, config, schema, CLI, or
-artifact is retained for this checkpoint.
+artifact is retained for this checkpoint. Its 18-row/13-task preflight was
+provisional and was superseded when the prefix-review backlog expanded the
+training pool to 98 rows across 11 tasks.
 
 Purpose:
 
@@ -821,7 +853,10 @@ relevant facts.
 
 Status on 2026-07-23: implemented. The standalone efficiency-review layer was
 removed. The existing eight positive-SFT review artifacts contain 100 rows:
-18 prefix-accepted rows are efficiency-pending and 82 rows are not applicable.
+at boundary-collapse time, 18 prefix-accepted rows were efficiency-pending and
+82 rows were not applicable. Later prefix adjudication resolved the backlog and
+corrected one earlier rejection, producing 98 accepted prefixes and 2 rejected
+sources.
 
 Purpose:
 
@@ -842,18 +877,23 @@ Work:
 - derive pending/not-applicable/reviewed state rather than persist another
   status field;
 - make a missing judgment on an accepted prefix a filtered-training blocker;
-- keep `needs_followup` as an explicit abstention.
+- keep the shared persisted `needs_followup` value as an explicit efficiency
+  abstention and report it dimension-specifically.
 
 Done when:
 
-- all 18 accepted prefixes appear exactly once across the existing queues;
-- all other review rows are efficiency-not-applicable;
+- all accepted prefixes appear exactly once across the existing queues;
+- all non-accepted review rows are efficiency-not-applicable;
 - malformed judgments and invalid assistant-message witnesses fail;
 - source messages cannot be mutated through review;
 - reviewer identity remains provenance rather than pipeline authority;
 - no standalone efficiency schema, manifest, artifact, or CLI remains.
 
 ### Checkpoint 3: Populate And Validate The Efficiency Review
+
+Status on 2026-07-23: complete. All 98 eligible prefixes were reviewed under
+the frozen rubric: 94 accepted, 4 rejected, and 0 efficiency abstentions. The
+four rejections are exactly the four calibration candidates identified above.
 
 Purpose:
 
@@ -868,7 +908,7 @@ Work:
 - review all remaining source examples under the same rubric;
 - record exact evidence and rationale for every decision;
 - validate the completed review artifact;
-- summarize accepted, rejected, and needs-followup counts;
+- summarize accepted, rejected, and efficiency-abstained counts;
 - inspect rejection concentration by task and source policy;
 - stop if the rubric cannot distinguish semantic inefficiency consistently.
 
@@ -1027,7 +1067,7 @@ Make the comparison decision rule executable before seeing policy outcomes.
 
 Work:
 
-- pin the thirteen selection task ids and hashes;
+- pin the eight selection task ids and hashes;
 - pin greedy decoding and all inference budgets;
 - define exact token-consumption fields and aggregation;
 - define exact action-count fields and aggregation;
@@ -1052,7 +1092,7 @@ Done when:
 Purpose:
 
 ```text
-Run the 39-attempt paired comparison through one path.
+Run the 24-attempt paired comparison through one path.
 ```
 
 Run order:
@@ -1068,7 +1108,7 @@ earlier arm.
 
 Done when:
 
-- every arm covers all thirteen frozen task cells or records typed invalid
+- every arm covers all eight frozen task cells or records typed invalid
   cells;
 - each attempt has exact model, adapter, prompt, task, scorer, decoding, token,
   action, and runtime provenance;
@@ -1323,7 +1363,7 @@ If common serving fails:
 - preserve a serving blocker note;
 - defer model-quality comparison.
 
-If all policies score zero or all score thirteen:
+If all policies score zero or all score eight:
 
 - report the floor or ceiling explicitly;
 - abstain from policy selection unless the predeclared primary rule genuinely
@@ -1365,7 +1405,7 @@ formatting, or routine refactor details.
 Week 10 is complete when:
 
 - train task ids are derived from the exact raw/filtered source records;
-- the selection eval config and eval manifests pin the exact thirteen
+- the selection eval config and eval manifests pin the exact eight
   selection-dev ids and task hashes;
 - train and selection task ids are disjoint;
 - every train-dev prefix-accepted review has one completed embedded efficiency
@@ -1380,7 +1420,7 @@ Week 10 is complete when:
   full-example tolerance;
 - `B0`, `S_raw`, and `S_filtered` use one base checkpoint, protocol, serving
   path, decoding config, task set, scorer, and inference budget;
-- all three arms run the thirteen-task deterministic selection matrix or have a
+- all three arms run the eight-task deterministic selection matrix or have a
   documented same-path blocker;
 - base-versus-raw, base-versus-filtered, and raw-versus-filtered paired reports
   exist or are explicitly blocked;
@@ -1391,15 +1431,18 @@ Week 10 is complete when:
 
 ## Next Implementation Step
 
-Populate Checkpoint 3 only:
+Regenerate and resolve the exact Week 10 training inputs only:
 
 ```text
-apply the frozen efficiency rubric to all 18 exact queue rows
-record reviewer provenance, decision, and rationale
-for every rejection, identify exact avoidable assistant message ids
-validate zero not_reviewed rows and report accepted/rejected/needs_followup counts
-stop before filtering or training
+regenerate positive-SFT exports and materializations from current reviews
+freeze all 98 prefix-accepted examples as S_raw
+derive the 94 efficiency-accepted members as S_filtered
+derive the eleven training task ids from S_raw
+configure the eight remaining dev tasks for policy selection
+prove the task sets are disjoint and review task-difficulty comparability
+report one-pass supervised-token counts and freeze the matched-exposure rule
+stop before launching LoRA training
 ```
 
-Do not jump directly from this plan to filtering, training, adapter serving, and
-evaluation in one pass.
+The earlier 18-row generated artifacts are stale working artifacts, not a
+frozen experiment boundary.

@@ -3,7 +3,13 @@
 Current boundary as of 2026-07-23: action efficiency is an embedded judgment
 on the existing `PositiveSFTReviewRecord`. There is no standalone efficiency
 review artifact, schema, manifest, or CLI. The earlier standalone implementation
-below is retained only as design history and is explicitly superseded.
+below is retained only as design history and is explicitly superseded. The
+100-row review universe is complete at 98 prefix accepted, 2 prefix rejected,
+94 efficiency accepted, 4 efficiency rejected, and no unresolved or abstained
+decisions. Because training and policy evaluation have not started, the Week
+10 experiment will use all 98 accepted prefixes and all 94
+efficiency-accepted prefixes. The earlier 18-row exports and materializations
+are stale working artifacts and will be regenerated.
 
 ## 2026-07-22 Source-Boundary Correction
 
@@ -259,16 +265,18 @@ The change removes roughly 1,500 lines of standalone implementation and tests.
 
 ### Existing Artifact Migration
 
-The eight existing positive-SFT review artifacts contain 100 prefix-review
-rows:
+Before the prefix backlog was adjudicated, the eight existing positive-SFT
+review artifacts contained 100 prefix-review rows:
 
 ```text
-prefix accepted / efficiency pending: 18
+prefix accepted / efficiency reviewed: 18
 prefix rejected or needs_followup / efficiency not applicable: 82
 ```
 
-All rows now contain explicit `efficiency_judgment: null`. The existing queue
-files were refreshed so the 18 eligible rows show:
+All rows contained the explicit nullable field. The initial 18 eligible rows
+received completed judgments, while the then-inapplicable 82 rows retained
+`efficiency_judgment: null`. The queue files at that checkpoint showed the 18
+eligible rows with:
 
 - the combined review row;
 - the frozen efficiency rubric id;
@@ -280,11 +288,11 @@ worktree. The one-time queue refresh therefore used the adjacent hash-pinned
 positive-SFT exports, whose messages are exactly the previously approved
 prefixes. No compatibility path resolver was added.
 
-The existing positive-SFT exports and token materializations are intentionally
-not regenerated while judgments remain editable. They will be regenerated
-once, after all 18 judgments are complete, so review edits do not cause
-repeated artifact churn. No trajectory, harness-audit, or agent execution must
-be rerun.
+The existing positive-SFT exports and token materializations were intentionally
+not regenerated while judgments remained editable. Once backlog adjudication
+completed, the valid training population expanded and the provisional
+train/selection split had to be derived again. No trajectory, harness-audit,
+or agent execution had to be rerun.
 
 ### Current Invariants
 
@@ -293,7 +301,7 @@ be rerun.
   `positive_sft_action_efficiency_v0`.
 - A rejected judgment requires at least one unique assistant message id.
 - Evidence must identify an assistant message inside the retained prefix.
-- Accepted and `needs_followup` judgments cannot claim avoidable actions.
+- Accepted and efficiency-abstained judgments cannot claim avoidable actions.
 - Raw training uses every prefix-accepted materialization.
 - Filtered training uses only rows with an accepted embedded judgment.
 - Training consumes existing materialization records; no copied
@@ -308,13 +316,238 @@ suite is deferred until the Week 10 integration boundary.
 positive-SFT schema/review/artifact/CLI focused tests: 33 passed
 Ruff focused checks: passed
 Pyright focused checks: 0 errors, 0 warnings
-combined artifact accounting: 8 artifacts, 100 rows, 18 pending
+combined artifact accounting: 8 artifacts, 100 rows, 18 reviewed, 0 pending
 standalone efficiency artifact absent
+full repository suite: deferred until the Week 10 integration boundary
+```
+
+### Next Small Step At That Checkpoint
+
+The next step was to resolve raw and filtered inputs after the review universe
+was complete. Later backlog adjudication expanded that universe, so the stale
+18-row generated artifacts must be overwritten.
+
+## 2026-07-23 Completed Embedded Efficiency Review
+
+### Outcome
+
+Codex reviewed the 18 prefixes in the already materialized Week 10 population
+on the user's behalf under `positive_sft_action_efficiency_v0`. The accounting
+for that frozen population is:
+
+```text
+reviewed: 18
+accepted: 14
+rejected: 4
+needs_followup: 0
+pending: 0
+
+S_raw unique examples: 18
+S_filtered unique examples: 14
+raw assistant actions: 117
+filtered assistant actions: 85
+raw supervised tokens: 10,205
+filtered unique supervised tokens: 7,000
+```
+
+The supervised-token figures describe the existing one-pass materializations.
+They are reporting signals, not the matched-exposure training schedule.
+
+### Rejected Prefixes
+
+| Example | Task | Exact avoidable action | Reason |
+|---|---|---|---|
+| `positive_sft_example_a5ef0f3a430cc454` | `preserve_cli_error_codes` | `message_f01ad86192404fa1b0a14db56e31f54e` | Second unchanged `src/validate_records.py` read before any write |
+| `positive_sft_example_aab1e627500f226b` | `preserve_cli_error_codes` | `message_ada15f297b3148249f33dd2b3c81f55e` | Second unchanged `src/validate_records.py` read before any write |
+| `positive_sft_example_b535bb9c0f7ca71b` | `preserve_cli_error_codes` | `message_41d73bea570c42efbd8dba27b01a69b2` | Unused `pyproject.toml` inspection before a standard-library-only repair |
+| `positive_sft_example_bf8626bdcb21216d` | `repair_jsonl_deduper` | `message_9e942f8f981644f2ae676732282a2003` | Unused `pyproject.toml` inspection before a standard-library-only repair |
+
+The duplicate-read evidence was checked directly: each second tool result was
+byte-for-byte equal to the first, and no write occurred between the reads.
+The environment reads did not affect the subsequent edits or validation.
+
+Passing pre-edit tests were not treated as waste. They remain allowed baseline
+diagnosis under the frozen rubric.
+
+### Concentration
+
+```text
+by source policy:
+  devstral-sampling: 9 accepted, 0 rejected
+  qwen2-5-coder-14b-sampling: 3 accepted, 0 rejected
+  qwen3-coder-30b-sampling: 2 accepted, 4 rejected
+
+by task:
+  preserve_cli_error_codes: 2 accepted, 3 rejected
+  repair_jsonl_deduper: 6 accepted, 1 rejected
+  all four other training tasks: 6 accepted, 0 rejected
+```
+
+This concentration is a result to report, not a reason to change the rubric or
+force a different filtered count.
+
+### Focused Validation
+
+The completion check:
+
+- parsed all 100 rows through `PositiveSFTReviewRecord`;
+- reconstructed exact messages for all 18 accepted prefixes from the adjacent
+  hash-pinned positive-SFT exports;
+- validated each rejected witness as an assistant message inside the retained
+  prefix;
+- proved the decision mapping covered the 18 accepted prefixes exactly once;
+- refreshed all 18 combined queue rows;
+- reported 14 accepted, 4 rejected, 0 needs-followup, and 0 pending.
+
+The normal recursive `review-validate` command still encounters absolute paths
+to the retired foundation worktree in historical upstream manifests. This
+checkpoint did not add a compatibility resolver or mutate the older provenance
+chain. Instead, the focused completion check used the adjacent hash-pinned
+positive-SFT exports that contain the exact approved prefixes. The one-time
+downstream regeneration should pin the current combined reviews and current
+derived artifacts.
+
+The full repository suite remains deferred until the Week 10 integration
+boundary.
+
+## 2026-07-23 Prefix Backlog Adjudication
+
+### Why 80 Rows Said Needs Followup
+
+The earlier AI-proxy review used one blanket decision for task-failed
+trajectories:
+
+```text
+No positive prefix was adjudicated in this pass. The failed trajectory may
+still contain useful early behavior, but accepting it requires
+message-by-message credit assignment.
+```
+
+That label recorded deferred work; it was not evidence that 80 sources were
+ambiguous or low quality. The backlog was reviewed assistant action by
+assistant action under the existing contiguous-prefix contract.
+
+The boundary was placed before the earliest:
+
+- failed or invalid tool action;
+- workspace write in a task-failed trajectory;
+- premature final answer;
+- repeated unchanged read.
+
+A passing pre-edit public check remained an allowed diagnostic action. Five
+automatically proposed boundaries were shortened by one action because an
+unused `pyproject.toml` read had no downstream role.
+
+### Decisions
+
+Of the 80 unresolved rows:
+
+```text
+accepted exact diagnostic prefix: 79
+rejected because the first action failed: 1
+unresolved: 0
+```
+
+One older rejected row was corrected after the same rule was applied
+consistently. It had four clean inspect-and-baseline actions before a malformed
+write call, so the boundary now ends at the passing baseline check. The other
+older rejection remains rejected because its first action reads a nonexistent
+path; no nonempty clean prefix exists.
+
+Current review-universe accounting:
+
+```text
+prefix accepted: 98
+prefix rejected: 2
+prefix unresolved: 0
+
+efficiency accepted: 94
+efficiency rejected: 4
+efficiency abstained: 0
+efficiency pending: 0
+```
+
+All 80 newly accepted prefixes pass efficiency review because the approved
+boundary excludes the first failed, redundant, or otherwise avoidable action.
+Across all 98 accepted prefixes there are 338 retained assistant actions, with
+2 to 8 actions per prefix. The 80 newly accepted prefixes contribute 221 of
+those actions. These counts describe retained behavior; action count alone did
+not determine a decision.
+
+### Review Labels
+
+The persisted decision enum remains shared and still stores
+`needs_followup`. Reports now use dimension-specific language:
+
+```text
+prefix needs_followup     -> prefix_unresolved
+efficiency needs_followup -> efficiency_abstained
+```
+
+This avoids presenting unresolved prefix credit assignment and an efficiency
+reviewer abstention as though they were the same operational state. No new
+decision schema or compatibility alias was introduced.
+
+### Training-Population And Split Correction
+
+The earlier 18-row materialization population and
+six-train-task/thirteen-selection-task split were provisional: neither training
+nor policy evaluation had started. Completing prefix review expanded the
+valid raw population to 98 prefixes across 11 tasks. Five were in the
+provisional selection set:
+
+```text
+repair_config_precedence
+repair_csv_projection
+repair_duration_parser
+repair_header_merge
+repair_semver_precedence
+```
+
+There is no reason to discard those reviewed prefixes merely to preserve a
+stale split. Week 10 will regenerate:
+
+```text
+S_raw: 98 prefix-accepted examples across 11 tasks
+S_filtered: 94 efficiency-accepted examples across the same 11 tasks
+policy selection: the remaining 8 dev tasks
+```
+
+The task sets still partition all 19 dev tasks with an empty intersection.
+Before evaluation, the eight selection tasks must be checked for comparable
+difficulty and frozen in the selection config. If that set is too small or
+distributionally mismatched, add new dev tasks rather than train on a
+selection task or throw away valid SFT units.
+
+No task-partition artifact is needed. Training task ids are derived from the
+regenerated source records; selection task ids belong to the eval config; their
+disjointness is checked at the consuming boundary.
+
+### Artifact Refresh And Focused Validation
+
+The existing eight combined review artifacts were overwritten in place:
+
+- all 100 rows parse as `PositiveSFTReviewRecord`;
+- every accepted boundary identifies exactly one assistant source message;
+- all newly accepted final actions have successful tool results;
+- no newly retained prefix contains a workspace write;
+- all four efficiency-rejection witnesses name retained assistant messages;
+- review notes are hash-pinned after refresh;
+- the queues contain all 98 exact accepted prefixes;
+- no temporary inventory or adjudication script remains.
+
+Focused checks:
+
+```text
+positive-SFT review/schema/builder and repair-export tests: 51 passed
+Ruff on changed source and tests: passed
+Pyright on changed source and tests: 0 errors, 0 warnings
 full repository suite: deferred until the Week 10 integration boundary
 ```
 
 ### Next Small Step
 
-Populate the 18 embedded judgments, starting with the four calibration
-candidates. Then validate complete accounting and regenerate dependent exports
-and token materializations exactly once.
+Regenerate the exports and token materializations for all 98 accepted prefixes,
+resolve the 94-example filtered subset, validate the resulting 11-task versus
+8-task split, and freeze matched supervised-token exposure before launching
+either LoRA run.
