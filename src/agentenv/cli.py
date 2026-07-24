@@ -53,6 +53,10 @@ from agentenv.training.candidates.export import (
     export_training_candidate_records,
 )
 from agentenv.training.positive_sft.export import export_positive_sft_examples
+from agentenv.training.positive_sft.efficiency_review import (
+    initialize_positive_sft_efficiency_review_artifact,
+    validate_positive_sft_efficiency_review_artifact,
+)
 from agentenv.training.positive_sft.materialization.export import (
     export_positive_sft_training_materializations,
 )
@@ -1184,6 +1188,94 @@ def initialize_training_positive_sft_review(
     console.print(
         f"wrote {artifact.out_dir / manifest.artifacts['review_queue']}",
         soft_wrap=True,
+    )
+
+
+@training_positive_sft_app.command("efficiency-review-init")
+def initialize_training_positive_sft_efficiency_review(
+    materialization: list[Path] | None = typer.Option(
+        None,
+        "--materialization",
+        help=(
+            "Completed positive-SFT training materialization artifact directory; "
+            "repeat for each source artifact."
+        ),
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for positive-SFT efficiency review artifacts.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before initializing.",
+    ),
+) -> None:
+    if not materialization:
+        raise typer.BadParameter(
+            "At least one --materialization is required",
+            param_hint="--materialization",
+        )
+    try:
+        artifact = initialize_positive_sft_efficiency_review_artifact(
+            materialization,
+            out,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(
+            str(exc),
+            param_hint="--materialization",
+        ) from exc
+
+    manifest = artifact.manifest
+    console.print(
+        "[green]positive SFT efficiency review initialized[/green] "
+        f"records={manifest.record_count} "
+        "not_reviewed="
+        f"{sum(review.review_status == 'not_reviewed' for review in artifact.reviews)}"
+    )
+    console.print(f"wrote {artifact.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['reviews']}",
+        soft_wrap=True,
+    )
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['review_queue']}",
+        soft_wrap=True,
+    )
+    console.print(
+        f"wrote {artifact.out_dir / manifest.artifacts['rubric']}",
+        soft_wrap=True,
+    )
+
+
+@training_positive_sft_app.command("efficiency-review-validate")
+def validate_training_positive_sft_efficiency_review(
+    reviews: Path = typer.Option(
+        ...,
+        "--reviews",
+        help="Positive-SFT efficiency review artifact directory.",
+    ),
+) -> None:
+    try:
+        validation = validate_positive_sft_efficiency_review_artifact(reviews)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--reviews") from exc
+
+    status_counts = validation.review_status_counts
+    decision_counts = validation.review_decision_counts
+    console.print(
+        "[green]positive SFT efficiency review valid[/green] "
+        f"records={validation.artifact.manifest.record_count} "
+        f"not_reviewed={status_counts['not_reviewed']} "
+        f"reviewed={status_counts['reviewed']} "
+        f"accepted={decision_counts['accepted']} "
+        f"rejected={decision_counts['rejected']} "
+        f"needs_followup={decision_counts['needs_followup']}"
     )
 
 

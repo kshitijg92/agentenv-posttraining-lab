@@ -1,7 +1,9 @@
 # Week 10 Plan
 
-Status: planned on 2026-07-22. Implementation and experiment execution have
-not started.
+Status: in progress on 2026-07-22. The source-record boundary, planned
+train/selection disjointness, efficiency-review contract, and initialized
+18-row queue are complete. Review decisions, filtering, training, and policy
+evaluation have not started.
 
 ## Theme
 
@@ -53,9 +55,10 @@ to select a policy.
 An acceptable closure result is also:
 
 ```text
-The filtering policy and task partition were implemented and audited, but a
-same-path base/adapter comparison was blocked; the blocker and filtering-only
-evidence were preserved without substituting a confounded comparison.
+The filtering policy and task-disjointness gates were implemented and audited,
+but a same-path base/adapter comparison was blocked; the blocker and
+filtering-only evidence were preserved without substituting a confounded
+comparison.
 ```
 
 ## Starting Point
@@ -320,12 +323,12 @@ Queue completeness is a pre-training gate:
   acceptance;
 - source messages remain immutable.
 
-## Resolved Task-Level Development Partition
+## Derived Training Tasks And Planned Selection Tasks
 
-The frozen partition uses task identity and task-content hash, not attempts,
-seeds, trajectories, or source model identity.
+The exact filtering unit is the existing `PositiveSFTExampleRecord`. There is
+no separate task-partition config, schema, manifest, or CLI.
 
-Training tasks:
+Training task ids are derived from the 18 exact source records:
 
 ```text
 preserve_cli_error_codes
@@ -336,7 +339,7 @@ repair_relative_path
 repair_template_expansion
 ```
 
-Selection tasks:
+Selection task ids are declared by the future selection eval config:
 
 ```text
 repair_config_precedence
@@ -354,7 +357,7 @@ repair_event_rollup
 repair_job_dispatch
 ```
 
-At the initial freeze:
+Current preflight:
 
 ```text
 train-dev count: 6
@@ -363,41 +366,46 @@ intersection: empty
 union: the 19 then-current dev tasks
 ```
 
-Every partition row must bind:
+Ownership remains at existing boundaries:
 
 ```text
-task_id -> task_record_hash
+PositiveSFTExampleRecord
+  -> owns the exact messages, source identity, task id, and upstream provenance
+
+efficiency-review and raw/filtered manifests
+  -> pin the exact source example ids and record hashes they consume
+
+selection eval config and eval manifests
+  -> own the thirteen selection ids and exact selected-task hashes
+
+policy comparison
+  -> verifies that every arm used the same selection-task hash set
 ```
 
-The resolved snapshot should also contain one deterministic aggregate hash for
-the train set and one for the selection set.
+Required gates:
 
-The whole task-pack hash and split-lock hash may be recorded as provenance, but
-they are not the sole invalidation authority. Adding an unrelated task or
-editing an unselected task must not invalidate the selected task-content
-snapshot.
-
-Partition invariants:
-
-- every current SFT source task is in train-dev;
-- every consumed SFT example belongs to a frozen train-dev task id and hash;
-- every selection eval attempt belongs to a frozen selection-dev task id and
-  hash;
-- no task identity or content hash appears in both roles;
+- every one of the 18 current source records appears exactly once in the
+  initialized efficiency-review queue;
+- raw and filtered construction pins exact source record hashes;
+- train task ids are derived from the consumed source records rather than
+  copied into a second config;
+- every selection eval attempt belongs to one of the thirteen configured
+  selection-dev tasks and is hash-pinned by the eval manifest;
+- derived train task ids and configured selection task ids are disjoint;
 - no practice, heldout-private, or public-calibration task appears;
-- selected task hash mismatch blocks the affected comparison snapshot;
-- unrelated repository or task-pack additions do not block the snapshot.
+- selection-task hash mismatch blocks the affected eval/comparison snapshot;
+- unrelated repository or task-pack additions do not invalidate existing
+  source-record, dataset, or eval artifacts.
 
-The historical checked-in task-hash report currently covers only the early
-four-task pack. It should be regenerated in place when implementing the
-partition. A preflight run against the current 26-task pack produced:
+The current 26-task pack hashes to:
 
 ```text
 pack_record_hash: xxh64:70af6abbb3ae1d61
 ```
 
-That preflight value is not the Week 10 freeze authority. The resolved
-partition artifact created by Checkpoint 1 is authoritative.
+That whole-pack value is diagnostic provenance, not filtering authority.
+Filtering follows exact `PositiveSFTExampleRecord` hashes, while selection
+evaluation follows the selected-task hashes already owned by eval manifests.
 
 ## Artifact And Regeneration Policy
 
@@ -415,17 +423,19 @@ mutable working configuration
 -> immutable comparison snapshot
 ```
 
-The freeze occurs immediately before raw and filtered dataset construction,
-after the partition, filtering rubric, review queue, model-input protocol,
-training exposure policy, serving path, decoding, metrics, and selection rule
-are approved.
+The experiment freeze occurs immediately before raw and filtered dataset
+construction, after the source-record scope, filtering rubric, review queue,
+model-input protocol, training exposure policy, serving path, decoding,
+metrics, and selection rule are approved.
 
 Practical invalidation rules:
 
-- adding a task does not invalidate an existing selected-task snapshot;
-- editing an unselected task does not invalidate it;
-- editing a selected task before freeze simply changes the planned snapshot;
-- editing a selected task after freeze creates a new comparison snapshot;
+- changing source messages invalidates review and dataset artifacts that pin
+  the prior source record;
+- changing a selection task invalidates eval artifacts that pin the prior task
+  hash;
+- adding an unrelated task or editing an unrelated task does not invalidate
+  existing source-record, dataset, or selected-task artifacts;
 - documentation, notes, report formatting, unrelated tests, and unrelated code
   do not require training-data regeneration;
 - a semantic change to selected task bytes, filtering, tokenization, loss
@@ -643,7 +653,7 @@ Week 10 must not claim:
 - that token count is a monotonic quality signal;
 - that matched supervised-token exposure matches unique information content;
 - that filtered-example repetition is harmless;
-- that the task partition is difficulty matched;
+- that the derived train and selection task sets are difficulty matched;
 - that progressive-task source-file counts are measured difficulty labels;
 - that an explicit learning-lab authorization override is a production data
   release;
@@ -718,7 +728,7 @@ notes/weekly/week_10/plan.md
 notes/weekly/week_10/implementation_notes.md
 notes/weekly/week_10/learnings.md
 notes/weekly/week_10/closure_audit.md
-experiments/plans/week_10_baseline_controlled_sft/
+experiments/plans/week_10_positive_sft_matched_schedule/
 experiments/runs/week_10_positive_sft_efficiency_review/
 experiments/runs/week_10_positive_sft_raw/
 experiments/runs/week_10_positive_sft_filtered/
@@ -738,7 +748,6 @@ Schedule-neutral repository surfaces should use names based on meaning rather
 than week number. Likely configuration artifacts:
 
 ```text
-configs/data/baseline_controlled_sft_task_partition.yaml
 configs/data/positive_sft_efficiency_filter.yaml
 configs/train/positive_sft_lora_raw.yaml
 configs/train/positive_sft_lora_filtered.yaml
@@ -764,46 +773,53 @@ reference-policy contract is ready.
 
 ## Planned Checkpoints
 
-### Checkpoint 1: Resolve And Freeze The Task Partition
+### Checkpoint 1: Confirm The Existing Source And Selection Boundaries
+
+Status: complete on 2026-07-22. No new source code, config, schema, CLI, or
+artifact is retained for this checkpoint.
 
 Purpose:
 
 ```text
-Turn the agreed six-task/13-task intent into a small hash-pinned experiment
-snapshot without freezing the whole evolving repository.
+Confirm that PositiveSFTExampleRecord is already the exact filtering unit and
+that task disjointness can be enforced between existing dataset and eval
+boundaries without introducing another authority.
 ```
 
 Work:
 
-- regenerate the current task hash report in place;
-- create the schedule-neutral human-authored partition config;
-- resolve every selected id to the current `task_record_hash`;
-- compute deterministic train-set and selection-set aggregate hashes;
-- persist the resolved snapshot under the Week 10 experiment plan;
-- validate train/selection disjointness and selected split membership;
-- validate that all 18 current SFT source examples belong to train-dev;
-- prove no heldout, practice, or public-calibration task appears;
-- test that adding an unrelated task does not invalidate a resolved selection;
-- test that editing a selected task does invalidate the affected snapshot.
+- inventory the eight existing positive-SFT exports and 18 typed source rows;
+- derive the six train task ids from `record.task_input.task_id`;
+- declare the thirteen selection ids in the planned selection eval config;
+- preflight that the derived train ids and planned selection ids are disjoint;
+- confirm that their current union is the 19 dev tasks;
+- leave source hashes to review/dataset artifacts and selection hashes to eval
+  artifacts;
+- remove the redundant task-partition implementation and generated snapshot.
 
 Done when:
 
-- six train rows and thirteen selection rows are resolved;
-- exact ids and per-task hashes are inspectable;
-- current SFT task coverage is complete;
-- selected task-content drift fails closed;
-- unrelated task-pack growth remains allowed;
-- no code or schema name contains a week label.
+- all 18 source rows are accounted for;
+- their six task ids are derived rather than copied;
+- the planned thirteen selection ids are disjoint;
+- no standalone task-partition artifact or duplicated authority remains;
+- later review, dataset, eval, and comparison artifacts each pin only the
+  dependencies they actually consume.
 
 Self-deception trap:
 
 ```text
-Hashing the whole pack is not the same as proving the exact train and selection
-tasks are frozen, and requiring the whole pack to stay unchanged creates
-ceremony rather than better measurement.
+Turning a derivable relationship into a new config, schema, manifest, CLI, and
+artifact does not make the experiment safer. It creates a second authority that
+can drift from the exact SFT records and eval manifests that already own the
+relevant facts.
 ```
 
 ### Checkpoint 2: Efficiency Review Contract And Queue
+
+Status on 2026-07-22: implemented. The queue contains all 18 exact source
+examples and validates with 18 `not_reviewed` rows. Populating decisions remains
+Checkpoint 3 work.
 
 Purpose:
 
@@ -1155,32 +1171,22 @@ These are intended interfaces, not promises that the commands already exist.
 Use cleaner repo-native names during implementation if inspection shows a
 better ownership boundary. Do not preserve abandoned shapes through aliases.
 
-Refresh task evidence:
+Validate the current task pack:
 
 ```bash
 uv run agentenv tasks validate data/task_packs/repo_patch_python_v0
 uv run agentenv tasks check-splits \
   data/task_packs/repo_patch_python_v0/splits.lock.json
-uv run agentenv tasks hash data/task_packs/repo_patch_python_v0 \
-  --out experiments/reports/hashes/repo_patch_python_v0_task_hashes.json
-```
-
-Resolve the partition:
-
-```bash
-uv run agentenv training task-partition resolve \
-  --config configs/data/baseline_controlled_sft_task_partition.yaml \
-  --task-hashes experiments/reports/hashes/repo_patch_python_v0_task_hashes.json \
-  --out experiments/plans/week_10_baseline_controlled_sft \
-  --overwrite
 ```
 
 Initialize and validate efficiency review:
 
 ```bash
 uv run agentenv training positive-sft efficiency-review-init \
-  --partition experiments/plans/week_10_baseline_controlled_sft \
-  --source-root experiments/runs \
+  --materialization experiments/runs/natural_model_anchor_contrast_acquisition/positive_sft_materializations/devstral-sampling \
+  --materialization experiments/runs/natural_model_anchor_contrast_acquisition/positive_sft_materializations/qwen2-5-coder-14b-sampling \
+  --materialization experiments/runs/natural_model_anchor_contrast_acquisition/positive_sft_materializations/qwen3-coder-30b-sampling \
+  --materialization experiments/runs/natural_model_dev_coverage_acquisition/positive_sft_materializations/devstral-sampling \
   --out experiments/runs/week_10_positive_sft_efficiency_review \
   --overwrite
 
@@ -1192,7 +1198,6 @@ Construct raw and filtered artifacts:
 
 ```bash
 uv run agentenv training positive-sft filter \
-  --partition experiments/plans/week_10_baseline_controlled_sft \
   --reviews experiments/runs/week_10_positive_sft_efficiency_review \
   --raw-out experiments/runs/week_10_positive_sft_raw \
   --filtered-out experiments/runs/week_10_positive_sft_filtered \
@@ -1206,7 +1211,7 @@ Resolve matched schedules:
 uv run agentenv training positive-sft schedule \
   --raw experiments/runs/week_10_positive_sft_raw \
   --filtered experiments/runs/week_10_positive_sft_filtered \
-  --plan experiments/plans/week_10_baseline_controlled_sft \
+  --out experiments/plans/week_10_positive_sft_matched_schedule \
   --overwrite
 ```
 
@@ -1283,8 +1288,8 @@ git diff --check
 
 Artifact validation must cover:
 
-- partition config and resolved task hashes;
 - positive-SFT source reconstruction;
+- train task ids derived from exact consumed source records;
 - efficiency-review total accounting and evidence references;
 - raw/filtered total accounting;
 - matched training schedules;
@@ -1308,7 +1313,7 @@ Cut in this order:
 Do not cut:
 
 - unchanged `B0` arm;
-- task-disjoint train/selection partition;
+- train/selection task disjointness at dataset/eval consumption;
 - exact selected-task hashes;
 - Week 9 hard eligibility gates;
 - complete efficiency-review accounting;
@@ -1335,7 +1340,7 @@ If the filtered set is too small for a meaningful schedule:
 If training fails:
 
 - preserve logs and typed failure artifacts;
-- keep the partition, review, raw/filtered, and schedule artifacts;
+- keep the review, raw/filtered, and schedule artifacts;
 - do not substitute the Week 9 smoke adapter;
 - close with a filtering-only result.
 
@@ -1386,8 +1391,10 @@ formatting, or routine refactor details.
 
 Week 10 is complete when:
 
-- exact train-dev and selection-dev ids and task hashes are frozen;
-- current task additions remain possible without global artifact churn;
+- train task ids are derived from the exact raw/filtered source records;
+- the selection eval config and eval manifests pin the exact thirteen
+  selection-dev ids and task hashes;
+- train and selection task ids are disjoint;
 - every train-dev positive-SFT source has one completed efficiency-review row;
 - every rejection has a machine-readable reason and exact action evidence;
 - no selection-dev, heldout, practice, or public-calibration example enters
@@ -1407,16 +1414,16 @@ Week 10 is complete when:
 - heldout-private remains unopened;
 - the final claim remains scoped to this controlled development distribution.
 
-## First Implementation Step
+## Next Implementation Step
 
-Begin with Checkpoint 1 only:
+Populate Checkpoint 3 only:
 
 ```text
-regenerate current task hashes
-create the schedule-neutral partition config
-resolve the six train and thirteen selection rows
-write focused partition validation tests
-stop and inspect the resolved artifact before implementing efficiency review
+apply the frozen efficiency rubric to all 18 exact queue rows
+record reviewer provenance, decision, and rationale
+for every rejection, identify exact avoidable assistant message ids
+validate zero not_reviewed rows and report accepted/rejected/needs_followup counts
+stop before filtering or training
 ```
 
 Do not jump directly from this plan to filtering, training, adapter serving, and

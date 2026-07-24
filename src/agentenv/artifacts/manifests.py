@@ -73,8 +73,10 @@ from agentenv.training.repairs.schema import (
     TrainingCandidateRepairRecordSchemaVersion,
 )
 from agentenv.training.positive_sft.schema import (
+    POSITIVE_SFT_EFFICIENCY_REVIEW_RECORD_SCHEMA_VERSION,
     POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION,
     POSITIVE_SFT_REVIEW_RECORD_SCHEMA_VERSION,
+    PositiveSFTEfficiencyReviewRecordSchemaVersion,
     PositiveSFTExampleRecordSchemaVersion,
     PositiveSFTReviewRecordSchemaVersion,
 )
@@ -216,6 +218,11 @@ POSITIVE_SFT_EXPORT_ARTIFACT_REFS = {
 POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS = {
     "materializations": "materializations.jsonl",
 }
+POSITIVE_SFT_EFFICIENCY_REVIEW_ARTIFACT_REFS = {
+    "reviews": "reviews.jsonl",
+    "review_queue": "review_queue.md",
+    "rubric": "efficiency_rubric.md",
+}
 POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_REFS = {
     "training_result": "training_result.json",
     "training_steps": "training_steps.jsonl",
@@ -274,6 +281,9 @@ POSITIVE_SFT_EXPORT_REQUIRED_ARTIFACTS = frozenset(POSITIVE_SFT_EXPORT_ARTIFACT_
 POSITIVE_SFT_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS = frozenset(
     POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_REFS
 )
+POSITIVE_SFT_EFFICIENCY_REVIEW_REQUIRED_ARTIFACTS = frozenset(
+    POSITIVE_SFT_EFFICIENCY_REVIEW_ARTIFACT_REFS
+)
 POSITIVE_SFT_LORA_TRAINING_RUN_BASE_REQUIRED_ARTIFACTS = frozenset(
     {"training_result", "training_steps"}
 )
@@ -316,6 +326,9 @@ PositiveSFTReviewArtifactSchemaVersion = Literal["positive_sft_review_artifact_v
 PositiveSFTExportArtifactSchemaVersion = Literal["positive_sft_export_artifact_v0"]
 PositiveSFTTrainingMaterializationArtifactSchemaVersion = Literal[
     "positive_sft_training_materialization_artifact_v0"
+]
+PositiveSFTEfficiencyReviewArtifactSchemaVersion = Literal[
+    "positive_sft_efficiency_review_artifact_v0"
 ]
 PositiveSFTLoRATrainingRunArtifactSchemaVersion = Literal[
     "positive_sft_lora_training_run_artifact_v0"
@@ -371,6 +384,7 @@ POSITIVE_SFT_EXPORT_ARTIFACT_SCHEMA_VERSION: PositiveSFTExportArtifactSchemaVers
     "positive_sft_export_artifact_v0"
 )
 POSITIVE_SFT_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION: PositiveSFTTrainingMaterializationArtifactSchemaVersion = "positive_sft_training_materialization_artifact_v0"
+POSITIVE_SFT_EFFICIENCY_REVIEW_ARTIFACT_SCHEMA_VERSION: PositiveSFTEfficiencyReviewArtifactSchemaVersion = "positive_sft_efficiency_review_artifact_v0"
 POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_SCHEMA_VERSION: PositiveSFTLoRATrainingRunArtifactSchemaVersion = "positive_sft_lora_training_run_artifact_v0"
 PREFERENCE_COMPARISON_EXPORT_ARTIFACT_SCHEMA_VERSION: PreferenceComparisonExportArtifactSchemaVersion = "preference_comparison_export_artifact_v0"
 PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_SCHEMA_VERSION: PreferenceAdjudicationReviewArtifactSchemaVersion = "preference_adjudication_review_artifact_v0"
@@ -1909,6 +1923,70 @@ class PositiveSFTTrainingMaterializationArtifactRef(BaseModel):
     materializations_jsonl_hash: ContentHash
 
 
+class PositiveSFTEfficiencyReviewManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.POSITIVE_SFT_EFFICIENCY_REVIEW.value
+    expected_artifact_schema_version = (
+        POSITIVE_SFT_EFFICIENCY_REVIEW_ARTIFACT_SCHEMA_VERSION
+    )
+
+    created_at: str = Field(min_length=1)
+    source_positive_sft_training_materializations: tuple[
+        PositiveSFTTrainingMaterializationArtifactRef, ...
+    ] = Field(min_length=1)
+    positive_sft_example_record_schema_version: PositiveSFTExampleRecordSchemaVersion
+    positive_sft_efficiency_review_record_schema_version: (
+        PositiveSFTEfficiencyReviewRecordSchemaVersion
+    )
+    rubric_hash: ContentHash
+    record_count: PositiveInt
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_positive_sft_efficiency_review_contract(
+        self,
+    ) -> "PositiveSFTEfficiencyReviewManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=POSITIVE_SFT_EFFICIENCY_REVIEW_ARTIFACT_REFS,
+            owner="positive-SFT efficiency review manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=(POSITIVE_SFT_EFFICIENCY_REVIEW_REQUIRED_ARTIFACTS),
+            owner="positive-SFT efficiency review manifests",
+        )
+        if (
+            self.positive_sft_example_record_schema_version
+            != POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "positive_sft_example_record_schema_version must be "
+                f"{POSITIVE_SFT_EXAMPLE_RECORD_SCHEMA_VERSION!r}"
+            )
+        if (
+            self.positive_sft_efficiency_review_record_schema_version
+            != POSITIVE_SFT_EFFICIENCY_REVIEW_RECORD_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "positive_sft_efficiency_review_record_schema_version must be "
+                f"{POSITIVE_SFT_EFFICIENCY_REVIEW_RECORD_SCHEMA_VERSION!r}"
+            )
+        source_dirs = [
+            source.artifact_dir
+            for source in self.source_positive_sft_training_materializations
+        ]
+        if source_dirs != sorted(source_dirs):
+            raise ValueError(
+                "positive-SFT efficiency review materialization refs must be sorted"
+            )
+        if len(source_dirs) != len(set(source_dirs)):
+            raise ValueError(
+                "positive-SFT efficiency review materialization refs must be unique"
+            )
+        return self
+
+
 class PositiveSFTLoRATrainingConfigRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2357,6 +2435,12 @@ def load_positive_sft_training_materialization_manifest(
     path: Path,
 ) -> PositiveSFTTrainingMaterializationManifest:
     return _validate_manifest(PositiveSFTTrainingMaterializationManifest, path)
+
+
+def load_positive_sft_efficiency_review_manifest(
+    path: Path,
+) -> PositiveSFTEfficiencyReviewManifest:
+    return _validate_manifest(PositiveSFTEfficiencyReviewManifest, path)
 
 
 def load_positive_sft_lora_training_run_manifest(
