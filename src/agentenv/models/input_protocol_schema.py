@@ -16,7 +16,7 @@ _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 class HuggingFaceRevisionPin(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     repository_id: str = Field(min_length=1)
     revision: str = Field(min_length=1)

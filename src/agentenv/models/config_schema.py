@@ -2,7 +2,9 @@ import re
 from pathlib import PurePosixPath
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from agentenv.models.input_protocol_schema import HuggingFaceRevisionPin
 
 
 TokenUsageCapability = Literal["native", "unavailable"]
@@ -37,23 +39,49 @@ class PinnedModelInputProtocolRef(BaseModel):
     @field_validator("path")
     @classmethod
     def validate_path(cls, value: str) -> str:
-        if "\\" in value or (
-            len(value) >= 2 and value[0].isalpha() and value[1] == ":"
-        ):
-            raise ValueError("model input protocol path must be POSIX-style")
-        path = PurePosixPath(value)
-        if path.is_absolute() or not path.parts or path.parts == (".",):
-            raise ValueError("model input protocol path must be relative")
-        if str(path) != value:
-            raise ValueError("model input protocol path must be canonical")
-        return value
+        return _validate_config_relative_path(
+            value,
+            owner="model input protocol",
+        )
 
     @field_validator("content_hash")
     @classmethod
     def validate_content_hash(cls, value: str) -> str:
-        if not _CONTENT_HASH_RE.fullmatch(value):
-            raise ValueError("content_hash must use the xxh64:<16 lowercase hex> form")
-        return value
+        return _validate_content_hash(value)
+
+
+class PinnedLoRATrainingRunRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    content_hash: str = Field(min_length=1)
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        return _validate_config_relative_path(
+            value,
+            owner="LoRA training manifest",
+        )
+
+    @field_validator("content_hash")
+    @classmethod
+    def validate_content_hash(cls, value: str) -> str:
+        return _validate_content_hash(value)
+
+
+class TransformersPeftRuntimeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    device: Literal["cuda", "cpu"]
+    weight_dtype: Literal["bfloat16", "float32"]
+    attention_implementation: Literal["sdpa", "eager"]
+
+    @model_validator(mode="after")
+    def validate_device_dtype(self) -> "TransformersPeftRuntimeConfig":
+        if self.device == "cpu" and self.weight_dtype == "bfloat16":
+            raise ValueError("CPU Transformers serving requires float32 weights")
+        return self
 
 
 class BaseModelConfig(BaseModel):
@@ -99,8 +127,36 @@ class OllamaGenerateModelConfig(BaseModelConfig):
         return value
 
 
+class TransformersPeftModelConfig(BaseModelConfig):
+    provider: Literal["transformers_peft"]
+    base_model: HuggingFaceRevisionPin
+    model_input_protocol: PinnedModelInputProtocolRef
+    adapter: PinnedLoRATrainingRunRef | None = None
+    runtime: TransformersPeftRuntimeConfig
+    agent_action_format: Literal["prompt_only"] = "prompt_only"
+
+    @model_validator(mode="after")
+    def validate_capabilities(self) -> "TransformersPeftModelConfig":
+        if self.base_url_env is not None:
+            raise ValueError("transformers_peft cannot configure base_url_env")
+        expected = ModelCapabilities(
+            token_usage="native",
+            supports_seed=False,
+            supports_stop=False,
+            supports_top_k=False,
+        )
+        if self.capabilities != expected:
+            raise ValueError(
+                "transformers_peft capabilities must match the implemented "
+                "greedy local client"
+            )
+        return self
+
+
 ModelConfig: TypeAlias = Annotated[
-    OpenAICompatibleChatModelConfig | OllamaGenerateModelConfig,
+    OpenAICompatibleChatModelConfig
+    | OllamaGenerateModelConfig
+    | TransformersPeftModelConfig,
     Field(discriminator="provider"),
 ]
 
@@ -110,4 +166,23 @@ def _validate_env_var_name(value: str | None) -> str | None:
         return value
     if not _ENV_VAR_RE.fullmatch(value):
         raise ValueError("environment variable names must be shell-safe")
+    return value
+
+
+def _validate_config_relative_path(value: str, *, owner: str) -> str:
+    if "\\" in value or (
+        len(value) >= 2 and value[0].isalpha() and value[1] == ":"
+    ):
+        raise ValueError(f"{owner} path must be POSIX-style")
+    path = PurePosixPath(value)
+    if path.is_absolute() or not path.parts or path.parts == (".",):
+        raise ValueError(f"{owner} path must be relative")
+    if str(path) != value:
+        raise ValueError(f"{owner} path must be canonical")
+    return value
+
+
+def _validate_content_hash(value: str) -> str:
+    if not _CONTENT_HASH_RE.fullmatch(value):
+        raise ValueError("content_hash must use the xxh64:<16 lowercase hex> form")
     return value

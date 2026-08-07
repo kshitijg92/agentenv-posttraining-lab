@@ -1,13 +1,14 @@
 # Week 10 Plan
 
-Status: in progress on 2026-07-23. The source-record boundary, planned
+Status: in progress on 2026-08-07. The source-record boundary, planned
 train/selection disjointness, and combined positive-SFT review contract are
 complete. The 100-row review universe now has 98 accepted prefixes, 2 rejected
 sources, and 0 unresolved prefix decisions. Embedded efficiency judgments are
 94 accepted, 4 rejected, and 0 abstained. Because training and policy
 evaluation have not started, the Week 10 experiment will use all reviewed
-prefixes: 98 raw and 94 efficiency-filtered. The stale 18-row exports and
-materializations must be regenerated before training.
+prefixes: 98 raw and 94 efficiency-filtered. All eight exports and
+materializations have been regenerated successfully. Training and policy
+evaluation have not started.
 
 ## Theme
 
@@ -99,31 +100,53 @@ eval attempts
 -> operational LoRA smoke
 ```
 
-Pre-adjudication trainer-shaped SFT inventory:
+Current trainer-shaped SFT inventory:
 
 ```text
 positive-SFT manifests: 8
-completed materializations: 18
+completed materializations: 98
 failed materializations: 0
 sequence-length exclusions: 0
 materialization errors: 0
 ```
 
-Those stale 18 source examples came from six dev tasks:
+The 98 source examples come from eleven dev tasks:
 
 ```text
-preserve_cli_error_codes: 5
-repair_jsonl_deduper: 7
-repair_query_encoding: 1
-repair_record_chunking: 1
-repair_relative_path: 3
-repair_template_expansion: 1
+preserve_cli_error_codes: 12
+repair_config_precedence: 1
+repair_csv_projection: 7
+repair_duration_parser: 4
+repair_header_merge: 4
+repair_jsonl_deduper: 12
+repair_query_encoding: 11
+repair_record_chunking: 11
+repair_relative_path: 12
+repair_semver_precedence: 12
+repair_template_expansion: 12
 ```
 
-Those materialized rows contain 10,205 supervised assistant tokens in one
-complete pass. This number is historical preflight context, not the Week 10
-budget. Regenerating all 98 accepted prefixes will produce the actual raw
-token budget.
+The resolved one-pass populations are:
+
+```text
+S_raw:
+  examples: 98
+  supervised tokens: 16,412
+  serialized sequence tokens: 97,005
+
+S_filtered:
+  examples: 94
+  supervised tokens: 13,207
+  serialized sequence tokens: 86,700
+
+removed by efficiency filtering:
+  examples: 4 / 98
+  supervised tokens: 3,205 / 16,412 = 19.53%
+  serialized sequence tokens: 10,305 / 97,005 = 10.62%
+```
+
+One complete `S_raw` pass therefore defines a 16,412 supervised-token target
+for matched training-schedule construction.
 
 Current combined-review authorization:
 
@@ -249,12 +272,12 @@ Resolved policy details:
 The four calibration candidates reviewed first were:
 
 ```text
-positive_sft_example_a5ef0f3a430cc454
-positive_sft_example_aab1e627500f226b
+positive_sft_example_d8ebdcf975f578ea
+positive_sft_example_59c8f157e4a63b5d
   repeated the unchanged src/validate_records.py read after a passing check
 
-positive_sft_example_b535bb9c0f7ca71b
-positive_sft_example_bf8626bdcb21216d
+positive_sft_example_1bb30cec2cc3dc78
+positive_sft_example_c74d2c81780fd413
   inspected pyproject.toml before standard-library-only repairs with no clear
   later dependence on that observation
 ```
@@ -931,6 +954,11 @@ construction. Zero or few filtered exclusions are valid results.
 
 ### Checkpoint 4: Resolve Raw And Filtered Training Inputs
 
+Status on 2026-07-23: source populations complete. All 98 raw rows and 94
+filtered rows reconstruct through their current reviews and materializations.
+The exact training schedules and their run-manifest pins remain downstream
+consumer responsibilities.
+
 Purpose:
 
 ```text
@@ -955,13 +983,20 @@ Done when:
   hashes consumed;
 - every raw row is either selected or explicitly excluded from filtered;
 - no source row disappears silently;
-- the raw count is expected to be 18 unless upstream current contracts are
-  intentionally regenerated before freeze;
+- the raw count is 98 and the filtered count is 94;
 - filtered count may validly be zero;
 - filtering report includes source-policy concentration and borderline cases;
-- the exact supervised-token budget authority is frozen.
+- one raw pass fixes the 16,412 supervised-token schedule target.
 
 ### Checkpoint 5: Common Base/Adapter Serving Smoke
+
+Status on 2026-08-07: the immutable in-process Transformers/PEFT client,
+direct generation smoke, optional hash-pinned adapter model-config reference,
+manifest-to-binding resolution, and model-config provenance validation are
+complete. B0 and the hash-pinned Week 9 adapter resolve through the same
+implementation with the same base revision, protocol, explicit greedy
+configuration, and exact token accounting. Eval-run-scoped client reuse and
+the paired practice-task agent smoke remain.
 
 Purpose:
 
@@ -1431,18 +1466,8 @@ Week 10 is complete when:
 
 ## Next Implementation Step
 
-Regenerate and resolve the exact Week 10 training inputs only:
-
-```text
-regenerate positive-SFT exports and materializations from current reviews
-freeze all 98 prefix-accepted examples as S_raw
-derive the 94 efficiency-accepted members as S_filtered
-derive the eleven training task ids from S_raw
-configure the eight remaining dev tasks for policy selection
-prove the task sets are disjoint and review task-difficulty comparability
-report one-pass supervised-token counts and freeze the matched-exposure rule
-stop before launching LoRA training
-```
-
-The earlier 18-row generated artifacts are stale working artifacts, not a
-frozen experiment boundary.
+Complete Checkpoint 5 only: make the eval run load one resolved immutable local
+composition rather than rebuilding it per task attempt, then run one practice
+task through both B0 and the known Week 9 adapter. Do not construct the matched
+schedules or launch either Week 10 training run until that full agent-path
+parity smoke succeeds.

@@ -1,10 +1,12 @@
 import json
+from pathlib import Path
 
 import httpx
 import pytest
 from pydantic import ValidationError
 
 from agentenv.artifacts.payloads import ModelConfigProvenance
+from agentenv.models.config import load_model_config
 from agentenv.models.config_schema import (
     ModelCapabilities,
     OllamaGenerateModelConfig,
@@ -159,6 +161,14 @@ def test_ollama_generate_runtime_probe_uses_native_root_and_config_digest(
 
     assert provenance is not None
     assert provenance.model_digest == MODEL_DIGEST
+
+
+def test_transformers_peft_has_no_remote_provider_runtime() -> None:
+    config = load_model_config(
+        Path("configs/models/transformers_peft_qwen2_5_coder_3b_base.yaml")
+    )
+
+    assert capture_provider_runtime_provenance(config) is None
 
 
 def test_model_config_provenance_requires_configured_runtime_evidence() -> None:

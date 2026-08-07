@@ -8,8 +8,8 @@ below is retained only as design history and is explicitly superseded. The
 94 efficiency accepted, 4 efficiency rejected, and no unresolved or abstained
 decisions. Because training and policy evaluation have not started, the Week
 10 experiment will use all 98 accepted prefixes and all 94
-efficiency-accepted prefixes. The earlier 18-row exports and materializations
-are stale working artifacts and will be regenerated.
+efficiency-accepted prefixes. The eight exports and materializations have been
+regenerated successfully from the completed reviews.
 
 ## 2026-07-22 Source-Boundary Correction
 
@@ -357,10 +357,10 @@ They are reporting signals, not the matched-exposure training schedule.
 
 | Example | Task | Exact avoidable action | Reason |
 |---|---|---|---|
-| `positive_sft_example_a5ef0f3a430cc454` | `preserve_cli_error_codes` | `message_f01ad86192404fa1b0a14db56e31f54e` | Second unchanged `src/validate_records.py` read before any write |
-| `positive_sft_example_aab1e627500f226b` | `preserve_cli_error_codes` | `message_ada15f297b3148249f33dd2b3c81f55e` | Second unchanged `src/validate_records.py` read before any write |
-| `positive_sft_example_b535bb9c0f7ca71b` | `preserve_cli_error_codes` | `message_41d73bea570c42efbd8dba27b01a69b2` | Unused `pyproject.toml` inspection before a standard-library-only repair |
-| `positive_sft_example_bf8626bdcb21216d` | `repair_jsonl_deduper` | `message_9e942f8f981644f2ae676732282a2003` | Unused `pyproject.toml` inspection before a standard-library-only repair |
+| `positive_sft_example_d8ebdcf975f578ea` | `preserve_cli_error_codes` | `message_f01ad86192404fa1b0a14db56e31f54e` | Second unchanged `src/validate_records.py` read before any write |
+| `positive_sft_example_59c8f157e4a63b5d` | `preserve_cli_error_codes` | `message_ada15f297b3148249f33dd2b3c81f55e` | Second unchanged `src/validate_records.py` read before any write |
+| `positive_sft_example_1bb30cec2cc3dc78` | `preserve_cli_error_codes` | `message_41d73bea570c42efbd8dba27b01a69b2` | Unused `pyproject.toml` inspection before a standard-library-only repair |
+| `positive_sft_example_c74d2c81780fd413` | `repair_jsonl_deduper` | `message_9e942f8f981644f2ae676732282a2003` | Unused `pyproject.toml` inspection before a standard-library-only repair |
 
 The duplicate-read evidence was checked directly: each second tool result was
 byte-for-byte equal to the first, and no write occurred between the reads.
@@ -545,9 +545,309 @@ Pyright on changed source and tests: 0 errors, 0 warnings
 full repository suite: deferred until the Week 10 integration boundary
 ```
 
+## 2026-07-23 Regenerated 98-Row Training Population
+
+### Provenance Refresh
+
+The standard trajectory re-export could not load the historical model-config
+payloads under the current stricter schema because they predate the required
+model-input-protocol field. No compatibility parser was added.
+
+Instead, the in-progress provenance chain used by positive-SFT construction was
+refreshed in place:
+
+- trajectory `eval_run_path`, eval-config path, splits-lock path, and
+  task-manifest path now resolve inside the current worktree;
+- trajectory JSONL and manifest hashes were recomputed;
+- trajectory-review source paths and hashes were refreshed without changing
+  review rows;
+- training-candidate source paths and hashes were refreshed without changing
+  candidate rows;
+- combined positive-SFT review manifests now pin the current candidate
+  manifests.
+
+The refresh was transactional and ran the standard
+`validate_positive_sft_review_artifact` path for all eight policies before
+committing the changes. It validated 156 trajectory records, 100 combined
+review rows, 98 accepted prefixes, and all embedded efficiency judgments.
+
+### Export And Materialization
+
+All eight positive-SFT exports were overwritten from the current combined
+reviews:
+
+```text
+anchor contrast:
+  devstral-sampling: 14
+  qwen2-5-coder-14b-sampling: 15
+  qwen3-14b-sampling: 15
+  qwen3-coder-30b-sampling: 15
+
+dev coverage:
+  devstral-sampling: 6
+  qwen2-5-coder-14b-sampling: 13
+  qwen3-14b-sampling: 12
+  qwen3-coder-30b-sampling: 8
+
+total: 98
+```
+
+The corresponding target-model materializations use:
+
+```text
+protocol: qwen2_5_coder_3b_agentenv_json
+max sequence length: 32,768
+local pinned tokenizer: required
+training authorization: explicit learning-lab override
+```
+
+Result:
+
+```text
+materialization artifacts: 8
+records: 98
+completed: 98
+failed: 0
+sequence-length exceeded: 0
+materialization errors: 0
+```
+
+### Raw And Filtered Accounting
+
+Every materialized row was joined back through its exact
+`PositiveSFTExampleRecord` hash to the current combined review hash and
+approved assistant boundary.
+
+```text
+S_raw:
+  examples: 98
+  tasks: 11
+  supervised tokens: 16,412
+  serialized sequence tokens: 97,005
+
+S_filtered:
+  examples: 94
+  tasks: 11
+  supervised tokens: 13,207
+  serialized sequence tokens: 86,700
+
+removed:
+  examples: 4 (4.08%)
+  supervised tokens: 3,205 (19.53%)
+  serialized sequence tokens: 10,305 (10.62%)
+```
+
+All four exclusions come from `qwen3-coder-30b-sampling`:
+
+```text
+raw: 23 examples / 5,441 supervised tokens
+filtered: 19 examples / 2,236 supervised tokens
+```
+
+Three exclusions are from `preserve_cli_error_codes` and one from
+`repair_jsonl_deduper`. Both tasks remain represented after filtering, so raw
+and filtered task support is identical.
+
+The eleven training tasks and eight remaining dev tasks partition all nineteen
+dev tasks with an empty intersection. No practice, heldout-private, or
+public-calibration task entered either training population.
+
+### Focused Verification
+
+```text
+standard combined-review validation: 8 / 8 artifacts
+positive-SFT exports: 8 artifacts / 98 exact examples
+materializations: 98 completed / 0 failed / 0 overlength / 0 errors
+raw-to-filtered exact review join: 98 accounted / 94 selected / 4 rejected
+focused positive-SFT tests: 52 passed
+Ruff focused checks: passed
+Pyright focused checks: 0 errors, 0 warnings
+retired-worktree paths in the consumed provenance chain: 0
+full repository suite: deferred until the Week 10 integration boundary
+```
+
 ### Next Small Step
 
-Regenerate the exports and token materializations for all 98 accepted prefixes,
-resolve the 94-example filtered subset, validate the resulting 11-task versus
-8-task split, and freeze matched supervised-token exposure before launching
-either LoRA run.
+Wire the verified immutable local client into the eval model-config/provenance
+boundary, reuse one loaded composition for an eval run, and execute one
+practice-task agent smoke for both B0 and the known Week 9 adapter. Do not
+construct the 16,412-token matched schedules or launch either treatment run
+before that final path-parity check.
+
+## 2026-07-23 Immutable Base/Adapter Local Serving Boundary
+
+### Policy Composition Decision
+
+One client instance now binds one immutable composition for its full lifetime:
+
+```text
+policy id
++ exact Hugging Face base repository and commit
++ optional local LoRA adapter directory and directory hash
+```
+
+There is no adapter-switching method. B0 uses the base with no adapter, while
+an adapted policy uses the same loader and client class with one PEFT adapter
+loaded on top. The adapter is not merged into the base.
+`HuggingFaceRevisionPin` is frozen as well, so the nested base identity cannot
+be mutated after constructing the otherwise frozen policy binding.
+
+Before loading model weights, the adapted path requires:
+
+- the adapter path and hash to be present together;
+- the observed adapter-directory hash to match;
+- `adapter_config.json` to name the exact base repository and revision;
+- the model-input protocol checkpoint and tokenizer to match that base.
+
+After PEFT loading, the client requires exactly one active adapter named
+`policy`, no merged adapter, and no trainable serving parameters. This prevents
+a nominal B1 run from silently becoming B0, a merged derivative, or a mutable
+multi-adapter process.
+
+### Deterministic Generation Contract
+
+The local client implements the existing `ModelClient` protocol and:
+
+- renders messages through the pinned AgentEnv model-input protocol;
+- uses an explicit fresh Transformers `GenerationConfig` rather than inheriting
+  repository sampling defaults;
+- forces greedy generation and disables model-default fallback;
+- rejects sampling, seeds, stop strings, top-k, and non-unit top-p rather than
+  silently ignoring them;
+- passes the pinned end-of-turn and padding token ids;
+- reports exact serialized prompt and generated completion token counts;
+- includes a generated terminal end-of-turn token in completion-token usage
+  while removing special tokens from returned text;
+- attributes context overflow, timeout, loading, tokenization, generation, and
+  decoding failures with typed model responses where generation has begun.
+
+The client rejects a request when
+`prompt_tokens + max_new_tokens` exceeds the pinned model context window. It
+does not silently shorten the generation budget.
+
+### Focused Verification
+
+```text
+focused local-client, input-protocol, and LoRA-package/schema tests: 30 passed
+Ruff focused checks: passed
+Pyright focused checks: 0 errors, 0 warnings
+full repository suite: deferred
+```
+
+A real RTX 4080 SUPER smoke then loaded the cached pinned
+Qwen2.5-Coder-3B-Instruct checkpoint twice, releasing B0 before loading B1:
+
+```text
+B0:
+  adapter id: null
+  prompt tokens: 40
+  completion tokens: 8
+  total tokens: 48
+  finish: stop_criteria_met
+  error: null
+
+Week 9 operational-smoke adapter:
+  adapter id: xxh64:ccd2828a4bc5fbe1
+  prompt tokens: 40
+  completion tokens: 8
+  total tokens: 48
+  finish: stop_criteria_met
+  error: null
+```
+
+Both outputs had the same SHA-256 on this tiny prompt. That is not a failure:
+the Week 9 adapter had only three operational-smoke steps, and this check is
+serving evidence, not efficacy evidence.
+
+### Remaining Checkpoint 5 Work
+
+This checkpoint is not yet complete. The client was exercised directly, not
+through an eval config and practice-task prompt loop. The existing eval
+orchestrator constructs remote-provider clients per attempt; the local path
+must instead bind and load one immutable composition for the eval run, then
+reuse it across that run's task attempts. Model config and provenance must pin
+the base, optional adapter source, runtime dtype/device, and input protocol
+without copying facts already authoritative in a completed LoRA training
+manifest.
+
+## 2026-08-07 Hash-Pinned Adapter Model Config Boundary
+
+### Config Ownership
+
+The local Transformers/PEFT model config now has one optional `adapter` field:
+
+```text
+adapter: null
+```
+
+for B0, or a relative `path + content_hash` reference to a positive-SFT LoRA
+training-run manifest for an adapted policy.
+
+The config does not copy the training-run id, adapter-directory path,
+adapter-directory hash, training status, base identity, or protocol identity.
+Those facts remain authoritative in the existing completed training manifest.
+Two schedule-neutral configs exercise the contract:
+
+```text
+configs/models/transformers_peft_qwen2_5_coder_3b_base.yaml
+configs/models/transformers_peft_qwen2_5_coder_3b_operational_smoke_adapter.yaml
+```
+
+The local runtime contract also pins CUDA versus CPU, weight dtype, and
+attention implementation. Its declared capability record must match what the
+current greedy client actually implements; unsupported seed, stop, and top-k
+support cannot be advertised.
+
+### Resolution And Validation
+
+Resolving the model config into `TransformersPeftPolicyBinding` now requires:
+
+- the referenced model-input protocol file and hash to match;
+- the protocol checkpoint and tokenizer to match the configured base pin;
+- the optional LoRA manifest file and hash to match;
+- the LoRA training run to have status `completed`;
+- the manifest base pin to match the model config;
+- the manifest protocol id and hash to match the loaded protocol;
+- the manifest's adapter artifact to exist at its declared relative path;
+- the observed adapter-directory hash to match the manifest; and
+- the adapter package itself to name the same base repository and revision.
+
+The output binding contains the derived adapter directory and directory hash,
+not the manifest reference. That keeps serving independent of training-manifest
+parsing after construction while preserving a single immutable policy
+composition.
+
+### Provenance
+
+No second adapter-provenance schema or artifact was added. The existing
+`ModelConfigProvenance` embeds the complete model config, so it already
+preserves the hash-pinned manifest reference. For `transformers_peft`, that
+provenance additionally requires the resolved pinned input protocol and
+forbids remote-provider runtime evidence.
+
+This is intentionally different from copying a subset of the LoRA manifest
+into the eval attempt: copied fields could drift from their authority without
+adding reproducibility.
+
+### Focused Verification
+
+```text
+model config, resolver, local client, provider runtime, factory, and LoRA
+manifest tests: 45 passed
+artifact-payload and eval-run tests: 56 passed
+Ruff focused checks: passed
+Pyright focused checks: 0 errors, 0 warnings
+full repository suite: deferred
+```
+
+Tests cover both null and adapted references, real Week 9 manifest resolution,
+manifest-hash drift, failed-run rejection, capability overstatement, adapter
+reference capture in model provenance, required protocol provenance, and the
+absence of a remote-provider runtime for the in-process path.
+
+### Remaining Checkpoint 5 Work
+
+The config is deliberately not wired into `build_model_client` or the eval
+orchestrator in this checkpoint. The next boundary is eval-run ownership: load
+one resolved immutable client once for a policy run and reuse it across task
+attempts, then execute the paired B0/adapter practice-task smoke.

@@ -1,0 +1,20 @@
+version: model_config_v0
+provider: transformers_peft
+model_id: qwen2.5-coder-3b-transformers-base
+capabilities:
+  token_usage: native
+  supports_seed: false
+  supports_stop: false
+  supports_top_k: false
+base_model:
+  repository_id: Qwen/Qwen2.5-Coder-3B-Instruct
+  revision: 89fe5444e8baf5736e70f528f1edcc79e6616ef6
+model_input_protocol:
+  path: ../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
+  content_hash: xxh64:9b9eba719de618f1
+adapter: null
+runtime:
+  device: cuda
+  weight_dtype: bfloat16
+  attention_implementation: sdpa
+agent_action_format: prompt_only

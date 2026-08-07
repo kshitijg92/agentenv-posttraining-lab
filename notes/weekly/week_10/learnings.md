@@ -129,3 +129,45 @@ where repeated exposure became concentrated
 
 Concentration is part of the treatment and its limitations. It should inform
 interpretation, not retroactively rewrite the labels.
+
+## A LoRA Policy Is An Immutable Composition, Not A Mutable Serving Mode
+
+For a controlled base-versus-adapter comparison, policy identity must include
+the exact base revision and the optional hash-pinned adapter. Allowing a live
+evaluation policy to switch adapters creates hidden state and makes it harder
+to attribute an outcome to one composition.
+
+The clean experimental forms are:
+
+```text
+B0 = pinned base + no adapter
+B1 = same pinned base + one active, unmerged adapter
+```
+
+The adapter package remains the learned artifact. A merged checkpoint is a
+different derived artifact whose dtype conversion or quantization may change
+generation, so it belongs to a later deployment study rather than the primary
+policy comparison.
+
+A serving smoke establishes that both compositions load, serialize the same
+prompt, decode under the same rules, and report comparable usage. Identical or
+different outputs on one smoke prompt say nothing about efficacy; efficacy
+begins only with the frozen paired task evaluation.
+
+## Reference The Adapter's Authority, Not Just Its Weight Directory
+
+A bare adapter-directory path identifies bytes but does not establish whether
+they came from a completed run, which base they require, or which protocol was
+used to train them. Copying all of those facts into a model config creates a
+second authority that can drift.
+
+The smaller trustworthy reference is:
+
+```text
+model config -> hash-pinned completed training manifest -> hash-pinned adapter
+```
+
+The config owns the decision to use an adapter. The training manifest owns the
+adapter's identity and provenance. The serving resolver validates the
+relationship before loading weights. This preserves both artifact economy and
+fail-closed reproducibility.
