@@ -153,21 +153,3 @@ A serving smoke establishes that both compositions load, serialize the same
 prompt, decode under the same rules, and report comparable usage. Identical or
 different outputs on one smoke prompt say nothing about efficacy; efficacy
 begins only with the frozen paired task evaluation.
-
-## Reference The Adapter's Authority, Not Just Its Weight Directory
-
-A bare adapter-directory path identifies bytes but does not establish whether
-they came from a completed run, which base they require, or which protocol was
-used to train them. Copying all of those facts into a model config creates a
-second authority that can drift.
-
-The smaller trustworthy reference is:
-
-```text
-model config -> hash-pinned completed training manifest -> hash-pinned adapter
-```
-
-The config owns the decision to use an adapter. The training manifest owns the
-adapter's identity and provenance. The serving resolver validates the
-relationship before loading weights. This preserves both artifact economy and
-fail-closed reproducibility.
