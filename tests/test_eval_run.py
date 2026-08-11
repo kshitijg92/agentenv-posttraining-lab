@@ -10,7 +10,11 @@ from agentenv.artifacts.manifests import load_eval_run_manifest
 from agentenv.artifacts.manifests import load_eval_suite_manifest
 from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
 from agentenv.artifacts.payloads import load_decoding_config_provenance
+from agentenv.evals.schema import AgentModelPolicy
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
+from agentenv.models.config_schema import ModelConfig, TransformersPeftModelConfig
+from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
+from agentenv.models.input_protocol import LoadedModelInputProtocol
 from agentenv.orchestrators.eval_run import (
     EvalAttemptRecord,
     run_eval_config,
@@ -33,6 +37,9 @@ AGENT_MODEL_DEV_DEEPSEEK_R1_DISTILL_QWEN_EVAL_CONFIG = Path(
 AGENT_MODEL_MULTI_POLICY_ACQUISITION_CONFIG = Path(
     "configs/eval/agent_model_dev_multi_policy_acquisition.yaml"
 )
+TRANSFORMERS_PEFT_PRACTICE_SMOKE_CONFIG = Path(
+    "configs/eval/transformers_peft_qwen2_5_coder_3b_practice_smoke.yaml"
+)
 
 
 def _write_agent_model_eval_config(path: Path) -> None:
@@ -50,6 +57,34 @@ def _write_agent_model_eval_config(path: Path) -> None:
                 "    model_config: configs/models/openai_compatible_chat_placeholder.yaml",
                 "    decoding_config: configs/decoding/greedy_1024.yaml",
                 "    max_turns_override: 37",
+                "    attempts: 2",
+                "    replay:",
+                "      repeats: 0",
+                "trace:",
+                "  version: trace_v0",
+                "  capture_stdout: true",
+                "  capture_stderr: true",
+                "  capture_diff: true",
+                "",
+            ]
+        )
+    )
+
+
+def _write_transformers_peft_eval_config(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "name: transformers_peft_agent_model_smoke",
+                "task_pack: data/task_packs/repo_patch_python_v0",
+                "tasks:",
+                "  - toy_python_fix_001",
+                "split: practice",
+                "policies:",
+                "  local-transformers-smoke:",
+                "    type: agent_model",
+                "    model_config: configs/models/transformers_peft_qwen2_5_coder_3b_base.yaml",
+                "    decoding_config: configs/decoding/greedy_1024.yaml",
                 "    attempts: 2",
                 "    replay:",
                 "      repeats: 0",
@@ -142,6 +177,23 @@ def test_agent_model_multi_policy_config_resolves_pinned_input_protocol() -> Non
         config,
         AGENT_MODEL_MULTI_POLICY_ACQUISITION_CONFIG,
     )
+
+
+def test_transformers_peft_practice_smoke_config_has_paired_local_policies() -> None:
+    config = load_eval_config(TRANSFORMERS_PEFT_PRACTICE_SMOKE_CONFIG)
+
+    assert config.tasks == ["toy_python_fix_001"]
+    assert config.split == "practice"
+    assert sorted(config.policies) == ["base", "operational-smoke-adapter"]
+    model_policies: list[AgentModelPolicy] = []
+    for policy in config.policies.values():
+        assert isinstance(policy, AgentModelPolicy)
+        model_policies.append(policy)
+    assert {policy.decoding_config_path for policy in model_policies} == {
+        "configs/decoding/greedy_1024.yaml"
+    }
+    assert {policy.max_turns_override for policy in model_policies} == {6}
+    validate_eval_config_paths(config, TRANSFORMERS_PEFT_PRACTICE_SMOKE_CONFIG)
 
 
 def test_agent_control_eval_config_loads() -> None:
@@ -325,6 +377,63 @@ def test_agent_model_eval_records_missing_model_env_failure(
             "attempts/toy_python_fix_001__attempt_001/prompt_loop_result.json"
         ),
     }
+
+
+def test_agent_model_eval_loads_one_transformers_client_per_policy_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "transformers_peft_eval.yaml"
+    _write_transformers_peft_eval_config(config_path)
+    fake_client = ScriptedFakeModelClient(
+        model_id="local-transformers-test",
+        script=[
+            FakeModelScriptStep(output_text="not-json"),
+            FakeModelScriptStep(output_text="not-json"),
+        ],
+    )
+    build_calls: list[Path] = []
+
+    def fake_build_model_client(
+        config: ModelConfig,
+        *,
+        model_input_protocol: LoadedModelInputProtocol | None = None,
+        model_config_path: Path | None = None,
+    ) -> ScriptedFakeModelClient:
+        assert isinstance(config, TransformersPeftModelConfig)
+        assert model_input_protocol is not None
+        assert model_config_path is not None
+        build_calls.append(model_config_path)
+        return fake_client
+
+    monkeypatch.setattr(
+        eval_run_module,
+        "build_model_client",
+        fake_build_model_client,
+    )
+
+    eval_run = run_eval_config(
+        config_path,
+        "local-transformers-smoke",
+        tmp_path / "eval",
+    )
+
+    assert build_calls == [
+        Path("configs/models/transformers_peft_qwen2_5_coder_3b_base.yaml").resolve()
+    ]
+    assert len(eval_run.attempts) == 2
+    prompt_loop_statuses: list[str | None] = []
+    for attempt in eval_run.attempts:
+        assert attempt.agent is not None
+        prompt_loop_statuses.append(attempt.agent.prompt_loop_status)
+        provenance = json.loads((attempt.attempt_dir / "model_config.json").read_text())
+        assert provenance["config"]["provider"] == "transformers_peft"
+        assert provenance["config"]["adapter"] is None
+        assert provenance["model_input_protocol"] is not None
+    assert prompt_loop_statuses == [
+        "invalid_model_output",
+        "invalid_model_output",
+    ]
 
 
 def test_run_eval_config_writes_agent_control_happy_manifest(

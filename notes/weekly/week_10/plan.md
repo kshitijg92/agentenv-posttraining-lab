@@ -1,14 +1,18 @@
 # Week 10 Plan
 
-Status: in progress on 2026-08-07. The source-record boundary, planned
+Status: in progress on 2026-08-10. The source-record boundary, planned
 train/selection disjointness, and combined positive-SFT review contract are
 complete. The 100-row review universe now has 98 accepted prefixes, 2 rejected
 sources, and 0 unresolved prefix decisions. Embedded efficiency judgments are
 94 accepted, 4 rejected, and 0 abstained. Because training and policy
 evaluation have not started, the Week 10 experiment will use all reviewed
 prefixes: 98 raw and 94 efficiency-filtered. All eight exports and
-materializations have been regenerated successfully. Training and policy
-evaluation have not started.
+materializations have been regenerated successfully. The common local
+base/adapter client now loads once per policy eval run. Its paired practice
+smoke reached deterministic generation for both compositions, but both emitted
+Markdown-fenced JSON and failed the strict action parser before tool execution.
+Training and policy evaluation have not started while that action-format
+boundary is resolved.
 
 ## Theme
 
@@ -990,13 +994,17 @@ Done when:
 
 ### Checkpoint 5: Common Base/Adapter Serving Smoke
 
-Status on 2026-08-07: the immutable in-process Transformers/PEFT client,
+Status on 2026-08-10: the immutable in-process Transformers/PEFT client,
 direct generation smoke, optional hash-pinned adapter model-config reference,
 manifest-to-binding resolution, and model-config provenance validation are
-complete. B0 and the hash-pinned Week 9 adapter resolve through the same
-implementation with the same base revision, protocol, explicit greedy
-configuration, and exact token accounting. Eval-run-scoped client reuse and
-the paired practice-task agent smoke remain.
+complete. Eval-run-scoped client reuse is also complete, and the paired
+practice-task smoke has run through the same pinned base revision, protocol,
+greedy decoding, client, and token-accounting path. Both compositions produced
+the same Markdown-fenced JSON action and were rejected as
+`MalformedModelOutput`; neither reached tools or the scorer. The remaining
+checkpoint decision is whether strict raw-JSON compliance is policy behavior
+to measure as failure or a serving guarantee that requires a predeclared,
+shared constrained-decoding mechanism.
 
 Purpose:
 
@@ -1466,8 +1474,9 @@ Week 10 is complete when:
 
 ## Next Implementation Step
 
-Complete Checkpoint 5 only: make the eval run load one resolved immutable local
-composition rather than rebuilding it per task attempt, then run one practice
-task through both B0 and the known Week 9 adapter. Do not construct the matched
-schedules or launch either Week 10 training run until that full agent-path
-parity smoke succeeds.
+Resolve the action-format boundary exposed by the Checkpoint 5 smoke before
+constructing matched schedules. Do not silently strip Markdown fences or alter
+the pinned model-input protocol after observing the result. Either retain the
+strict parser and treat raw-JSON compliance as measured policy behavior, or
+predeclare one deterministic constrained-decoding mechanism shared by B0 and
+both future treatment arms. Only then decide whether Checkpoint 6 can begin.

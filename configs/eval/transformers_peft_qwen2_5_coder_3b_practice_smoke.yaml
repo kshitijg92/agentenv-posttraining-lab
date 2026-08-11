@@ -1,0 +1,27 @@
+name: transformers_peft_qwen2_5_coder_3b_practice_smoke
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - toy_python_fix_001
+split: practice
+policies:
+  base:
+    type: agent_model
+    model_config: configs/models/transformers_peft_qwen2_5_coder_3b_base.yaml
+    decoding_config: configs/decoding/greedy_1024.yaml
+    max_turns_override: 6
+    attempts: 1
+    replay:
+      repeats: 0
+  operational-smoke-adapter:
+    type: agent_model
+    model_config: configs/models/transformers_peft_qwen2_5_coder_3b_operational_smoke_adapter.yaml
+    decoding_config: configs/decoding/greedy_1024.yaml
+    max_turns_override: 6
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

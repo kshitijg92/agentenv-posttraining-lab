@@ -851,3 +851,82 @@ The config is deliberately not wired into `build_model_client` or the eval
 orchestrator in this checkpoint. The next boundary is eval-run ownership: load
 one resolved immutable client once for a policy run and reuse it across task
 attempts, then execute the paired B0/adapter practice-task smoke.
+
+## 2026-08-10 Eval-Run Client Ownership And Paired Practice Smoke
+
+### Run-Scoped Client Lifetime
+
+The existing model factory now constructs `transformers_peft` clients from the
+already-defined model config, resolved input protocol, and model-config path.
+The path is required because the optional adapter is a hash-pinned reference
+relative to that config.
+
+For an `agent_model` policy, the eval runner now resolves and loads the model
+config, decoding config, protocol, provider provenance, client, and attempt
+provenance once before entering its task/attempt loops. Every attempt in that
+policy run receives the same client and frozen provenance values. This is an
+ephemeral run context, not a new persisted artifact or schema.
+
+The focused lifecycle test uses one local PEFT config with two attempts and
+requires exactly one client construction and two generations. Existing remote
+provider behavior remains covered through the same run-owned path.
+
+### Paired Practice Smoke
+
+Added the schedule-neutral paired config:
+
+```text
+configs/eval/transformers_peft_qwen2_5_coder_3b_practice_smoke.yaml
+```
+
+It holds task, input protocol, base revision, CUDA/BF16/SDPA runtime, greedy
+decoding, turn budget, action parser, tools, and scorer constant. The two
+policies differ only in whether the known Week 9 operational-smoke LoRA
+manifest is referenced. The real run is:
+
+```text
+experiments/runs/week_10_transformers_peft_practice_smoke_v0
+```
+
+Both policies loaded successfully in sequence and released GPU allocations
+after their policy run. Both first turns reported:
+
+```text
+prompt tokens: 470
+completion tokens: 42
+total tokens: 512
+finish reason: stop_criteria_met
+model error: null
+```
+
+Both also produced the same proposed `read_file` action wrapped in a
+`json` Markdown fence. The strict action parser therefore recorded:
+
+```text
+agent status: agent_loop_failed
+prompt-loop status: invalid_model_output
+error class: MalformedModelOutput
+valid actions executed: 0
+scorer invoked: no
+```
+
+This proves common loading, prompt rendering, generation, token accounting,
+provenance, and failure attribution. It does not prove complete agent-path
+parity because neither policy reached tool execution or the hidden scorer, and
+it provides no efficacy evidence.
+
+Changing the parser to strip the observed fences would be an outcome-dependent
+harness change. Before matched training begins, the experiment must decide
+whether exact raw JSON is policy behavior to score strictly or whether valid
+JSON is a serving guarantee implemented by one predeclared constrained decoder
+for every arm.
+
+### Focused Verification
+
+```text
+model config, factory, local client, provider runtime, eval-run lifecycle,
+and artifact-provenance tests: 101 passed
+Ruff focused checks: passed
+Pyright focused checks: 0 errors, 0 warnings
+full repository suite: deferred
+```

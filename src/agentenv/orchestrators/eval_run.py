@@ -20,7 +20,11 @@ from agentenv.artifacts.manifests import EvalRunManifest
 from agentenv.artifacts.manifests import EvalSuiteManifest
 from agentenv.artifacts.manifests import REPLAY_RUN_ARTIFACT_REFS
 from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_REFS
-from agentenv.artifacts.payloads import EvalTaskHashes
+from agentenv.artifacts.payloads import (
+    DecodingConfigProvenance,
+    EvalTaskHashes,
+    ModelConfigProvenance,
+)
 from agentenv.audits.runtime import (
     capture_harness_runtime_provenance,
     harness_repo_root,
@@ -38,6 +42,7 @@ from agentenv.evals.schema import (
     CONTROL_POLICY_FAMILY,
     SCORER_CONTROL_LAYER,
     SCORER_CONTROL_PATCH_POLICY_TYPE,
+    AgentModelPolicy,
     EvalConfig,
 )
 from agentenv.evals.resolve import (
@@ -60,9 +65,11 @@ from agentenv.models.config import (
     load_model_config,
     load_referenced_model_input_protocol,
 )
+from agentenv.models.client import ModelClient
 from agentenv.models.factory import build_model_client
 from agentenv.models.provider_runtime import capture_provider_runtime_provenance
 from agentenv.models.fake import ScriptedFakeModelClient
+from agentenv.models.schema import DecodingConfig
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.agent_task_run import (
     decoding_config_provenance_artifact,
@@ -158,6 +165,18 @@ class EvalMatrixReplayRecord:
     replay_run: "ReplayRun"
 
 
+@dataclass(frozen=True)
+class _AgentModelRunContext:
+    model_config_path: Path
+    model_config_hash: str
+    decoding_config_path: Path
+    decoding_config_hash: str
+    model_client: ModelClient
+    decoding_config: DecodingConfig
+    model_config_provenance: ModelConfigProvenance
+    decoding_config_provenance: DecodingConfigProvenance
+
+
 def run_eval_config(
     config_path: Path,
     policy: str,
@@ -183,6 +202,11 @@ def run_eval_config(
     attempts_dir.mkdir(parents=True, exist_ok=True)
 
     resolved_tasks = resolve_eval_tasks(config, config_path)
+    agent_model_context = (
+        _load_agent_model_run_context(config_path, selected_policy)
+        if isinstance(selected_policy, AgentModelPolicy)
+        else None
+    )
     trace_events: list[TraceEvent] = []
     base_provenance = _eval_provenance(
         eval_run_id,
@@ -302,22 +326,16 @@ def run_eval_config(
                     attempt_dir,
                 )
             elif selected_policy.type == AGENT_MODEL_POLICY_TYPE:
-                model_config_path = resolve_config_file_ref(
-                    config_path,
-                    selected_policy.model_config_path,
-                    field_name="model_config",
-                )
-                decoding_config_path = resolve_config_file_ref(
-                    config_path,
-                    selected_policy.decoding_config_path,
-                    field_name="decoding_config",
-                )
+                if agent_model_context is None:
+                    raise AssertionError("Agent-model run context was not loaded")
                 started_payload = {
                     "attempt_artifact_dir": artifact_dir_ref,
-                    "model_config_path": str(model_config_path),
-                    "model_config_hash": _hash_file(model_config_path),
-                    "decoding_config_path": str(decoding_config_path),
-                    "decoding_config_hash": _hash_file(decoding_config_path),
+                    "model_config_path": str(agent_model_context.model_config_path),
+                    "model_config_hash": agent_model_context.model_config_hash,
+                    "decoding_config_path": str(
+                        agent_model_context.decoding_config_path
+                    ),
+                    "decoding_config_hash": (agent_model_context.decoding_config_hash),
                     "max_turns_override": selected_policy.max_turns_override,
                 }
                 _append_trace(
@@ -328,8 +346,7 @@ def run_eval_config(
                 )
                 attempt_record = _run_agent_model_eval_attempt(
                     task=task,
-                    model_config_path=model_config_path,
-                    decoding_config_path=decoding_config_path,
+                    run_context=agent_model_context,
                     eval_attempt_id=eval_attempt_id,
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
@@ -745,42 +762,20 @@ def _run_agent_control_eval_attempt(
 def _run_agent_model_eval_attempt(
     *,
     task: ResolvedEvalTask,
-    model_config_path: Path,
-    decoding_config_path: Path,
+    run_context: _AgentModelRunContext,
     eval_attempt_id: str,
     attempt_index: int,
     attempt_dir: Path,
     max_turns_override: int | None,
 ) -> EvalAttemptRecord:
-    model_config = load_model_config(model_config_path)
-    decoding_config = load_decoding_config(decoding_config_path)
-    provider_runtime_provenance = capture_provider_runtime_provenance(model_config)
-    model_input_protocol = load_referenced_model_input_protocol(
-        model_config,
-        model_config_path,
-    )
-    model_client = build_model_client(
-        model_config,
-        model_input_protocol=model_input_protocol,
-    )
     agent_task_run = run_and_persist_agent_task_attempt_to_dir(
         task.manifest_path,
-        model_client,
-        decoding_config,
+        run_context.model_client,
+        run_context.decoding_config,
         attempt_dir,
         max_turns_override=max_turns_override,
-        model_config_provenance=model_config_provenance_artifact(
-            model_config=model_config,
-            model_config_path=model_config_path,
-            model_config_hash=_hash_file(model_config_path),
-            provider_runtime_provenance=provider_runtime_provenance,
-            model_input_protocol=model_input_protocol,
-        ),
-        decoding_config_provenance=decoding_config_provenance_artifact(
-            decoding_config=decoding_config,
-            decoding_config_path=decoding_config_path,
-            decoding_config_hash=_hash_file(decoding_config_path),
-        ),
+        model_config_provenance=run_context.model_config_provenance,
+        decoding_config_provenance=run_context.decoding_config_provenance,
     )
     artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
@@ -792,6 +787,56 @@ def _run_agent_model_eval_attempt(
         artifact_schema_version=artifact_identity.artifact_schema_version,
         scorer=None,
         agent=_agent_summary(agent_task_run.result),
+    )
+
+
+def _load_agent_model_run_context(
+    eval_config_path: Path,
+    policy: AgentModelPolicy,
+) -> _AgentModelRunContext:
+    model_config_path = resolve_config_file_ref(
+        eval_config_path,
+        policy.model_config_path,
+        field_name="model_config",
+    )
+    decoding_config_path = resolve_config_file_ref(
+        eval_config_path,
+        policy.decoding_config_path,
+        field_name="decoding_config",
+    )
+    model_config_hash = _hash_file(model_config_path)
+    decoding_config_hash = _hash_file(decoding_config_path)
+    model_config = load_model_config(model_config_path)
+    decoding_config = load_decoding_config(decoding_config_path)
+    provider_runtime_provenance = capture_provider_runtime_provenance(model_config)
+    model_input_protocol = load_referenced_model_input_protocol(
+        model_config,
+        model_config_path,
+    )
+    model_client = build_model_client(
+        model_config,
+        model_input_protocol=model_input_protocol,
+        model_config_path=model_config_path,
+    )
+    return _AgentModelRunContext(
+        model_config_path=model_config_path,
+        model_config_hash=model_config_hash,
+        decoding_config_path=decoding_config_path,
+        decoding_config_hash=decoding_config_hash,
+        model_client=model_client,
+        decoding_config=decoding_config,
+        model_config_provenance=model_config_provenance_artifact(
+            model_config=model_config,
+            model_config_path=model_config_path,
+            model_config_hash=model_config_hash,
+            provider_runtime_provenance=provider_runtime_provenance,
+            model_input_protocol=model_input_protocol,
+        ),
+        decoding_config_provenance=decoding_config_provenance_artifact(
+            decoding_config=decoding_config,
+            decoding_config_path=decoding_config_path,
+            decoding_config_hash=decoding_config_hash,
+        ),
     )
 
 
