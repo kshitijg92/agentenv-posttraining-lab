@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from pathlib import Path
 
-from agentenv.hashing import hash_directory, hash_file, hash_json
+from agentenv.hashing import hash_file, hash_json, relative_path
 from agentenv.models.input_protocol import (
     LoadedModelInputProtocol,
     render_model_input_with_generation_ownership,
@@ -22,10 +22,33 @@ from agentenv.training.positive_sft.schema import PositiveSFTExampleRecord
 
 POSITIVE_SFT_TRAINING_MATERIALIZER_VERSION = "positive_sft_training_materializer_v0"
 
+_MATERIALIZER_CODE_DEPENDENCIES = (
+    "hashing.py",
+    "models/input_protocol.py",
+    "models/input_protocol_schema.py",
+    "models/schema.py",
+    "training/positive_sft/materialization/builder.py",
+    "training/positive_sft/materialization/schema.py",
+    "training/positive_sft/schema.py",
+    "training/tokenization.py",
+)
+
 
 def compute_positive_sft_training_materializer_code_hash() -> str:
     agentenv_source_root = Path(__file__).resolve().parents[3]
-    return hash_directory(agentenv_source_root)
+    dependencies = [
+        (agentenv_source_root / relative_path_value).resolve()
+        for relative_path_value in _MATERIALIZER_CODE_DEPENDENCIES
+    ]
+    return hash_json(
+        [
+            {
+                "path": relative_path(path, agentenv_source_root),
+                "hash": hash_file(path),
+            }
+            for path in dependencies
+        ]
+    )
 
 
 def materialize_positive_sft_examples(

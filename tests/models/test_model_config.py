@@ -160,7 +160,7 @@ def test_load_ollama_adapter_config_validates_source_training_manifest() -> None
     )
 
     assert config.adapter is not None
-    assert config.adapter.content_hash == "xxh64:51369f8947cc96f8"
+    assert config.adapter.content_hash == "xxh64:bd7282ac841de22a"
     assert config.model_id == (
         "agentenv-qwen2.5-coder-3b-f16-operational-smoke-lora:latest"
     )
@@ -347,7 +347,7 @@ def test_ollama_provenance_captures_adapter_manifest_reference() -> None:
             "../../experiments/models/"
             "week_09_positive_sft_lora_smoke_qwen2_5_coder_3b/manifest.json"
         ),
-        "content_hash": "xxh64:51369f8947cc96f8",
+        "content_hash": "xxh64:bd7282ac841de22a",
     }
     assert artifact["provider_runtime"]["model_digest"] == (
         config.model_manifest_digest

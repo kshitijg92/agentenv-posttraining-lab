@@ -73,20 +73,17 @@ class _InitializedLoRATraining:
 
 def select_positive_sft_training_sequences(
     records: Sequence[PositiveSFTTrainingMaterializationRecord],
-    *,
-    max_examples: int,
 ) -> tuple[SelectedTrainingSequence, ...]:
     completed_records = [record for record in records if record.status == "completed"]
-    selected_records = completed_records[:max_examples]
-    if not selected_records:
+    if not completed_records:
         raise ValueError("authorized materialization contains no completed SFT rows")
 
-    example_ids = [record.source_positive_sft_example_id for record in selected_records]
+    example_ids = [record.source_positive_sft_example_id for record in completed_records]
     if len(example_ids) != len(set(example_ids)):
         raise ValueError("selected positive-SFT example ids must be unique")
 
     selected: list[SelectedTrainingSequence] = []
-    for record in selected_records:
+    for record in completed_records:
         if record.labels[0] != TRAINER_IGNORE_INDEX:
             raise ValueError(
                 "the first sequence label is unreachable by shifted causal loss and "

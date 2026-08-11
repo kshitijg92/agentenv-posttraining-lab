@@ -27,6 +27,7 @@ import agentenv.training.positive_sft.materialization.export as materialization_
 from agentenv.training.positive_sft.materialization.export import (
     export_positive_sft_training_materializations,
     load_positive_sft_training_materialization_artifact,
+    load_positive_sft_training_materialization_snapshot,
 )
 from agentenv.training.positive_sft.review import (
     build_positive_sft_review_selections,
@@ -500,6 +501,31 @@ def test_materialization_reload_rebuilds_and_rejects_label_drift(
     rewrite_materialization_manifest_jsonl_hash(export.out_dir)
 
     with pytest.raises(ValueError, match="do not match records rebuilt"):
+        load_positive_sft_training_materialization_artifact(export.out_dir)
+
+
+def test_materialization_snapshot_load_does_not_require_current_code_rebuild(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    export = build_positive_sft_training_materialization_export(
+        tmp_path,
+        monkeypatch,
+    )
+
+    def fail_rebuild(*args: Any, **kwargs: Any):
+        raise RuntimeError("current materializer must not run")
+
+    monkeypatch.setattr(
+        materialization_export_module,
+        "materialize_positive_sft_examples",
+        fail_rebuild,
+    )
+
+    snapshot = load_positive_sft_training_materialization_snapshot(export.out_dir)
+
+    assert snapshot.records == export.records
+    with pytest.raises(RuntimeError, match="current materializer must not run"):
         load_positive_sft_training_materialization_artifact(export.out_dir)
 
 

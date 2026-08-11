@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
@@ -29,6 +30,7 @@ from agentenv.training.positive_sft.lora.config import (
     load_positive_sft_lora_training_config,
 )
 from agentenv.training.positive_sft.lora.engine import (
+    SelectedTrainingSequence,
     execute_lora_qualification,
     execute_positive_sft_lora_training,
     select_positive_sft_training_sequences,
@@ -51,11 +53,22 @@ from agentenv.training.positive_sft.lora.schema import (
     PositiveSFTLoRATrainingResult,
     PositiveSFTLoRATrainingStepRecord,
     PositiveSFTLoRATrainingConfig,
+    SelectedPositiveSFTTrainingExample,
     TrainingFailureStage,
 )
 from agentenv.training.positive_sft.materialization.export import (
     PositiveSFTTrainingMaterializationExport,
-    load_positive_sft_training_materialization_artifact,
+    load_positive_sft_training_materialization_snapshot,
+)
+from agentenv.training.positive_sft.materialization.schema import (
+    CompletedPositiveSFTTrainingMaterializationRecord,
+)
+from agentenv.training.positive_sft.export import (
+    load_pinned_positive_sft_review,
+    load_positive_sft_export_artifact,
+)
+from agentenv.training.positive_sft.review import (
+    hash_positive_sft_review_record,
 )
 
 
@@ -71,28 +84,24 @@ class PositiveSFTLoRATrainingArtifact:
 
 
 def run_positive_sft_lora_training(
-    source_materialization_dir: Path,
+    source_materialization_dirs: Sequence[Path],
     training_config_path: Path,
     out_dir: Path,
     *,
     model_cache_dir: Path | None = None,
-    tokenizer_cache_dir: Path | None = None,
     local_files_only: bool = False,
     overwrite: bool = False,
 ) -> PositiveSFTLoRATrainingArtifact:
     config_path = training_config_path.resolve()
     config = load_positive_sft_lora_training_config(config_path)
     configure_process_determinism(config)
-    source = _load_authorized_source(
-        source_materialization_dir,
-        tokenizer_cache_dir=tokenizer_cache_dir,
-        local_files_only=local_files_only,
-    )
-    _validate_config_matches_source(config, source)
+    sources = _load_authorized_sources(source_materialization_dirs)
+    _validate_config_matches_sources(config, sources)
+    selected_records = _select_treatment_records(sources, config=config)
     selected_sequences = select_positive_sft_training_sequences(
-        source.records,
-        max_examples=config.data.max_examples,
+        selected_records,
     )
+    _validate_training_exposure(selected_sequences, config=config)
     runtime_provenance = capture_training_runtime_provenance(config)
     require_requested_training_device(runtime_provenance)
 
@@ -167,7 +176,6 @@ def run_positive_sft_lora_training(
         incomplete_adapter_dir.rename(final_adapter_dir)
         result: PositiveSFTLoRATrainingResult = CompletedPositiveSFTLoRATrainingResult(
             training_run_id=run_id,
-            purpose=config.purpose,
             started_at=started_at,
             finished_at=_utc_now(),
             selected_examples=execution.selected_examples,
@@ -187,7 +195,6 @@ def run_positive_sft_lora_training(
             final_adapter_dir.rename(out_dir / "adapter_failed")
         result = FailedPositiveSFTLoRATrainingResult(
             training_run_id=run_id,
-            purpose=config.purpose,
             started_at=started_at,
             finished_at=_utc_now(),
             selected_examples=tuple(item.provenance for item in selected_sequences),
@@ -206,7 +213,7 @@ def run_positive_sft_lora_training(
     )
     manifest = _build_manifest(
         out_dir=out_dir,
-        source=source,
+        sources=sources,
         config_path=config_path,
         result_path=result_path,
         steps_path=steps_path,
@@ -263,10 +270,19 @@ def load_positive_sft_lora_training_artifact(
         raise ValueError("persisted training-step count differs from result")
     if [step.step_index for step in steps] != list(range(len(steps))):
         raise ValueError("persisted training step indexes must be contiguous")
+    _validate_executed_order(
+        steps,
+        selected_examples=result.selected_examples,
+        owner="persisted training steps",
+    )
+    if result.qualification is not None:
+        _validate_executed_order(
+            result.qualification.steps,
+            selected_examples=result.selected_examples,
+            owner="persisted qualification steps",
+        )
     if result.runtime_provenance.trainer_code_hash != manifest.trainer_code_hash:
         raise ValueError("training result code hash differs from manifest")
-    if config.purpose != manifest.purpose or result.purpose != config.purpose:
-        raise ValueError("training purpose differs across config, result, and manifest")
     if config.max_steps != manifest.requested_step_count:
         raise ValueError("training config step count differs from manifest")
     if config.base_model != manifest.base_model:
@@ -293,7 +309,7 @@ def load_positive_sft_lora_training_artifact(
         if adapter_hash != result.adapter_round_trip.persisted_adapter_directory_hash:
             raise ValueError("adapter hash differs from round-trip audit")
 
-    _validate_source_ref(out_dir, manifest)
+    _validate_source_refs(out_dir, manifest)
     return PositiveSFTLoRATrainingArtifact(
         out_dir=out_dir,
         manifest=manifest,
@@ -302,64 +318,221 @@ def load_positive_sft_lora_training_artifact(
     )
 
 
-def _load_authorized_source(
-    source_dir: Path,
-    *,
-    tokenizer_cache_dir: Path | None,
-    local_files_only: bool,
-) -> PositiveSFTTrainingMaterializationExport:
-    source_dir = source_dir.resolve()
-    source_manifest = load_positive_sft_training_materialization_manifest(
-        source_dir / MANIFEST_FILENAME
-    )
-    if source_manifest.training_authorization != "authorized":
-        raise ValueError(
-            "LoRA training requires an authorized positive-SFT materialization"
+def _load_authorized_sources(
+    source_dirs: Sequence[Path],
+) -> tuple[PositiveSFTTrainingMaterializationExport, ...]:
+    resolved_dirs = sorted(path.resolve() for path in source_dirs)
+    if not resolved_dirs:
+        raise ValueError("LoRA training requires at least one source materialization")
+    if len(resolved_dirs) != len(set(resolved_dirs)):
+        raise ValueError("LoRA training source materializations must be unique")
+
+    sources: list[PositiveSFTTrainingMaterializationExport] = []
+    for source_dir in resolved_dirs:
+        source_manifest = load_positive_sft_training_materialization_manifest(
+            source_dir / MANIFEST_FILENAME
         )
-    if source_manifest.training_authorization_override is None:
-        raise ValueError(
-            "authorized positive-SFT materialization is missing override provenance"
-        )
-    source = load_positive_sft_training_materialization_artifact(
-        source_dir,
-        tokenizer_cache_dir=tokenizer_cache_dir,
-        local_files_only=local_files_only,
-    )
-    if source.manifest.training_authorization != "authorized":
-        raise ValueError(
-            "LoRA training requires an authorized positive-SFT materialization"
-        )
-    if source.manifest.training_authorization_override is None:
-        raise ValueError(
-            "authorized positive-SFT materialization is missing override provenance"
-        )
-    return source
+        if source_manifest.training_authorization != "authorized":
+            raise ValueError(
+                "LoRA training requires authorized positive-SFT materializations"
+            )
+        if source_manifest.training_authorization_override is None:
+            raise ValueError(
+                "authorized positive-SFT materialization is missing override provenance"
+            )
+        source = load_positive_sft_training_materialization_snapshot(source_dir)
+        if source.manifest.training_authorization != "authorized":
+            raise ValueError(
+                "LoRA training requires authorized positive-SFT materializations"
+            )
+        if source.manifest.training_authorization_override is None:
+            raise ValueError(
+                "authorized positive-SFT materialization is missing override provenance"
+            )
+        sources.append(source)
+    return tuple(sources)
 
 
-def _validate_config_matches_source(
+def _validate_config_matches_sources(
     config: PositiveSFTLoRATrainingConfig,
-    source: PositiveSFTTrainingMaterializationExport,
+    sources: Sequence[PositiveSFTTrainingMaterializationExport],
 ) -> None:
-    manifest = source.manifest
-    if config.model_input_protocol_id != manifest.model_input_protocol_id:
-        raise ValueError("training config and source input protocol ids differ")
-    protocol_path = Path(manifest.model_input_protocol_path)
-    if not protocol_path.is_absolute():
-        protocol_path = source.out_dir / protocol_path
-    protocol_path = protocol_path.resolve()
-    if hash_file(protocol_path) != manifest.model_input_protocol_hash:
-        raise ValueError("source model input protocol hash mismatch")
-    protocol = load_model_input_protocol(protocol_path)
-    if protocol.record.model_checkpoint != config.base_model:
-        raise ValueError(
-            "training base model must equal the materialization protocol checkpoint"
+    protocol_ids = {source.manifest.model_input_protocol_id for source in sources}
+    protocol_hashes = {source.manifest.model_input_protocol_hash for source in sources}
+    if len(protocol_ids) != 1 or len(protocol_hashes) != 1:
+        raise ValueError("LoRA training sources must share one model input protocol")
+
+    for source in sources:
+        manifest = source.manifest
+        if config.model_input_protocol_id != manifest.model_input_protocol_id:
+            raise ValueError("training config and source input protocol ids differ")
+        protocol_path = Path(manifest.model_input_protocol_path)
+        if not protocol_path.is_absolute():
+            protocol_path = source.out_dir / protocol_path
+        protocol_path = protocol_path.resolve()
+        if hash_file(protocol_path) != manifest.model_input_protocol_hash:
+            raise ValueError("source model input protocol hash mismatch")
+        protocol = load_model_input_protocol(protocol_path)
+        if protocol.record.model_checkpoint != config.base_model:
+            raise ValueError(
+                "training base model must equal each materialization protocol "
+                "checkpoint"
+            )
+
+
+def _select_treatment_records(
+    sources: Sequence[PositiveSFTTrainingMaterializationExport],
+    *,
+    config: PositiveSFTLoRATrainingConfig,
+) -> tuple[CompletedPositiveSFTTrainingMaterializationRecord, ...]:
+    raw_records: list[CompletedPositiveSFTTrainingMaterializationRecord] = []
+    filtered_records: list[CompletedPositiveSFTTrainingMaterializationRecord] = []
+    raw_task_ids: set[str] = set()
+    filtered_task_ids: set[str] = set()
+    observed_example_ids: set[str] = set()
+
+    for source in sources:
+        export_dir = Path(source.manifest.source_positive_sft_export.artifact_dir)
+        if not export_dir.is_absolute():
+            export_dir = source.out_dir / export_dir
+        positive_sft_export = load_positive_sft_export_artifact(export_dir.resolve())
+        examples_by_id = {
+            example.example_id: example for example in positive_sft_export.records
+        }
+        if len(examples_by_id) != len(positive_sft_export.records):
+            raise ValueError("positive-SFT export example ids must be unique")
+
+        review_validation = load_pinned_positive_sft_review(
+            positive_sft_export.out_dir,
+            positive_sft_export.manifest,
         )
+        reviews_by_hash = {
+            hash_positive_sft_review_record(review): review
+            for review in review_validation.review_artifact.reviews
+        }
+        if len(reviews_by_hash) != len(review_validation.review_artifact.reviews):
+            raise ValueError("positive-SFT review record hashes must be unique")
+
+        for record in source.records:
+            if not isinstance(
+                record,
+                CompletedPositiveSFTTrainingMaterializationRecord,
+            ):
+                continue
+            example_id = record.source_positive_sft_example_id
+            if example_id in observed_example_ids:
+                raise ValueError(
+                    "positive-SFT example ids must be unique across materializations"
+                )
+            observed_example_ids.add(example_id)
+
+            example = examples_by_id.get(example_id)
+            if example is None:
+                raise ValueError(
+                    "materialization references an unknown positive-SFT example: "
+                    f"{example_id}"
+                )
+            review_hash = (
+                example.review_provenance.source_positive_sft_review_record_hash
+            )
+            review = reviews_by_hash.get(review_hash)
+            if review is None:
+                raise ValueError(
+                    "positive-SFT example references an unknown review record: "
+                    f"{example_id}"
+                )
+            if review.review_decision != "accepted":
+                raise ValueError(
+                    "materialized positive-SFT examples require accepted prefixes"
+                )
+            efficiency = review.efficiency_judgment
+            if efficiency is None:
+                raise ValueError(
+                    "LoRA treatment selection requires completed efficiency reviews"
+                )
+
+            task_id = example.provenance_ids.task_id
+            raw_records.append(record)
+            raw_task_ids.add(task_id)
+            if efficiency.review_decision == "accepted":
+                filtered_records.append(record)
+                filtered_task_ids.add(task_id)
+
+    if not raw_records:
+        raise ValueError("LoRA training sources contain no completed SFT rows")
+    if not filtered_records:
+        raise ValueError("efficiency filtering removed every completed SFT row")
+    if filtered_task_ids != raw_task_ids:
+        raise ValueError(
+            "raw and efficiency-filtered treatments must cover the same task ids"
+        )
+
+    selected = (
+        raw_records if config.data.treatment == "raw" else filtered_records
+    )
+    return tuple(
+        sorted(
+            selected,
+            key=lambda record: (
+                -record.supervised_token_count,
+                record.source_positive_sft_example_id,
+            ),
+        )
+    )
+
+
+def _validate_training_exposure(
+    selected_sequences: Sequence[SelectedTrainingSequence],
+    *,
+    config: PositiveSFTLoRATrainingConfig,
+) -> None:
+    observed_supervised_tokens = sum(
+        selected_sequences[step_index % len(selected_sequences)]
+        .provenance.stored_supervised_token_count
+        for step_index in range(config.max_steps)
+    )
+    target = config.data.target_supervised_token_count
+    tolerance = config.data.supervised_token_tolerance
+    if abs(observed_supervised_tokens - target) > tolerance:
+        raise ValueError(
+            "LoRA training exposure is outside the configured supervised-token "
+            f"tolerance: observed={observed_supervised_tokens}, target={target}, "
+            f"tolerance={tolerance}"
+        )
+
+
+def _validate_executed_order(
+    steps: Sequence[PositiveSFTLoRATrainingStepRecord],
+    *,
+    selected_examples: Sequence[SelectedPositiveSFTTrainingExample],
+    owner: str,
+) -> None:
+    if steps and not selected_examples:
+        raise ValueError(f"{owner} require selected examples")
+    for step in steps:
+        expected = selected_examples[step.step_index % len(selected_examples)]
+        observed_fields = (
+            step.source_positive_sft_example_id,
+            step.source_materialization_record_hash,
+            step.sequence_length,
+            step.supervised_prediction_count,
+            step.ignored_prediction_count,
+        )
+        expected_fields = (
+            expected.source_positive_sft_example_id,
+            expected.source_materialization_record_hash,
+            expected.sequence_length,
+            expected.effective_shifted_supervised_token_count,
+            expected.ignored_prediction_count,
+        )
+        if observed_fields != expected_fields:
+            raise ValueError(f"{owner} differ from deterministic selected order")
 
 
 def _build_manifest(
     *,
     out_dir: Path,
-    source: PositiveSFTTrainingMaterializationExport,
+    sources: Sequence[PositiveSFTTrainingMaterializationExport],
     config_path: Path,
     result_path: Path,
     steps_path: Path,
@@ -367,11 +540,22 @@ def _build_manifest(
     trainer_code_hash: str,
     adapter_dir: Path,
 ) -> PositiveSFTLoRATrainingRunManifest:
-    source_manifest_path = source.out_dir / MANIFEST_FILENAME
-    source_materializations_path = resolve_relative_artifact_ref(
-        source.out_dir,
-        source.manifest.artifacts["materializations"],
-    )
+    source_refs = []
+    for source in sources:
+        source_manifest_path = source.out_dir / MANIFEST_FILENAME
+        source_materializations_path = resolve_relative_artifact_ref(
+            source.out_dir,
+            source.manifest.artifacts["materializations"],
+        )
+        source_refs.append(
+            {
+                "artifact_dir": str(source.out_dir),
+                "manifest_hash": hash_file(source_manifest_path),
+                "materializations_jsonl_hash": hash_file(
+                    source_materializations_path
+                ),
+            }
+        )
     artifacts = {
         key: value
         for key, value in POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_REFS.items()
@@ -387,20 +571,15 @@ def _build_manifest(
             ),
             "created_at": _utc_now(),
             "training_run_id": result.training_run_id,
-            "purpose": result.purpose,
             "status": result.status,
-            "source_positive_sft_training_materialization": {
-                "artifact_dir": str(source.out_dir),
-                "manifest_hash": hash_file(source_manifest_path),
-                "materializations_jsonl_hash": hash_file(source_materializations_path),
-            },
+            "source_positive_sft_training_materializations": source_refs,
             "training_config": {
                 "path": str(config_path),
                 "content_hash": hash_file(config_path),
                 "config_id": config.config_id,
             },
-            "model_input_protocol_id": source.manifest.model_input_protocol_id,
-            "model_input_protocol_hash": source.manifest.model_input_protocol_hash,
+            "model_input_protocol_id": sources[0].manifest.model_input_protocol_id,
+            "model_input_protocol_hash": sources[0].manifest.model_input_protocol_hash,
             "base_model": config.base_model.model_dump(mode="json"),
             "trainer_code_hash": trainer_code_hash,
             "training_result_schema_version": (
@@ -420,26 +599,32 @@ def _build_manifest(
     )
 
 
-def _validate_source_ref(
+def _validate_source_refs(
     out_dir: Path,
     manifest: PositiveSFTLoRATrainingRunManifest,
 ) -> None:
-    source_ref = manifest.source_positive_sft_training_materialization
-    source_dir = Path(source_ref.artifact_dir)
-    if not source_dir.is_absolute():
-        source_dir = out_dir / source_dir
-    source_dir = source_dir.resolve()
-    if hash_file(source_dir / MANIFEST_FILENAME) != source_ref.manifest_hash:
-        raise ValueError("source positive-SFT materialization manifest hash mismatch")
-    source_manifest = PositiveSFTTrainingMaterializationManifest.model_validate_json(
-        (source_dir / MANIFEST_FILENAME).read_text()
-    )
-    materializations_path = resolve_relative_artifact_ref(
-        source_dir,
-        source_manifest.artifacts["materializations"],
-    )
-    if hash_file(materializations_path) != source_ref.materializations_jsonl_hash:
-        raise ValueError("source positive-SFT materializations JSONL hash mismatch")
+    for source_ref in manifest.source_positive_sft_training_materializations:
+        source_dir = Path(source_ref.artifact_dir)
+        if not source_dir.is_absolute():
+            source_dir = out_dir / source_dir
+        source_dir = source_dir.resolve()
+        if hash_file(source_dir / MANIFEST_FILENAME) != source_ref.manifest_hash:
+            raise ValueError(
+                "source positive-SFT materialization manifest hash mismatch"
+            )
+        source_manifest = (
+            PositiveSFTTrainingMaterializationManifest.model_validate_json(
+                (source_dir / MANIFEST_FILENAME).read_text()
+            )
+        )
+        materializations_path = resolve_relative_artifact_ref(
+            source_dir,
+            source_manifest.artifacts["materializations"],
+        )
+        if hash_file(materializations_path) != source_ref.materializations_jsonl_hash:
+            raise ValueError(
+                "source positive-SFT materializations JSONL hash mismatch"
+            )
 
 
 def _load_result(path: Path) -> PositiveSFTLoRATrainingResult:

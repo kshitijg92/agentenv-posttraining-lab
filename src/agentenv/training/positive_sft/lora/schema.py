@@ -41,6 +41,7 @@ TrainingFailureStage = Literal[
     "adapter_reload",
     "artifact_persistence",
 ]
+TrainingTreatment = Literal["raw", "efficiency_filtered"]
 
 
 class LoRAConfigRecord(BaseModel):
@@ -90,11 +91,12 @@ class OptimizerConfigRecord(BaseModel):
     schedule: Literal["constant"]
 
 
-class TrainingDataSelectionConfig(BaseModel):
+class TrainingDataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    selection_policy: Literal["completed_manifest_order_prefix"]
-    max_examples: PositiveInt
+    treatment: TrainingTreatment
+    target_supervised_token_count: PositiveInt
+    supervised_token_tolerance: NonNegativeInt
     shuffle: Literal[False]
     micro_batch_size: Literal[1]
 
@@ -112,7 +114,7 @@ class TrainingRuntimeConfig(BaseModel):
     @model_validator(mode="after")
     def validate_device_dtype(self) -> "TrainingRuntimeConfig":
         if self.device == "cpu" and self.weight_dtype == "bfloat16":
-            raise ValueError("CPU smoke training requires float32 weights in this lab")
+            raise ValueError("CPU training requires float32 weights in this lab")
         return self
 
 
@@ -121,7 +123,6 @@ class PositiveSFTLoRATrainingConfig(BaseModel):
 
     schema_version: Literal["positive_sft_lora_training_config_v0"]
     config_id: str = Field(min_length=1, pattern=r"^[a-z0-9_]+$")
-    purpose: Literal["operational_smoke"]
     model_input_protocol_id: str = Field(
         min_length=1,
         pattern=r"^[a-z0-9_]+$",
@@ -129,7 +130,7 @@ class PositiveSFTLoRATrainingConfig(BaseModel):
     base_model: HuggingFaceRevisionPin
     lora: LoRAConfigRecord
     optimizer: OptimizerConfigRecord
-    data: TrainingDataSelectionConfig
+    data: TrainingDataConfig
     runtime: TrainingRuntimeConfig
     seed: NonNegativeInt
     max_steps: PositiveInt
@@ -327,7 +328,6 @@ class _PositiveSFTLoRATrainingResult(BaseModel):
         min_length=1,
         pattern=r"^positive_sft_lora_run_[0-9a-f]{32}$",
     )
-    purpose: Literal["operational_smoke"]
     started_at: str = Field(min_length=1)
     finished_at: str = Field(min_length=1)
     selected_examples: tuple[SelectedPositiveSFTTrainingExample, ...]

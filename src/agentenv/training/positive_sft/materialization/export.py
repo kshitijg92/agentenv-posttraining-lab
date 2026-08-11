@@ -119,6 +119,18 @@ def load_positive_sft_training_materialization_artifact(
         tokenizer=None,
         tokenizer_cache_dir=tokenizer_cache_dir,
         local_files_only=local_files_only,
+        validate_current_code=True,
+    )
+
+
+def load_positive_sft_training_materialization_snapshot(
+    export_dir: Path,
+) -> PositiveSFTTrainingMaterializationExport:
+    """Load a frozen materialization through artifact-integrity checks only."""
+    return _load_and_validate_positive_sft_training_materialization_artifact(
+        export_dir,
+        tokenizer=None,
+        validate_current_code=False,
     )
 
 
@@ -128,6 +140,7 @@ def _load_and_validate_positive_sft_training_materialization_artifact(
     tokenizer: MaterializationTokenizer | None,
     tokenizer_cache_dir: Path | None = None,
     local_files_only: bool = False,
+    validate_current_code: bool = True,
 ) -> PositiveSFTTrainingMaterializationExport:
     export_dir = export_dir.resolve()
     manifest = load_positive_sft_training_materialization_manifest(
@@ -151,6 +164,13 @@ def _load_and_validate_positive_sft_training_materialization_artifact(
     _validate_exact_source_coverage(source_export, records)
     protocol = _load_pinned_model_input_protocol(export_dir, manifest)
     _validate_record_provenance(manifest, records)
+
+    if not validate_current_code:
+        return PositiveSFTTrainingMaterializationExport(
+            out_dir=export_dir,
+            manifest=manifest,
+            records=records,
+        )
 
     active_tokenizer = tokenizer
     if active_tokenizer is None:

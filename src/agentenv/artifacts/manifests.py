@@ -1928,11 +1928,11 @@ class PositiveSFTLoRATrainingRunManifest(ArtifactManifest):
         min_length=1,
         pattern=r"^positive_sft_lora_run_[0-9a-f]{32}$",
     )
-    purpose: Literal["operational_smoke"]
     status: Literal["completed", "failed"]
-    source_positive_sft_training_materialization: (
-        PositiveSFTTrainingMaterializationArtifactRef
-    )
+    source_positive_sft_training_materializations: tuple[
+        PositiveSFTTrainingMaterializationArtifactRef,
+        ...,
+    ] = Field(min_length=1)
     training_config: PositiveSFTLoRATrainingConfigRef
     model_input_protocol_id: str = Field(
         min_length=1,
@@ -1955,6 +1955,14 @@ class PositiveSFTLoRATrainingRunManifest(ArtifactManifest):
     def validate_lora_training_run_contract(
         self,
     ) -> "PositiveSFTLoRATrainingRunManifest":
+        source_dirs = [
+            source.artifact_dir
+            for source in self.source_positive_sft_training_materializations
+        ]
+        if len(source_dirs) != len(set(source_dirs)):
+            raise ValueError("LoRA training source materializations must be unique")
+        if source_dirs != sorted(source_dirs):
+            raise ValueError("LoRA training source materializations must be sorted")
         self.validate_artifacts_map(self.artifacts)
         _validate_artifact_ref_contract(
             self.artifacts,

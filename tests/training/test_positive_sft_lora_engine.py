@@ -23,7 +23,7 @@ from agentenv.training.positive_sft.materialization.schema import (
 )
 
 
-CONFIG_PATH = Path("configs/train/positive_sft_lora_smoke.yaml")
+CONFIG_PATH = Path("configs/train/positive_sft_lora_raw.yaml")
 
 
 def _tiny_training_config(
@@ -101,10 +101,7 @@ def _tiny_base_factory() -> Callable[[], transformers.PreTrainedModel]:
 def test_tiny_qwen_lora_run_proves_training_invariants(tmp_path: Path) -> None:
     config = _tiny_training_config()
     record = _materialization_record()
-    selected = select_positive_sft_training_sequences(
-        [record],
-        max_examples=config.data.max_examples,
-    )
+    selected = select_positive_sft_training_sequences([record])
     base_factory = _tiny_base_factory()
     qualification = execute_lora_qualification(
         base_model=base_factory(),
@@ -153,10 +150,7 @@ def test_training_restarts_at_step_zero_without_detailed_gradient_observation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = _tiny_training_config(max_steps=1, qualification_step_count=2)
-    selected = select_positive_sft_training_sequences(
-        [_materialization_record()],
-        max_examples=config.data.max_examples,
-    )
+    selected = select_positive_sft_training_sequences([_materialization_record()])
     base_factory = _tiny_base_factory()
     observed_step_count = 0
     original_observe = lora_engine.AdapterQualificationTracker.observe
@@ -200,7 +194,7 @@ def test_selection_rejects_unreachable_supervised_first_label() -> None:
     record = CompletedPositiveSFTTrainingMaterializationRecord.model_validate(payload)
 
     try:
-        select_positive_sft_training_sequences([record], max_examples=1)
+        select_positive_sft_training_sequences([record])
     except ValueError as exc:
         assert "first sequence label is unreachable" in str(exc)
     else:

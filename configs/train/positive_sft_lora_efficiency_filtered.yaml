@@ -1,6 +1,5 @@
 schema_version: positive_sft_lora_training_config_v0
-config_id: positive_sft_lora_smoke
-purpose: operational_smoke
+config_id: positive_sft_lora_efficiency_filtered
 model_input_protocol_id: qwen2_5_coder_3b_agentenv_json
 base_model:
   repository_id: Qwen/Qwen2.5-Coder-3B-Instruct
@@ -28,8 +27,9 @@ optimizer:
   max_gradient_norm: 1.0
   schedule: constant
 data:
-  selection_policy: completed_manifest_order_prefix
-  max_examples: 1
+  treatment: efficiency_filtered
+  target_supervised_token_count: 16412
+  supervised_token_tolerance: 907
   shuffle: false
   micro_batch_size: 1
 runtime:
@@ -40,7 +40,7 @@ runtime:
   deterministic_algorithms: true
   cublas_workspace_config: ":4096:8"
 seed: 42
-max_steps: 3
+max_steps: 98
 qualification_step_count: 2
 gradient_accumulation_steps: 1
 reload_probe_token_count: 64

@@ -1130,3 +1130,86 @@ Ruff focused checks: passed
 Pyright: 0 errors, 0 warnings
 full repository suite: deferred
 ```
+
+## 2026-08-10 Schedule Boundary Simplification
+
+The first Checkpoint 6 implementation introduced a standalone typed schedule
+set and generated JSON. That layer was removed before trainer integration. It
+duplicated a relation that the existing LoRA workflow already consumes and the
+existing training-step JSONL already persists.
+
+The retained exposure decision is:
+
+| Measure | Raw | Efficiency-filtered |
+| --- | ---: | ---: |
+| Unique examples | 98 | 94 |
+| Optimizer steps | 98 | 98 |
+| Observed supervised tokens | 16,412 | 16,071 |
+| Delta from target | 0 | -341 (-2.08%) |
+| Observed context tokens | 97,005 | 94,440 |
+| Repeated examples | 0 | 4 |
+| Maximum exposure count | 1 | 2 |
+
+The existing workflow will resolve this in memory from the eight pinned
+materialization artifacts and their existing positive-SFT review provenance.
+It will pass the ordered unique examples to the existing modulo-cycling trainer
+for exactly 98 steps. The existing step records will then own the exact
+executed order; the run manifest will pin all consumed sources. No schedule
+artifact, manifest, schema, or CLI is needed.
+
+The discarded attempt did expose one independent regeneration problem: the old
+materializer code hash covered all of `src/agentenv`, so an unrelated source
+file changed reconstructed record hashes. Frozen materializations can now be
+loaded through artifact-integrity checks without demanding a current-code
+rebuild, while explicit rebuild validation remains available. Future
+materializer hashes cover only the files that own rendering, token ownership,
+materialization, validation, and hashing.
+
+Focused verification after removal:
+
+```text
+positive-SFT materialization tests: 37 passed
+Ruff focused checks: passed
+Pyright focused checks: 0 errors, 0 warnings
+standalone schedule source, tests, and generated JSON: absent
+full repository suite: deferred
+```
+
+## 2026-08-10 Existing-Workflow Treatment Integration
+
+Checkpoint 6 was completed without restoring the discarded schedule layer.
+The existing LoRA command now accepts the eight authorized materialization
+directories directly. It joins each materialized row to its exact
+`PositiveSFTExampleRecord` and hash-pinned combined review, then selects either
+the raw prefix-accepted population or the efficiency-accepted population.
+
+There is one current training-data contract. It contains the treatment and the
+predeclared supervised-token target/tolerance; it has no smoke purpose,
+manifest-prefix compatibility branch, or schedule policy discriminator. The
+old Week 9 smoke config was moved beside its historical run and is no longer an
+active training config.
+
+Both treatments use descending supervised-token count with example id as the
+tie-breaker. The trainer's existing modulo loop therefore produces the frozen
+98-step exposures:
+
+```text
+raw:                 98 unique, 16,412 supervised, 97,005 context
+efficiency-filtered: 94 unique, 16,071 supervised, 94,440 context
+```
+
+The workflow validates that exposure before runtime capture or model loading.
+The existing result records the ordered unique inputs, the existing step JSONL
+records every executed repetition, and the existing run manifest now pins all
+source materializations. Artifact loading verifies that persisted
+qualification and training steps follow the same deterministic modulo order.
+
+Focused verification:
+
+```text
+LoRA schema, manifest, engine, workflow, and model-config tests: 44 passed
+real eight-source treatment preflight: 98/94 rows and expected token totals
+Ruff focused checks: passed
+Pyright focused checks: 0 errors, 0 warnings
+full repository suite: deferred
+```

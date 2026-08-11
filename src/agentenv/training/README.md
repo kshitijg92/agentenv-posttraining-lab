@@ -231,26 +231,33 @@ OpenAI-compatible client remains a separate provider-owned serialization path;
 the 7B and 14B Qwen2.5 configs remain on that path until they have their own
 pinned input-protocol records.
 
-## Positive-SFT LoRA operational smoke
+## Positive-SFT LoRA training
 
-The first trainer is deliberately an operational smoke rather than an efficacy
-experiment. Its input is an authorized
-`PositiveSFTTrainingMaterializationManifest`, not a loose JSONL file. The run
-pins the exact materialization manifest and token file, training config, target
-checkpoint, source input protocol, package runtime, Git state, trainer code,
-hardware, selected records, and optimization steps.
+The trainer consumes one or more authorized
+`PositiveSFTTrainingMaterializationManifest` artifacts, not loose JSONL files.
+The run pins every exact materialization manifest and token file, the training
+config, target checkpoint, source input protocol, package runtime, Git state,
+trainer code, hardware, selected records, and optimization steps.
 
 The training config is an input, not a generated run artifact. The run manifest
 stores its path, content hash, and config id. It does not copy the YAML into the
 output directory; this follows the same hash-pinned-reference convention as
 task and model-input-protocol configuration.
 
-The reusable config is
-`configs/train/positive_sft_lora_smoke.yaml`. It uses ordinary rank-8 LoRA on
-all four attention projections with `scale = alpha / rank = 1`. This target set
-is a declared plumbing choice for the smoke; it is not evidence that
-attention-only adaptation is better than narrower or attention-plus-MLP
-alternatives.
+The current matched configs are
+`configs/train/positive_sft_lora_raw.yaml` and
+`configs/train/positive_sft_lora_efficiency_filtered.yaml`. They use ordinary
+rank-8 LoRA on all four attention projections with
+`scale = alpha / rank = 1`. This target set is a declared experiment choice;
+it is not evidence that attention-only adaptation is better than narrower or
+attention-plus-MLP alternatives.
+
+The data contract selects either every prefix-accepted positive-SFT record or
+the subset whose embedded efficiency judgment is accepted. It orders complete
+materializations deterministically, cycles that order for `max_steps`, and
+checks the resulting supervised-token exposure against the configured target
+and tolerance before loading the model. The raw and filtered configs differ
+only in config identity and treatment.
 
 Each step uses batch size one and the materialized trajectory as one causal
 sequence. The trainer shifts labels by one position and computes mean
@@ -262,8 +269,8 @@ losses.
 Before real training, the runner performs a separate
 `qualification_step_count`-step diagnostic run. During that bounded run, it
 inspects every LoRA parameter for observed, finite, nonzero gradients and
-compares its state with initialization. The smoke uses two qualification steps
-because ordinary LoRA initializes the B factor to zero: the first step can
+compares its state with initialization. At least two qualification steps are
+used because ordinary LoRA initializes the B factor to zero: the first step can
 update B before the A factor receives a useful gradient on a later step.
 
 The qualification model and optimizer are then discarded. The runner reloads
@@ -313,17 +320,18 @@ and an unpinned revision are rejected. The training manifest and result remain
 the authoritative experiment record.
 
 If any invariant or runtime stage fails, the run records a failed result and
-does not publish the canonical `adapter/` artifact reference. A passing smoke
-means only that the intended training operation occurred and round-tripped. It
-does not claim lower loss on future batches, improved task completion, or
-generalization.
+does not publish the canonical `adapter/` artifact reference. A mechanically
+passing run means only that the intended training operation occurred and
+round-tripped. It does not by itself claim lower loss on future batches,
+improved task completion, or generalization.
 
 The CLI entrypoint is:
 
 ```text
 agentenv training positive-sft train-lora \
-  --source <authorized-positive-sft-materialization> \
-  --config configs/train/positive_sft_lora_smoke.yaml \
+  --source <authorized-positive-sft-materialization-1> \
+  --source <authorized-positive-sft-materialization-2> \
+  --config configs/train/positive_sft_lora_raw.yaml \
   --out <training-run-artifact>
 ```
 

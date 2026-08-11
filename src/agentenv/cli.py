@@ -1372,10 +1372,13 @@ def materialize_training_positive_sft(
 
 @training_positive_sft_app.command("train-lora")
 def train_positive_sft_lora(
-    source: Path = typer.Option(
+    source: list[Path] = typer.Option(
         ...,
         "--source",
-        help="Authorized positive-SFT training materialization artifact directory.",
+        help=(
+            "Authorized positive-SFT training materialization artifact directory; "
+            "repeat for every source."
+        ),
     ),
     config: Path = typer.Option(
         ...,
@@ -1387,15 +1390,10 @@ def train_positive_sft_lora(
         "--model-cache-dir",
         help="Optional Hugging Face base-model cache directory.",
     ),
-    tokenizer_cache_dir: Path | None = typer.Option(
-        None,
-        "--tokenizer-cache-dir",
-        help="Optional Hugging Face tokenizer cache directory.",
-    ),
     local_files_only: bool = typer.Option(
         False,
         "--local-files-only",
-        help="Require the pinned model and tokenizer revisions to be cached locally.",
+        help="Require the pinned base-model revision to be cached locally.",
     ),
     out: Path = typer.Option(
         ...,
@@ -1414,7 +1412,6 @@ def train_positive_sft_lora(
             config,
             out,
             model_cache_dir=model_cache_dir,
-            tokenizer_cache_dir=tokenizer_cache_dir,
             local_files_only=local_files_only,
             overwrite=overwrite,
         )

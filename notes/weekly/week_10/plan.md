@@ -11,8 +11,15 @@ materializations have been regenerated successfully. The common serving path
 is now Ollama native generation over one exact F16 GGUF base and an optional
 separate GGUF LoRA adapter. Its paired practice smoke produced schema-valid
 actions, completed the same four-turn agent path for both compositions, and
-passed both public and hidden scoring. Training and policy evaluation have not
-started; Checkpoint 6 matched-schedule construction is next.
+passed both public and hidden scoring. The matched training schedules are now
+resolved at 98 optimizer steps per arm: 16,412 supervised tokens for raw and
+16,071 for efficiency-filtered, a declared 341-token shortfall within the
+907-token complete-example tolerance. No standalone schedule artifact is
+needed; the existing LoRA workflow and training-run records now own resolution
+and executed order. The workflow accepts all eight sources, derives the chosen
+treatment from the existing reviews, and blocks token-exposure drift before
+model loading. Training and policy evaluation have not started; Checkpoint 7
+training is next.
 
 ## Theme
 
@@ -803,23 +810,25 @@ experiments/reports/week_10_raw_vs_filtered.md
 experiments/reports/week_10_policy_selection.md
 ```
 
-Schedule-neutral repository surfaces should use names based on meaning rather
-than week number. Likely configuration artifacts:
+Schedule-neutral repository surfaces use names based on meaning rather than
+week number. The current training configs are:
 
 ```text
-configs/data/positive_sft_efficiency_filter.yaml
 configs/train/positive_sft_lora_raw.yaml
-configs/train/positive_sft_lora_filtered.yaml
+configs/train/positive_sft_lora_efficiency_filtered.yaml
+```
+
+The selection config remains planned:
+
+```text
 configs/eval/qwen2_5_coder_3b_sft_selection.yaml
 ```
 
-Likely code ownership, subject to inspection before creation:
+Current code ownership is:
 
 ```text
-src/agentenv/training/positive_sft/efficiency_review.py
-src/agentenv/training/positive_sft/filtering.py
-src/agentenv/training/positive_sft/training_schedule.py
-src/agentenv/reporting/policy_comparison.py
+existing combined review under src/agentenv/training/positive_sft/
+existing LoRA workflow under src/agentenv/training/positive_sft/lora/
 existing schema-constrained Ollama client under src/agentenv/models/
 ```
 
@@ -1041,6 +1050,17 @@ through the exact B0 path.
 
 ### Checkpoint 6: Deterministic Matched Training Schedules
 
+Status: complete on 2026-08-10. Raw is one complete 98-example pass. Filtered is one complete
+94-example pass followed by the first four examples from the same deterministic
+descending-supervised-token order, yielding the approved 98-step schedule and
+341-token shortfall. A proposed standalone schedule schema and JSON were
+removed before training because the existing LoRA workflow, step records, and
+run manifest are the natural consumer and provenance boundary. The workflow
+now resolves the eight authorized materializations through their exact
+positive-SFT examples and combined reviews, validates the configured token
+target before model loading, and pins all eight sources in the existing run
+manifest.
+
 Purpose:
 
 ```text
@@ -1062,7 +1082,8 @@ Work:
 
 Done when:
 
-- both schedules are persisted and content-hashed;
+- both expected schedules are resolved by the existing training workflow from
+  hash-pinned materialization and review sources;
 - target and observed supervised-token counts are explicit;
 - full context-token cost is also reported;
 - per-example repeat counts are inspectable;
@@ -1473,8 +1494,8 @@ Week 10 is complete when:
 
 ## Next Implementation Step
 
-Construct the deterministic raw and filtered schedules for Checkpoint 6. Use
-one complete raw pass as the 16,412-supervised-token target, cycle only complete
-filtered examples to approach that target, and freeze order, repetitions,
-steps, and exposure totals before training either arm. Do not inspect
-selection-dev outcomes or heldout-private data while resolving the schedules.
+Begin Checkpoint 7 by running the raw and efficiency-filtered configs through
+the completed workflow over the same eight materialization sources. Start both
+from fresh matching step-zero state, preserve the existing qualification and
+adapter-reload checks, and do not inspect selection-dev or heldout-private
+outcomes between arms.

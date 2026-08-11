@@ -12,17 +12,18 @@ def _manifest_payload(**updates: Any) -> dict[str, Any]:
         "artifact_schema_version": "positive_sft_lora_training_run_artifact_v0",
         "created_at": "2026-07-22T00:00:00Z",
         "training_run_id": "positive_sft_lora_run_" + "a" * 32,
-        "purpose": "operational_smoke",
         "status": "completed",
-        "source_positive_sft_training_materialization": {
-            "artifact_dir": "/tmp/source",
-            "manifest_hash": "xxh64:1111111111111111",
-            "materializations_jsonl_hash": "xxh64:2222222222222222",
-        },
+        "source_positive_sft_training_materializations": [
+            {
+                "artifact_dir": "/tmp/source",
+                "manifest_hash": "xxh64:1111111111111111",
+                "materializations_jsonl_hash": "xxh64:2222222222222222",
+            }
+        ],
         "training_config": {
             "path": "/tmp/config.yaml",
             "content_hash": "xxh64:3333333333333333",
-            "config_id": "positive_sft_lora_smoke",
+            "config_id": "positive_sft_lora_raw",
         },
         "model_input_protocol_id": "qwen2_5_coder_3b_agentenv_json",
         "model_input_protocol_hash": "xxh64:4444444444444444",

@@ -24,7 +24,10 @@ from agentenv.training.positive_sft.materialization.schema import (
 )
 
 
-CONFIG_PATH = Path("configs/train/positive_sft_lora_smoke.yaml")
+CONFIG_PATH = Path("configs/train/positive_sft_lora_raw.yaml")
+FILTERED_CONFIG_PATH = Path(
+    "configs/train/positive_sft_lora_efficiency_filtered.yaml"
+)
 PROTOCOL_PATH = Path(
     "configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
 ).resolve()
@@ -44,6 +47,8 @@ def _tiny_config(tmp_path: Path) -> Path:
         "cublas_workspace_config": ":4096:8",
     }
     payload["max_steps"] = 2
+    payload["data"]["target_supervised_token_count"] = 6
+    payload["data"]["supervised_token_tolerance"] = 0
     payload["reload_probe_token_count"] = 4
     config_path = tmp_path / "tiny_config.yaml"
     import yaml
@@ -158,8 +163,13 @@ def test_training_artifact_persists_verified_adapter(
     base_factory = _tiny_base_factory()
     monkeypatch.setattr(
         lora_workflow,
-        "_load_authorized_source",
-        lambda *args, **kwargs: source,
+        "_load_authorized_sources",
+        lambda *args, **kwargs: (source,),
+    )
+    monkeypatch.setattr(
+        lora_workflow,
+        "_select_treatment_records",
+        lambda *args, **kwargs: source.records,
     )
     monkeypatch.setattr(
         lora_workflow,
@@ -168,7 +178,7 @@ def test_training_artifact_persists_verified_adapter(
     )
 
     artifact = lora_workflow.run_positive_sft_lora_training(
-        source.out_dir,
+        (source.out_dir,),
         config_path,
         tmp_path / "run",
     )
@@ -218,8 +228,13 @@ def test_model_loading_failure_never_publishes_adapter(
     config_path = _tiny_config(tmp_path)
     monkeypatch.setattr(
         lora_workflow,
-        "_load_authorized_source",
-        lambda *args, **kwargs: source,
+        "_load_authorized_sources",
+        lambda *args, **kwargs: (source,),
+    )
+    monkeypatch.setattr(
+        lora_workflow,
+        "_select_treatment_records",
+        lambda *args, **kwargs: source.records,
     )
 
     def fail_to_load(*args, **kwargs):
@@ -228,7 +243,7 @@ def test_model_loading_failure_never_publishes_adapter(
     monkeypatch.setattr(lora_workflow, "load_pinned_causal_lm", fail_to_load)
 
     artifact = lora_workflow.run_positive_sft_lora_training(
-        source.out_dir,
+        (source.out_dir,),
         config_path,
         tmp_path / "failed_run",
     )
@@ -252,8 +267,13 @@ def test_training_model_loading_failure_preserves_completed_qualification(
     load_count = 0
     monkeypatch.setattr(
         lora_workflow,
-        "_load_authorized_source",
-        lambda *args, **kwargs: source,
+        "_load_authorized_sources",
+        lambda *args, **kwargs: (source,),
+    )
+    monkeypatch.setattr(
+        lora_workflow,
+        "_select_treatment_records",
+        lambda *args, **kwargs: source.records,
     )
 
     def load_then_fail(*args, **kwargs):
@@ -266,7 +286,7 @@ def test_training_model_loading_failure_preserves_completed_qualification(
     monkeypatch.setattr(lora_workflow, "load_pinned_causal_lm", load_then_fail)
 
     artifact = lora_workflow.run_positive_sft_lora_training(
-        source.out_dir,
+        (source.out_dir,),
         config_path,
         tmp_path / "training_load_failed_run",
     )
@@ -294,12 +314,8 @@ def test_authorization_override_is_required_before_source_loading(
         json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
     )
 
-    with pytest.raises(ValueError, match="requires an authorized"):
-        lora_workflow._load_authorized_source(
-            source.out_dir,
-            tokenizer_cache_dir=None,
-            local_files_only=True,
-        )
+    with pytest.raises(ValueError, match="requires authorized"):
+        lora_workflow._load_authorized_sources((source.out_dir,))
 
 
 def test_training_authorization_override_shape_remains_explicit() -> None:
@@ -310,3 +326,61 @@ def test_training_authorization_override_shape_remains_explicit() -> None:
     )
 
     assert override.mode == "explicit_user_override"
+
+
+def test_reviewed_treatments_resolve_the_predeclared_exposures() -> None:
+    source_roots = (
+        Path(
+            "experiments/runs/natural_model_anchor_contrast_acquisition/"
+            "positive_sft_materializations"
+        ),
+        Path(
+            "experiments/runs/natural_model_dev_coverage_acquisition/"
+            "positive_sft_materializations"
+        ),
+    )
+    source_dirs = tuple(
+        sorted(
+            path
+            for root in source_roots
+            for path in root.iterdir()
+            if path.is_dir()
+        )
+    )
+    sources = lora_workflow._load_authorized_sources(source_dirs)
+
+    observed: dict[str, tuple[int, int, int]] = {}
+    ordered_ids: dict[str, tuple[str, ...]] = {}
+    for config_path in (CONFIG_PATH, FILTERED_CONFIG_PATH):
+        config = load_positive_sft_lora_training_config(config_path)
+        records = lora_workflow._select_treatment_records(sources, config=config)
+        selected = lora_workflow.select_positive_sft_training_sequences(records)
+        lora_workflow._validate_training_exposure(selected, config=config)
+        supervised_tokens = sum(
+            selected[index % len(selected)].provenance.stored_supervised_token_count
+            for index in range(config.max_steps)
+        )
+        context_tokens = sum(
+            selected[index % len(selected)].provenance.sequence_length
+            for index in range(config.max_steps)
+        )
+        observed[config.data.treatment] = (
+            len(selected),
+            supervised_tokens,
+            context_tokens,
+        )
+        ordered_ids[config.data.treatment] = tuple(
+            item.provenance.source_positive_sft_example_id for item in selected
+        )
+
+    assert len(sources) == 8
+    assert observed == {
+        "raw": (98, 16_412, 97_005),
+        "efficiency_filtered": (94, 16_071, 94_440),
+    }
+    assert ordered_ids["efficiency_filtered"][:4] == (
+        "positive_sft_example_69335020b88d8879",
+        "positive_sft_example_60721e3d0d7a56fd",
+        "positive_sft_example_51de182e0123c7b0",
+        "positive_sft_example_d4999e17f94cbcd0",
+    )

@@ -14,17 +14,21 @@ from agentenv.training.positive_sft.lora.schema import (
 )
 
 
-CONFIG_PATH = Path("configs/train/positive_sft_lora_smoke.yaml")
+CONFIG_PATH = Path("configs/train/positive_sft_lora_raw.yaml")
+FILTERED_CONFIG_PATH = Path(
+    "configs/train/positive_sft_lora_efficiency_filtered.yaml"
+)
 
 
 def _config_payload() -> dict[str, Any]:
     return load_positive_sft_lora_training_config(CONFIG_PATH).model_dump(mode="json")
 
 
-def test_smoke_config_pins_scale_one_ordinary_lora() -> None:
+def test_training_config_pins_scale_one_ordinary_lora() -> None:
     config = load_positive_sft_lora_training_config(CONFIG_PATH)
 
-    assert config.purpose == "operational_smoke"
+    assert config.data.treatment == "raw"
+    assert "purpose" not in config.model_dump(mode="json")
     assert config.lora.scale == 1.0
     assert config.lora.alpha == config.lora.rank
     assert config.lora.use_rslora is False
@@ -36,6 +40,28 @@ def test_smoke_config_pins_scale_one_ordinary_lora() -> None:
         "v_proj",
         "o_proj",
     )
+
+
+def test_treatment_configs_differ_only_by_identity_and_treatment() -> None:
+    raw = load_positive_sft_lora_training_config(CONFIG_PATH).model_dump(mode="json")
+    filtered = load_positive_sft_lora_training_config(
+        FILTERED_CONFIG_PATH
+    ).model_dump(mode="json")
+
+    raw.pop("config_id")
+    filtered.pop("config_id")
+    assert raw["data"].pop("treatment") == "raw"
+    assert filtered["data"].pop("treatment") == "efficiency_filtered"
+    assert raw == filtered
+
+
+def test_retired_purpose_and_prefix_selector_are_rejected() -> None:
+    payload = _config_payload()
+    payload["purpose"] = "operational_smoke"
+    payload["data"]["selection_policy"] = "completed_manifest_order_prefix"
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        PositiveSFTLoRATrainingConfig.model_validate(payload)
 
 
 def test_lora_target_modules_must_be_unique() -> None:
