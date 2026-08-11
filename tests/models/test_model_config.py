@@ -12,12 +12,11 @@ from agentenv.models.config import (
     load_decoding_config,
     load_model_config,
     load_referenced_model_input_protocol,
-    load_transformers_peft_policy_binding,
+    validate_ollama_lora_reference,
 )
 from agentenv.models.config_schema import (
     OllamaGenerateModelConfig,
     OpenAICompatibleChatModelConfig,
-    TransformersPeftModelConfig,
 )
 from agentenv.models.runtime_schema import OllamaProviderRuntimeProvenance
 from agentenv.orchestrators.agent_task_run import (
@@ -34,12 +33,12 @@ QWEN2_5_3B_MODEL_CONFIG = Path("configs/models/ollama_qwen2_5_coder_3b.yaml")
 QWEN2_5_3B_MODEL_INPUT_PROTOCOL = Path(
     "configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
 )
-TRANSFORMERS_PEFT_BASE_CONFIG = Path(
-    "configs/models/transformers_peft_qwen2_5_coder_3b_base.yaml"
+OLLAMA_F16_BASE_CONFIG = Path(
+    "configs/models/ollama_qwen2_5_coder_3b_f16_base.yaml"
 )
-TRANSFORMERS_PEFT_ADAPTER_CONFIG = Path(
+OLLAMA_F16_ADAPTER_CONFIG = Path(
     "configs/models/"
-    "transformers_peft_qwen2_5_coder_3b_operational_smoke_adapter.yaml"
+    "ollama_qwen2_5_coder_3b_f16_operational_smoke_lora.yaml"
 )
 QWEN2_5_OPENAI_COMPATIBLE_MODEL_CONFIGS = (
     Path("configs/models/ollama_qwen2_5_coder_7b.yaml"),
@@ -123,64 +122,61 @@ def test_referenced_model_input_protocol_rejects_hash_drift() -> None:
         )
 
 
-def test_load_transformers_peft_base_config_resolves_immutable_base_policy() -> None:
-    config = load_model_config(TRANSFORMERS_PEFT_BASE_CONFIG)
-    assert isinstance(config, TransformersPeftModelConfig)
+def test_load_ollama_f16_base_config_has_no_adapter() -> None:
+    config = load_model_config(OLLAMA_F16_BASE_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
     protocol = load_referenced_model_input_protocol(
         config,
-        TRANSFORMERS_PEFT_BASE_CONFIG,
+        OLLAMA_F16_BASE_CONFIG,
     )
     assert protocol is not None
 
-    binding = load_transformers_peft_policy_binding(
+    adapter_dir = validate_ollama_lora_reference(
         config,
-        TRANSFORMERS_PEFT_BASE_CONFIG,
+        OLLAMA_F16_BASE_CONFIG,
         model_input_protocol=protocol,
     )
 
-    assert config.provider == "transformers_peft"
+    assert config.provider == "ollama_generate"
+    assert config.model_id == "agentenv-qwen2.5-coder-3b-f16-base:latest"
     assert config.adapter is None
-    assert config.runtime.device == "cuda"
-    assert config.runtime.weight_dtype == "bfloat16"
-    assert binding.policy_id == "qwen2.5-coder-3b-transformers-base"
-    assert binding.base_model == config.base_model
-    assert binding.adapter_id is None
-    assert binding.adapter_dir is None
+    assert config.agent_action_format == "json_schema"
+    assert adapter_dir is None
 
 
-def test_load_transformers_peft_adapter_config_derives_adapter_from_manifest() -> (
-    None
-):
-    config = load_model_config(TRANSFORMERS_PEFT_ADAPTER_CONFIG)
-    assert isinstance(config, TransformersPeftModelConfig)
+def test_load_ollama_adapter_config_validates_source_training_manifest() -> None:
+    config = load_model_config(OLLAMA_F16_ADAPTER_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
     protocol = load_referenced_model_input_protocol(
         config,
-        TRANSFORMERS_PEFT_ADAPTER_CONFIG,
+        OLLAMA_F16_ADAPTER_CONFIG,
     )
     assert protocol is not None
 
-    binding = load_transformers_peft_policy_binding(
+    adapter_dir = validate_ollama_lora_reference(
         config,
-        TRANSFORMERS_PEFT_ADAPTER_CONFIG,
+        OLLAMA_F16_ADAPTER_CONFIG,
         model_input_protocol=protocol,
     )
 
     assert config.adapter is not None
     assert config.adapter.content_hash == "xxh64:51369f8947cc96f8"
-    assert binding.adapter_id == "xxh64:ccd2828a4bc5fbe1"
-    assert binding.adapter_dir == Path(
+    assert config.model_id == (
+        "agentenv-qwen2.5-coder-3b-f16-operational-smoke-lora:latest"
+    )
+    assert adapter_dir == Path(
         "experiments/models/"
         "week_09_positive_sft_lora_smoke_qwen2_5_coder_3b/adapter"
     ).resolve()
 
 
-def test_transformers_peft_adapter_manifest_reference_rejects_hash_drift() -> None:
-    config = load_model_config(TRANSFORMERS_PEFT_ADAPTER_CONFIG)
-    assert isinstance(config, TransformersPeftModelConfig)
+def test_ollama_adapter_manifest_reference_rejects_hash_drift() -> None:
+    config = load_model_config(OLLAMA_F16_ADAPTER_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
     assert config.adapter is not None
     protocol = load_referenced_model_input_protocol(
         config,
-        TRANSFORMERS_PEFT_ADAPTER_CONFIG,
+        OLLAMA_F16_ADAPTER_CONFIG,
     )
     assert protocol is not None
     drifted_adapter = config.adapter.model_copy(
@@ -189,18 +185,18 @@ def test_transformers_peft_adapter_manifest_reference_rejects_hash_drift() -> No
     drifted_config = config.model_copy(update={"adapter": drifted_adapter})
 
     with pytest.raises(ValueError, match="LoRA training manifest hash mismatch"):
-        load_transformers_peft_policy_binding(
+        validate_ollama_lora_reference(
             drifted_config,
-            TRANSFORMERS_PEFT_ADAPTER_CONFIG,
+            OLLAMA_F16_ADAPTER_CONFIG,
             model_input_protocol=protocol,
         )
 
 
-def test_transformers_peft_adapter_reference_rejects_failed_training_run(
+def test_ollama_adapter_reference_rejects_failed_training_run(
     tmp_path: Path,
 ) -> None:
-    config = load_model_config(TRANSFORMERS_PEFT_ADAPTER_CONFIG)
-    assert isinstance(config, TransformersPeftModelConfig)
+    config = load_model_config(OLLAMA_F16_ADAPTER_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
     assert config.adapter is not None
 
     failed_manifest = json.loads(
@@ -242,29 +238,10 @@ def test_transformers_peft_adapter_reference_rejects_failed_training_run(
     assert protocol is not None
 
     with pytest.raises(ValueError, match="require a completed LoRA training run"):
-        load_transformers_peft_policy_binding(
+        validate_ollama_lora_reference(
             failed_config,
             synthetic_config_path,
             model_input_protocol=protocol,
-        )
-
-
-def test_transformers_peft_config_rejects_unsupported_capability_claims() -> None:
-    config = load_model_config(TRANSFORMERS_PEFT_BASE_CONFIG)
-    assert isinstance(config, TransformersPeftModelConfig)
-    overstated_capabilities = config.capabilities.model_copy(
-        update={"supports_stop": True}
-    )
-
-    with pytest.raises(
-        ValidationError,
-        match="capabilities must match the implemented greedy local client",
-    ):
-        TransformersPeftModelConfig.model_validate(
-            {
-                **config.model_dump(mode="json"),
-                "capabilities": overstated_capabilities.model_dump(mode="json"),
-            }
         )
 
 
@@ -348,20 +325,21 @@ def test_ollama_model_config_provenance_persists_resolved_input_protocol() -> No
     }
 
 
-def test_transformers_peft_provenance_captures_adapter_manifest_reference() -> None:
-    config = load_model_config(TRANSFORMERS_PEFT_ADAPTER_CONFIG)
-    assert isinstance(config, TransformersPeftModelConfig)
+def test_ollama_provenance_captures_adapter_manifest_reference() -> None:
+    config = load_model_config(OLLAMA_F16_ADAPTER_CONFIG)
+    assert isinstance(config, OllamaGenerateModelConfig)
     protocol = load_referenced_model_input_protocol(
         config,
-        TRANSFORMERS_PEFT_ADAPTER_CONFIG,
+        OLLAMA_F16_ADAPTER_CONFIG,
     )
     assert protocol is not None
 
     artifact = model_config_provenance_artifact(
         model_config=config,
-        model_config_path=TRANSFORMERS_PEFT_ADAPTER_CONFIG,
+        model_config_path=OLLAMA_F16_ADAPTER_CONFIG,
         model_config_hash="xxh64:modelconfig000",
         model_input_protocol=protocol,
+        provider_runtime_provenance=_ollama_runtime(config),
     ).model_dump(mode="json")
 
     assert artifact["config"]["adapter"] == {
@@ -371,29 +349,12 @@ def test_transformers_peft_provenance_captures_adapter_manifest_reference() -> N
         ),
         "content_hash": "xxh64:51369f8947cc96f8",
     }
-    assert artifact["config"]["base_model"] == {
-        "repository_id": "Qwen/Qwen2.5-Coder-3B-Instruct",
-        "revision": "89fe5444e8baf5736e70f528f1edcc79e6616ef6",
-    }
-    assert artifact["provider_runtime"] is None
+    assert artifact["provider_runtime"]["model_digest"] == (
+        config.model_manifest_digest
+    )
     assert artifact["model_input_protocol"]["source_hash"] == (
         config.model_input_protocol.content_hash
     )
-
-
-def test_transformers_peft_provenance_requires_resolved_input_protocol() -> None:
-    config = load_model_config(TRANSFORMERS_PEFT_BASE_CONFIG)
-    assert isinstance(config, TransformersPeftModelConfig)
-
-    with pytest.raises(
-        ValidationError,
-        match="transformers_peft provenance requires model_input_protocol",
-    ):
-        model_config_provenance_artifact(
-            model_config=config,
-            model_config_path=TRANSFORMERS_PEFT_BASE_CONFIG,
-            model_config_hash="xxh64:modelconfig000",
-        )
 
 
 def test_ollama_model_config_provenance_requires_resolved_input_protocol() -> None:

@@ -7,12 +7,12 @@ sources, and 0 unresolved prefix decisions. Embedded efficiency judgments are
 94 accepted, 4 rejected, and 0 abstained. Because training and policy
 evaluation have not started, the Week 10 experiment will use all reviewed
 prefixes: 98 raw and 94 efficiency-filtered. All eight exports and
-materializations have been regenerated successfully. The common local
-base/adapter client now loads once per policy eval run. Its paired practice
-smoke reached deterministic generation for both compositions, but both emitted
-Markdown-fenced JSON and failed the strict action parser before tool execution.
-Training and policy evaluation have not started while that action-format
-boundary is resolved.
+materializations have been regenerated successfully. The common serving path
+is now Ollama native generation over one exact F16 GGUF base and an optional
+separate GGUF LoRA adapter. Its paired practice smoke produced schema-valid
+actions, completed the same four-turn agent path for both compositions, and
+passed both public and hidden scoring. Training and policy evaluation have not
+started; Checkpoint 6 matched-schedule construction is next.
 
 ## Theme
 
@@ -820,7 +820,7 @@ src/agentenv/training/positive_sft/efficiency_review.py
 src/agentenv/training/positive_sft/filtering.py
 src/agentenv/training/positive_sft/training_schedule.py
 src/agentenv/reporting/policy_comparison.py
-shared base/adapter model client under src/agentenv/models/
+existing schema-constrained Ollama client under src/agentenv/models/
 ```
 
 Do not create files merely to match the manual if an existing contract-owned
@@ -994,17 +994,16 @@ Done when:
 
 ### Checkpoint 5: Common Base/Adapter Serving Smoke
 
-Status on 2026-08-10: the immutable in-process Transformers/PEFT client,
-direct generation smoke, optional hash-pinned adapter model-config reference,
-manifest-to-binding resolution, and model-config provenance validation are
-complete. Eval-run-scoped client reuse is also complete, and the paired
-practice-task smoke has run through the same pinned base revision, protocol,
-greedy decoding, client, and token-accounting path. Both compositions produced
-the same Markdown-fenced JSON action and were rejected as
-`MalformedModelOutput`; neither reached tools or the scorer. The remaining
-checkpoint decision is whether strict raw-JSON compliance is policy behavior
-to measure as failure or a serving guarantee that requires a predeclared,
-shared constrained-decoding mechanism.
+Status on 2026-08-10: complete. The exact pinned Hugging Face base and the known
+Week 9 PEFT adapter were converted to separate F16 GGUF files and registered as
+two immutable Ollama identities sharing one base layer. The existing native
+Ollama client supplies the same pinned input protocol, greedy decoding, token
+accounting, and agent-action JSON schema to both compositions. The adapted
+model config additionally pins its authoritative LoRA training manifest and
+validates the source adapter package before evaluation. The paired practice
+smoke completed in four turns for both compositions and passed public and
+hidden scoring. The tiny operational adapter behaved identically to the base;
+that is serving evidence, not efficacy evidence.
 
 Purpose:
 
@@ -1474,9 +1473,8 @@ Week 10 is complete when:
 
 ## Next Implementation Step
 
-Resolve the action-format boundary exposed by the Checkpoint 5 smoke before
-constructing matched schedules. Do not silently strip Markdown fences or alter
-the pinned model-input protocol after observing the result. Either retain the
-strict parser and treat raw-JSON compliance as measured policy behavior, or
-predeclare one deterministic constrained-decoding mechanism shared by B0 and
-both future treatment arms. Only then decide whether Checkpoint 6 can begin.
+Construct the deterministic raw and filtered schedules for Checkpoint 6. Use
+one complete raw pass as the 16,412-supervised-token target, cycle only complete
+filtered examples to approach that target, and freeze order, repetitions,
+steps, and exposure totals before training either arm. Do not inspect
+selection-dev outcomes or heldout-private data while resolving the schedules.

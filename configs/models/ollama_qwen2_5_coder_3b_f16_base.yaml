@@ -1,0 +1,15 @@
+version: model_config_v0
+provider: ollama_generate
+model_id: agentenv-qwen2.5-coder-3b-f16-base:latest
+model_manifest_digest: sha256:634801eab0dbcaa85441e7cb7a91e501a111344404eabfefe3717f78e5606779
+base_url_env: AGENTENV_OLLAMA_BASE_URL
+capabilities:
+  token_usage: native
+  supports_seed: true
+  supports_stop: true
+  supports_top_k: true
+model_input_protocol:
+  path: ../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
+  content_hash: xxh64:9b9eba719de618f1
+adapter: null
+agent_action_format: json_schema

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import yaml
 from pydantic import TypeAdapter
@@ -11,17 +10,12 @@ from agentenv.hashing import hash_directory, hash_file
 from agentenv.models.config_schema import (
     ModelConfig,
     OllamaGenerateModelConfig,
-    TransformersPeftModelConfig,
 )
 from agentenv.models.input_protocol import (
     LoadedModelInputProtocol,
     load_model_input_protocol,
 )
 from agentenv.models.schema import DecodingConfig
-
-
-if TYPE_CHECKING:
-    from agentenv.models.transformers_peft import TransformersPeftPolicyBinding
 
 
 _MODEL_CONFIG_ADAPTER = TypeAdapter(ModelConfig)
@@ -36,10 +30,7 @@ def load_referenced_model_input_protocol(
     config: ModelConfig,
     model_config_path: Path,
 ) -> LoadedModelInputProtocol | None:
-    if not isinstance(
-        config,
-        (OllamaGenerateModelConfig, TransformersPeftModelConfig),
-    ):
+    if not isinstance(config, OllamaGenerateModelConfig):
         return None
 
     protocol_path = _resolve_hash_pinned_config_file(
@@ -48,33 +39,20 @@ def load_referenced_model_input_protocol(
         expected_hash=config.model_input_protocol.content_hash,
         artifact_name="Model input protocol",
     )
-    protocol = load_model_input_protocol(protocol_path)
-    if isinstance(config, TransformersPeftModelConfig):
-        if protocol.record.model_checkpoint != config.base_model:
-            raise ValueError(
-                "model input protocol checkpoint does not match the configured "
-                "Transformers base model"
-            )
-        if protocol.record.tokenizer.source != config.base_model:
-            raise ValueError(
-                "model input protocol tokenizer does not match the configured "
-                "Transformers base model"
-            )
-    return protocol
+    return load_model_input_protocol(protocol_path)
 
 
-def load_transformers_peft_policy_binding(
-    config: TransformersPeftModelConfig,
+def validate_ollama_lora_reference(
+    config: OllamaGenerateModelConfig,
     model_config_path: Path,
     *,
     model_input_protocol: LoadedModelInputProtocol,
-) -> TransformersPeftPolicyBinding:
-    """Resolve one immutable base or base-plus-adapter policy composition."""
+) -> Path | None:
+    """Validate the source LoRA provenance claimed by an Ollama model config."""
 
     from agentenv.artifacts.manifests import (
         load_positive_sft_lora_training_run_manifest,
     )
-    from agentenv.models.transformers_peft import TransformersPeftPolicyBinding
     from agentenv.training.positive_sft.lora.model import (
         validate_lora_adapter_package,
     )
@@ -89,22 +67,14 @@ def load_transformers_peft_policy_binding(
         raise ValueError(
             "loaded model input protocol does not match the model config reference"
         )
-    if model_input_protocol.record.model_checkpoint != config.base_model:
+    base_model = model_input_protocol.record.model_checkpoint
+    if model_input_protocol.record.tokenizer.source != base_model:
         raise ValueError(
-            "loaded model input protocol checkpoint does not match the configured "
-            "Transformers base model"
-        )
-    if model_input_protocol.record.tokenizer.source != config.base_model:
-        raise ValueError(
-            "loaded model input protocol tokenizer does not match the configured "
-            "Transformers base model"
+            "loaded model input protocol tokenizer does not match its base checkpoint"
         )
 
     if config.adapter is None:
-        return TransformersPeftPolicyBinding(
-            policy_id=config.model_id,
-            base_model=config.base_model,
-        )
+        return None
 
     manifest_path = _resolve_hash_pinned_config_file(
         model_config_path,
@@ -115,9 +85,10 @@ def load_transformers_peft_policy_binding(
     manifest = load_positive_sft_lora_training_run_manifest(manifest_path)
     if manifest.status != "completed":
         raise ValueError("adapted model policies require a completed LoRA training run")
-    if manifest.base_model != config.base_model:
+    if manifest.base_model != base_model:
         raise ValueError(
-            "LoRA training manifest base model does not match the model config"
+            "LoRA training manifest base model does not match the model-input "
+            "protocol"
         )
     if manifest.model_input_protocol_hash != config.model_input_protocol.content_hash:
         raise ValueError(
@@ -144,13 +115,8 @@ def load_transformers_peft_policy_binding(
             "LoRA adapter directory hash mismatch: "
             f"expected {adapter_hash}, observed {observed_adapter_hash}"
         )
-    validate_lora_adapter_package(adapter_dir, base_model=config.base_model)
-    return TransformersPeftPolicyBinding(
-        policy_id=config.model_id,
-        base_model=config.base_model,
-        adapter_dir=adapter_dir,
-        adapter_directory_hash=adapter_hash,
-    )
+    validate_lora_adapter_package(adapter_dir, base_model=base_model)
+    return adapter_dir
 
 
 def load_decoding_config(path: Path) -> DecodingConfig:

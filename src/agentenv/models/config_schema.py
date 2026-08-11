@@ -2,10 +2,7 @@ import re
 from pathlib import PurePosixPath
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from agentenv.models.input_protocol_schema import HuggingFaceRevisionPin
-
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 TokenUsageCapability = Literal["native", "unavailable"]
 AgentActionFormat = Literal["prompt_only", "json_schema"]
@@ -70,20 +67,6 @@ class PinnedLoRATrainingRunRef(BaseModel):
         return _validate_content_hash(value)
 
 
-class TransformersPeftRuntimeConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    device: Literal["cuda", "cpu"]
-    weight_dtype: Literal["bfloat16", "float32"]
-    attention_implementation: Literal["sdpa", "eager"]
-
-    @model_validator(mode="after")
-    def validate_device_dtype(self) -> "TransformersPeftRuntimeConfig":
-        if self.device == "cpu" and self.weight_dtype == "bfloat16":
-            raise ValueError("CPU Transformers serving requires float32 weights")
-        return self
-
-
 class BaseModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -115,6 +98,7 @@ class OllamaGenerateModelConfig(BaseModelConfig):
     provider: Literal["ollama_generate"]
     model_manifest_digest: str = Field(min_length=1)
     model_input_protocol: PinnedModelInputProtocolRef
+    adapter: PinnedLoRATrainingRunRef | None = None
     agent_action_format: AgentActionFormat = "prompt_only"
 
     @field_validator("model_manifest_digest")
@@ -127,36 +111,9 @@ class OllamaGenerateModelConfig(BaseModelConfig):
         return value
 
 
-class TransformersPeftModelConfig(BaseModelConfig):
-    provider: Literal["transformers_peft"]
-    base_model: HuggingFaceRevisionPin
-    model_input_protocol: PinnedModelInputProtocolRef
-    adapter: PinnedLoRATrainingRunRef | None = None
-    runtime: TransformersPeftRuntimeConfig
-    agent_action_format: Literal["prompt_only"] = "prompt_only"
-
-    @model_validator(mode="after")
-    def validate_capabilities(self) -> "TransformersPeftModelConfig":
-        if self.base_url_env is not None:
-            raise ValueError("transformers_peft cannot configure base_url_env")
-        expected = ModelCapabilities(
-            token_usage="native",
-            supports_seed=False,
-            supports_stop=False,
-            supports_top_k=False,
-        )
-        if self.capabilities != expected:
-            raise ValueError(
-                "transformers_peft capabilities must match the implemented "
-                "greedy local client"
-            )
-        return self
-
-
 ModelConfig: TypeAlias = Annotated[
     OpenAICompatibleChatModelConfig
-    | OllamaGenerateModelConfig
-    | TransformersPeftModelConfig,
+    | OllamaGenerateModelConfig,
     Field(discriminator="provider"),
 ]
 

@@ -930,3 +930,203 @@ Ruff focused checks: passed
 Pyright focused checks: 0 errors, 0 warnings
 full repository suite: deferred
 ```
+
+## 2026-08-10 Ollama GGUF LoRA Compatibility Spike
+
+### Question Tested
+
+The failed in-process practice smoke left one serving question: can Ollama
+serve the exact pinned Hugging Face base and the Week 9 PEFT adapter while also
+enforcing the existing agent-action JSON schema?
+
+This was tested as a disposable spike before changing the repository serving
+architecture. No new source module, config schema, manifest, CLI, or committed
+model artifact was introduced.
+
+### Separate Base And Adapter Conversion
+
+The official `ggml-org/llama.cpp` converters were pinned at commit
+`030ebb558a5820b444a8f836ed5cdd46c9b4bd7a`. They converted:
+
+- the cached `Qwen/Qwen2.5-Coder-3B-Instruct` revision
+  `89fe5444e8baf5736e70f528f1edcc79e6616ef6` to F16 GGUF; and
+- the unmerged Week 9 operational-smoke PEFT adapter to a separate F16 LoRA
+  GGUF.
+
+The resulting disposable files were:
+
+```text
+base GGUF:
+  sha256:d1213e384d3bc5ba8be9f8f093746f4bf3c56f8b0fe0c909f89db11a6ef8c43f
+  6.17 GB converter size
+
+adapter GGUF:
+  sha256:e871af2d0da581d96f62f2e3e1ae10cc857c7786206e9c88bf6a33e904f719c0
+  7.37 MB converter size
+  288 LoRA tensors
+```
+
+Ollama 0.30.11 accepted both and registered two temporary model identities:
+
+```text
+base manifest:
+  sha256:634801eab0dbcaa85441e7cb7a91e501a111344404eabfefe3717f78e5606779
+
+base-plus-adapter manifest:
+  sha256:976005a1eb0978f8049d839b9d94d240ed523ac419f16d61e53a782043254ec8
+```
+
+Both manifests reference the same F16 base layer. Only the adapted manifest
+adds the separate adapter layer. At inference, the Ollama runner reported a
+7.03 MiB CUDA LoRA buffer and loaded all 288 adapter tensors without a warning.
+The adapter was not merged into a derivative base checkpoint.
+
+### Schema-Constrained Agent Result
+
+Both temporary identities then ran the same `toy_python_fix_001` practice task
+through the repository's existing `OllamaGenerateModelClient`, pinned Qwen
+input protocol, greedy decoding, strict action parser, tool loop, and hidden
+scorer. The client sent the existing agent-action JSON schema to Ollama.
+
+Both policies produced exact raw JSON on every turn, executed `list_files`,
+`read_file`, and `write_file`, returned `final_answer`, and reached the scorer:
+
+```text
+base:
+  agent status: scored
+  prompt-loop status: completed
+  turns: 4
+  prompt tokens: 2,551
+  completion tokens: 166
+  total tokens: 2,717
+  public scorer: PASS
+  hidden scorer: PASS
+
+Week 9 operational-smoke adapter:
+  agent status: scored
+  prompt-loop status: completed
+  turns: 4
+  prompt tokens: 2,551
+  completion tokens: 166
+  total tokens: 2,717
+  public scorer: PASS
+  hidden scorer: PASS
+```
+
+The generated actions and final patch were identical. This tiny adapter had
+only three operational-smoke training steps, so equality on one task is not
+efficacy evidence.
+
+### Conclusion
+
+Ollama can serve this Qwen PEFT policy as immutable base-plus-adapter inference
+after converting both artifacts to GGUF. It also restores the already-used
+JSON-schema constrained decoding path and completes the agent loop that the
+prompt-only Transformers client could not complete.
+
+The remaining tradeoff is now concrete rather than a compatibility unknown:
+adopting this route requires a reproducible GGUF conversion boundary and pins
+Ollama/llama.cpp behavior, while retaining the Transformers route would require
+adding an equivalent constrained decoder. The spike establishes feasibility;
+the integration immediately below records the resulting serving decision.
+
+## 2026-08-10 Ollama Common Serving Integration
+
+### Chosen Boundary
+
+PEFT remains the training representation, but Ollama native generation is now
+the only Qwen2.5 base/LoRA evaluation provider. The base and each adapter remain
+separate GGUF layers; serving does not merge adapter weights into the base.
+
+`OllamaGenerateModelConfig` now has one optional `adapter` reference:
+
+```text
+adapter: null
+```
+
+for `B0`, or the existing hash-pinned completed LoRA training manifest for an
+adapted policy. This adds no new artifact type. Before constructing an adapted
+client, the loader validates:
+
+- the referenced training-manifest hash;
+- completed training status;
+- the source base checkpoint against the pinned model-input protocol;
+- the source protocol id and hash;
+- the published PEFT adapter-directory hash; and
+- the adapter package's own base-model identity.
+
+The existing Ollama model id and manifest digest pin the deployed composition,
+and the provider-runtime probe records the observed digest and Ollama version.
+The model-input protocol, greedy decoding config, JSON-schema action format,
+agent loop, tools, and scorer remain shared across policies.
+
+No conversion manifest or new CLI was added. GGUF conversion and `ollama
+create` remain local model setup operations, documented in
+`src/agentenv/local_model_setup/README.md` with the tested `llama.cpp` commit.
+
+### Retired Path
+
+The in-process `transformers_peft` model-config variant, serving client, model
+configs, practice eval config, and provider-specific tests were removed rather
+than retained as a compatibility path. Transformers and PEFT remain required
+by training; only their duplicate evaluation provider was retired.
+
+The durable common-path configs are:
+
+```text
+configs/models/ollama_qwen2_5_coder_3b_f16_base.yaml
+configs/models/ollama_qwen2_5_coder_3b_f16_operational_smoke_lora.yaml
+configs/eval/ollama_qwen2_5_coder_3b_lora_practice_smoke.yaml
+```
+
+### Integrated Practice Evidence
+
+The normal eval orchestrator produced:
+
+```text
+experiments/runs/week_10_ollama_qwen2_5_coder_3b_lora_practice_smoke_v0
+```
+
+Both policy runs persisted matching protocol and runtime provenance and
+completed the same four-turn action sequence:
+
+```text
+base:
+  agent status: scored
+  prompt-loop status: completed
+  prompt/completion/total tokens: 2,551 / 166 / 2,717
+  public scorer: PASS
+  hidden scorer: PASS
+
+Week 9 operational-smoke adapter:
+  agent status: scored
+  prompt-loop status: completed
+  prompt/completion/total tokens: 2,551 / 166 / 2,717
+  public scorer: PASS
+  hidden scorer: PASS
+```
+
+Both generated the same actions and candidate-patch hash. This closes the
+same-path serving gate but remains plumbing evidence rather than adapter
+efficacy evidence.
+
+### Deliberate Limitation
+
+For the verified Week 9 adapter, converter hashes, the Ollama Modelfile, and
+runtime logs establish that the separate GGUF adapter was loaded. The general
+config contract pins both the intended source training manifest and the final
+Ollama composition, but it does not persist a typed conversion record joining
+those two hashes. That omission keeps this learning-lab path small. If a future
+treatment conversion becomes ambiguous, strengthen the existing config or
+training evidence at that point instead of preemptively adding another
+artifact layer.
+
+### Focused Verification
+
+```text
+model/config/factory/provider/eval focused tests: 64 passed
+broader model, artifact, eval, replay, agent-run, and LoRA tests: 207 passed
+Ruff focused checks: passed
+Pyright: 0 errors, 0 warnings
+full repository suite: deferred
+```

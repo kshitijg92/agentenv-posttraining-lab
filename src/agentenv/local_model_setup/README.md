@@ -129,3 +129,61 @@ Its model config is
 `configs/models/ollama_qwen2_5_coder_3b.yaml`. The separate environment
 variable makes it explicit whether a policy is using provider-owned
 OpenAI-compatible chat serialization or AgentEnv-owned raw generation.
+
+## Qwen2.5 Base-Plus-LoRA Serving
+
+Ollama can serve the exact pinned Qwen2.5 base and a PEFT adapter after both
+are converted to separate GGUF files. The adapter is not merged into the base.
+This remains a local setup operation: the existing LoRA training manifest owns
+the source adapter provenance, while the model config pins the registered
+Ollama model id and manifest digest.
+
+Use a pinned `llama.cpp` checkout. The compatibility path was verified at:
+
+```text
+ggml-org/llama.cpp commit:
+030ebb558a5820b444a8f836ed5cdd46c9b4bd7a
+```
+
+Convert the exact Hugging Face snapshot and the adapter published by a
+completed LoRA training run:
+
+```bash
+uv run --project <llama-cpp> python <llama-cpp>/convert_hf_to_gguf.py \
+  <exact-hugging-face-snapshot> \
+  --outfile <serving-dir>/base-f16.gguf \
+  --outtype f16
+
+uv run --project <llama-cpp> python <llama-cpp>/convert_lora_to_gguf.py \
+  <completed-training-run>/adapter \
+  --base <exact-hugging-face-snapshot> \
+  --outfile <serving-dir>/adapter-f16.gguf \
+  --outtype f16
+```
+
+The base Modelfile contains:
+
+```text
+FROM /absolute/path/to/base-f16.gguf
+```
+
+The adapted Modelfile contains:
+
+```text
+FROM /absolute/path/to/base-f16.gguf
+ADAPTER /absolute/path/to/adapter-f16.gguf
+```
+
+Register separate immutable identities:
+
+```bash
+ollama create <base-model-id> -f <base-Modelfile>
+ollama create <adapted-model-id> -f <adapted-Modelfile>
+curl -sS http://127.0.0.1:11434/api/tags
+```
+
+Copy each observed manifest digest into its `ollama_generate` model config.
+Set `adapter: null` for the base. For an adapted policy, set `adapter` to the
+hash-pinned completed LoRA training manifest. Loading the config then validates
+that the source adapter package, base checkpoint, and model-input protocol still
+match before evaluation begins.

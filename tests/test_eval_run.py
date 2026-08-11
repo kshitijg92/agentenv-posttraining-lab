@@ -12,9 +12,10 @@ from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSIO
 from agentenv.artifacts.payloads import load_decoding_config_provenance
 from agentenv.evals.schema import AgentModelPolicy
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
-from agentenv.models.config_schema import ModelConfig, TransformersPeftModelConfig
+from agentenv.models.config_schema import ModelConfig, OllamaGenerateModelConfig
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
 from agentenv.models.input_protocol import LoadedModelInputProtocol
+from agentenv.models.runtime_schema import OllamaProviderRuntimeProvenance
 from agentenv.orchestrators.eval_run import (
     EvalAttemptRecord,
     run_eval_config,
@@ -37,8 +38,8 @@ AGENT_MODEL_DEV_DEEPSEEK_R1_DISTILL_QWEN_EVAL_CONFIG = Path(
 AGENT_MODEL_MULTI_POLICY_ACQUISITION_CONFIG = Path(
     "configs/eval/agent_model_dev_multi_policy_acquisition.yaml"
 )
-TRANSFORMERS_PEFT_PRACTICE_SMOKE_CONFIG = Path(
-    "configs/eval/transformers_peft_qwen2_5_coder_3b_practice_smoke.yaml"
+OLLAMA_LORA_PRACTICE_SMOKE_CONFIG = Path(
+    "configs/eval/ollama_qwen2_5_coder_3b_lora_practice_smoke.yaml"
 )
 
 
@@ -71,19 +72,19 @@ def _write_agent_model_eval_config(path: Path) -> None:
     )
 
 
-def _write_transformers_peft_eval_config(path: Path) -> None:
+def _write_ollama_lifecycle_eval_config(path: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                "name: transformers_peft_agent_model_smoke",
+                "name: ollama_agent_model_lifecycle_smoke",
                 "task_pack: data/task_packs/repo_patch_python_v0",
                 "tasks:",
                 "  - toy_python_fix_001",
                 "split: practice",
                 "policies:",
-                "  local-transformers-smoke:",
+                "  local-ollama-smoke:",
                 "    type: agent_model",
-                "    model_config: configs/models/transformers_peft_qwen2_5_coder_3b_base.yaml",
+                "    model_config: configs/models/ollama_qwen2_5_coder_3b_f16_base.yaml",
                 "    decoding_config: configs/decoding/greedy_1024.yaml",
                 "    attempts: 2",
                 "    replay:",
@@ -179,8 +180,8 @@ def test_agent_model_multi_policy_config_resolves_pinned_input_protocol() -> Non
     )
 
 
-def test_transformers_peft_practice_smoke_config_has_paired_local_policies() -> None:
-    config = load_eval_config(TRANSFORMERS_PEFT_PRACTICE_SMOKE_CONFIG)
+def test_ollama_lora_practice_smoke_config_has_paired_local_policies() -> None:
+    config = load_eval_config(OLLAMA_LORA_PRACTICE_SMOKE_CONFIG)
 
     assert config.tasks == ["toy_python_fix_001"]
     assert config.split == "practice"
@@ -193,7 +194,7 @@ def test_transformers_peft_practice_smoke_config_has_paired_local_policies() -> 
         "configs/decoding/greedy_1024.yaml"
     }
     assert {policy.max_turns_override for policy in model_policies} == {6}
-    validate_eval_config_paths(config, TRANSFORMERS_PEFT_PRACTICE_SMOKE_CONFIG)
+    validate_eval_config_paths(config, OLLAMA_LORA_PRACTICE_SMOKE_CONFIG)
 
 
 def test_agent_control_eval_config_loads() -> None:
@@ -379,20 +380,33 @@ def test_agent_model_eval_records_missing_model_env_failure(
     }
 
 
-def test_agent_model_eval_loads_one_transformers_client_per_policy_run(
+def test_agent_model_eval_loads_one_ollama_client_per_policy_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config_path = tmp_path / "transformers_peft_eval.yaml"
-    _write_transformers_peft_eval_config(config_path)
+    config_path = tmp_path / "ollama_eval.yaml"
+    _write_ollama_lifecycle_eval_config(config_path)
     fake_client = ScriptedFakeModelClient(
-        model_id="local-transformers-test",
+        model_id="local-ollama-test",
         script=[
             FakeModelScriptStep(output_text="not-json"),
             FakeModelScriptStep(output_text="not-json"),
         ],
     )
     build_calls: list[Path] = []
+    runtime_calls: list[str] = []
+
+    def fake_capture_provider_runtime_provenance(
+        config: ModelConfig,
+    ) -> OllamaProviderRuntimeProvenance:
+        assert isinstance(config, OllamaGenerateModelConfig)
+        runtime_calls.append(config.model_id)
+        return OllamaProviderRuntimeProvenance(
+            provider="ollama",
+            model_id=config.model_id,
+            model_digest=config.model_manifest_digest,
+            server_version="0.30.11",
+        )
 
     def fake_build_model_client(
         config: ModelConfig,
@@ -400,7 +414,7 @@ def test_agent_model_eval_loads_one_transformers_client_per_policy_run(
         model_input_protocol: LoadedModelInputProtocol | None = None,
         model_config_path: Path | None = None,
     ) -> ScriptedFakeModelClient:
-        assert isinstance(config, TransformersPeftModelConfig)
+        assert isinstance(config, OllamaGenerateModelConfig)
         assert model_input_protocol is not None
         assert model_config_path is not None
         build_calls.append(model_config_path)
@@ -411,25 +425,35 @@ def test_agent_model_eval_loads_one_transformers_client_per_policy_run(
         "build_model_client",
         fake_build_model_client,
     )
+    monkeypatch.setattr(
+        eval_run_module,
+        "capture_provider_runtime_provenance",
+        fake_capture_provider_runtime_provenance,
+    )
 
     eval_run = run_eval_config(
         config_path,
-        "local-transformers-smoke",
+        "local-ollama-smoke",
         tmp_path / "eval",
     )
 
     assert build_calls == [
-        Path("configs/models/transformers_peft_qwen2_5_coder_3b_base.yaml").resolve()
+        Path("configs/models/ollama_qwen2_5_coder_3b_f16_base.yaml").resolve()
     ]
+    assert runtime_calls == ["agentenv-qwen2.5-coder-3b-f16-base:latest"]
     assert len(eval_run.attempts) == 2
     prompt_loop_statuses: list[str | None] = []
     for attempt in eval_run.attempts:
         assert attempt.agent is not None
         prompt_loop_statuses.append(attempt.agent.prompt_loop_status)
         provenance = json.loads((attempt.attempt_dir / "model_config.json").read_text())
-        assert provenance["config"]["provider"] == "transformers_peft"
+        assert provenance["config"]["provider"] == "ollama_generate"
         assert provenance["config"]["adapter"] is None
         assert provenance["model_input_protocol"] is not None
+        assert provenance["provider_runtime"]["model_digest"] == (
+            "sha256:634801eab0dbcaa85441e7cb7a91e501"
+            "a111344404eabfefe3717f78e5606779"
+        )
     assert prompt_loop_statuses == [
         "invalid_model_output",
         "invalid_model_output",

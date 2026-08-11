@@ -20,7 +20,6 @@ from agentenv.evals.schema import SCORER_CONTROL_LAYER, ControlLayer
 from agentenv.models.config_schema import (
     ModelConfig,
     OllamaGenerateModelConfig,
-    TransformersPeftModelConfig,
 )
 from agentenv.models.input_protocol_schema import ModelInputProtocol
 from agentenv.models.runtime_schema import (
@@ -660,37 +659,6 @@ class ModelConfigProvenance(BaseModel):
             if self.provider_runtime.model_id != self.config.model_id:
                 raise ValueError(
                     "provider_runtime model_id must match the configured model_id"
-                )
-            return self
-
-        if isinstance(self.config, TransformersPeftModelConfig):
-            if self.model_input_protocol is None:
-                raise ValueError(
-                    "transformers_peft provenance requires model_input_protocol"
-                )
-            if (
-                self.model_input_protocol.source_hash
-                != self.config.model_input_protocol.content_hash
-            ):
-                raise ValueError(
-                    "model input protocol provenance hash must match the model "
-                    "config pin"
-                )
-            protocol = self.model_input_protocol.protocol
-            if protocol.model_checkpoint != self.config.base_model:
-                raise ValueError(
-                    "model input protocol provenance checkpoint must match the "
-                    "Transformers base-model pin"
-                )
-            if protocol.tokenizer.source != self.config.base_model:
-                raise ValueError(
-                    "model input protocol provenance tokenizer must match the "
-                    "Transformers base-model pin"
-                )
-            if self.provider_runtime is not None:
-                raise ValueError(
-                    "transformers_peft provenance cannot include a remote provider "
-                    "runtime"
                 )
             return self
 

@@ -8,7 +8,6 @@ from agentenv.models.config_schema import (
     ModelConfig,
     OllamaGenerateModelConfig,
     OpenAICompatibleChatModelConfig,
-    TransformersPeftModelConfig,
 )
 from agentenv.models.runtime_schema import (
     OllamaProviderRuntimeProvenance,
@@ -51,8 +50,6 @@ def capture_provider_runtime_provenance(
         raise ProviderRuntimeProbeError(
             f"Unsupported provider runtime probe: {config.provider_runtime_probe}"
         )
-    if isinstance(config, TransformersPeftModelConfig):
-        return None
     raise ProviderRuntimeProbeError(
         f"Unsupported model provider for runtime probing: {config.provider}"
     )
