@@ -1,0 +1,35 @@
+name: positive_sft_practice_diagnostic
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - toy_python_fix_001
+split: practice
+policies:
+  base:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b_f16_base.yaml
+    decoding_config: configs/decoding/greedy_1024.yaml
+    max_turns_override: 6
+    attempts: 1
+    replay:
+      repeats: 0
+  raw-sft:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b_f16_positive_sft_raw_lora.yaml
+    decoding_config: configs/decoding/greedy_1024.yaml
+    max_turns_override: 6
+    attempts: 1
+    replay:
+      repeats: 0
+  efficiency-filtered-sft:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b_f16_positive_sft_efficiency_filtered_lora.yaml
+    decoding_config: configs/decoding/greedy_1024.yaml
+    max_turns_override: 6
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

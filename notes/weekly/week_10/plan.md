@@ -1,11 +1,10 @@
 # Week 10 Plan
 
-Status: in progress on 2026-08-10. The source-record boundary, planned
+Status: in progress on 2026-08-11. The source-record boundary, planned
 train/selection disjointness, and combined positive-SFT review contract are
 complete. The 100-row review universe now has 98 accepted prefixes, 2 rejected
 sources, and 0 unresolved prefix decisions. Embedded efficiency judgments are
-94 accepted, 4 rejected, and 0 abstained. Because training and policy
-evaluation have not started, the Week 10 experiment will use all reviewed
+94 accepted, 4 rejected, and 0 abstained. The experiment used all reviewed
 prefixes: 98 raw and 94 efficiency-filtered. All eight exports and
 materializations have been regenerated successfully. The common serving path
 is now Ollama native generation over one exact F16 GGUF base and an optional
@@ -18,8 +17,24 @@ resolved at 98 optimizer steps per arm: 16,412 supervised tokens for raw and
 needed; the existing LoRA workflow and training-run records now own resolution
 and executed order. The workflow accepts all eight sources, derives the chosen
 treatment from the existing reviews, and blocks token-exposure drift before
-model loading. Training and policy evaluation have not started; Checkpoint 7
-training is next.
+model loading. Both fresh PEFT adapters have now completed 98 optimizer steps,
+kept the base frozen, and passed exact adapter save/reload verification. Both
+adapters are registered as separate GGUF layers over the same immutable F16
+Ollama base, and their model configs pin the
+source training manifests and deployed composition digests. The exact
+eight-task selection set, shared three-arm eval config, deterministic decoding,
+typed cell outcomes, paired comparisons, and success-first decision rule are
+now frozen. The deterministic selection-dev evaluation has completed all 24
+cells: every policy scored 0/8 nested PASS, there were no invalid comparison
+cells, and the frozen rule abstains because no successful cells exist for an
+efficiency tie-break. Failure analysis is complete. A separate three-cell
+practice diagnostic then produced one base PASS and identical six-turn
+inspection/test loops with no writes from both treatment adapters. This makes
+training-induced completion suppression the leading diagnosis while retaining
+public-test feedback, turn-budget, small-model, and single-greedy-rollout
+limitations. The diagnostic does not change the frozen abstention. Persisting
+the paired selection section in the existing report and closing Week 10 are
+next.
 
 ## Theme
 
@@ -799,10 +814,8 @@ notes/weekly/week_10/implementation_notes.md
 notes/weekly/week_10/learnings.md
 notes/weekly/week_10/closure_audit.md
 experiments/models/week_10_positive_sft_raw_lora/
-experiments/models/week_10_positive_sft_filtered_lora/
-experiments/runs/week_10_selection_base/
-experiments/runs/week_10_selection_raw/
-experiments/runs/week_10_selection_filtered/
+experiments/models/week_10_positive_sft_efficiency_filtered_lora/
+experiments/runs/week_10_positive_sft_policy_selection/
 experiments/reports/week_10_filtering_quality.md
 experiments/reports/week_10_base_vs_raw.md
 experiments/reports/week_10_base_vs_filtered.md
@@ -818,10 +831,10 @@ configs/train/positive_sft_lora_raw.yaml
 configs/train/positive_sft_lora_efficiency_filtered.yaml
 ```
 
-The selection config remains planned:
+The selection config is:
 
 ```text
-configs/eval/qwen2_5_coder_3b_sft_selection.yaml
+configs/eval/positive_sft_policy_selection.yaml
 ```
 
 Current code ownership is:
@@ -1092,6 +1105,16 @@ Done when:
 
 ### Checkpoint 7: Train S_raw And S_filtered
 
+Status on 2026-08-10: both training runs completed. Raw used 98 unique examples
+for 16,412 supervised tokens; efficiency-filtered used 94 unique examples and
+four deterministic repeats for 16,071 supervised tokens. Both runs pinned the
+same eight sources, kept the base exactly frozen, changed the adapter, and
+passed adapter and probe-logit reload checks. Both PEFT adapters were converted
+to separate GGUF layers and registered over the same immutable F16 Ollama base.
+The resulting model configs pin each source training manifest and Ollama
+composition digest, and both compositions passed live constrained-generation
+checks.
+
 Purpose:
 
 ```text
@@ -1122,6 +1145,20 @@ Done when:
 
 ### Checkpoint 8: Freeze Selection Metrics And Eval Config
 
+Status on 2026-08-11: complete. One existing eval config now drives `B0`,
+`S_raw`, and `S_filtered` in that order over the eight disjoint dev tasks. It
+pins selected-task hash set `xxh64:cb95e4422a6ee152`, the shared
+`greedy_8192.yaml` decoding contract, one rollout per cell, no replay repeats,
+and task-native max-turn budgets. Validation derives both adapters' 11 training
+task ids from their exact consumed positive-SFT examples, requires the two
+training task sets to match, and blocks overlap with selection tasks. Plain
+reporting helpers map existing typed attempt evidence to PASS, policy failure,
+or invalid cells; compute all three paired comparisons; report prompt,
+completion, and total tokens plus model-turn action counts; and apply the
+predeclared success-first selection or abstention rule. No new persisted
+artifact or manifest was added. All intended selection output paths remain
+absent before the first run.
+
 Purpose:
 
 ```text
@@ -1147,10 +1184,19 @@ Done when:
 - report code can apply the rule without hand interpretation;
 - no metric definition depends on observed Week 10 outcomes;
 - scorer, infra, model, task, and policy failures remain distinguishable;
-- all three output directories are empty or intentionally overwriteable before
-  the first arm runs.
+- the selection-suite output and its child policy directories are absent or
+  intentionally overwriteable before the first arm runs.
 
 ### Checkpoint 9: Deterministic Selection-Dev Evaluation
+
+Status on 2026-08-11: complete. One suite ran the frozen policy order over all
+eight task hashes and persisted 24/24 cells with the common Ollama path. Base
+completed and scored all eight attempts; raw SFT scored six and reached the
+task-native max-turn limit on two; efficiency-filtered SFT completed and scored
+all eight. All three policies produced 0/8 nested PASS. The 24 cells contain 24
+typed policy failures and no scorer, harness, serving, or infrastructure
+invalid cells. No config, task, budget, or rule changed between arms, and no
+heldout-private task was loaded.
 
 Purpose:
 
@@ -1181,6 +1227,15 @@ Done when:
 - common-path parity is revalidated from run manifests.
 
 ### Checkpoint 10: Paired Comparison And Selection Decision
+
+Status on 2026-08-11: in progress. The typed cells, three paired comparisons,
+descriptive totals, and mechanical `complete_tie` abstention have been computed
+and recorded. Archived-trajectory inspection also localized the dominant
+failure patterns without rerunning a cell. A separately labeled practice
+diagnostic confirmed that base can complete a four-turn repair while both
+treatment adapters repeat inspection and passing public checks without a
+write. The generic eval-suite report still lacks the selection-specific
+comparison and decision section, so this checkpoint is not yet complete.
 
 Purpose:
 
@@ -1220,6 +1275,11 @@ Done when:
 - the result can be regenerated from archived manifests and attempt artifacts.
 
 ### Checkpoint 11: Conditional DPO Decision
+
+Status on 2026-08-11: deferred by the predeclared gate. The selection rule
+abstained, so no exact `S_selected` policy exists from which both the DPO policy
+and frozen reference could start. The 29 existing materialized pairs remain
+preserved; pair availability alone does not authorize this follow-up.
 
 Purpose:
 
@@ -1494,8 +1554,11 @@ Week 10 is complete when:
 
 ## Next Implementation Step
 
-Begin Checkpoint 7 by running the raw and efficiency-filtered configs through
-the completed workflow over the same eight materialization sources. Start both
-from fresh matching step-zero state, preserve the existing qualification and
-adapter-reload checks, and do not inspect selection-dev or heldout-private
-outcomes between arms.
+Finish Checkpoint 10 by rendering the already-computed typed cells, all three
+paired comparisons, descriptive token/action totals, and the mechanical
+`complete_tie` abstention into the existing policy-selection report. Include
+the practice diagnostic as failure-analysis evidence, not as a replacement
+selection set. Then complete the Week 10 closeout with DPO explicitly deferred,
+the negative result stated plainly, and the harness/data limitations carried
+forward as a future technical bet. Week 11 reliability work can proceed
+without requiring a successful SFT policy.

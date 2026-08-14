@@ -1,0 +1,17 @@
+version: model_config_v0
+provider: ollama_generate
+model_id: agentenv-qwen2.5-coder-3b-f16-positive-sft-efficiency-filtered-lora:v0
+model_manifest_digest: sha256:038a771b66ecea02b765e0f677e98d492a2116cea1039b23f98030c70893550f
+base_url_env: AGENTENV_OLLAMA_BASE_URL
+capabilities:
+  token_usage: native
+  supports_seed: true
+  supports_stop: true
+  supports_top_k: true
+model_input_protocol:
+  path: ../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml
+  content_hash: xxh64:9b9eba719de618f1
+adapter:
+  path: ../../experiments/models/week_10_positive_sft_efficiency_filtered_lora/manifest.json
+  content_hash: xxh64:024cb3a3d8a4facb
+agent_action_format: json_schema

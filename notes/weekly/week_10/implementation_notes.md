@@ -1213,3 +1213,495 @@ Ruff focused checks: passed
 Pyright focused checks: 0 errors, 0 warnings
 full repository suite: deferred
 ```
+
+## 2026-08-10 Matched LoRA Training Runs
+
+The raw and efficiency-filtered adapters were trained sequentially from fresh
+matching step-zero initialization. No policy evaluation was run between arms.
+Both consumed the same eight authorized materialization artifacts and passed
+the existing qualification, frozen-base, adapter-ownership, persistence, and
+reload checks.
+
+Raw:
+
+```text
+artifact: experiments/models/week_10_positive_sft_raw_lora
+run id: positive_sft_lora_run_75026bd7b64e4b229450ced024f23221
+manifest hash: xxh64:3828900162386f5c
+adapter hash: xxh64:628c8c9a46b0bd1e
+selected examples: 98
+optimizer steps: 98 / 98
+supervised tokens: 16,412
+context tokens: 97,005
+repeated examples: 0
+```
+
+Efficiency-filtered:
+
+```text
+artifact: experiments/models/week_10_positive_sft_efficiency_filtered_lora
+run id: positive_sft_lora_run_ba8374dd03734bbc8de84a678f41c234
+manifest hash: xxh64:024cb3a3d8a4facb
+adapter hash: xxh64:4b88697558dcbdd3
+selected examples: 94
+optimizer steps: 98 / 98
+supervised tokens: 16,071
+context tokens: 94,440
+repeated examples: 4
+maximum exposure count: 2
+```
+
+Reloading both artifacts through the repository validator confirmed:
+
+```text
+source lists identical: true
+source count per arm: 8
+frozen base exactly unchanged: true
+adapter state changed: true
+saved adapter exactly reloaded: true
+trained and reloaded probe logits exactly equal: true
+```
+
+These are training-integrity results only. They do not establish policy
+improvement or select either adapter. The next section records their serving
+conversion; selection evaluation had not begun between the two training runs.
+
+## 2026-08-10 Treatment Adapter GGUF Serving Registration
+
+Both completed PEFT adapters were converted with the already-tested official
+`ggml-org/llama.cpp` converter pinned at commit
+`030ebb558a5820b444a8f836ed5cdd46c9b4bd7a`. Each conversion produced a
+separate F16 LoRA GGUF with 288 adapter tensors; neither adapter was merged
+into the base model.
+
+The registered Ollama compositions share this exact base layer:
+
+```text
+sha256:e38087533702eddfb4025e230c08e5b5a37912c6d1341200dc5e6a5a085b53c1
+```
+
+Their distinct adapter and model identities are:
+
+| Treatment | Adapter GGUF SHA-256 | Ollama model | Ollama manifest digest |
+| --- | --- | --- | --- |
+| Raw | `6ce692b6bb6947a907f7d4ae63409eabc5793db2a5ba28a924ac6eae79dea968` | `agentenv-qwen2.5-coder-3b-f16-positive-sft-raw-lora:v0` | `sha256:0d205a44cee00b3d9abb610d2c6414c83d6a69a572ad085b4b3c110d71d68234` |
+| Efficiency-filtered | `93bdd3d12ccda20f075dd8ffcf4c492e8091260b5bc64de243d070af6cce6311` | `agentenv-qwen2.5-coder-3b-f16-positive-sft-efficiency-filtered-lora:v0` | `sha256:038a771b66ecea02b765e0f677e98d492a2116cea1039b23f98030c70893550f` |
+
+`ollama show` confirmed that both compositions point to the same base blob and
+the expected distinct adapter blob. The two reusable model configs are:
+
+```text
+configs/models/ollama_qwen2_5_coder_3b_f16_positive_sft_raw_lora.yaml
+configs/models/ollama_qwen2_5_coder_3b_f16_positive_sft_efficiency_filtered_lora.yaml
+```
+
+Each config pins the deployed Ollama manifest digest and references the exact
+completed PEFT training manifest through the existing optional `adapter`
+field. No conversion artifact, schema, or new command was introduced.
+
+One deterministic live request per composition used raw Qwen serialization,
+Ollama JSON-schema constrained decoding, and a 32-token generation cap. Both
+loaded successfully, returned `{"answer": 42}`, stopped normally, and reported
+30 prompt tokens plus 11 completion tokens. This is a serving-integrity check,
+not policy-quality evidence; no selection-development task was run.
+
+Focused verification:
+
+```text
+model config, Ollama generation, factory, and provider-runtime tests: 43 passed
+Ruff focused check: passed
+Pyright focused check: 0 errors, 0 warnings
+full repository suite: deferred
+```
+
+## 2026-08-11 Selection Contract Freeze
+
+Checkpoint 8 froze the comparison before any selection-dev policy outcome was
+generated or inspected. The single three-arm config is:
+
+```text
+configs/eval/positive_sft_policy_selection.yaml
+config hash: xxh64:f3861aef6336bbe2
+policy order: base, raw-sft, efficiency-filtered-sft
+attempts per task and policy: 1
+replay repeats: 0
+selection output directories before first run: absent
+```
+
+The config pins this selected-task hash set:
+
+```text
+selected_task_hash_set: xxh64:cb95e4422a6ee152
+
+repair_retry_schedule          xxh64:88747cbb862c8fca
+repair_interval_coalescing     xxh64:dd2ec5b9d53527d9
+repair_alias_chain             xxh64:7a1cb38f6228e3dc
+repair_inventory_transaction   xxh64:a69801f882c9ba1b
+repair_access_policy           xxh64:b2c85f6fdb3c2aac
+repair_config_inheritance      xxh64:25d4b430f13f5c22
+repair_event_rollup            xxh64:906ca79ae586ff45
+repair_job_dispatch            xxh64:9e8f9b97d27d3e07
+```
+
+The shared inference contract is the existing
+`configs/decoding/greedy_8192.yaml`:
+
+```text
+strategy: greedy
+temperature: 0.0
+top_p: 1.0
+top_k: null
+max_new_tokens: 8192
+num_return_sequences: 1
+seed: null
+stop: []
+timeout_seconds: 300
+```
+
+The config does not override max turns. All policies therefore consume each
+task's native budget through the same path; the eight budgets are 20, 20, 16,
+20, 24, 28, 32, and 36 turns in config task order. These budgets are task
+contracts, not empirical difficulty labels. The experiment still cannot claim
+that training and selection tasks are difficulty matched.
+
+Task-scope validation does not copy training task ids into the eval config. It
+loads each adapter's exact completed training artifact, resolves the selected
+example ids through the pinned positive-SFT materializations and exports, and
+derives the task ids from those records. Both adapters resolve to the same 11
+training tasks, and their intersection with the eight selection tasks is empty.
+
+The mechanical comparison code lives in
+`src/agentenv/reporting/policy_selection.py` as plain dataclasses and functions,
+not a persisted schema. Its frozen definitions are:
+
+```text
+success
+  nested scorer AttemptStatus == PASS
+
+policy failure
+  scorer PUBLIC_TEST_FAIL, HIDDEN_TEST_FAIL, INVALID_SHORTCUT, or
+  HIDDEN_VALIDATOR_ACCESS_ATTEMPT
+  prompt loop max_turns_exceeded, invalid_model_output,
+  invalid_shortcut_attempted, or terminal_tool_error
+  confirmed reward-hack behavior
+
+invalid comparison cell
+  scorer PATCH_APPLY_ERROR, TIMEOUT, or ORCHESTRATOR_ERROR
+  model_error, prompt-loop orchestrator_error, agent orchestrator_error,
+  or missing/corrupt comparison evidence
+
+tokens consumed
+  PromptLoopResult.token_usage prompt_tokens, completion_tokens, and
+  total_tokens summed across the relevant task cells
+
+actions taken
+  PromptLoopResult.turns_executed; one prompt-loop turn is one attempted
+  assistant action request. Every successful-cell turn has one model response,
+  including the terminal final answer
+```
+
+All-task token and action totals are descriptive and include observation
+coverage. Tie-break totals use only the identical successful task cells of the
+tied leaders. Pairwise reporting is fixed for `base -> raw-sft`,
+`base -> efficiency-filtered-sft`, and
+`raw-sft -> efficiency-filtered-sft`, including gains, regressions, shared
+passes, shared failures, and invalid cells.
+
+The decision order is executable and result-independent:
+
+```text
+1. Any invalid comparison cell -> abstain.
+2. Unique highest nested-PASS count -> select that policy, including base.
+3. Equal leading PASS counts on different task ids -> abstain.
+4. Identical success vectors -> fewest total tokens on those successes.
+5. Token tie -> fewest model-turn actions on those same successes.
+6. Missing needed tie-break evidence or a remaining tie -> abstain.
+```
+
+Focused verification:
+
+```text
+selection decision and eval-config tests: 11 passed
+Ruff focused check: passed
+Pyright focused check: 0 errors, 0 warnings
+full repository suite: deferred
+```
+
+## 2026-08-11 Deterministic Selection-Dev Run
+
+The frozen all-policies eval completed in the declared order without config or
+task changes:
+
+```text
+artifact: experiments/runs/week_10_positive_sft_policy_selection
+report: experiments/reports/week_10_policy_selection.md
+eval suite id: eval_suite_c53b4f76646b45269032e9b69878ef0b
+suite manifest hash: xxh64:6a46d6e79373889c
+config hash: xxh64:f3861aef6336bbe2
+selected-task hash set: xxh64:cb95e4422a6ee152
+harness runtime hash: xxh64:02cd08e1c3fbbad8
+policies: 3
+tasks per policy: 8
+attempts: 24 / 24
+replays: 0
+```
+
+The first CLI invocation was stopped during provider-runtime probing because
+the execution sandbox denied Python's localhost connection. It made no model
+attempt. The approved rerun overwrote only that incomplete directory, reached
+the already-running local Ollama server, and produced the suite above. This was
+not an outcome-based retry.
+
+Persisted policy results:
+
+| Policy | Nested PASS | Policy failures | Invalid cells | Prompt tokens | Completion tokens | Total tokens | Actions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base | 0/8 | 8 | 0 | 36,576 | 1,362 | 37,938 | 33 |
+| Raw SFT | 0/8 | 8 | 0 | 243,776 | 2,475 | 246,251 | 104 |
+| Efficiency-filtered SFT | 0/8 | 8 | 0 | 86,072 | 1,439 | 87,511 | 62 |
+
+Base completed and reached the nested scorer on all eight tasks: seven hidden
+test failures and one public test failure. Raw SFT reached the scorer on six
+tasks and hit the native max-turn limit on `repair_retry_schedule` and
+`repair_config_inheritance`; its six scored attempts failed hidden tests.
+Efficiency-filtered SFT reached the scorer on all eight tasks and failed hidden
+tests on all eight. Max-turn exhaustion is a frozen policy-failure status, not
+an invalid infrastructure cell.
+
+Every pair has the same empty successful-task set:
+
+```text
+base vs raw SFT:                 0 gains, 0 regressions, 8 shared failures
+base vs efficiency-filtered:    0 gains, 0 regressions, 8 shared failures
+raw vs efficiency-filtered:     0 gains, 0 regressions, 8 shared failures
+```
+
+Mechanical selection result:
+
+```text
+status: abstained
+selected policy: none
+rule branch: complete_tie
+reason: all policies have zero successful cells, so the successful-cell token
+        and action tie-break sets are empty
+```
+
+The differing full-run token and action totals are descriptive only. Base
+cannot win because it failed more cheaply, and neither filtered treatment can
+advance without a task success. No heldout-private outcome was loaded or
+reported.
+
+## 2026-08-11 All-Failure Analysis
+
+This analysis read only the archived selection, source-trajectory, export,
+materialization, and training artifacts. It did not change a task, decoder,
+model composition, scorer, or decision rule; it did not rerun a frozen cell or
+open heldout-private evidence.
+
+### Serving And Scoring Are Not The Leading Failure
+
+All 24 cells returned schema-valid constrained JSON actions. There were no
+invalid model outputs, model-provider errors, invalid tool calls, or invalid
+comparison cells. Every attempt within an arm pinned one model id and digest;
+all arms used Ollama 0.30.11, model-input protocol
+`xxh64:9b9eba719de618f1`, and decoding config
+`xxh64:e10e1d1e2f1baba7`:
+
+```text
+base digest:                sha256:634801eab0dbcaa85441e7cb7a91e501a111344404eabfefe3717f78e5606779
+raw SFT digest:             sha256:0d205a44cee00b3d9abb610d2c6414c83d6a69a572ad085b4b3c110d71d68234
+efficiency-filtered digest: sha256:038a771b66ecea02b765e0f677e98d492a2116cea1039b23f98030c70893550f
+```
+
+The arms also produced clearly different action distributions, which is
+consistent with both adapters being active. The earlier paired practice smoke
+proved that this Ollama base-plus-adapter composition path can apply a LoRA and
+reach nested PASS, although that smoke used the operational adapter rather
+than either new treatment adapter.
+
+All 32 in-loop `run_tests` tool calls returned `passed: true`. The nested
+scorer then correctly separated public-check success from task success: 21
+scored cells passed public checks and failed hidden checks, one base cell
+failed public checks, and two raw cells exhausted max turns before scoring.
+That is the intended behavior for tasks whose known-bad seed can satisfy the
+small public suite. There is no artifact evidence of a serving, protocol, or
+scorer failure explaining the 0/24 result.
+
+### Observed Policy Behavior
+
+| Policy | List | Read | Test | Write | Final | Workspace result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Base | 4 | 18 | 1 | 2 | 8 | 6 empty patches, 2 nonempty failing patches |
+| Raw SFT | 8 | 69 | 21 | 0 | 6 | 6 empty patches, 2 max-turn cells with no patch |
+| Efficiency-filtered SFT | 8 | 36 | 10 | 0 | 8 | 8 empty patches |
+
+The raw adapter repeatedly cycled through the same reads and passing public
+test on `repair_retry_schedule` and `repair_config_inheritance` until their
+20- and 28-turn limits. The filtered adapter usually performed one inspection
+and test cycle, sometimes two, and then finalized. Neither treatment adapter
+issued `write_file` once.
+
+The base policy did edit twice, but neither patch is evidence of a hidden
+scoring defect. Its `repair_alias_chain` patch only lowercased one return value;
+the oracle also requires whitespace handling, input validation, transitive
+alias resolution, and collision, missing-target, and cycle checks. Its
+`repair_access_policy` patch introduced a reference to undefined `pattern` and
+failed all four public tests with `NameError`.
+
+### Training-Unit Population
+
+Joining each of the 98 raw `PositiveSFTExampleRecord` rows back to its executed
+source trajectory exposes a distinction that per-prefix review did not own:
+
+| Source outcome | Examples | Supervised tokens | List | Read | Test | Write | Final | Prefix endings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Failed | 79 | 6,101 | 79 | 119 | 19 | 0 | 0 | 60 read, 19 test |
+| Successful | 19 | 10,311 | 19 | 39 | 27 | 18 | 18 | 18 final, 1 test |
+
+The 79 failed-source rows are defensible diagnostic prefixes, not successful
+demonstrations. They contain every failed-source action that was authorized,
+but none contains a workspace change or final answer. Because the prefix ends
+at its last approved assistant action, it also supplies no target for what the
+policy should do after that final read or test returns. Eighteen successful
+rows supply every `write_file` and `final_answer` target in the raw population.
+
+The executed 98-step schedules are even more revealing:
+
+| Treatment | Failed-source exposures | Successful-source exposures | Failed/success supervised tokens | Read | Test | Write | Final |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| Raw | 79 | 19 | 6,101 / 10,311 | 158 | 46 | 18 | 18 |
+| Efficiency-filtered | 79 | 19 | 6,101 / 9,970 | 154 | 43 | 18 | 18 |
+
+The filtered arm's four repeated examples are all complete successful
+trajectories, so matched exposure restored the same 19 successful-source, 18
+write, and 18 final-answer exposures as raw. The effective treatment removed
+four read actions and three test actions while keeping the larger
+diagnostic-versus-completion mixture unchanged. That is consistent with the
+filtered policy looping less than raw, but the 0/8 success vectors make this a
+descriptive association rather than policy-selection evidence.
+
+Both trainers used micro-batch size 1, gradient accumulation 1, and mean
+cross-entropy over each sequence. Consequently, each example caused one
+optimizer step regardless of its token length: 79 of 98 updates came from
+failed-source diagnostic prefixes even though those prefixes owned only 6,101
+of 16,412 raw supervised tokens. Matching aggregate supervised-token totals
+across arms controlled loss-bearing exposure within the declared tolerance,
+but did not remove this within-arm behavior-frequency imbalance.
+
+Training itself completed cleanly. Raw mean loss fell from `0.16197` over its
+first ten steps to `0.02383` over its last ten; filtered fell from `0.17488` to
+`0.09013`. Gradient norms remained finite and nonzero, base parameters stayed
+frozen, adapter weights changed, and exact save/reload checks passed. This is
+evidence that optimization fit the supplied objective, not that the objective
+taught task completion.
+
+### Selection Difficulty Was Not Empirically Matched
+
+The current `matched_and_disjoint` eval validation proves that the two adapters
+used matching training task ids and that those ids are disjoint from selection
+tasks. It does not prove that training and selection difficulty are matched.
+The plan already records this as a non-claim.
+
+Historical acquisition evidence reinforces the floor concern. Across the four
+larger source policies, the eleven eventual training tasks produced 20 nested
+passes in 132 attempts. Only two of the eight selection tasks had comparable
+acquisition runs, and those two produced 0 passes in 24 attempts; the other six
+selection tasks had no natural-policy calibration evidence before freeze.
+Task-native turn budgets and valid oracle controls established execution
+contracts, not empirical difficulty.
+
+The current all-failure matrix therefore cannot distinguish two plausible
+contributors:
+
+```text
+completion behavior was underrepresented at the optimizer-step level
+the eight-task selection set is a floor for this 3B base and its adapters
+```
+
+One deterministic training run per arm, one eval attempt per cell, and the
+small LoRA budget also leave ordinary optimization variance, capacity, and
+hyperparameters as secondary possibilities. The artifacts do not justify
+ranking those explanations yet.
+
+### Smallest Discriminating Follow-Up
+
+Run a separately labeled three-cell diagnostic on the existing
+`toy_python_fix_001` practice task with base, raw SFT, and efficiency-filtered
+SFT through the same serving path. The operational smoke already establishes
+that base and an older adapter can solve this task, but the two treatment
+adapters have not been tested on it.
+
+This diagnostic is post-hoc and cannot revise the frozen `complete_tie`
+abstention:
+
+```text
+treatment adapters do not write or pass
+-> global completion suppression becomes the leading hypothesis
+
+treatment adapters write and pass
+-> the selection-task floor becomes the leading hypothesis
+```
+
+Do not retrain or alter the frozen eight-task result before this distinction is
+observed. If a completion-balanced ablation is later justified, it can filter
+or resample the existing exact SFT records by already-derivable source outcome
+and action coverage; it does not require another review schema or intermediate
+artifact.
+
+## 2026-08-11 Three-Cell Practice Diagnostic
+
+The post-hoc diagnostic used the existing `toy_python_fix_001` practice task,
+the prior six-turn practice budget, greedy decoding, and the exact three Week
+10 policy compositions:
+
+```text
+config: configs/eval/positive_sft_practice_diagnostic.yaml
+config hash: xxh64:194ee0043484cb71
+artifact: experiments/runs/week_10_positive_sft_practice_diagnostic
+report: experiments/reports/week_10_positive_sft_practice_diagnostic.md
+eval suite id: eval_suite_95e6ad51fa85428ea6215e74cf8ab175
+selected-task hash set: xxh64:c827eabdb1a694e1
+attempts: 3 / 3
+```
+
+The first CLI invocation stopped during provider-runtime probing because
+`AGENTENV_OLLAMA_BASE_URL` was absent. It made no model attempt. The corrected
+invocation set the local URL and deliberately overwrote only that incomplete
+suite shell.
+
+Results:
+
+| Policy | Nested result | Turns | Prompt / completion / total tokens | Actions | Patch |
+| --- | --- | ---: | --- | --- | --- |
+| Base | PASS | 4 | 2,551 / 166 / 2,717 | list, read source, write, final | 497 bytes |
+| Raw SFT | max turns | 6 | 4,366 / 157 / 4,523 | list, read source, read public test, test, reread source, retest | none |
+| Efficiency-filtered SFT | max turns | 6 | 4,366 / 157 / 4,523 | list, read source, read public test, test, reread source, retest | none |
+
+The base policy directly implemented true division and zero-denominator
+handling, then passed public and hidden scoring. The two treatment adapters
+produced byte-identical action sequences and token totals. Their first four
+actions were relevant diagnostic progress: they found the workspace, inspected
+the broken implementation, inspected the visible test, and established its
+baseline result. Their final two actions reread unchanged state and reran the
+same passing check without obtaining new information. Neither adapter changed
+the workspace or completed the task.
+
+The practice task makes the current harness limitation concrete. Its public
+check intentionally passes the known-bad floor-division seed, so `run_tests`
+does not provide a corrective signal. The six-turn diagnostic cap also leaves
+little recovery room, constrained actions do not expose a diagnosis in prose,
+and one greedy rollout cannot measure behavioral variance. Those limitations
+matter for a 3B policy and make partial-step inspection useful.
+
+They do not erase the treatment result. The instruction explicitly states true
+division and zero-denominator behavior, and the unchanged base solved the task
+under the same stricter six-turn path. Combined with zero adapter writes across
+the 16 selection cells, the new evidence makes completion suppression after
+training a stronger explanation than selection difficulty alone.
+
+This remains a diagnostic result, not a second policy-selection set. It cannot
+change the frozen 0/8-per-arm abstention. Week 10 can still close as a valid
+negative post-training experiment: report exact success outcomes as primary,
+report causally relevant and redundant steps descriptively, defer DPO because
+no SFT policy was selected, and carry the dataset-composition and harness
+limitations into the next technical bet.

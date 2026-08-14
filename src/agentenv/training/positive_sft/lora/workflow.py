@@ -318,6 +318,50 @@ def load_positive_sft_lora_training_artifact(
     )
 
 
+def load_positive_sft_lora_training_task_ids(out_dir: Path) -> frozenset[str]:
+    """Derive task ids from the exact examples selected by a training run."""
+
+    artifact = load_positive_sft_lora_training_artifact(out_dir)
+    selected_example_ids = {
+        example.source_positive_sft_example_id
+        for example in artifact.result.selected_examples
+    }
+    if len(selected_example_ids) != len(artifact.result.selected_examples):
+        raise ValueError("LoRA training selected example ids must be unique")
+
+    task_ids_by_example_id: dict[str, str] = {}
+    for source_ref in artifact.manifest.source_positive_sft_training_materializations:
+        source_dir = Path(source_ref.artifact_dir)
+        if not source_dir.is_absolute():
+            source_dir = artifact.out_dir / source_dir
+        source = load_positive_sft_training_materialization_snapshot(
+            source_dir.resolve()
+        )
+        export_dir = Path(source.manifest.source_positive_sft_export.artifact_dir)
+        if not export_dir.is_absolute():
+            export_dir = source.out_dir / export_dir
+        positive_sft_export = load_positive_sft_export_artifact(export_dir.resolve())
+        for example in positive_sft_export.records:
+            if example.example_id not in selected_example_ids:
+                continue
+            if example.example_id in task_ids_by_example_id:
+                raise ValueError(
+                    "LoRA training selected example ids must resolve from exactly "
+                    f"one source export: {example.example_id}"
+                )
+            task_ids_by_example_id[example.example_id] = (
+                example.provenance_ids.task_id
+            )
+
+    missing_example_ids = selected_example_ids - set(task_ids_by_example_id)
+    if missing_example_ids:
+        raise ValueError(
+            "LoRA training selected examples are missing from pinned source exports: "
+            + ", ".join(sorted(missing_example_ids))
+        )
+    return frozenset(task_ids_by_example_id.values())
+
+
 def _load_authorized_sources(
     source_dirs: Sequence[Path],
 ) -> tuple[PositiveSFTTrainingMaterializationExport, ...]:

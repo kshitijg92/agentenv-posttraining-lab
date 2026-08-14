@@ -41,6 +41,9 @@ AGENT_MODEL_MULTI_POLICY_ACQUISITION_CONFIG = Path(
 OLLAMA_LORA_PRACTICE_SMOKE_CONFIG = Path(
     "configs/eval/ollama_qwen2_5_coder_3b_lora_practice_smoke.yaml"
 )
+POSITIVE_SFT_POLICY_SELECTION_CONFIG = Path(
+    "configs/eval/positive_sft_policy_selection.yaml"
+)
 
 
 def _write_agent_model_eval_config(path: Path) -> None:
@@ -195,6 +198,66 @@ def test_ollama_lora_practice_smoke_config_has_paired_local_policies() -> None:
     }
     assert {policy.max_turns_override for policy in model_policies} == {6}
     validate_eval_config_paths(config, OLLAMA_LORA_PRACTICE_SMOKE_CONFIG)
+
+
+def test_positive_sft_policy_selection_config_freezes_shared_matrix() -> None:
+    config = load_eval_config(POSITIVE_SFT_POLICY_SELECTION_CONFIG)
+
+    assert config.split == "dev"
+    assert config.tasks == [
+        "repair_retry_schedule",
+        "repair_interval_coalescing",
+        "repair_alias_chain",
+        "repair_inventory_transaction",
+        "repair_access_policy",
+        "repair_config_inheritance",
+        "repair_event_rollup",
+        "repair_job_dispatch",
+    ]
+    assert config.expected_task_hash_set == "xxh64:cb95e4422a6ee152"
+    assert config.adapter_training_task_scope == "matched_and_disjoint"
+    assert (
+        config.policy_selection_rule
+        == "nested_pass_then_success_tokens_then_actions"
+    )
+    assert tuple(config.policies) == (
+        "base",
+        "raw-sft",
+        "efficiency-filtered-sft",
+    )
+    model_policies: list[AgentModelPolicy] = []
+    for policy in config.policies.values():
+        assert isinstance(policy, AgentModelPolicy)
+        assert policy.attempts == 1
+        assert policy.replay.repeats == 0
+        model_policies.append(policy)
+    assert {policy.decoding_config_path for policy in model_policies} == {
+        "configs/decoding/greedy_8192.yaml"
+    }
+    assert {policy.max_turns_override for policy in model_policies} == {None}
+    validate_eval_config_paths(config, POSITIVE_SFT_POLICY_SELECTION_CONFIG)
+
+
+def test_eval_config_task_hash_freeze_rejects_drift() -> None:
+    config = load_eval_config(POSITIVE_SFT_POLICY_SELECTION_CONFIG).model_copy(
+        update={"expected_task_hash_set": "xxh64:0000000000000000"}
+    )
+
+    with pytest.raises(ValueError, match="does not match the config freeze"):
+        validate_eval_config_paths(config, POSITIVE_SFT_POLICY_SELECTION_CONFIG)
+
+
+def test_policy_selection_config_rejects_training_task_overlap() -> None:
+    frozen_config = load_eval_config(POSITIVE_SFT_POLICY_SELECTION_CONFIG)
+    config = frozen_config.model_copy(
+        update={
+            "tasks": ["repair_jsonl_deduper", *frozen_config.tasks],
+            "expected_task_hash_set": None,
+        }
+    )
+
+    with pytest.raises(ValueError, match="must be disjoint from eval tasks"):
+        validate_eval_config_paths(config, POSITIVE_SFT_POLICY_SELECTION_CONFIG)
 
 
 def test_agent_control_eval_config_loads() -> None:

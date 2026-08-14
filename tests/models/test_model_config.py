@@ -40,6 +40,34 @@ OLLAMA_F16_ADAPTER_CONFIG = Path(
     "configs/models/"
     "ollama_qwen2_5_coder_3b_f16_operational_smoke_lora.yaml"
 )
+OLLAMA_F16_POSITIVE_SFT_ADAPTER_CONFIGS = (
+    (
+        Path(
+            "configs/models/"
+            "ollama_qwen2_5_coder_3b_f16_positive_sft_raw_lora.yaml"
+        ),
+        "agentenv-qwen2.5-coder-3b-f16-positive-sft-raw-lora:v0",
+        "sha256:0d205a44cee00b3d9abb610d2c6414c83d6a69a572ad085b4b3c110d71d68234",
+        "xxh64:3828900162386f5c",
+        Path("experiments/models/week_10_positive_sft_raw_lora/adapter"),
+    ),
+    (
+        Path(
+            "configs/models/"
+            "ollama_qwen2_5_coder_3b_f16_positive_sft_efficiency_filtered_lora.yaml"
+        ),
+        (
+            "agentenv-qwen2.5-coder-3b-f16-"
+            "positive-sft-efficiency-filtered-lora:v0"
+        ),
+        "sha256:038a771b66ecea02b765e0f677e98d492a2116cea1039b23f98030c70893550f",
+        "xxh64:024cb3a3d8a4facb",
+        Path(
+            "experiments/models/"
+            "week_10_positive_sft_efficiency_filtered_lora/adapter"
+        ),
+    ),
+)
 QWEN2_5_OPENAI_COMPATIBLE_MODEL_CONFIGS = (
     Path("configs/models/ollama_qwen2_5_coder_7b.yaml"),
     Path("configs/models/ollama_qwen2_5_coder_14b.yaml"),
@@ -168,6 +196,41 @@ def test_load_ollama_adapter_config_validates_source_training_manifest() -> None
         "experiments/models/"
         "week_09_positive_sft_lora_smoke_qwen2_5_coder_3b/adapter"
     ).resolve()
+
+
+@pytest.mark.parametrize(
+    (
+        "config_path",
+        "expected_model_id",
+        "expected_manifest_digest",
+        "expected_training_manifest_hash",
+        "expected_adapter_dir",
+    ),
+    OLLAMA_F16_POSITIVE_SFT_ADAPTER_CONFIGS,
+)
+def test_positive_sft_lora_model_configs_validate_source_training_manifests(
+    config_path: Path,
+    expected_model_id: str,
+    expected_manifest_digest: str,
+    expected_training_manifest_hash: str,
+    expected_adapter_dir: Path,
+) -> None:
+    config = load_model_config(config_path)
+    assert isinstance(config, OllamaGenerateModelConfig)
+    protocol = load_referenced_model_input_protocol(config, config_path)
+    assert protocol is not None
+
+    adapter_dir = validate_ollama_lora_reference(
+        config,
+        config_path,
+        model_input_protocol=protocol,
+    )
+
+    assert config.adapter is not None
+    assert config.adapter.content_hash == expected_training_manifest_hash
+    assert config.model_id == expected_model_id
+    assert config.model_manifest_digest == expected_manifest_digest
+    assert adapter_dir == expected_adapter_dir.resolve()
 
 
 def test_ollama_adapter_manifest_reference_rejects_hash_drift() -> None:

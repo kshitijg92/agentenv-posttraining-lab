@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agentenv.tasks.schema import TaskSplit
 
@@ -83,6 +83,40 @@ class EvalConfig(BaseModel):
     name: str = Field(min_length=1)
     task_pack: str = Field(min_length=1)
     tasks: list[str] = Field(min_length=1)
+    expected_task_hash_set: str | None = Field(
+        default=None,
+        pattern=r"^xxh64:[0-9a-f]{16}$",
+    )
+    adapter_training_task_scope: Literal["matched_and_disjoint"] | None = None
+    policy_selection_rule: Literal[
+        "nested_pass_then_success_tokens_then_actions"
+    ] | None = None
     split: TaskSplit
     policies: dict[str, EvalPolicy] = Field(min_length=1)
     trace: TraceCaptureConfig
+
+    @model_validator(mode="after")
+    def validate_policy_selection_contract(self) -> "EvalConfig":
+        if self.policy_selection_rule is None:
+            return self
+        if self.expected_task_hash_set is None:
+            raise ValueError("policy selection requires expected_task_hash_set")
+        if len(self.policies) < 2:
+            raise ValueError("policy selection requires at least two policies")
+        if any(policy.type != AGENT_MODEL_POLICY_TYPE for policy in self.policies.values()):
+            raise ValueError("policy selection requires agent-model policies")
+        if any(policy.attempts != 1 for policy in self.policies.values()):
+            raise ValueError("policy selection requires one attempt per task")
+        if any(policy.replay.repeats != 0 for policy in self.policies.values()):
+            raise ValueError("policy selection does not use replay repeats")
+
+        model_policies = [
+            policy
+            for policy in self.policies.values()
+            if isinstance(policy, AgentModelPolicy)
+        ]
+        if len({policy.decoding_config_path for policy in model_policies}) != 1:
+            raise ValueError("policy selection requires one shared decoding config")
+        if len({policy.max_turns_override for policy in model_policies}) != 1:
+            raise ValueError("policy selection requires shared max-turn semantics")
+        return self

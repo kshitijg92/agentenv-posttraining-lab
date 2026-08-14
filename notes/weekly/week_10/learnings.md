@@ -93,3 +93,85 @@ A conservative deterministic selection rule is lexicographic:
 Equal success counts on different task identities are not a clean efficiency
 tie. The policies may have different capabilities, so an abstention is more
 honest than aggregating incomparable token totals into a winner.
+
+## Per-Record Eligibility Does Not Guarantee Completion Coverage
+
+A diagnostic prefix can be locally correct and still be weak evidence for a
+policy that must complete a task. Prefix review answers whether the retained
+actions are safe to reinforce. It does not answer whether the dataset as a
+whole contains enough state-changing actions, validation-after-change, and
+successful termination behavior.
+
+This distinction matters when many accepted prefixes stop after inspection or
+before the observation that would determine the next action. Such examples can
+teach navigation and diagnosis, but they provide no positive continuation
+target from that final observation into a repair. Dataset review must therefore
+audit both local action quality and population-level workflow coverage:
+
+```text
+inspect -> diagnose -> change state -> validate changed state -> finish
+```
+
+A public check that already passes on the seed workspace is especially risky.
+If successful demonstrations associate `public PASS` with finishing, while
+most other examples teach only inspection, the policy can learn the shortcut
+`public PASS -> finish` without reliably learning that the required repair must
+come first.
+
+## Token Matching Does Not Fully Match Behavioral Influence
+
+Matching supervised-token exposure controls an important training-budget
+difference, but it does not make every behavior equally influential. With one
+sequence per optimizer step and a mean loss over that sequence's supervised
+tokens, a short diagnostic prefix and a long complete repair each cause one
+optimizer update.
+
+The dataset therefore needs at least two complementary audits:
+
+```text
+supervised-token mass by behavior type
+optimizer-step and action-target frequency by behavior type
+```
+
+Long writes may dominate token mass while short inspection prefixes dominate
+update frequency. Reporting only one view can hide a strong training-mixture
+imbalance.
+
+## Disjointness Is Not Difficulty Matching
+
+Train/selection disjointness prevents direct task contamination. It says
+nothing about whether the two task populations occupy a comparable difficulty
+range. Task validity, source-file count, turn budget, and a passing oracle are
+also not empirical difficulty measurements.
+
+Difficulty calibration must happen before freezing policy selection, using a
+declared reference policy or other outcome evidence that is independent of the
+treatments being compared. An all-failure floor is still a valid experimental
+result, but it cannot distinguish two potentially different policies.
+
+## Partial Progress Is Diagnostic Evidence, Not Replacement Success
+
+A failed attempt can still reveal whether a policy is moving through useful
+phases of work. Relevant inspection, information-gaining tests, correct state
+changes, validation after change, and coherent termination can be reported
+separately. Repeated reads of unchanged state and repeated checks without an
+intervening change are evidence of a loop rather than additional progress.
+
+This qualitative decomposition helps explain failures and choose the next
+experiment. It must not be turned into a post-hoc score that overrides the
+predeclared task-success metric. Otherwise an agent that explores plausibly but
+never repairs anything can be promoted over one that solves the task.
+
+## A Shared Harness Can Be Fair Yet Insensitive
+
+Using the same harness for every policy makes a comparison fair with respect to
+the harness. It does not guarantee that the harness supplies useful feedback or
+enough resolution for the policies being studied. A shallow public check that
+passes the broken seed, a tight turn budget, a rigid action interface, and one
+greedy rollout can combine with a small policy to produce floors or repetitive
+behavior.
+
+Hidden validators should not be weakened to rescue the score. Instead, retain
+true task success, preserve the failure traces, and treat harness affordances
+and task calibration as part of failure analysis. A negative result under a
+limited harness is still useful when its claim is scoped to that exact setup.
