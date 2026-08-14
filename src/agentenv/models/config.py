@@ -53,7 +53,7 @@ def validate_ollama_lora_reference(
     from agentenv.artifacts.manifests import (
         load_positive_sft_lora_training_run_manifest,
     )
-    from agentenv.training.positive_sft.lora.model import (
+    from agentenv.training.lora.model import (
         validate_lora_adapter_package,
     )
 
@@ -87,18 +87,14 @@ def validate_ollama_lora_reference(
         raise ValueError("adapted model policies require a completed LoRA training run")
     if manifest.base_model != base_model:
         raise ValueError(
-            "LoRA training manifest base model does not match the model-input "
-            "protocol"
+            "LoRA training manifest base model does not match the model-input protocol"
         )
     if manifest.model_input_protocol_hash != config.model_input_protocol.content_hash:
         raise ValueError(
             "LoRA training manifest model input protocol hash does not match the "
             "model config"
         )
-    if (
-        manifest.model_input_protocol_id
-        != model_input_protocol.record.protocol_id
-    ):
+    if manifest.model_input_protocol_id != model_input_protocol.record.protocol_id:
         raise ValueError(
             "LoRA training manifest model input protocol id does not match the "
             "loaded protocol"

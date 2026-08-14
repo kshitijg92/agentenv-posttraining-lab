@@ -175,3 +175,35 @@ Hidden validators should not be weakened to rescue the score. Instead, retain
 true task success, preserve the failure traces, and treat harness affordances
 and task calibration as part of failure analysis. A negative result under a
 limited harness is still useful when its claim is scoped to that exact setup.
+
+## Preference Optimization Usually Refines A Supervised Policy
+
+The conventional post-training sequence is:
+
+```text
+pretrained policy -> instruction SFT -> preference optimization
+```
+
+Pretraining supplies broad language and task knowledge. Instruction SFT first
+teaches the interaction distribution: how to follow requests, use the expected
+conversation or tool interface, and complete representative tasks. DPO or RLHF
+then primarily changes which behaviors the policy prefers within that
+distribution. Asking preference optimization to start from the raw pretrained
+policy is possible, but it combines learning the interface with learning the
+preference ordering and makes the source of any change harder to interpret.
+
+For the usual DPO comparison, the frozen reference and trainable policy begin
+as exact copies of the same SFT checkpoint:
+
+```text
+SFT policy
+  -> frozen reference
+  -> trainable policy updated by DPO
+```
+
+This makes the causal question narrow: what did preference optimization add
+beyond this exact supervised policy? The SFT parent therefore owns part of the
+meaning of the DPO result. If that parent was designated for an exploratory
+run rather than selected by the declared evaluation rule, the result must be
+reported as exploratory rather than retroactively treating the parent as a
+selection winner.

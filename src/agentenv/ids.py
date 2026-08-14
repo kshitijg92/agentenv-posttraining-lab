@@ -47,3 +47,7 @@ def new_message_id() -> str:
 
 def new_positive_sft_lora_training_run_id() -> str:
     return _new_id("positive_sft_lora_run")
+
+
+def new_dpo_lora_training_run_id() -> str:
+    return _new_id("dpo_lora_run")

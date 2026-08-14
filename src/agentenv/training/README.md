@@ -26,6 +26,9 @@ without claiming that the normal trust gate passed.
   under an exact shared decision state, persists unordered comparison exports,
   and owns the separate adjudication-review artifact that may label a
   comparison. It never treats a repaired transcript as an executed rollout.
+- `lora/` owns objective-neutral model loading, optimizer isolation, parameter
+  state auditing, runtime capture, and adapter save/reload verification. SFT and
+  DPO retain their own loss, selection, and provenance semantics.
 - `release/` owns fail-closed harness-audit and control-calibration validation for
   the eventual final dataset release. The release manifest itself remains a
   downstream boundary after token materialization.
@@ -67,6 +70,7 @@ flowchart TD
     PA -->|reviewed + preferred only| PE[Preference pair export<br/>reference-only + exhaustive]
     PE --> DM[Target-model DPO materialization<br/>paired tokens + response labels]
     DM -->|either branch invalid or overlength| DE[Explicit atomic pair failure]
+    DM -->|explicitly authorized snapshot| DP[DPO LoRA run]
 
     TS --> DR[Planned final dataset release]
     HA[Harness audit] --> DR
@@ -74,6 +78,8 @@ flowchart TD
     DR -->|all trust checks pass| AU[Training-authorized manifest]
     TS -->|explicitly authorized materialization| LR[Positive-SFT LoRA run]
     LR -->|all mechanical invariants pass| LA[Hash-pinned adapter]
+    LA -->|exact frozen/trainable parent copies| DP
+    DP -->|all mechanical invariants pass| DA[Hash-pinned derived adapter]
 ```
 
 Clean candidates bypass repair. Candidates with a selected repair must pin both
@@ -143,6 +149,10 @@ stand in for the other.
     loss over non-`-100` targets, and refuses to publish `adapter/` unless
     optimizer ownership, gradient connectivity, frozen-state equality, adapter
     mutation, and save/reload equivalence all pass.
+16. The DPO LoRA trainer consumes only authorized target-model pair snapshots and
+    one completed positive-SFT LoRA parent. Its reference and trainable policy
+    must match that exact parent at step zero. Only the inherited adapter is
+    optimized; the frozen base and precomputed reference remain unchanged.
 
 ## What an exported positive-SFT record means
 
@@ -445,3 +455,48 @@ not token materialization. The persisted artifact is trainer-shaped and
 `not_authorized` by default. A non-production run may consume it only when its
 manifest atomically records `authorized` and an `explicit_user_override`; this
 does not assert that the ordinary release trust root passed.
+
+## DPO LoRA training
+
+The DPO trainer consumes the existing authorized materialization snapshots
+directly. A training snapshot validates its manifest, exact materializations
+JSONL hash and schema, counts, immediate preference-pair ids and hashes, and
+model-input protocol hash. It does not require historical source worktrees to
+remain at their original absolute paths or rebuild the already-frozen tokens
+with current code. The full materialization loader remains the regeneration
+check when those live sources are available.
+
+The parent is a completed positive-SFT LoRA run, represented as one exact
+composition rather than merged weights:
+
+```text
+pinned base + frozen copy of parent SFT adapter     -> reference policy
+pinned base + trainable copy of parent SFT adapter  -> step-zero policy
+```
+
+The trainer rejects the run unless both loaded compositions match the parent
+adapter and frozen-base tensor hashes and produce exactly matching chosen and
+rejected response log probabilities at step zero. Reference log probabilities
+are then fixed before optimization and the reference model is unloaded. This
+keeps the reference immutable and permits the 3B experiment to fit on the
+available GPU without changing DPO semantics.
+
+The implemented objective is canonical sigmoid DPO with `beta` pinned in the
+training config. Chosen and rejected response log probabilities are sums over
+only the materialized response-label spans; shared prompts and template-owned
+suffixes remain masked. Micro-batch size and gradient accumulation are both
+one. The output is a new adapter derived from the SFT adapter and still served
+over the same immutable base; it is not an additional adapter layer stacked on
+top of the SFT adapter.
+
+```bash
+agentenv training preferences train-lora \
+  --source <authorized-dpo-materialization> \
+  --parent-sft-run <completed-positive-sft-lora-run> \
+  --config configs/train/dpo_lora_exploratory.yaml \
+  --out <dpo-lora-training-run>
+```
+
+Repeat `--source` for each source artifact. The current exploratory config
+runs one optimizer step as a mechanics gate. It is not a full preference
+training schedule or model-improvement claim.

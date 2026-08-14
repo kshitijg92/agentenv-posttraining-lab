@@ -42,6 +42,7 @@ from agentenv.training.preferences.materialization.source_reconstruction import 
 )
 from agentenv.training.preferences.pair_export import (
     PreferencePairExport,
+    load_preference_pair_records_jsonl,
     load_preference_pair_export_artifact,
 )
 from agentenv.training.tokenization import (
@@ -124,6 +125,37 @@ def load_dpo_training_materialization_artifact(
     )
 
 
+def load_dpo_training_materialization_snapshot(
+    export_dir: Path,
+) -> DPOTrainingMaterializationExport:
+    """Load a frozen trainer-shaped snapshot without rebuilding historical inputs."""
+    export_dir = export_dir.resolve()
+    manifest = load_dpo_training_materialization_manifest(
+        export_dir / MANIFEST_FILENAME
+    )
+    records_path = resolve_relative_artifact_ref(
+        export_dir,
+        manifest.artifacts["materializations"],
+    )
+    observed_records_hash = hash_file(records_path)
+    if observed_records_hash != manifest.materializations_jsonl_hash:
+        raise ValueError(
+            "DPO materializations JSONL hash mismatch: "
+            f"{observed_records_hash!r} != "
+            f"{manifest.materializations_jsonl_hash!r}"
+        )
+    records = load_dpo_training_materialization_records_jsonl(records_path)
+    _validate_manifest_counts(manifest, records)
+    _validate_record_provenance(manifest, records)
+    _validate_snapshot_source_coverage(export_dir, manifest, records)
+    _load_pinned_model_input_protocol(export_dir, manifest)
+    return DPOTrainingMaterializationExport(
+        out_dir=export_dir,
+        manifest=manifest,
+        records=records,
+    )
+
+
 def _load_and_validate_dpo_training_materialization_artifact(
     export_dir: Path,
     *,
@@ -178,6 +210,51 @@ def _load_and_validate_dpo_training_materialization_artifact(
         manifest=manifest,
         records=records,
     )
+
+
+def _validate_snapshot_source_coverage(
+    materialization_dir: Path,
+    manifest: DPOTrainingMaterializationManifest,
+    records: Sequence[DPOTrainingMaterializationRecord],
+) -> None:
+    source_ref = manifest.source_preference_pair_export
+    source_dir = Path(source_ref.artifact_dir)
+    if not source_dir.is_absolute():
+        source_dir = materialization_dir / source_dir
+    source_dir = source_dir.resolve()
+    source_manifest_path = source_dir / MANIFEST_FILENAME
+    if hash_file(source_manifest_path) != source_ref.manifest_hash:
+        raise ValueError("Source preference-pair export manifest hash mismatch")
+    source_manifest = load_preference_pair_export_manifest(source_manifest_path)
+    source_pairs_path = resolve_relative_artifact_ref(
+        source_dir,
+        source_manifest.artifacts["preference_pairs"],
+    )
+    if hash_file(source_pairs_path) != source_ref.preference_pairs_jsonl_hash:
+        raise ValueError("Source preference-pair JSONL hash mismatch")
+    pairs = load_preference_pair_records_jsonl(source_pairs_path)
+    if len(pairs) != source_manifest.record_count:
+        raise ValueError("Source preference-pair record count mismatch")
+    if len(records) != len(pairs):
+        raise ValueError(
+            "DPO materialization record count does not equal source pair count"
+        )
+    pair_ids = [pair.preference_pair_id for pair in pairs]
+    if len(pair_ids) != len(set(pair_ids)):
+        raise ValueError("Source preference-pair ids must be unique")
+    for record_index, (pair, record) in enumerate(zip(pairs, records, strict=True)):
+        if record.source_preference_pair_id != pair.preference_pair_id:
+            raise ValueError(
+                "DPO materialization source order/id mismatch; "
+                f"record_index={record_index}"
+            )
+        if record.source_preference_pair_record_hash != (
+            hash_preference_pair_record(pair)
+        ):
+            raise ValueError(
+                "DPO materialization source pair hash mismatch; "
+                f"record_index={record_index}"
+            )
 
 
 def write_dpo_training_materialization_records_jsonl(

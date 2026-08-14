@@ -71,6 +71,7 @@ from agentenv.training.preferences.pair_export import export_preference_pairs
 from agentenv.training.preferences.materialization.export import (
     export_dpo_training_materializations,
 )
+from agentenv.training.preferences.dpo.workflow import run_dpo_lora_training
 from agentenv.training.preferences.review import (
     initialize_preference_adjudication_review_artifact,
     validate_preference_adjudication_review_artifact,
@@ -1121,6 +1122,74 @@ def materialize_training_preference_pairs(
         f"wrote {export.out_dir / manifest.artifacts['materializations']}",
         soft_wrap=True,
     )
+
+
+@training_preferences_app.command("train-lora")
+def train_dpo_lora(
+    source: list[Path] = typer.Option(
+        ...,
+        "--source",
+        help=(
+            "Authorized DPO training materialization artifact directory; repeat "
+            "for every source."
+        ),
+    ),
+    parent_sft_run: Path = typer.Option(
+        ...,
+        "--parent-sft-run",
+        help="Completed positive-SFT LoRA run used for both policy and reference.",
+    ),
+    config: Path = typer.Option(
+        ...,
+        "--config",
+        help="Pinned DPO LoRA training config YAML.",
+    ),
+    model_cache_dir: Path | None = typer.Option(
+        None,
+        "--model-cache-dir",
+        help="Optional Hugging Face base-model cache directory.",
+    ),
+    local_files_only: bool = typer.Option(
+        False,
+        "--local-files-only",
+        help="Require the pinned base model to be cached locally.",
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Directory for the DPO LoRA training-run artifact.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Delete and recreate a non-empty --out directory before training.",
+    ),
+) -> None:
+    try:
+        artifact = run_dpo_lora_training(
+            source,
+            parent_sft_run,
+            config,
+            out,
+            model_cache_dir=model_cache_dir,
+            local_files_only=local_files_only,
+            overwrite=overwrite,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(
+            str(exc),
+            param_hint="--source/--parent-sft-run/--config",
+        ) from exc
+
+    manifest = artifact.manifest
+    console.print(
+        "[green]DPO LoRA training completed[/green] "
+        f"pairs={manifest.selected_pair_count} "
+        f"steps={manifest.completed_step_count}/{manifest.requested_step_count}"
+    )
+    console.print(f"wrote {artifact.out_dir / MANIFEST_FILENAME}", soft_wrap=True)
 
 
 @training_positive_sft_app.command("review-init")

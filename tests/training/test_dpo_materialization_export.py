@@ -22,6 +22,7 @@ from agentenv.training.preferences.hashing import build_preference_pair_id
 from agentenv.training.preferences.materialization.export import (
     export_dpo_training_materializations,
     load_dpo_training_materialization_artifact,
+    load_dpo_training_materialization_snapshot,
 )
 from agentenv.training.preferences.materialization.source_reconstruction import (
     DPOPreferencePairMaterializationInput,
@@ -130,6 +131,24 @@ def test_dpo_materialization_accepts_explicit_authorization_override(
     reloaded = load_dpo_training_materialization_artifact(export.out_dir)
     assert reloaded.manifest.training_authorization == "authorized"
     assert reloaded.manifest.training_authorization_override == override
+
+
+def test_dpo_materialization_snapshot_validates_frozen_training_unit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_export, _ = _install_source_pair_export(tmp_path, monkeypatch)
+    export = export_dpo_training_materializations(
+        source_export.out_dir,
+        PROTOCOL_PATH,
+        tmp_path / "dpo-materialization",
+        max_sequence_length=10_000,
+    )
+
+    snapshot = load_dpo_training_materialization_snapshot(export.out_dir)
+
+    assert snapshot.manifest == export.manifest
+    assert snapshot.records == export.records
 
 
 def test_dpo_materialization_authorization_status_and_override_are_atomic(

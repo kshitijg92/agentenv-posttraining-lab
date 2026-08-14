@@ -25,9 +25,7 @@ from agentenv.training.positive_sft.materialization.schema import (
 
 
 CONFIG_PATH = Path("configs/train/positive_sft_lora_raw.yaml")
-FILTERED_CONFIG_PATH = Path(
-    "configs/train/positive_sft_lora_efficiency_filtered.yaml"
-)
+FILTERED_CONFIG_PATH = Path("configs/train/positive_sft_lora_efficiency_filtered.yaml")
 PROTOCOL_PATH = Path(
     "configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
 ).resolve()
@@ -203,10 +201,7 @@ def test_training_artifact_persists_verified_adapter(
     assert (adapter_dir / "adapter_model.safetensors").is_file()
     assert not (adapter_dir / "README.md").exists()
     adapter_config = json.loads((adapter_dir / "adapter_config.json").read_text())
-    assert (
-        adapter_config["base_model_name_or_path"]
-        == "Qwen/Qwen2.5-Coder-3B-Instruct"
-    )
+    assert adapter_config["base_model_name_or_path"] == "Qwen/Qwen2.5-Coder-3B-Instruct"
     assert adapter_config["revision"] == "89fe5444e8baf5736e70f528f1edcc79e6616ef6"
     assert not (artifact.out_dir / "adapter_incomplete").exists()
     assert artifact.manifest.adapter_directory_hash is not None
@@ -341,10 +336,7 @@ def test_reviewed_treatments_resolve_the_predeclared_exposures() -> None:
     )
     source_dirs = tuple(
         sorted(
-            path
-            for root in source_roots
-            for path in root.iterdir()
-            if path.is_dir()
+            path for root in source_roots for path in root.iterdir() if path.is_dir()
         )
     )
     sources = lora_workflow._load_authorized_sources(source_dirs)

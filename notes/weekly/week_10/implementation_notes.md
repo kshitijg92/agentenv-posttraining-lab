@@ -1705,3 +1705,105 @@ negative post-training experiment: report exact success outcomes as primary,
 report causally relevant and redundant steps descriptively, defer DPO because
 no SFT policy was selected, and carry the dataset-composition and harness
 limitations into the next technical bet.
+
+## 2026-08-13 Exploratory DPO One-Step Gate
+
+### Experimental Authority
+
+The frozen SFT selection decision remains `abstained`. By explicit user
+direction, the efficiency-filtered SFT run is instead a designated exploratory
+DPO parent:
+
+```text
+parent run: positive_sft_lora_run_ba8374dd03734bbc8de84a678f41c234
+parent manifest hash: xxh64:024cb3a3d8a4facb
+parent adapter-directory hash: xxh64:4b88697558dcbdd3
+```
+
+Both the frozen reference and trainable policy load the same base plus separate
+copies of that adapter. The resulting adapter continues the parent's weights;
+it is not a second adapter stacked over the SFT adapter.
+
+### Implemented Boundary
+
+The existing eight authorized DPO materialization snapshots remain the exact
+training inputs. The trainer adds no dataset, review, partition, or schedule
+artifact. The DPO training-run artifact uniquely pins the source
+materializations, parent SFT run, consumed config, objective, executed steps,
+runtime, tensor-state audits, and derived adapter.
+
+The objective is sigmoid DPO with summed response-token log probabilities.
+Materialized labels continue to own masking: shared prompt and template suffix
+tokens receive no DPO score. The frozen reference log probabilities are
+computed before optimization and the reference model is then unloaded. Chosen
+and rejected policy branches are differentiated sequentially so both 3B model
+copies and both activation graphs are never resident together.
+
+The trainer-facing snapshot loader validates the frozen materialization
+manifest, JSONL hash/schema/counts, immediate preference-pair ids and hashes,
+and protocol hash without rebuilding historical inputs. This was necessary
+because otherwise-valid upstream pair manifests still name the old
+`agentenv-posttraining-foundation-wt` absolute worktree. The stricter live
+reconstruction loader remains available for regeneration checks when all
+historical paths exist.
+
+### Focused Validation
+
+```text
+51 focused DPO/materialization/shared-LoRA tests passed
+ruff on changed training/artifact/CLI files passed
+pyright on changed training/artifact/CLI files passed
+real source preflight: 8 sources / 29 pairs / 1 requested step
+```
+
+The real run completed at:
+
+```text
+config: configs/train/dpo_lora_exploratory.yaml
+artifact: experiments/models/week_10_dpo_lora_exploratory_one_step
+run id: dpo_lora_run_768aa50f2cff4767acbde6fbe4247d7e
+manifest hash: xxh64:4190d63222565a12
+adapter-directory hash: xxh64:7ad5d1856d62aaa4
+```
+
+Observed gate evidence:
+
+```text
+step-zero policy/reference log-probability difference: 0.0
+loss: 0.6931471824645996
+reward margin: 0.0
+adapter gradient norm before clipping: 9.773926734924316
+optimizer membership: exact 288 inherited LoRA parameters
+frozen base: exactly unchanged
+adapter: changed
+saved/reloaded adapter state and probe logits: exact
+```
+
+This proves only that the SFT-to-DPO mechanics are correctly wired. The full
+29-pair schedule and downstream policy evaluation have not run.
+
+## 2026-08-13 Shared LoRA Runtime Refactor
+
+The exploratory DPO implementation exposed copied LoRA mechanics in the SFT
+and DPO engines. Objective-neutral code now lives under
+`src/agentenv/training/lora/`: runtime capture and determinism, pinned model
+loading, optimizer isolation, parameter-state hashing, adapter persistence,
+and exact save/reload probe verification. Positive SFT retains qualification
+and masked causal-loss behavior; DPO retains parent/reference identity,
+reference log-probability caching, and its chosen/rejected objective.
+
+No generic trainer protocol or workflow framework was added. The two workflows
+keep separate source validation and manifest construction because they own
+different provenance. Only their existing JSONL parsing path and the physically
+identical training-config and materialization-reference records were shared.
+The trainer code hash now combines the shared LoRA package hash with the
+objective-specific trainer package hash.
+
+Focused validation after the refactor:
+
+```text
+60 focused LoRA, SFT, DPO, workflow, manifest, objective, and model-config tests passed
+ruff on the affected source and tests passed
+pyright on the affected source passed
+git diff --check passed
+```

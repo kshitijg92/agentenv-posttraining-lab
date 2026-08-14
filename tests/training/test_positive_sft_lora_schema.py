@@ -15,9 +15,7 @@ from agentenv.training.positive_sft.lora.schema import (
 
 
 CONFIG_PATH = Path("configs/train/positive_sft_lora_raw.yaml")
-FILTERED_CONFIG_PATH = Path(
-    "configs/train/positive_sft_lora_efficiency_filtered.yaml"
-)
+FILTERED_CONFIG_PATH = Path("configs/train/positive_sft_lora_efficiency_filtered.yaml")
 
 
 def _config_payload() -> dict[str, Any]:
@@ -44,9 +42,9 @@ def test_training_config_pins_scale_one_ordinary_lora() -> None:
 
 def test_treatment_configs_differ_only_by_identity_and_treatment() -> None:
     raw = load_positive_sft_lora_training_config(CONFIG_PATH).model_dump(mode="json")
-    filtered = load_positive_sft_lora_training_config(
-        FILTERED_CONFIG_PATH
-    ).model_dump(mode="json")
+    filtered = load_positive_sft_lora_training_config(FILTERED_CONFIG_PATH).model_dump(
+        mode="json"
+    )
 
     raw.pop("config_id")
     filtered.pop("config_id")

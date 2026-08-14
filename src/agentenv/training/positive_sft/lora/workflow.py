@@ -14,7 +14,7 @@ from agentenv.artifacts import (
     ArtifactType,
     prepare_artifact_output_dir,
 )
-from agentenv.artifacts.base import resolve_relative_artifact_ref
+from agentenv.artifacts.base import load_jsonl_objects, resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import (
     POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_REFS,
     POSITIVE_SFT_LORA_TRAINING_RUN_ARTIFACT_SCHEMA_VERSION,
@@ -35,11 +35,11 @@ from agentenv.training.positive_sft.lora.engine import (
     execute_positive_sft_lora_training,
     select_positive_sft_training_sequences,
 )
-from agentenv.training.positive_sft.lora.model import (
+from agentenv.training.lora.model import (
     load_pinned_causal_lm,
     validate_lora_adapter_package,
 )
-from agentenv.training.positive_sft.lora.runtime import (
+from agentenv.training.lora.runtime import (
     capture_training_runtime_provenance,
     configure_process_determinism,
     require_requested_training_device,
@@ -94,7 +94,7 @@ def run_positive_sft_lora_training(
 ) -> PositiveSFTLoRATrainingArtifact:
     config_path = training_config_path.resolve()
     config = load_positive_sft_lora_training_config(config_path)
-    configure_process_determinism(config)
+    configure_process_determinism(config.runtime)
     sources = _load_authorized_sources(source_materialization_dirs)
     _validate_config_matches_sources(config, sources)
     selected_records = _select_treatment_records(sources, config=config)
@@ -102,7 +102,10 @@ def run_positive_sft_lora_training(
         selected_records,
     )
     _validate_training_exposure(selected_sequences, config=config)
-    runtime_provenance = capture_training_runtime_provenance(config)
+    runtime_provenance = capture_training_runtime_provenance(
+        config.runtime,
+        objective_code_dir=Path(__file__).resolve().parent,
+    )
     require_requested_training_device(runtime_provenance)
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
@@ -141,7 +144,8 @@ def run_positive_sft_lora_training(
     try:
         qualification = execute_lora_qualification(
             base_model=load_pinned_causal_lm(
-                config,
+                config.base_model,
+                config.runtime,
                 cache_dir=model_cache_dir,
                 local_files_only=local_files_only,
             ),
@@ -153,14 +157,16 @@ def run_positive_sft_lora_training(
 
         def reload_base_model():
             return load_pinned_causal_lm(
-                config,
+                config.base_model,
+                config.runtime,
                 cache_dir=model_cache_dir,
                 local_files_only=True,
             )
 
         execution = execute_positive_sft_lora_training(
             base_model=load_pinned_causal_lm(
-                config,
+                config.base_model,
+                config.runtime,
                 cache_dir=model_cache_dir,
                 local_files_only=True,
             ),
@@ -214,6 +220,7 @@ def run_positive_sft_lora_training(
     manifest = _build_manifest(
         out_dir=out_dir,
         sources=sources,
+        config=config,
         config_path=config_path,
         result_path=result_path,
         steps_path=steps_path,
@@ -349,9 +356,7 @@ def load_positive_sft_lora_training_task_ids(out_dir: Path) -> frozenset[str]:
                     "LoRA training selected example ids must resolve from exactly "
                     f"one source export: {example.example_id}"
                 )
-            task_ids_by_example_id[example.example_id] = (
-                example.provenance_ids.task_id
-            )
+            task_ids_by_example_id[example.example_id] = example.provenance_ids.task_id
 
     missing_example_ids = selected_example_ids - set(task_ids_by_example_id)
     if missing_example_ids:
@@ -511,9 +516,7 @@ def _select_treatment_records(
             "raw and efficiency-filtered treatments must cover the same task ids"
         )
 
-    selected = (
-        raw_records if config.data.treatment == "raw" else filtered_records
-    )
+    selected = raw_records if config.data.treatment == "raw" else filtered_records
     return tuple(
         sorted(
             selected,
@@ -531,8 +534,9 @@ def _validate_training_exposure(
     config: PositiveSFTLoRATrainingConfig,
 ) -> None:
     observed_supervised_tokens = sum(
-        selected_sequences[step_index % len(selected_sequences)]
-        .provenance.stored_supervised_token_count
+        selected_sequences[
+            step_index % len(selected_sequences)
+        ].provenance.stored_supervised_token_count
         for step_index in range(config.max_steps)
     )
     target = config.data.target_supervised_token_count
@@ -577,6 +581,7 @@ def _build_manifest(
     *,
     out_dir: Path,
     sources: Sequence[PositiveSFTTrainingMaterializationExport],
+    config: PositiveSFTLoRATrainingConfig,
     config_path: Path,
     result_path: Path,
     steps_path: Path,
@@ -595,9 +600,7 @@ def _build_manifest(
             {
                 "artifact_dir": str(source.out_dir),
                 "manifest_hash": hash_file(source_manifest_path),
-                "materializations_jsonl_hash": hash_file(
-                    source_materializations_path
-                ),
+                "materializations_jsonl_hash": hash_file(source_materializations_path),
             }
         )
     artifacts = {
@@ -606,7 +609,6 @@ def _build_manifest(
         if key != "adapter" or result.status == "completed"
     }
     adapter_hash = hash_directory(adapter_dir) if result.status == "completed" else None
-    config = load_positive_sft_lora_training_config(config_path)
     return PositiveSFTLoRATrainingRunManifest.model_validate(
         {
             "artifact_type": ArtifactType.POSITIVE_SFT_LORA_TRAINING_RUN,
@@ -666,9 +668,7 @@ def _validate_source_refs(
             source_manifest.artifacts["materializations"],
         )
         if hash_file(materializations_path) != source_ref.materializations_jsonl_hash:
-            raise ValueError(
-                "source positive-SFT materializations JSONL hash mismatch"
-            )
+            raise ValueError("source positive-SFT materializations JSONL hash mismatch")
 
 
 def _load_result(path: Path) -> PositiveSFTLoRATrainingResult:
@@ -682,18 +682,10 @@ def _load_result(path: Path) -> PositiveSFTLoRATrainingResult:
 
 
 def _load_steps(path: Path) -> tuple[PositiveSFTLoRATrainingStepRecord, ...]:
-    steps: list[PositiveSFTLoRATrainingStepRecord] = []
-    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            steps.append(PositiveSFTLoRATrainingStepRecord.model_validate_json(line))
-        except ValidationError as exc:
-            raise ValidationError.from_exception_data(
-                f"PositiveSFTLoRATrainingStepRecord at {path}:{line_number}",
-                cast(Any, exc.errors()),
-            ) from exc
-    return tuple(steps)
+    return tuple(
+        PositiveSFTLoRATrainingStepRecord.model_validate(payload)
+        for payload in load_jsonl_objects(path)
+    )
 
 
 def _utc_now() -> str:

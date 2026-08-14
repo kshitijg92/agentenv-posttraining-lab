@@ -29,6 +29,7 @@ class ArtifactType(StrEnum):
     PREFERENCE_ADJUDICATION_REVIEW = "preference_adjudication_review"
     PREFERENCE_PAIR_EXPORT = "preference_pair_export"
     DPO_TRAINING_MATERIALIZATION = "dpo_training_materialization"
+    DPO_LORA_TRAINING_RUN = "dpo_lora_training_run"
     SCORER_AUDIT = "scorer_audit"
     AGENT_TASK_AUDIT = "agent_task_audit"
     HARNESS_AUDIT = "harness_audit"

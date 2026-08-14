@@ -101,6 +101,10 @@ from agentenv.training.preferences.materialization.schema import (
     DPO_TRAINING_MATERIALIZATION_RECORD_SCHEMA_VERSION,
     DPOTrainingMaterializationRecordSchemaVersion,
 )
+from agentenv.training.preferences.dpo.schema import (
+    DPO_LORA_TRAINING_RESULT_SCHEMA_VERSION,
+    DPO_LORA_TRAINING_STEP_SCHEMA_VERSION,
+)
 from agentenv.trajectories.schema import (
     TRAJECTORY_RECORD_SCHEMA_VERSION,
     TRAJECTORY_REVIEW_SCHEMA_VERSION,
@@ -235,6 +239,11 @@ PREFERENCE_PAIR_EXPORT_ARTIFACT_REFS = {
 DPO_TRAINING_MATERIALIZATION_ARTIFACT_REFS = {
     "materializations": "materializations.jsonl",
 }
+DPO_LORA_TRAINING_RUN_ARTIFACT_REFS = {
+    "training_result": "training_result.json",
+    "training_steps": "training_steps.jsonl",
+    "adapter": "adapter",
+}
 REWARD_HACK_AUDIT_ARTIFACT_REFS = {
     "results": "reward_hack_audit_results.jsonl",
     "case_runs": "case_runs",
@@ -289,6 +298,9 @@ PREFERENCE_PAIR_EXPORT_REQUIRED_ARTIFACTS = frozenset(
 DPO_TRAINING_MATERIALIZATION_REQUIRED_ARTIFACTS = frozenset(
     DPO_TRAINING_MATERIALIZATION_ARTIFACT_REFS
 )
+DPO_LORA_TRAINING_RUN_REQUIRED_ARTIFACTS = frozenset(
+    DPO_LORA_TRAINING_RUN_ARTIFACT_REFS
+)
 REWARD_HACK_AUDIT_REQUIRED_ARTIFACTS = frozenset(REWARD_HACK_AUDIT_ARTIFACT_REFS)
 SCORER_AUDIT_REQUIRED_ARTIFACTS = frozenset(SCORER_AUDIT_ARTIFACT_REFS)
 AGENT_TASK_AUDIT_REQUIRED_ARTIFACTS = frozenset(AGENT_TASK_AUDIT_ARTIFACT_REFS)
@@ -332,6 +344,7 @@ PreferencePairExportArtifactSchemaVersion = Literal[
 DPOTrainingMaterializationArtifactSchemaVersion = Literal[
     "dpo_training_materialization_artifact_v0"
 ]
+DPOLoRATrainingRunArtifactSchemaVersion = Literal["dpo_lora_training_run_artifact_v0"]
 RewardHackAuditArtifactSchemaVersion = Literal["reward_hack_audit_artifact_v2"]
 ScorerAuditArtifactSchemaVersion = Literal["scorer_audit_artifact_v0"]
 AgentTaskAuditArtifactSchemaVersion = Literal["agent_task_audit_artifact_v0"]
@@ -376,6 +389,7 @@ PREFERENCE_COMPARISON_EXPORT_ARTIFACT_SCHEMA_VERSION: PreferenceComparisonExport
 PREFERENCE_ADJUDICATION_REVIEW_ARTIFACT_SCHEMA_VERSION: PreferenceAdjudicationReviewArtifactSchemaVersion = "preference_adjudication_review_artifact_v0"
 PREFERENCE_PAIR_EXPORT_ARTIFACT_SCHEMA_VERSION: PreferencePairExportArtifactSchemaVersion = "preference_pair_export_artifact_v0"
 DPO_TRAINING_MATERIALIZATION_ARTIFACT_SCHEMA_VERSION: DPOTrainingMaterializationArtifactSchemaVersion = "dpo_training_materialization_artifact_v0"
+DPO_LORA_TRAINING_RUN_ARTIFACT_SCHEMA_VERSION: DPOLoRATrainingRunArtifactSchemaVersion = "dpo_lora_training_run_artifact_v0"
 REWARD_HACK_AUDIT_ARTIFACT_SCHEMA_VERSION: RewardHackAuditArtifactSchemaVersion = (
     "reward_hack_audit_artifact_v2"
 )
@@ -1901,7 +1915,7 @@ class PositiveSFTTrainingMaterializationManifest(ArtifactManifest):
         return self
 
 
-class PositiveSFTTrainingMaterializationArtifactRef(BaseModel):
+class TrainingMaterializationArtifactRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact_dir: str = Field(min_length=1)
@@ -1909,7 +1923,7 @@ class PositiveSFTTrainingMaterializationArtifactRef(BaseModel):
     materializations_jsonl_hash: ContentHash
 
 
-class PositiveSFTLoRATrainingConfigRef(BaseModel):
+class TrainingConfigRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     path: str = Field(min_length=1)
@@ -1930,10 +1944,10 @@ class PositiveSFTLoRATrainingRunManifest(ArtifactManifest):
     )
     status: Literal["completed", "failed"]
     source_positive_sft_training_materializations: tuple[
-        PositiveSFTTrainingMaterializationArtifactRef,
+        TrainingMaterializationArtifactRef,
         ...,
     ] = Field(min_length=1)
-    training_config: PositiveSFTLoRATrainingConfigRef
+    training_config: TrainingConfigRef
     model_input_protocol_id: str = Field(
         min_length=1,
         pattern=r"^[a-z0-9_]+$",
@@ -2011,6 +2025,85 @@ class PositiveSFTLoRATrainingRunManifest(ArtifactManifest):
                 raise ValueError(
                     "completed_step_count cannot exceed requested_step_count"
                 )
+        return self
+
+
+class DPOParentSFTPolicyArtifactRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_dir: str = Field(min_length=1)
+    manifest_hash: ContentHash
+    training_run_id: str = Field(
+        min_length=1,
+        pattern=r"^positive_sft_lora_run_[0-9a-f]{32}$",
+    )
+    adapter_directory_hash: ContentHash
+
+
+class DPOLoRATrainingRunManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.DPO_LORA_TRAINING_RUN.value
+    expected_artifact_schema_version = DPO_LORA_TRAINING_RUN_ARTIFACT_SCHEMA_VERSION
+
+    created_at: str = Field(min_length=1)
+    training_run_id: str = Field(
+        min_length=1,
+        pattern=r"^dpo_lora_run_[0-9a-f]{32}$",
+    )
+    status: Literal["completed"]
+    source_dpo_training_materializations: tuple[
+        TrainingMaterializationArtifactRef,
+        ...,
+    ] = Field(min_length=1)
+    parent_sft_policy: DPOParentSFTPolicyArtifactRef
+    training_config: TrainingConfigRef
+    model_input_protocol_id: str = Field(
+        min_length=1,
+        pattern=r"^[a-z0-9_]+$",
+    )
+    model_input_protocol_hash: ContentHash
+    base_model: HuggingFaceRevisionPin
+    trainer_code_hash: ContentHash
+    training_result_schema_version: Literal["dpo_lora_training_result_v0"]
+    training_step_schema_version: Literal["dpo_lora_training_step_v0"]
+    selected_pair_count: PositiveInt
+    requested_step_count: PositiveInt
+    completed_step_count: PositiveInt
+    training_result_hash: ContentHash
+    training_steps_hash: ContentHash
+    adapter_directory_hash: ContentHash
+    artifacts: dict[str, str]
+
+    @model_validator(mode="after")
+    def validate_dpo_lora_training_run_contract(
+        self,
+    ) -> "DPOLoRATrainingRunManifest":
+        source_dirs = [
+            source.artifact_dir for source in self.source_dpo_training_materializations
+        ]
+        if len(source_dirs) != len(set(source_dirs)):
+            raise ValueError("DPO training source materializations must be unique")
+        if source_dirs != sorted(source_dirs):
+            raise ValueError("DPO training source materializations must be sorted")
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=DPO_LORA_TRAINING_RUN_ARTIFACT_REFS,
+            owner="DPO LoRA training-run manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=DPO_LORA_TRAINING_RUN_REQUIRED_ARTIFACTS,
+            owner="DPO LoRA training-run manifests",
+        )
+        if (
+            self.training_result_schema_version
+            != DPO_LORA_TRAINING_RESULT_SCHEMA_VERSION
+        ):
+            raise ValueError("DPO training result schema version is not current")
+        if self.training_step_schema_version != DPO_LORA_TRAINING_STEP_SCHEMA_VERSION:
+            raise ValueError("DPO training step schema version is not current")
+        if self.completed_step_count != self.requested_step_count:
+            raise ValueError("completed DPO runs require every requested step")
         return self
 
 
@@ -2371,6 +2464,12 @@ def load_positive_sft_lora_training_run_manifest(
     path: Path,
 ) -> PositiveSFTLoRATrainingRunManifest:
     return _validate_manifest(PositiveSFTLoRATrainingRunManifest, path)
+
+
+def load_dpo_lora_training_run_manifest(
+    path: Path,
+) -> DPOLoRATrainingRunManifest:
+    return _validate_manifest(DPOLoRATrainingRunManifest, path)
 
 
 def load_scorer_audit_manifest(path: Path) -> ScorerAuditManifest:

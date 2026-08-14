@@ -1,6 +1,6 @@
 # Week 10 Plan
 
-Status: in progress on 2026-08-11. The source-record boundary, planned
+Status: in progress on 2026-08-13. The source-record boundary, planned
 train/selection disjointness, and combined positive-SFT review contract are
 complete. The 100-row review universe now has 98 accepted prefixes, 2 rejected
 sources, and 0 unresolved prefix decisions. Embedded efficiency judgments are
@@ -32,9 +32,9 @@ practice diagnostic then produced one base PASS and identical six-turn
 inspection/test loops with no writes from both treatment adapters. This makes
 training-induced completion suppression the leading diagnosis while retaining
 public-test feedback, turn-budget, small-model, and single-greedy-rollout
-limitations. The diagnostic does not change the frozen abstention. Persisting
-the paired selection section in the existing report and closing Week 10 are
-next.
+limitations. The diagnostic does not change the frozen abstention. An
+exploratory DPO continuation from the exact filtered-SFT adapter has now passed
+its one-step mechanics gate; the complete preference schedule remains unrun.
 
 ## Theme
 
@@ -1274,12 +1274,32 @@ Done when:
 - the report does not describe selection-dev evidence as heldout improvement;
 - the result can be regenerated from archived manifests and attempt artifacts.
 
-### Checkpoint 11: Conditional DPO Decision
+### Checkpoint 11: Exploratory DPO Follow-Up
 
-Status on 2026-08-11: deferred by the predeclared gate. The selection rule
-abstained, so no exact `S_selected` policy exists from which both the DPO policy
-and frozen reference could start. The 29 existing materialized pairs remain
-preserved; pair availability alone does not authorize this follow-up.
+Status on 2026-08-13: authorized as an explicitly exploratory follow-up. The
+predeclared selection rule still abstained, so there is no `S_selected` and the
+earlier selection result is not revised. Instead, `S_filtered` is designated
+as the experimental parent with its negative evidence carried forward:
+
+```text
+parent artifact:
+  experiments/models/week_10_positive_sft_efficiency_filtered_lora
+parent training-run id:
+  positive_sft_lora_run_ba8374dd03734bbc8de84a678f41c234
+parent manifest hash:
+  xxh64:024cb3a3d8a4facb
+parent adapter-directory hash:
+  xxh64:4b88697558dcbdd3
+
+reference policy:
+  frozen base + frozen copy of the exact S_filtered adapter
+trainable policy at step zero:
+  same base + trainable copy of the exact S_filtered adapter
+```
+
+The existing eight authorized DPO materialization artifacts provide 29 pairs
+over 20 distinct shared contexts. No new preference dataset, review layer, or
+intermediate partition artifact is required.
 
 Purpose:
 
@@ -1288,7 +1308,7 @@ Decide whether preference optimization is a justified incremental experiment
 after the base/SFT comparison is complete.
 ```
 
-Run DPO only when:
+The ordinary selection-controlled DPO claim would require:
 
 - an exact SFT policy was selected rather than abstained or rejected;
 - at least 20 auditable preference pairs survive the frozen train-dev task,
@@ -1298,17 +1318,51 @@ Run DPO only when:
 - adapter composition and reference log-probability evaluation are trustworthy;
 - the incremental comparison can use the same selection-dev path.
 
-If those conditions fail, preserve the existing 29 materialized pairs and write
-an explicit deferral. Do not force DPO merely because the pair count exists.
-
-Conditional required comparisons:
+Those conditions did fail because no SFT policy won selection. The exploratory
+override changes only the question being asked:
 
 ```text
-S_selected vs P_dpo
+What incremental effect does DPO have on this exact designated SFT policy?
+```
+
+It does not ask whether DPO improves a selected policy, and it cannot turn
+`S_filtered` into a retrospective selection winner.
+
+Exploratory required comparisons:
+
+```text
+S_filtered vs P_dpo
 B0 vs P_dpo
 ```
 
-DPO is the first feature to cut if Week 10 time or measurement trust is tight.
+The first comparison owns the incremental DPO claim. The second reports whether
+the complete exploratory post-training path recovers, matches, or remains below
+the base policy under the same evaluation conditions.
+
+One-step mechanics gate completed on 2026-08-13:
+
+```text
+config: configs/train/dpo_lora_exploratory.yaml
+config hash: xxh64:842a639633234f0c
+artifact: experiments/models/week_10_dpo_lora_exploratory_one_step
+manifest hash: xxh64:4190d63222565a12
+training-run id: dpo_lora_run_768aa50f2cff4767acbde6fbe4247d7e
+selected population: 29 pairs
+executed schedule: 1 pair / 1 optimizer step
+```
+
+The frozen reference and trainable policy both loaded adapter tensor hash
+`xxh64:44cc473855320e13` and frozen-base tensor hash
+`xxh64:da0d2b53497821fd`. Their chosen and rejected response log probabilities
+matched exactly before optimization. The initial canonical sigmoid DPO loss was
+`0.6931471824645996`, the expected `log(2)` value for identical policy and
+reference, with zero reward margin and finite nonzero adapter gradient norm
+`9.773926734924316`. Only the 288 inherited LoRA parameters were optimizer
+members; the frozen base remained exact, the adapter changed, and the saved
+adapter reproduced its probe logits exactly after reload.
+
+This proves the mechanics gate only. It does not establish a useful DPO
+schedule, policy improvement, or a valid selection winner.
 
 ### Checkpoint 12: Closeout
 
@@ -1554,11 +1608,11 @@ Week 10 is complete when:
 
 ## Next Implementation Step
 
-Finish Checkpoint 10 by rendering the already-computed typed cells, all three
-paired comparisons, descriptive token/action totals, and the mechanical
-`complete_tie` abstention into the existing policy-selection report. Include
-the practice diagnostic as failure-analysis evidence, not as a replacement
-selection set. Then complete the Week 10 closeout with DPO explicitly deferred,
-the negative result stated plainly, and the harness/data limitations carried
-forward as a future technical bet. Week 11 reliability work can proceed
-without requiring a successful SFT policy.
+Decide the full exploratory DPO exposure rule before changing the current
+one-step config. The 29 rows represent only 20 distinct shared contexts and
+their chosen/rejected action lengths vary substantially, so a one-pass
+pair-level schedule, a context-balanced schedule, and any response-token
+normalization are different objectives. Freeze that decision, then run the
+complete adapter, register its immutable Ollama composition, and evaluate
+`S_filtered` versus `P_dpo` plus `B0` versus `P_dpo` without revising the prior
+SFT abstention.

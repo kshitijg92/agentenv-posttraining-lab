@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from agentenv.models.input_protocol_schema import HuggingFaceRevisionPin
-from agentenv.training.positive_sft.lora.model import (
+from agentenv.training.lora.model import (
     finalize_lora_adapter_package,
     validate_lora_adapter_package,
 )
