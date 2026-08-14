@@ -2472,6 +2472,26 @@ def load_dpo_lora_training_run_manifest(
     return _validate_manifest(DPOLoRATrainingRunManifest, path)
 
 
+def load_lora_training_run_manifest(
+    path: Path,
+) -> PositiveSFTLoRATrainingRunManifest | DPOLoRATrainingRunManifest:
+    payload = load_json_object(path)
+    artifact_type = payload.get("artifact_type")
+    if artifact_type == ArtifactType.POSITIVE_SFT_LORA_TRAINING_RUN.value:
+        return _validate_manifest_payload(
+            PositiveSFTLoRATrainingRunManifest,
+            path,
+            payload,
+        )
+    if artifact_type == ArtifactType.DPO_LORA_TRAINING_RUN.value:
+        return _validate_manifest_payload(
+            DPOLoRATrainingRunManifest,
+            path,
+            payload,
+        )
+    raise ValueError(f"Expected LoRA training-run manifest at {path}")
+
+
 def load_scorer_audit_manifest(path: Path) -> ScorerAuditManifest:
     return _validate_manifest(ScorerAuditManifest, path)
 

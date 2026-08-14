@@ -2,6 +2,7 @@ from pathlib import Path
 
 import yaml
 
+from agentenv.artifacts.base import MANIFEST_FILENAME
 from agentenv.evals.resolve import (
     agent_control_script_path,
     resolve_config_file_ref,
@@ -68,16 +69,6 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
                 raise AssertionError(f"Unhandled eval policy type: {policy.type}")
 
     adapter_training_task_sets: list[frozenset[str]] = []
-    load_adapter_training_task_ids = None
-    if config.adapter_training_task_scope is not None:
-        # Import lazily: the positive-SFT export path reads eval configs while
-        # constructing trajectory-derived records.
-        from agentenv.training.positive_sft.lora.workflow import (
-            load_positive_sft_lora_training_task_ids,
-        )
-
-        load_adapter_training_task_ids = load_positive_sft_lora_training_task_ids
-
     for policy in config.policies.values():
         if policy.type != AGENT_MODEL_POLICY_TYPE:
             continue
@@ -106,9 +97,8 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
                 model_input_protocol=model_input_protocol,
             )
             if adapter_dir is not None:
-                assert load_adapter_training_task_ids is not None
                 adapter_training_task_sets.append(
-                    load_adapter_training_task_ids(adapter_dir.parent)
+                    _load_adapter_training_task_ids(adapter_dir.parent)
                 )
         load_decoding_config(
             resolve_config_file_ref(
@@ -117,6 +107,10 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
                 field_name="decoding_config",
             )
         )
+
+    if config.adapter_training_task_scope is not None:
+        if not adapter_training_task_sets:
+            raise ValueError("adapter training task scope requires an adapted policy")
 
     if config.adapter_training_task_scope == "matched_and_disjoint":
         if len(adapter_training_task_sets) < 2:
@@ -128,7 +122,9 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
             for task_ids in adapter_training_task_sets[1:]
         ):
             raise ValueError("adapted policies must have matching training task ids")
-        overlap = set(config.tasks) & adapter_training_task_sets[0]
+    if config.adapter_training_task_scope is not None:
+        all_adapter_training_tasks = frozenset().union(*adapter_training_task_sets)
+        overlap = set(config.tasks) & all_adapter_training_tasks
         if overlap:
             raise ValueError(
                 "adapter training tasks must be disjoint from eval tasks: "
@@ -143,3 +139,26 @@ def validate_eval_config_paths(config: EvalConfig, config_path: Path) -> None:
             f"configured={sorted(configured_task_ids)} "
             f"resolved={sorted(resolved_task_ids)}"
         )
+
+
+def _load_adapter_training_task_ids(training_run_dir: Path) -> frozenset[str]:
+    # Import lazily: the positive-SFT export path reads eval configs while
+    # constructing trajectory-derived records.
+    from agentenv.artifacts.manifests import (
+        DPOLoRATrainingRunManifest,
+        load_lora_training_run_manifest,
+    )
+
+    manifest = load_lora_training_run_manifest(training_run_dir / MANIFEST_FILENAME)
+    if isinstance(manifest, DPOLoRATrainingRunManifest):
+        from agentenv.training.preferences.dpo.workflow import (
+            load_dpo_lora_training_task_ids,
+        )
+
+        return load_dpo_lora_training_task_ids(training_run_dir)
+
+    from agentenv.training.positive_sft.lora.workflow import (
+        load_positive_sft_lora_training_task_ids,
+    )
+
+    return load_positive_sft_lora_training_task_ids(training_run_dir)

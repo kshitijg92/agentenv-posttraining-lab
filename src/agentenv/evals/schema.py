@@ -87,10 +87,12 @@ class EvalConfig(BaseModel):
         default=None,
         pattern=r"^xxh64:[0-9a-f]{16}$",
     )
-    adapter_training_task_scope: Literal["matched_and_disjoint"] | None = None
-    policy_selection_rule: Literal[
-        "nested_pass_then_success_tokens_then_actions"
-    ] | None = None
+    adapter_training_task_scope: Literal["disjoint", "matched_and_disjoint"] | None = (
+        None
+    )
+    policy_selection_rule: (
+        Literal["nested_pass_then_success_tokens_then_actions"] | None
+    ) = None
     split: TaskSplit
     policies: dict[str, EvalPolicy] = Field(min_length=1)
     trace: TraceCaptureConfig
@@ -103,7 +105,9 @@ class EvalConfig(BaseModel):
             raise ValueError("policy selection requires expected_task_hash_set")
         if len(self.policies) < 2:
             raise ValueError("policy selection requires at least two policies")
-        if any(policy.type != AGENT_MODEL_POLICY_TYPE for policy in self.policies.values()):
+        if any(
+            policy.type != AGENT_MODEL_POLICY_TYPE for policy in self.policies.values()
+        ):
             raise ValueError("policy selection requires agent-model policies")
         if any(policy.attempts != 1 for policy in self.policies.values()):
             raise ValueError("policy selection requires one attempt per task")

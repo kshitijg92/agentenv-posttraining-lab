@@ -18,6 +18,8 @@ from agentenv.artifacts.manifests import (
     DPO_LORA_TRAINING_RUN_ARTIFACT_SCHEMA_VERSION,
     DPOLoRATrainingRunManifest,
     load_dpo_lora_training_run_manifest,
+    load_preference_comparison_export_manifest,
+    load_preference_pair_export_manifest,
 )
 from agentenv.hashing import hash_directory, hash_file
 from agentenv.ids import new_dpo_lora_training_run_id
@@ -37,6 +39,9 @@ from agentenv.training.positive_sft.lora.workflow import (
     load_positive_sft_lora_training_artifact,
     load_positive_sft_lora_training_task_ids,
 )
+from agentenv.training.preferences.comparison_export import (
+    load_preference_comparison_candidates_jsonl,
+)
 from agentenv.training.preferences.dpo.config import (
     load_dpo_lora_training_config,
 )
@@ -51,9 +56,15 @@ from agentenv.training.preferences.dpo.schema import (
     DPOLoRATrainingConfig,
     DPOLoRATrainingStepRecord,
 )
+from agentenv.training.preferences.hashing import (
+    hash_preference_comparison_candidate_record,
+)
 from agentenv.training.preferences.materialization.export import (
     DPOTrainingMaterializationExport,
     load_dpo_training_materialization_snapshot,
+)
+from agentenv.training.preferences.pair_export import (
+    load_preference_pair_records_jsonl,
 )
 
 
@@ -232,7 +243,102 @@ def load_dpo_lora_training_task_ids(out_dir: Path) -> frozenset[str]:
     parent_dir = Path(artifact.manifest.parent_sft_policy.artifact_dir)
     if not parent_dir.is_absolute():
         parent_dir = artifact.out_dir / parent_dir
-    return load_positive_sft_lora_training_task_ids(parent_dir.resolve())
+    parent_task_ids = load_positive_sft_lora_training_task_ids(parent_dir.resolve())
+
+    trained_pair_ids = {step.source_preference_pair_id for step in artifact.steps}
+    task_ids_by_pair_id: dict[str, str] = {}
+    for source_ref in artifact.manifest.source_dpo_training_materializations:
+        source_dir = Path(source_ref.artifact_dir)
+        if not source_dir.is_absolute():
+            source_dir = artifact.out_dir / source_dir
+        source = load_dpo_training_materialization_snapshot(source_dir.resolve())
+        for pair_id, task_id in _load_source_pair_task_ids(
+            source,
+            trained_pair_ids=trained_pair_ids,
+        ).items():
+            if pair_id in task_ids_by_pair_id:
+                raise ValueError(
+                    "DPO trained preference-pair ids must resolve from exactly one "
+                    f"source export: {pair_id}"
+                )
+            task_ids_by_pair_id[pair_id] = task_id
+
+    missing_pair_ids = trained_pair_ids - set(task_ids_by_pair_id)
+    if missing_pair_ids:
+        raise ValueError(
+            "DPO trained preference pairs are missing from pinned source exports: "
+            + ", ".join(sorted(missing_pair_ids))
+        )
+    return parent_task_ids | frozenset(task_ids_by_pair_id.values())
+
+
+def _load_source_pair_task_ids(
+    source: DPOTrainingMaterializationExport,
+    *,
+    trained_pair_ids: set[str],
+) -> dict[str, str]:
+    pair_export_dir = Path(source.manifest.source_preference_pair_export.artifact_dir)
+    if not pair_export_dir.is_absolute():
+        pair_export_dir = source.out_dir / pair_export_dir
+    pair_export_dir = pair_export_dir.resolve()
+    pair_manifest = load_preference_pair_export_manifest(
+        pair_export_dir / MANIFEST_FILENAME
+    )
+    pairs = load_preference_pair_records_jsonl(
+        resolve_relative_artifact_ref(
+            pair_export_dir,
+            pair_manifest.artifacts["preference_pairs"],
+        )
+    )
+
+    comparison_export_dir = (
+        pair_export_dir.parents[1] / "preference_comparisons" / pair_export_dir.name
+    )
+    comparison_manifest_path = comparison_export_dir / MANIFEST_FILENAME
+    comparison_ref = pair_manifest.source_preference_comparison_export
+    if hash_file(comparison_manifest_path) != comparison_ref.manifest_hash:
+        raise ValueError("DPO source preference-comparison manifest hash mismatch")
+    comparison_manifest = load_preference_comparison_export_manifest(
+        comparison_manifest_path
+    )
+    comparison_records_path = resolve_relative_artifact_ref(
+        comparison_export_dir,
+        comparison_manifest.artifacts["comparison_candidates"],
+    )
+    if hash_file(comparison_records_path) != (
+        comparison_ref.comparison_candidates_jsonl_hash
+    ):
+        raise ValueError(
+            "DPO source preference-comparison candidate JSONL hash mismatch"
+        )
+    comparisons = load_preference_comparison_candidates_jsonl(comparison_records_path)
+    comparisons_by_id = {
+        record.comparison_candidate_id: record for record in comparisons
+    }
+    if len(comparisons_by_id) != len(comparisons):
+        raise ValueError("DPO source preference-comparison ids must be unique")
+
+    task_ids_by_pair_id: dict[str, str] = {}
+    for pair in pairs:
+        if pair.preference_pair_id not in trained_pair_ids:
+            continue
+        comparison = comparisons_by_id.get(pair.source.comparison_candidate_id)
+        if comparison is None:
+            raise ValueError(
+                "DPO trained preference pair is missing its pinned comparison: "
+                f"{pair.preference_pair_id}"
+            )
+        if hash_preference_comparison_candidate_record(comparison) != (
+            pair.source.source_preference_comparison_candidate_record_hash
+        ):
+            raise ValueError(
+                "DPO trained preference pair comparison record hash mismatch: "
+                f"{pair.preference_pair_id}"
+            )
+        task_ids_by_pair_id[pair.preference_pair_id] = (
+            comparison.shared_context.task_provenance.task_id
+        )
+    return task_ids_by_pair_id
 
 
 def _load_authorized_sources(

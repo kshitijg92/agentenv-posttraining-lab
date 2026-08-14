@@ -33,19 +33,13 @@ QWEN2_5_3B_MODEL_CONFIG = Path("configs/models/ollama_qwen2_5_coder_3b.yaml")
 QWEN2_5_3B_MODEL_INPUT_PROTOCOL = Path(
     "configs/model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
 )
-OLLAMA_F16_BASE_CONFIG = Path(
-    "configs/models/ollama_qwen2_5_coder_3b_f16_base.yaml"
-)
+OLLAMA_F16_BASE_CONFIG = Path("configs/models/ollama_qwen2_5_coder_3b_f16_base.yaml")
 OLLAMA_F16_ADAPTER_CONFIG = Path(
-    "configs/models/"
-    "ollama_qwen2_5_coder_3b_f16_operational_smoke_lora.yaml"
+    "configs/models/ollama_qwen2_5_coder_3b_f16_operational_smoke_lora.yaml"
 )
-OLLAMA_F16_POSITIVE_SFT_ADAPTER_CONFIGS = (
+OLLAMA_F16_TRAINED_ADAPTER_CONFIGS = (
     (
-        Path(
-            "configs/models/"
-            "ollama_qwen2_5_coder_3b_f16_positive_sft_raw_lora.yaml"
-        ),
+        Path("configs/models/ollama_qwen2_5_coder_3b_f16_positive_sft_raw_lora.yaml"),
         "agentenv-qwen2.5-coder-3b-f16-positive-sft-raw-lora:v0",
         "sha256:0d205a44cee00b3d9abb610d2c6414c83d6a69a572ad085b4b3c110d71d68234",
         "xxh64:3828900162386f5c",
@@ -56,16 +50,19 @@ OLLAMA_F16_POSITIVE_SFT_ADAPTER_CONFIGS = (
             "configs/models/"
             "ollama_qwen2_5_coder_3b_f16_positive_sft_efficiency_filtered_lora.yaml"
         ),
-        (
-            "agentenv-qwen2.5-coder-3b-f16-"
-            "positive-sft-efficiency-filtered-lora:v0"
-        ),
+        ("agentenv-qwen2.5-coder-3b-f16-positive-sft-efficiency-filtered-lora:v0"),
         "sha256:038a771b66ecea02b765e0f677e98d492a2116cea1039b23f98030c70893550f",
         "xxh64:024cb3a3d8a4facb",
         Path(
-            "experiments/models/"
-            "week_10_positive_sft_efficiency_filtered_lora/adapter"
+            "experiments/models/week_10_positive_sft_efficiency_filtered_lora/adapter"
         ),
+    ),
+    (
+        Path("configs/models/ollama_qwen2_5_coder_3b_f16_dpo_lora.yaml"),
+        "agentenv-qwen2.5-coder-3b-f16-dpo-lora:v0",
+        "sha256:e56bd7cf4582ec1b33b6d9a5e2759e732ac59720cd9462a9645ac7f2ac45d057",
+        "xxh64:a7b4da47350bdb08",
+        Path("experiments/models/week_10_dpo_lora_exploratory_full_pass/adapter"),
     ),
 )
 QWEN2_5_OPENAI_COMPATIBLE_MODEL_CONFIGS = (
@@ -116,8 +113,7 @@ def test_qwen2_5_3b_config_pins_agentenv_owned_input_protocol() -> None:
     assert config.provider == "ollama_generate"
     assert config.base_url_env == "AGENTENV_OLLAMA_BASE_URL"
     assert config.model_manifest_digest == (
-        "sha256:f72c60cabf6237b07f6e632b2c48d533"
-        "cef25eda2efbd34bed21c5e9c01e6225"
+        "sha256:f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225"
     )
     assert config.model_input_protocol.path == (
         "../model_input_protocols/qwen2_5_coder_3b_agentenv_json.yaml"
@@ -192,10 +188,13 @@ def test_load_ollama_adapter_config_validates_source_training_manifest() -> None
     assert config.model_id == (
         "agentenv-qwen2.5-coder-3b-f16-operational-smoke-lora:latest"
     )
-    assert adapter_dir == Path(
-        "experiments/models/"
-        "week_09_positive_sft_lora_smoke_qwen2_5_coder_3b/adapter"
-    ).resolve()
+    assert (
+        adapter_dir
+        == Path(
+            "experiments/models/"
+            "week_09_positive_sft_lora_smoke_qwen2_5_coder_3b/adapter"
+        ).resolve()
+    )
 
 
 @pytest.mark.parametrize(
@@ -206,9 +205,9 @@ def test_load_ollama_adapter_config_validates_source_training_manifest() -> None
         "expected_training_manifest_hash",
         "expected_adapter_dir",
     ),
-    OLLAMA_F16_POSITIVE_SFT_ADAPTER_CONFIGS,
+    OLLAMA_F16_TRAINED_ADAPTER_CONFIGS,
 )
-def test_positive_sft_lora_model_configs_validate_source_training_manifests(
+def test_trained_lora_model_configs_validate_source_training_manifests(
     config_path: Path,
     expected_model_id: str,
     expected_manifest_digest: str,

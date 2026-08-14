@@ -1807,3 +1807,194 @@ ruff on the affected source and tests passed
 pyright on the affected source passed
 git diff --check passed
 ```
+
+## 2026-08-13 Exploratory DPO Full Pass
+
+The full schedule uses the preference pair as the atomic exposure unit. Every
+one of the 29 authorized pairs is consumed exactly once in deterministic
+source-then-record order with no shuffle and micro-batch size one. Token totals
+are reported rather than used to stop partway through that order:
+
+```text
+sources: 8
+pairs / optimizer steps: 29 / 29
+distinct shared contexts: 20
+logical chosen-plus-rejected input tokens: 64,863
+loss-bearing chosen-plus-rejected response tokens: 12,587
+```
+
+The dedicated config preserves the one-step gate's pinned input:
+
+```text
+config: configs/train/dpo_lora_exploratory_full_pass.yaml
+config id: dpo_lora_exploratory_full_pass
+config hash: xxh64:2938bcf1227fddd8
+parent: experiments/models/week_10_positive_sft_efficiency_filtered_lora
+artifact: experiments/models/week_10_dpo_lora_exploratory_full_pass
+run id: dpo_lora_run_b8a3752e281f4ca8af9d65bd97a1ef1b
+manifest hash: xxh64:a7b4da47350bdb08
+adapter-directory hash: xxh64:ea8dadb299dfed48
+elapsed training workflow time: 89.60 seconds
+```
+
+Persisted audit evidence:
+
+```text
+step-zero policy/reference maximum log-probability difference: 0.0
+optimizer membership: exact 288 inherited LoRA tensors / 3,686,400 elements
+frozen base hash before/after: xxh64:da0d2b53497821fd
+adapter hash before: xxh64:44cc473855320e13
+adapter hash after: xxh64:24e7739db5e08111
+saved/reloaded adapter state: exact
+saved/reloaded frozen-base state: exact
+saved/reloaded probe logits: exact
+```
+
+The 29 step records have mean loss `0.6406905541902986` and mean reward margin
+`0.4344228923577687`, with substantial pair-to-pair variation. Those rows score
+different pairs under successively updated policy states; they are not repeated
+measurements of one example and therefore must not be presented as a training
+curve or evidence of task-level improvement. The run establishes a completed,
+auditable DPO treatment. Model-quality interpretation requires serving and the
+predeclared paired agent evaluation.
+
+## 2026-08-13 DPO Serving And Exploratory Evaluation
+
+### Immutable Base-Plus-Adapter Registration
+
+The completed DPO PEFT adapter was converted with the already-declared
+`ggml-org/llama.cpp` commit
+`030ebb558a5820b444a8f836ed5cdd46c9b4bd7a`. The converter emitted 288 F16
+LoRA tensors as one separate 7.37 MB GGUF layer:
+
+```text
+source training manifest: xxh64:a7b4da47350bdb08
+source PEFT adapter directory: xxh64:ea8dadb299dfed48
+adapter GGUF SHA-256:
+  236dab3552975903d43a396c13ea78dc2be620add67bdf0cc7ae2578cc2a63e0
+shared base GGUF SHA-256:
+  e38087533702eddfb4025e230c08e5b5a37912c6d1341200dc5e6a5a085b53c1
+Ollama model: agentenv-qwen2.5-coder-3b-f16-dpo-lora:v0
+Ollama manifest digest:
+  sha256:e56bd7cf4582ec1b33b6d9a5e2759e732ac59720cd9462a9645ac7f2ac45d057
+model config: configs/models/ollama_qwen2_5_coder_3b_f16_dpo_lora.yaml
+model config hash: xxh64:f224f18268a5a89a
+```
+
+`ollama show` resolved the existing base blob plus the new adapter blob. The
+adapter was not merged into a derivative base checkpoint. The existing model
+config consumer now accepts either existing LoRA training-run manifest type by
+dispatching on `artifact_type`; eval task-scope validation similarly selects
+the existing SFT or DPO task-id loader. No new schema, conversion artifact, or
+serving abstraction was added.
+
+A deterministic live request passed the repository model-config validator,
+Ollama digest probe, raw Qwen input protocol, and JSON-schema constrained
+decoder. It returned a valid `final_answer` action with text `42`, stopped
+normally, and reported 34 prompt plus 19 completion tokens.
+
+### Task-Lineage Contamination Found Before Interpretation
+
+The first exploratory config reused all eight tasks from the earlier SFT
+selection matrix. Its validator incorrectly treated the DPO policy's parent
+SFT task set as the DPO policy's complete training exposure. Tracing the exact
+29 trained pair ids through their hash-pinned pair and comparison records found
+eleven DPO pair task ids. Six pairs came from two nominal evaluation tasks:
+
+```text
+repair_retry_schedule: 4 pairs
+repair_interval_coalescing: 2 pairs
+```
+
+The completed DPO policy therefore has a 13-task lineage: eleven inherited SFT
+tasks plus those two additional preference-training tasks. The original
+eight-task run is preserved only as contaminated diagnostic evidence:
+
+```text
+artifact: experiments/runs/week_10_dpo_exploratory_policy_evaluation_v0
+eval suite id: eval_suite_6d7c101721e345aeb6df70a9dcf4c4f2
+suite manifest hash: xxh64:9af876a601b8cb71
+report: experiments/reports/week_10_dpo_exploratory_policy_evaluation.md
+report hash: xxh64:50eeffd1876c39ff
+policies / tasks / attempts: 3 / 8 / 24
+```
+
+Its 0/8 results and DPO prompt-copying traces remain factual observations, but
+that run cannot support a disjoint generalization or policy-selection claim.
+Matching the evaluation task inputs to an earlier suite did not establish
+disjointness from the newer DPO treatment.
+
+The task-scope loader now derives exposure from the exact optimizer-step pair
+ids, resolves each pair's hash-pinned comparison record, reads the task
+provenance already owned there, and unions those ids with the parent SFT
+lineage. No task-partition artifact or copied task-id list was introduced.
+Evaluation now supports a plain `disjoint` lineage check for parent-versus-child
+comparisons; requiring their training sets to match would erase the DPO
+intervention itself.
+
+### Corrected Disjoint Exploratory Matrix
+
+Only six dev tasks remain outside the full 13-task lineage. The corrected
+config freezes those tasks while retaining the same three policies, scorer,
+native turn budgets, input protocol, greedy decoder, one attempt per cell, and
+zero replay repeats:
+
+```text
+config: configs/eval/dpo_exploratory_policy_evaluation.yaml
+config hash: xxh64:3f424ac17b2f6dd6
+selected-task hash set: xxh64:f620bafa6b168d4c
+artifact:
+  experiments/runs/week_10_dpo_exploratory_policy_evaluation_disjoint_v0
+eval suite id: eval_suite_f53256f26a5d47a49a7214253722f447
+suite manifest hash: xxh64:de5a948521bf8316
+report:
+  experiments/reports/week_10_dpo_exploratory_policy_evaluation_disjoint.md
+report hash: xxh64:dc796e3f37e64f08
+policies / tasks / attempts: 3 / 6 / 18
+replays: 0
+```
+
+The sandboxed launch was blocked during its first localhost runtime probe,
+before any generation. The approved local-Ollama rerun overwrote that incomplete
+directory and completed all 18 cells; this was not an outcome-based retry.
+
+Persisted outcomes and descriptive all-cell usage were:
+
+| Policy | Nested PASS | Scored | Max-turn failures | Total tokens | Actions |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Base | 0/6 | 6/6 | 0/6 | 35,464 | 29 |
+| Efficiency-filtered SFT | 0/6 | 6/6 | 0/6 | 70,640 | 47 |
+| DPO | 0/6 | 0/6 | 6/6 | 303,394 | 156 |
+
+All cells are policy failures rather than invalid infrastructure cells. Every
+pair has zero gains, zero regressions, no shared successes, and six shared
+failures under nested PASS. The mechanical decision is:
+
+```text
+status: abstained
+selected policy: none
+rule branch: complete_tie
+reason: all successful-task vectors are empty, so the success-only token and
+        action tie-break sets are also empty
+```
+
+The same DPO collapse persisted on all six genuinely unseen tasks. Across 156
+turns it emitted only the four illustrative tool calls from the system prompt:
+52 `list_files`, 35 `read_file`, 21 `write_file`, and 48 `run_tests` calls. It
+never emitted `final_answer`, incurred one missing-file tool error per task,
+and every write targeted `src/file.py` with the literal placeholder
+`entire replacement file contents...`. This clean comparison supports no DPO
+benefit claim and leaves the earlier SFT abstention unchanged.
+
+Focused verification:
+
+```text
+DPO task-lineage and corrected eval-config tests: 4 passed
+policy-selection reporting tests: 8 passed
+trained-adapter model-config tests: 3 passed
+prior model-config and eval regression tests before correction: 50 passed
+Ruff focused check: passed
+Pyright focused check: 0 errors, 0 warnings
+git diff --check: passed
+full repository suite: deferred
+```

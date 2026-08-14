@@ -1,0 +1,40 @@
+name: dpo_exploratory_policy_evaluation
+task_pack: data/task_packs/repo_patch_python_v0
+tasks:
+  - repair_alias_chain
+  - repair_inventory_transaction
+  - repair_access_policy
+  - repair_config_inheritance
+  - repair_event_rollup
+  - repair_job_dispatch
+expected_task_hash_set: xxh64:f620bafa6b168d4c
+adapter_training_task_scope: disjoint
+policy_selection_rule: nested_pass_then_success_tokens_then_actions
+split: dev
+policies:
+  base:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b_f16_base.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  efficiency-filtered-sft:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b_f16_positive_sft_efficiency_filtered_lora.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+  dpo:
+    type: agent_model
+    model_config: configs/models/ollama_qwen2_5_coder_3b_f16_dpo_lora.yaml
+    decoding_config: configs/decoding/greedy_8192.yaml
+    attempts: 1
+    replay:
+      repeats: 0
+trace:
+  version: trace_v0
+  capture_stdout: true
+  capture_stderr: true
+  capture_diff: true

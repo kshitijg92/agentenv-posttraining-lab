@@ -1,0 +1,32 @@
+schema_version: dpo_lora_training_config_v0
+config_id: dpo_lora_exploratory_full_pass
+model_input_protocol_id: qwen2_5_coder_3b_agentenv_json
+objective:
+  loss: sigmoid
+  beta: 0.1
+  response_log_probability_aggregation: sum
+  reference_policy: frozen_parent
+optimizer:
+  optimizer: adamw
+  learning_rate: 0.0002
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1.0e-8
+  weight_decay: 0.0
+  max_gradient_norm: 1.0
+  schedule: constant
+data:
+  pair_order: source_then_record
+  shuffle: false
+  micro_batch_size: 1
+runtime:
+  device: cuda
+  weight_dtype: bfloat16
+  attention_implementation: sdpa
+  gradient_checkpointing: true
+  deterministic_algorithms: true
+  cublas_workspace_config: ":4096:8"
+seed: 42
+max_steps: 29
+gradient_accumulation_steps: 1
+reload_probe_token_count: 64

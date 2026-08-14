@@ -207,3 +207,67 @@ meaning of the DPO result. If that parent was designated for an exploratory
 run rather than selected by the declared evaluation rule, the result must be
 reported as exploratory rather than retroactively treating the parent as a
 selection winner.
+
+## Pair Exposure And Token Exposure Answer Different Questions
+
+A DPO preference pair is the atomic training judgment: one shared context, one
+chosen continuation, and one rejected continuation. A first deterministic pass
+can therefore give every judgment equal exposure by consuming every pair once.
+Stopping at an arbitrary token threshold may instead cut through the declared
+pair order and leave some judgments unseen.
+
+Token totals are still necessary, but their denominator must be named. Full
+chosen-plus-rejected sequence tokens describe logical model input and compute;
+chosen-plus-rejected response tokens describe the positions scored by the DPO
+objective. Neither count changes the weighting implied by summed response log
+probabilities. Length normalization would be a different objective decision,
+not something a token-budget schedule silently provides.
+
+Equal pair exposure also does not imply equal context or task exposure when one
+context generates several auditable pairs. That multiplicity belongs in the
+reported data distribution unless a context-balanced objective is explicitly
+declared before training.
+
+## Evaluation Disjointness Follows The Whole Policy Lineage
+
+A post-trained policy has inherited exposure as well as exposure from its most
+recent optimization stage. A DPO policy initialized from an SFT checkpoint has
+seen every task that shaped the SFT parent and every task represented in the
+preference pairs actually consumed by DPO. Checking only the parent dataset, or
+only the newest dataset, can therefore certify a contaminated evaluation as
+disjoint.
+
+This differs from requiring two compared policies to have identical training
+task sets. Parent-versus-child comparison is intended to isolate an additional
+training intervention, so the child will normally have a larger lineage. The
+necessary invariant is that every evaluation task is outside every compared
+policy's complete lineage. Matching task sets is appropriate only for
+treatments whose data scope is supposed to match.
+
+A reused evaluation matrix is not automatically reusable evidence after a new
+training stage. Its task inputs may be byte-identical to the earlier matrix yet
+overlap the new treatment data. Split validation must be rerun against the
+actual consumed units whenever the policy lineage changes.
+
+## Preference-Loss Progress Does Not Guarantee Policy Progress
+
+A preference objective can move in its intended mathematical direction while
+the resulting policy becomes less useful as an agent. Lower observed DPO loss,
+positive reward margins, nonzero gradients, and exact checkpoint reloads prove
+optimization and persistence mechanics. They do not prove that the model
+grounds actions in the current task, terminates coherently, or preserves the
+parent policy's useful behavior.
+
+This risk is especially visible when a small policy operates inside a long
+prompt containing illustrative actions. A preference update can sharpen a
+high-probability but task-independent attractor, causing the model to copy
+demonstration-shaped actions repeatedly. Schema validity and high tool-call
+counts can then make a collapsed policy look active even though it ignores
+observed filenames, writes placeholder content, and never terminates.
+
+Same-path rollout evaluation is therefore part of validating preference
+training, not an optional downstream polish step. Task success remains the
+primary measure, while action diversity, grounding in tool observations,
+placeholder copying, repeated-state actions, and termination are diagnostic
+checks that explain a negative result without converting partial motion into
+success.

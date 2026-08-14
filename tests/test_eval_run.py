@@ -44,6 +44,9 @@ OLLAMA_LORA_PRACTICE_SMOKE_CONFIG = Path(
 POSITIVE_SFT_POLICY_SELECTION_CONFIG = Path(
     "configs/eval/positive_sft_policy_selection.yaml"
 )
+DPO_EXPLORATORY_POLICY_EVALUATION_CONFIG = Path(
+    "configs/eval/dpo_exploratory_policy_evaluation.yaml"
+)
 
 
 def _write_agent_model_eval_config(path: Path) -> None:
@@ -217,8 +220,7 @@ def test_positive_sft_policy_selection_config_freezes_shared_matrix() -> None:
     assert config.expected_task_hash_set == "xxh64:cb95e4422a6ee152"
     assert config.adapter_training_task_scope == "matched_and_disjoint"
     assert (
-        config.policy_selection_rule
-        == "nested_pass_then_success_tokens_then_actions"
+        config.policy_selection_rule == "nested_pass_then_success_tokens_then_actions"
     )
     assert tuple(config.policies) == (
         "base",
@@ -236,6 +238,41 @@ def test_positive_sft_policy_selection_config_freezes_shared_matrix() -> None:
     }
     assert {policy.max_turns_override for policy in model_policies} == {None}
     validate_eval_config_paths(config, POSITIVE_SFT_POLICY_SELECTION_CONFIG)
+
+
+def test_dpo_exploratory_evaluation_freezes_disjoint_task_subset() -> None:
+    config = load_eval_config(DPO_EXPLORATORY_POLICY_EVALUATION_CONFIG)
+
+    assert config.split == "dev"
+    assert config.tasks == [
+        "repair_alias_chain",
+        "repair_inventory_transaction",
+        "repair_access_policy",
+        "repair_config_inheritance",
+        "repair_event_rollup",
+        "repair_job_dispatch",
+    ]
+    assert config.expected_task_hash_set == "xxh64:f620bafa6b168d4c"
+    assert config.adapter_training_task_scope == "disjoint"
+    assert tuple(config.policies) == (
+        "base",
+        "efficiency-filtered-sft",
+        "dpo",
+    )
+    validate_eval_config_paths(config, DPO_EXPLORATORY_POLICY_EVALUATION_CONFIG)
+
+
+def test_dpo_exploratory_evaluation_rejects_preference_task_overlap() -> None:
+    frozen_config = load_eval_config(DPO_EXPLORATORY_POLICY_EVALUATION_CONFIG)
+    config = frozen_config.model_copy(
+        update={
+            "tasks": ["repair_retry_schedule", *frozen_config.tasks],
+            "expected_task_hash_set": None,
+        }
+    )
+
+    with pytest.raises(ValueError, match="must be disjoint from eval tasks"):
+        validate_eval_config_paths(config, DPO_EXPLORATORY_POLICY_EVALUATION_CONFIG)
 
 
 def test_eval_config_task_hash_freeze_rejects_drift() -> None:
@@ -514,8 +551,7 @@ def test_agent_model_eval_loads_one_ollama_client_per_policy_run(
         assert provenance["config"]["adapter"] is None
         assert provenance["model_input_protocol"] is not None
         assert provenance["provider_runtime"]["model_digest"] == (
-            "sha256:634801eab0dbcaa85441e7cb7a91e501"
-            "a111344404eabfefe3717f78e5606779"
+            "sha256:634801eab0dbcaa85441e7cb7a91e501a111344404eabfefe3717f78e5606779"
         )
     assert prompt_loop_statuses == [
         "invalid_model_output",

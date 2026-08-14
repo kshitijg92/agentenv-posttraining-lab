@@ -51,7 +51,7 @@ def validate_ollama_lora_reference(
     """Validate the source LoRA provenance claimed by an Ollama model config."""
 
     from agentenv.artifacts.manifests import (
-        load_positive_sft_lora_training_run_manifest,
+        load_lora_training_run_manifest,
     )
     from agentenv.training.lora.model import (
         validate_lora_adapter_package,
@@ -82,7 +82,7 @@ def validate_ollama_lora_reference(
         expected_hash=config.adapter.content_hash,
         artifact_name="LoRA training manifest",
     )
-    manifest = load_positive_sft_lora_training_run_manifest(manifest_path)
+    manifest = load_lora_training_run_manifest(manifest_path)
     if manifest.status != "completed":
         raise ValueError("adapted model policies require a completed LoRA training run")
     if manifest.base_model != base_model:

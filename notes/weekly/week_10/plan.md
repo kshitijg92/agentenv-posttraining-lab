@@ -34,7 +34,15 @@ training-induced completion suppression the leading diagnosis while retaining
 public-test feedback, turn-budget, small-model, and single-greedy-rollout
 limitations. The diagnostic does not change the frozen abstention. An
 exploratory DPO continuation from the exact filtered-SFT adapter has now passed
-its one-step mechanics gate; the complete preference schedule remains unrun.
+its one-step mechanics gate and completed one deterministic pass over all 29
+preference pairs. The derived PEFT adapter passed the same frozen-base and
+save/reload audits. That adapter is now registered as an immutable separate
+GGUF layer over the shared F16 base and passed constrained serving validation.
+The frozen exploratory 24-cell comparison also completed: every arm remained
+0/8 nested PASS, so the rule abstained, while the DPO arm exhausted every task's
+turn budget by copying the prompt's four illustrative actions. DPO therefore
+showed no incremental benefit and a clear behavioral regression relative to
+its designated SFT parent.
 
 ## Theme
 
@@ -1364,6 +1372,42 @@ adapter reproduced its probe logits exactly after reload.
 This proves the mechanics gate only. It does not establish a useful DPO
 schedule, policy improvement, or a valid selection winner.
 
+One-pass exploratory training completed on 2026-08-13 after freezing pair
+exposure, rather than an arbitrary token cutoff, as the schedule authority:
+
+```text
+config: configs/train/dpo_lora_exploratory_full_pass.yaml
+config hash: xxh64:2938bcf1227fddd8
+artifact: experiments/models/week_10_dpo_lora_exploratory_full_pass
+manifest hash: xxh64:a7b4da47350bdb08
+training-run id: dpo_lora_run_b8a3752e281f4ca8af9d65bd97a1ef1b
+adapter-directory hash: xxh64:ea8dadb299dfed48
+executed schedule: 29 unique pairs / 29 optimizer steps / no shuffle
+logical chosen-plus-rejected input tokens: 64,863
+loss-bearing chosen-plus-rejected response tokens: 12,587
+```
+
+The policy and reference again matched exactly at step zero. Only the 288
+inherited LoRA parameters entered the optimizer; the frozen base remained
+byte-exact, the adapter changed, and the persisted adapter and probe logits
+reloaded exactly. Per-step losses and margins describe different pairs at
+different points in the pass, so they are not a learning curve or model-quality
+evaluation.
+
+Serving and evaluation completed on 2026-08-13. The DPO adapter remained a
+separate GGUF layer over the exact common base and passed a constrained live
+request. The first 24-cell run exposed a validation error: task scope covered
+only the parent SFT lineage even though six DPO pairs came from two tasks in the
+reused evaluation matrix. That run is diagnostic-only.
+
+The corrected loader derives the 13-task full lineage from the exact SFT
+examples plus exact preference pairs consumed by optimizer steps. The clean
+matrix uses the six remaining disjoint dev tasks. `B0`, `S_filtered`, and
+`P_dpo` each produced 0/6 nested PASS with no invalid cells, so the mechanical
+result is another `complete_tie` abstention. `P_dpo` hit every native max-turn
+limit and repeated only the four example actions from the system prompt on all
+six unseen tasks. This supports no incremental DPO benefit claim.
+
 ### Checkpoint 12: Closeout
 
 Purpose:
@@ -1608,11 +1652,6 @@ Week 10 is complete when:
 
 ## Next Implementation Step
 
-Decide the full exploratory DPO exposure rule before changing the current
-one-step config. The 29 rows represent only 20 distinct shared contexts and
-their chosen/rejected action lengths vary substantially, so a one-pass
-pair-level schedule, a context-balanced schedule, and any response-token
-normalization are different objectives. Freeze that decision, then run the
-complete adapter, register its immutable Ollama composition, and evaluate
-`S_filtered` versus `P_dpo` plus `B0` versus `P_dpo` without revising the prior
-SFT abstention.
+Close Week 10 by updating `closure_audit.md` with the final SFT and exploratory
+DPO evidence, run the deferred broader verification once, and carry the
+observed prompt-example-copying failure into the Week 11 reliability target.
