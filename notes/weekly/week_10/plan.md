@@ -1,48 +1,16 @@
 # Week 10 Plan
 
-Status: in progress on 2026-08-13. The source-record boundary, planned
-train/selection disjointness, and combined positive-SFT review contract are
-complete. The 100-row review universe now has 98 accepted prefixes, 2 rejected
-sources, and 0 unresolved prefix decisions. Embedded efficiency judgments are
-94 accepted, 4 rejected, and 0 abstained. The experiment used all reviewed
-prefixes: 98 raw and 94 efficiency-filtered. All eight exports and
-materializations have been regenerated successfully. The common serving path
-is now Ollama native generation over one exact F16 GGUF base and an optional
-separate GGUF LoRA adapter. Its paired practice smoke produced schema-valid
-actions, completed the same four-turn agent path for both compositions, and
-passed both public and hidden scoring. The matched training schedules are now
-resolved at 98 optimizer steps per arm: 16,412 supervised tokens for raw and
-16,071 for efficiency-filtered, a declared 341-token shortfall within the
-907-token complete-example tolerance. No standalone schedule artifact is
-needed; the existing LoRA workflow and training-run records now own resolution
-and executed order. The workflow accepts all eight sources, derives the chosen
-treatment from the existing reviews, and blocks token-exposure drift before
-model loading. Both fresh PEFT adapters have now completed 98 optimizer steps,
-kept the base frozen, and passed exact adapter save/reload verification. Both
-adapters are registered as separate GGUF layers over the same immutable F16
-Ollama base, and their model configs pin the
-source training manifests and deployed composition digests. The exact
-eight-task selection set, shared three-arm eval config, deterministic decoding,
-typed cell outcomes, paired comparisons, and success-first decision rule are
-now frozen. The deterministic selection-dev evaluation has completed all 24
-cells: every policy scored 0/8 nested PASS, there were no invalid comparison
-cells, and the frozen rule abstains because no successful cells exist for an
-efficiency tie-break. Failure analysis is complete. A separate three-cell
-practice diagnostic then produced one base PASS and identical six-turn
-inspection/test loops with no writes from both treatment adapters. This makes
-training-induced completion suppression the leading diagnosis while retaining
-public-test feedback, turn-budget, small-model, and single-greedy-rollout
-limitations. The diagnostic does not change the frozen abstention. An
-exploratory DPO continuation from the exact filtered-SFT adapter has now passed
-its one-step mechanics gate and completed one deterministic pass over all 29
-preference pairs. The derived PEFT adapter passed the same frozen-base and
-save/reload audits. That adapter is now registered as an immutable separate
-GGUF layer over the shared F16 base and passed constrained serving validation.
-The frozen exploratory 24-cell comparison also completed: every arm remained
-0/8 nested PASS, so the rule abstained, while the DPO arm exhausted every task's
-turn budget by copying the prompt's four illustrative actions. DPO therefore
-showed no incremental benefit and a clear behavioral regression relative to
-its designated SFT parent.
+Status: closed on 2026-08-14. The raw and efficiency-filtered SFT treatments
+trained for the matched 98-step schedule and were evaluated with the frozen
+base on all 24 task-policy cells. Every policy scored 0/8, so the predeclared
+rule abstained. The exploratory DPO continuation completed one pass over all 29
+preference pairs, but its first evaluation was found to reuse two
+preference-source tasks. That matrix is retained only as a contaminated
+diagnostic. The corrected task-disjoint 18-cell evaluation again produced zero
+successes and showed DPO prompt-example copying on every task. Heldout-private
+model outcomes remained unopened. The final full verification passed with
+1,250 tests. See `closure_audit.md` for exact artifact identities, results,
+limitations, and the Week 11 handoff.
 
 ## Theme
 
@@ -1650,8 +1618,10 @@ Week 10 is complete when:
 - heldout-private remains unopened;
 - the final claim remains scoped to this controlled development distribution.
 
-## Next Implementation Step
+## Handoff
 
-Close Week 10 by updating `closure_audit.md` with the final SFT and exploratory
-DPO evidence, run the deferred broader verification once, and carry the
-observed prompt-example-copying failure into the Week 11 reliability target.
+Week 10 is closed. Start Week 11 with a read-only inventory of the existing
+validation, report-regeneration, and runner state surfaces. Preserve the DPO
+prompt-copying result as evidence; do not tune around it. Before implementing a
+resume subsystem, resolve what unit of completed work a resumed evaluation may
+trust and reuse. See `notes/weekly/week_11/plan.md`.
