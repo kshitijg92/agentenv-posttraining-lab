@@ -1,7 +1,7 @@
 # Week 11 Plan
 
-Status: planned, not started. Week 10 closes with a reproducible negative
-post-training result and a prompt-copying DPO failure. Week 11 will preserve
+Status: in progress. Week 10 closes with a reproducible negative
+post-training result and a prompt-copying DPO failure. Week 11 is preserving
 that evidence while making the lab's ordinary validation and report path
 repeatable after interruption. It is not a model-tuning week.
 
@@ -468,7 +468,12 @@ routine refactors in `learnings.md`.
 
 ## Next Small Step
 
-Perform Checkpoint 1 as a read-only inventory. Then stop for the Checkpoint 4
-conceptual question before adding any resume subsystem or schema. Routine gaps
-in the existing validation/report path may be implemented in small checkpoints
-once their ownership is clear.
+Compose the Level 1 archived-evidence verifier from existing authoritative
+loaders and the suite-backed policy-selection consumer. Keep report rendering
+unchanged: regenerate each designated report in a disposable location and
+require both the reconstructed decision and exact report bytes to match.
+
+Do not add resume execution yet. The resume unit, terminal generation outcome,
+predeclared attempt set, strict identity matching, and corrupt-attempt scope are
+now decided; they should be implemented only after the required Level 1 path is
+working.

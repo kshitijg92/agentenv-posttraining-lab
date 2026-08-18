@@ -1,26 +1,31 @@
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import cast
 
 import pytest
 
+import agentenv.orchestrators.eval_run as eval_run_module
 from agentenv.agents.schema import PromptLoopResult, TokenUsage
-from agentenv.artifacts.manifests import (
-    EvalRunAgentAttemptSummary,
-    EvalRunScorerAttemptSummary,
-)
+from agentenv.artifacts.manifests import load_eval_suite_manifest
+from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
+from agentenv.orchestrators.eval_run import run_eval_config_all_policies
 from agentenv.reporting.policy_selection import (
     PolicyCellOutcome,
     PolicyTaskCell,
     analyze_policy_cells,
-    policy_task_cell_from_agent_attempt,
+    build_policy_selection_analysis_from_eval_suite,
+    policy_task_cell_from_attempt_evidence,
     render_policy_selection_analysis,
     select_policy,
     summarize_policy_cells,
 )
+from agentenv.tasks.hashing import build_eval_task_hashes
 
 
 POLICIES = ("base", "raw-sft", "efficiency-filtered-sft")
 TASKS = ("task_a", "task_b", "task_c")
+TASK_PACK = Path("data/task_packs/repo_patch_python_v0")
+POLICY_SELECTION_TASK = "toy_python_fix_001"
 
 
 def _cells(
@@ -48,6 +53,74 @@ def _cells(
                 )
             )
     return tuple(records)
+
+
+def _write_policy_selection_eval_config(path: Path) -> None:
+    selected_task_hash_set = build_eval_task_hashes(
+        TASK_PACK,
+        [POLICY_SELECTION_TASK],
+    ).selected_task_hash_set
+    path.write_text(
+        "\n".join(
+            [
+                "name: policy_selection_artifact_test",
+                "task_pack: data/task_packs/repo_patch_python_v0",
+                "tasks:",
+                f"  - {POLICY_SELECTION_TASK}",
+                f"expected_task_hash_set: {selected_task_hash_set}",
+                "policy_selection_rule: nested_pass_then_success_tokens_then_actions",
+                "split: practice",
+                "policies:",
+                "  policy-a:",
+                "    type: agent_model",
+                "    model_config: configs/models/openai_compatible_chat_placeholder.yaml",
+                "    decoding_config: configs/decoding/greedy_1024.yaml",
+                "    attempts: 1",
+                "    replay:",
+                "      repeats: 0",
+                "  policy-b:",
+                "    type: agent_model",
+                "    model_config: configs/models/openai_compatible_chat_placeholder.yaml",
+                "    decoding_config: configs/decoding/greedy_1024.yaml",
+                "    attempts: 1",
+                "    replay:",
+                "      repeats: 0",
+                "trace:",
+                "  version: trace_v0",
+                "  capture_stdout: true",
+                "  capture_stderr: true",
+                "  capture_diff: true",
+                "",
+            ]
+        )
+    )
+
+
+def _run_policy_selection_eval_suite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Path, Path]:
+    config_path = tmp_path / "policy_selection.yaml"
+    suite_dir = tmp_path / "eval_suite"
+    _write_policy_selection_eval_config(config_path)
+
+    def fake_build_model_client(
+        *args: object, **kwargs: object
+    ) -> ScriptedFakeModelClient:
+        del args
+        del kwargs
+        return ScriptedFakeModelClient(
+            model_id="placeholder-model",
+            script=[FakeModelScriptStep(output_text="not-json")],
+        )
+
+    monkeypatch.setattr(
+        eval_run_module,
+        "build_model_client",
+        fake_build_model_client,
+    )
+    run_eval_config_all_policies(config_path, suite_dir)
+    return config_path, suite_dir
 
 
 def test_more_nested_passes_selects_policy_before_efficiency() -> None:
@@ -193,24 +266,6 @@ def test_policy_selection_requires_exact_frozen_matrix() -> None:
 
 
 def test_attempt_evidence_maps_status_tokens_and_actions_mechanically() -> None:
-    scorer = EvalRunScorerAttemptSummary(
-        scorer_attempt_id="scorer_attempt_test",
-        status="PASS",
-        public_status="PASS",
-        hidden_status="PASS",
-        error_class=None,
-        final_diff_hash="xxh64:aaaaaaaaaaaaaaaa",
-        duration_ms=10,
-    )
-    agent = EvalRunAgentAttemptSummary(
-        agent_attempt_id="agent_attempt_test",
-        status="scored",
-        prompt_loop_status="completed",
-        error_class=None,
-        candidate_patch_hash="xxh64:bbbbbbbbbbbbbbbb",
-        duration_ms=20,
-        scorer_attempt=scorer,
-    )
     prompt_loop = PromptLoopResult(
         task_id="task_a",
         prompt_builder_version="test",
@@ -228,16 +283,20 @@ def test_attempt_evidence_maps_status_tokens_and_actions_mechanically() -> None:
         tool_results=[],
     )
 
-    cell = policy_task_cell_from_agent_attempt(
+    cell = policy_task_cell_from_attempt_evidence(
         policy_id="base",
         task_id="task_a",
-        agent=agent,
+        agent_status="scored",
+        prompt_loop_status="completed",
+        scorer_status="PASS",
         prompt_loop=prompt_loop,
     )
-    disqualified = policy_task_cell_from_agent_attempt(
+    disqualified = policy_task_cell_from_attempt_evidence(
         policy_id="base",
         task_id="task_a",
-        agent=agent,
+        agent_status="scored",
+        prompt_loop_status="completed",
+        scorer_status="PASS",
         prompt_loop=prompt_loop,
         confirmed_reward_hack=True,
     )
@@ -278,3 +337,59 @@ def test_analysis_reports_all_pairs_and_renders_decision() -> None:
     assert "## Policy Selection" in report
     assert "| base | raw-sft | task_b | task_c | task_a | none | none |" in report
     assert "- Status: abstained" in report
+
+
+def test_policy_selection_analysis_reconstructs_from_eval_suite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, suite_dir = _run_policy_selection_eval_suite(tmp_path, monkeypatch)
+
+    analysis = build_policy_selection_analysis_from_eval_suite(suite_dir)
+
+    assert tuple(cell.policy_id for cell in analysis.cells) == (
+        "policy-a",
+        "policy-b",
+    )
+    assert tuple(cell.task_id for cell in analysis.cells) == (
+        POLICY_SELECTION_TASK,
+        POLICY_SELECTION_TASK,
+    )
+    assert tuple(cell.outcome for cell in analysis.cells) == (
+        "policy_failure",
+        "policy_failure",
+    )
+    assert analysis.decision.status == "abstained"
+    assert analysis.decision.selected_policy is None
+    assert analysis.decision.branch == "complete_tie"
+
+
+def test_policy_selection_analysis_rejects_live_config_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path, suite_dir = _run_policy_selection_eval_suite(tmp_path, monkeypatch)
+    config_path.write_text(config_path.read_text() + "# drift\n")
+
+    with pytest.raises(ValueError, match="config hash"):
+        build_policy_selection_analysis_from_eval_suite(suite_dir)
+
+
+def test_policy_selection_analysis_rejects_missing_attempt_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, suite_dir = _run_policy_selection_eval_suite(tmp_path, monkeypatch)
+    suite_manifest = load_eval_suite_manifest(suite_dir / "manifest.json")
+    first_policy_run = suite_manifest.policy_runs[0]
+    prompt_loop_path = (
+        suite_dir
+        / first_policy_run.artifact_dir
+        / "attempts"
+        / f"{POLICY_SELECTION_TASK}__attempt_001"
+        / "prompt_loop_result.json"
+    )
+    prompt_loop_path.unlink()
+
+    with pytest.raises(FileNotFoundError, match="prompt_loop_result.json"):
+        build_policy_selection_analysis_from_eval_suite(suite_dir)

@@ -1,11 +1,28 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import combinations
+from pathlib import Path
 from typing import Literal, Sequence
 
-from agentenv.agents.schema import PromptLoopResult
-from agentenv.artifacts.manifests import EvalRunAgentAttemptSummary
+from agentenv.agents.schema import PromptLoopResult, PromptLoopStatus
+from agentenv.artifacts import MANIFEST_FILENAME
+from agentenv.artifacts.manifests import (
+    EvalSuiteManifest,
+    EvalSuitePolicyRunManifestRecord,
+    load_eval_suite_manifest,
+)
+from agentenv.artifacts.payloads import load_prompt_loop_result
+from agentenv.evals.schema import AgentModelPolicy, EvalConfig
+from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
+from agentenv.hashing import hash_file
+from agentenv.orchestrators.agent_task_schema import AgentTaskRunStatus
+from agentenv.orchestrators.attempt import AttemptStatus
+from agentenv.trajectories.builder import (
+    build_trajectory_records_from_eval_suite,
+    resolve_eval_run_artifact_path,
+)
+from agentenv.trajectories.schema import TrajectoryRecord
 
 
 PolicyCellOutcome = Literal["pass", "policy_failure", "invalid"]
@@ -135,11 +152,76 @@ _POLICY_FAILURE_PROMPT_LOOP_STATUSES = frozenset(
 )
 
 
-def policy_task_cell_from_agent_attempt(
+def build_policy_selection_analysis_from_eval_suite(
+    eval_suite_dir: Path,
+) -> PolicySelectionAnalysis:
+    """Validate one frozen policy-selection suite and reconstruct its decision."""
+
+    eval_suite_dir = eval_suite_dir.resolve()
+    suite_manifest = load_eval_suite_manifest(eval_suite_dir / MANIFEST_FILENAME)
+    config_path = Path(suite_manifest.config_path)
+    observed_config_hash = hash_file(config_path)
+    if observed_config_hash != suite_manifest.config_hash:
+        raise ValueError(
+            "Eval suite config hash does not match the current config bytes: "
+            f"{observed_config_hash!r} != {suite_manifest.config_hash!r}"
+        )
+
+    config = load_eval_config(config_path)
+    validate_eval_config_paths(config, config_path)
+    _validate_policy_selection_suite_declaration(suite_manifest, config)
+
+    trajectories = _policy_selection_trajectory_matrix(
+        build_trajectory_records_from_eval_suite(eval_suite_dir),
+        eval_suite_id=suite_manifest.eval_suite_id,
+        policy_order=tuple(config.policies),
+        task_order=tuple(config.tasks),
+    )
+
+    cells: list[PolicyTaskCell] = []
+    for policy_id in config.policies:
+        for task_id in config.tasks:
+            trajectory = trajectories[(policy_id, task_id)]
+            agent_status = trajectory.statuses.agent_task_run_status
+            if agent_status is None:
+                raise ValueError(
+                    "Policy-selection eval attempts require agent evidence: "
+                    f"{trajectory.identity.eval_attempt_id}"
+                )
+            cell = policy_task_cell_from_attempt_evidence(
+                policy_id=policy_id,
+                task_id=task_id,
+                agent_status=agent_status,
+                prompt_loop_status=trajectory.statuses.prompt_loop_status,
+                scorer_status=trajectory.statuses.attempt_status,
+                prompt_loop=_load_trajectory_prompt_loop(trajectory),
+                confirmed_reward_hack=(
+                    trajectory.reward_hack_detection.finding_classification
+                    == "confirmed"
+                ),
+            )
+            if trajectory.reward_hack_detection.evaluation_status != "complete":
+                cell = replace(
+                    cell,
+                    outcome="invalid",
+                    outcome_detail="reward_hack:incomplete_evaluation",
+                )
+            cells.append(cell)
+
+    return analyze_policy_cells(
+        cells,
+        policy_order=tuple(config.policies),
+        task_order=tuple(config.tasks),
+    )
+
+
+def policy_task_cell_from_attempt_evidence(
     *,
     policy_id: str,
     task_id: str,
-    agent: EvalRunAgentAttemptSummary,
+    agent_status: AgentTaskRunStatus,
+    prompt_loop_status: PromptLoopStatus | None,
+    scorer_status: AttemptStatus | None,
     prompt_loop: PromptLoopResult | None,
     confirmed_reward_hack: bool = False,
 ) -> PolicyTaskCell:
@@ -150,14 +232,16 @@ def policy_task_cell_from_agent_attempt(
             raise ValueError(
                 "prompt-loop task id does not match policy-selection task id"
             )
-        if prompt_loop.status != agent.prompt_loop_status:
+        if prompt_loop.status != prompt_loop_status:
             raise ValueError(
                 "prompt-loop status does not match eval attempt summary"
             )
 
-    if agent.status == "scored":
-        assert agent.scorer_attempt is not None
-        scorer_status = agent.scorer_attempt.status
+    if agent_status == "scored":
+        if prompt_loop_status != "completed":
+            raise ValueError("scored agent evidence requires completed prompt loop")
+        if scorer_status is None:
+            raise ValueError("scored agent evidence requires scorer status")
         outcome: PolicyCellOutcome
         if scorer_status == "PASS":
             outcome = "pass"
@@ -166,9 +250,11 @@ def policy_task_cell_from_agent_attempt(
         else:
             outcome = "invalid"
         outcome_detail = f"nested_scorer:{scorer_status}"
-    elif agent.status == "agent_loop_failed":
-        assert agent.prompt_loop_status is not None
-        prompt_loop_status = agent.prompt_loop_status
+    elif agent_status == "agent_loop_failed":
+        if prompt_loop_status is None:
+            raise ValueError("agent-loop failure evidence requires prompt-loop status")
+        if scorer_status is not None:
+            raise ValueError("agent-loop failure evidence cannot include scorer status")
         outcome = (
             "policy_failure"
             if prompt_loop_status in _POLICY_FAILURE_PROMPT_LOOP_STATUSES
@@ -176,8 +262,10 @@ def policy_task_cell_from_agent_attempt(
         )
         outcome_detail = f"prompt_loop:{prompt_loop_status}"
     else:
+        if scorer_status is not None:
+            raise ValueError("agent orchestrator errors cannot include scorer status")
         outcome = "invalid"
-        outcome_detail = f"agent:{agent.status}"
+        outcome_detail = f"agent:{agent_status}"
 
     if confirmed_reward_hack and outcome != "invalid":
         outcome = "policy_failure"
@@ -199,6 +287,135 @@ def policy_task_cell_from_agent_attempt(
         # including the terminal final-answer action.
         action_count=(prompt_loop.turns_executed if prompt_loop is not None else None),
     )
+
+
+def _validate_policy_selection_suite_declaration(
+    suite_manifest: EvalSuiteManifest,
+    config: EvalConfig,
+) -> None:
+    if config.policy_selection_rule is None:
+        raise ValueError("Eval suite config does not declare a policy-selection rule")
+
+    compared_suite_fields = (
+        ("config_name", config.name, suite_manifest.config_name),
+        ("task_pack", config.task_pack, suite_manifest.task_pack),
+        ("split", config.split, suite_manifest.split),
+        ("tasks", config.tasks, suite_manifest.tasks),
+        (
+            "selected_task_hash_set",
+            config.expected_task_hash_set,
+            suite_manifest.task_hashes.selected_task_hash_set,
+        ),
+    )
+    for field_name, config_value, suite_value in compared_suite_fields:
+        if config_value != suite_value:
+            raise ValueError(
+                f"Eval suite {field_name} does not match its policy-selection "
+                f"config: {suite_value!r} != {config_value!r}"
+            )
+
+    expected_policy_order = tuple(config.policies)
+    observed_policy_order = tuple(
+        policy_run.policy for policy_run in suite_manifest.policy_runs
+    )
+    if observed_policy_order != expected_policy_order:
+        raise ValueError(
+            "Eval suite policy order does not match its policy-selection config: "
+            f"{observed_policy_order!r} != {expected_policy_order!r}"
+        )
+
+    for policy_run in suite_manifest.policy_runs:
+        policy = config.policies[policy_run.policy]
+        if not isinstance(policy, AgentModelPolicy):
+            raise ValueError(
+                "Policy-selection eval suites require agent-model policies"
+            )
+        _validate_policy_run_matches_config(policy_run, policy)
+
+
+def _validate_policy_run_matches_config(
+    policy_run: EvalSuitePolicyRunManifestRecord,
+    policy: AgentModelPolicy,
+) -> None:
+    compared_fields = (
+        ("policy_type", policy.type, policy_run.policy_type),
+        ("policy_family", "agent", policy_run.policy_family),
+        ("control_layer", None, policy_run.control_layer),
+        ("control_name", None, policy_run.control_name),
+        ("model_config", policy.model_config_path, policy_run.model_config_ref),
+        (
+            "decoding_config",
+            policy.decoding_config_path,
+            policy_run.decoding_config_ref,
+        ),
+        (
+            "max_turns_override",
+            policy.max_turns_override,
+            policy_run.max_turns_override,
+        ),
+        ("attempts_per_task", policy.attempts, policy_run.attempts_per_task),
+        ("replay_repeats", policy.replay.repeats, policy_run.replay_repeats),
+    )
+    for field_name, config_value, suite_value in compared_fields:
+        if config_value != suite_value:
+            raise ValueError(
+                f"Eval suite policy {policy_run.policy!r} {field_name} does not "
+                f"match its config: {suite_value!r} != {config_value!r}"
+            )
+
+
+def _policy_selection_trajectory_matrix(
+    trajectories: Sequence[TrajectoryRecord],
+    *,
+    eval_suite_id: str,
+    policy_order: Sequence[str],
+    task_order: Sequence[str],
+) -> dict[tuple[str, str], TrajectoryRecord]:
+    expected = {
+        (policy_id, task_id)
+        for policy_id in policy_order
+        for task_id in task_order
+    }
+    matrix: dict[tuple[str, str], TrajectoryRecord] = {}
+    for trajectory in trajectories:
+        if trajectory.identity.eval_suite_id != eval_suite_id:
+            raise ValueError(
+                "Policy-selection trajectory does not match eval_suite_id: "
+                f"{trajectory.identity.eval_suite_id!r} != {eval_suite_id!r}"
+            )
+        if trajectory.identity.attempt_index != 0:
+            raise ValueError(
+                "Policy-selection trajectories require attempt_index 0: "
+                f"{trajectory.identity.eval_attempt_id}"
+            )
+        key = (trajectory.identity.policy_id, trajectory.identity.task_id)
+        if key in matrix:
+            raise ValueError(
+                f"Duplicate policy-selection trajectory for policy/task: {key!r}"
+            )
+        matrix[key] = trajectory
+
+    observed = set(matrix)
+    if observed != expected:
+        raise ValueError(
+            "Policy-selection trajectories do not match the declared matrix: "
+            f"missing={sorted(expected - observed)} "
+            f"extra={sorted(observed - expected)}"
+        )
+    return matrix
+
+
+def _load_trajectory_prompt_loop(
+    trajectory: TrajectoryRecord,
+) -> PromptLoopResult | None:
+    prompt_loop_ref = trajectory.artifacts.prompt_loop_result_json
+    if prompt_loop_ref is None:
+        return None
+    prompt_loop_path = resolve_eval_run_artifact_path(
+        Path(trajectory.artifacts.eval_run_path),
+        prompt_loop_ref.path,
+    )
+    return load_prompt_loop_result(prompt_loop_path)
 
 
 def analyze_policy_cells(
