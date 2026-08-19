@@ -17,10 +17,10 @@ from agentenv.reporting.policy_selection import (
     build_policy_selection_analysis_from_eval_suite,
 )
 from agentenv.reproduction.schema import (
-    ArchivedComparisonSpec,
-    ArchivedReproductionPlan,
-    ArchivedTrainingArtifactSpec,
-    load_archived_reproduction_plan,
+    StoredComparisonSpec,
+    StoredEvidencePlan,
+    StoredTrainingArtifactSpec,
+    load_stored_evidence_plan,
 )
 from agentenv.tasks.splits import check_splits_lock
 from agentenv.tasks.validate import load_task_pack_manifest, validate_task_pack
@@ -38,18 +38,18 @@ VerificationStatus = Literal["PASS", "FAIL"]
 
 
 @dataclass(frozen=True)
-class ArchivedEvidenceCheck:
+class StoredEvidenceCheck:
     check_id: str
     status: VerificationStatus
     detail: str
 
 
 @dataclass(frozen=True)
-class ArchivedEvidenceVerification:
+class StoredEvidenceVerification:
     plan_name: str
     plan_hash: str
     out_dir: Path
-    checks: tuple[ArchivedEvidenceCheck, ...]
+    checks: tuple[StoredEvidenceCheck, ...]
 
     @property
     def status(self) -> VerificationStatus:
@@ -58,17 +58,17 @@ class ArchivedEvidenceVerification:
         return "FAIL"
 
 
-def verify_archived_evidence(
+def verify_stored_evidence(
     plan_path: Path,
     out_dir: Path,
     *,
     repo_root: Path = Path("."),
-) -> ArchivedEvidenceVerification:
-    """Validate designated archived evidence and regenerate canonical reports."""
+) -> StoredEvidenceVerification:
+    """Validate designated stored evidence and regenerate canonical reports."""
 
     repo_root = repo_root.resolve()
     plan_path = _resolve_input_path(repo_root, plan_path)
-    plan = load_archived_reproduction_plan(plan_path)
+    plan = load_stored_evidence_plan(plan_path)
     out_dir = prepare_artifact_output_dir(out_dir)
 
     checks = [
@@ -119,7 +119,7 @@ def verify_archived_evidence(
             )
         )
 
-    return ArchivedEvidenceVerification(
+    return StoredEvidenceVerification(
         plan_name=plan.name,
         plan_hash=hash_file(plan_path),
         out_dir=out_dir,
@@ -127,11 +127,11 @@ def verify_archived_evidence(
     )
 
 
-def render_archived_evidence_verification(
-    verification: ArchivedEvidenceVerification,
+def render_stored_evidence_verification(
+    verification: StoredEvidenceVerification,
 ) -> str:
     lines = [
-        "# Archived Evidence Verification",
+        "# Stored Evidence Verification",
         "",
         f"- Plan: {verification.plan_name}",
         f"- Plan hash: {verification.plan_hash}",
@@ -147,24 +147,24 @@ def render_archived_evidence_verification(
     return "\n".join(lines) + "\n"
 
 
-def _capture_check(check_id: str, operation: Callable[[], str]) -> ArchivedEvidenceCheck:
+def _capture_check(check_id: str, operation: Callable[[], str]) -> StoredEvidenceCheck:
     try:
         detail = operation()
     except (OSError, ValueError) as exc:
-        return ArchivedEvidenceCheck(
+        return StoredEvidenceCheck(
             check_id=check_id,
             status="FAIL",
             detail=f"{type(exc).__name__}: {exc}",
         )
-    return ArchivedEvidenceCheck(check_id=check_id, status="PASS", detail=detail)
+    return StoredEvidenceCheck(check_id=check_id, status="PASS", detail=detail)
 
 
-def _validate_task_pack(repo_root: Path, plan: ArchivedReproductionPlan) -> str:
+def _validate_task_pack(repo_root: Path, plan: StoredEvidencePlan) -> str:
     result = validate_task_pack(_repo_path(repo_root, plan.task_pack))
     return f"task_pack={result.task_pack_id}; tasks={result.task_count}"
 
 
-def _validate_splits(repo_root: Path, plan: ArchivedReproductionPlan) -> str:
+def _validate_splits(repo_root: Path, plan: StoredEvidencePlan) -> str:
     task_pack_dir = _repo_path(repo_root, plan.task_pack)
     pack_manifest = load_task_pack_manifest(task_pack_dir / "manifest.yaml")
     split_lock_path = resolve_relative_artifact_ref(
@@ -180,7 +180,7 @@ def _validate_splits(repo_root: Path, plan: ArchivedReproductionPlan) -> str:
 
 def _validate_training_artifact(
     repo_root: Path,
-    spec: ArchivedTrainingArtifactSpec,
+    spec: StoredTrainingArtifactSpec,
 ) -> str:
     artifact_dir = _repo_path(repo_root, spec.artifact_dir)
     _require_hash(
@@ -208,7 +208,7 @@ def _validate_training_artifact(
 
 def _validate_comparison_evidence(
     repo_root: Path,
-    spec: ArchivedComparisonSpec,
+    spec: StoredComparisonSpec,
 ) -> str:
     eval_suite_dir = _repo_path(repo_root, spec.eval_suite_dir)
     _require_hash(
@@ -228,7 +228,7 @@ def _validate_comparison_evidence(
 
 def _validate_canonical_report(
     repo_root: Path,
-    spec: ArchivedComparisonSpec,
+    spec: StoredComparisonSpec,
 ) -> str:
     canonical_report = _repo_path(repo_root, spec.canonical_report)
     _require_hash(
@@ -242,7 +242,7 @@ def _validate_canonical_report(
 def _regenerate_and_compare_report(
     repo_root: Path,
     out_dir: Path,
-    spec: ArchivedComparisonSpec,
+    spec: StoredComparisonSpec,
 ) -> str:
     eval_suite_dir = _repo_path(repo_root, spec.eval_suite_dir)
     canonical_report = _repo_path(repo_root, spec.canonical_report)
@@ -256,7 +256,7 @@ def _regenerate_and_compare_report(
 
 
 def _require_expected_selection(
-    spec: ArchivedComparisonSpec,
+    spec: StoredComparisonSpec,
     analysis: PolicySelectionAnalysis,
 ) -> None:
     expected = spec.expected_selection
@@ -290,4 +290,3 @@ def _repo_path(repo_root: Path, relative_path: str) -> Path:
 
 def _markdown_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
-

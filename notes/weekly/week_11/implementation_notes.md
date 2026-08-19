@@ -14,12 +14,12 @@ the missing consumer boundaries.
 | --- | --- | --- | --- |
 | Validate task-pack structure and private/public boundaries | task manifests, task-pack manifest, and required task files | `agentenv tasks validate`; `validate_task_pack` | Existing command is sufficient and already validates the 26-task pack. |
 | Validate split membership | `splits.lock.json` and task manifests | `agentenv tasks check-splits`; `check_splits_lock` | Existing command is sufficient. It validates membership, counts, and task splits. |
-| Re-establish frozen eval task identity | eval config `expected_task_hash_set`; eval-manifest `task_hashes` | `validate_eval_config_paths`; `build_eval_task_hashes`; `agentenv eval compare-task-hashes` | Existing logic is sufficient, but the Week 11 default consumer must invoke it explicitly for both canonical configs rather than merely load the archived suite manifest. |
+| Re-establish frozen eval task identity | eval config `expected_task_hash_set`; eval-manifest `task_hashes` | `validate_eval_config_paths`; `build_eval_task_hashes`; `agentenv eval compare-task-hashes` | Existing logic is sufficient, but the Week 11 default consumer must invoke it explicitly for both canonical configs rather than merely load the stored suite manifest. |
 | Validate raw and efficiency-filtered SFT training artifacts | training manifests, result and step records, adapter package, pinned configs, and eight source materializations | `load_positive_sft_lora_training_artifact`; `load_positive_sft_lora_training_task_ids` | Strong existing loader validates hashes, counts, step order, adapter round trip, source refs, and selected-example lineage. Canonical reload succeeded; both treatments resolve to 11 training task ids. |
 | Validate exploratory DPO training artifact and full inherited lineage | DPO manifest, exact SFT parent ref, result and step records, adapter package, and eight DPO materializations | `load_dpo_lora_training_artifact`; `load_dpo_lora_training_task_ids` | Strong existing loader validates the parent, sources, hashes, steps, and adapter. Canonical reload succeeded and resolves the complete 13-task lineage. |
-| Validate adapted-policy model and protocol pins | model configs, model-input protocol pin, training-manifest pin, adapter hash, and deployed Ollama digest | `load_model_config`; `load_referenced_model_input_protocol`; `validate_ollama_lora_reference`; archived `ModelConfigProvenance` loaders | File-backed adapter and protocol provenance can be checked offline. Archived attempt payloads also bind the observed provider digest to the configured digest. Live Ollama availability remains a Level 3 check. |
+| Validate adapted-policy model and protocol pins | model configs, model-input protocol pin, training-manifest pin, adapter hash, and deployed Ollama digest | `load_model_config`; `load_referenced_model_input_protocol`; `validate_ollama_lora_reference`; stored `ModelConfigProvenance` loaders | File-backed adapter and protocol provenance can be checked offline. Stored attempt payloads also bind the observed provider digest to the configured digest. Live Ollama availability remains a Level 3 check. |
 | Validate eval-suite topology and aggregate counts | eval-suite manifest and child eval-run manifests | `load_eval_suite_manifest`; `load_eval_run_manifest`; report loader | Pydantic contracts reject duplicate policies, incorrect counts, missing coverage, invalid refs, and inconsistent layer summaries. Manifest loading alone does not walk every referenced child payload. |
-| Validate every archived Week 10 attempt and its live task bytes | suite, run, attempt, scorer, agent, prompt-loop, model, decoding, task-hash, leakage, and reward-hack evidence | `build_trajectory_records_from_eval_suite` and its existing validators | This is the strongest existing read-only graph walk. It reconstructed 24 SFT-comparison attempts and 18 clean DPO-comparison attempts successfully. It should be reused rather than creating another attempt validator. |
+| Validate every stored Week 10 attempt and its live task bytes | suite, run, attempt, scorer, agent, prompt-loop, model, decoding, task-hash, leakage, and reward-hack evidence | `build_trajectory_records_from_eval_suite` and its existing validators | This is the strongest existing read-only graph walk. It reconstructed 24 SFT-comparison attempts and 18 clean DPO-comparison attempts successfully. It should be reused rather than creating another attempt validator. |
 | Revalidate adapter-training/eval disjointness | exact consumed SFT examples and DPO optimizer-step pair ids, plus eval config task ids | `validate_eval_config_paths` via `adapter_training_task_scope`; training task-id loaders | Existing logic is sufficient. It checks matched-and-disjoint SFT scope and full-lineage DPO disjointness from authoritative consumed records. |
 | Recompute policy-selection cells and abstention | eval attempts and prompt-loop payloads; config-declared selection rule | `policy_task_cell_from_agent_attempt`; `analyze_policy_cells` | The logic exists and an inventory probe reconstructed `abstained / complete_tie / none` for both canonical suites. No repository command currently composes suite loading into this analysis. |
 | Regenerate generic eval reports | eval-suite and child artifacts | `agentenv report`; `write_markdown_report` | Both canonical Week 10 reports regenerated byte-for-byte into a disposable directory. The renderer does not include the executable policy-selection analysis even though the files are named policy-selection reports. |
@@ -36,7 +36,7 @@ the missing consumer boundaries.
 | Detect task/config/runtime drift before reuse | config and task hashes; harness runtime provenance | eval validators; runtime equality check during a live eval; task-hash comparison | Current execution detects drift, but no resume consumer uses those identities to accept or reject stored work. |
 | Capture reproducibility metadata | eval `HarnessRuntimeProvenance`; training `TrainingRuntimeProvenance`; model provider provenance | manifest schemas and loaders | Eval records hash `src/agentenv`, `pyproject.toml`, `uv.lock`, Python, OS, and machine. Training additionally records git SHA, dirty state/diff hash, frameworks, device, and accelerator. Eval does not record git SHA or dirty-state hash; its source hash is the stronger current byte-level code identity. |
 | Support a clean CI check | existing core reproduction workflow | `.github/workflows/core-repro-smoke.yml` | CI already runs Ruff, Pyright, the full suite, and the old deterministic smoke. It should be pointed at the final Week 11 default path only after that path is stable. |
-| Preserve portability claims honestly | absolute paths stored in historical training and eval artifacts | current loaders resolve those absolute paths directly | Canonical artifacts reload in the present worktree, but moving the archive breaks many source, config, task, and attempt refs. Level 1 must report this path-local limitation; reproduction cannot claim a portable bundle. |
+| Preserve portability claims honestly | absolute paths stored in historical training and eval artifacts | current loaders resolve those absolute paths directly | Canonical artifacts reload in the present worktree, but moving the stored result breaks many source, config, task, and attempt refs. Level 1 must report this path-local limitation; reproduction cannot claim a portable bundle. |
 
 ### Current Execution And Recovery Shape
 
@@ -92,7 +92,7 @@ policy-decision reconstruction:
 
 report regeneration:
   both designated Week 10 Markdown reports were byte-identical to fresh
-  rendering from their archived eval suites
+  rendering from their stored eval suites
 ```
 
 No live model inference, network access, GPU work, training, heldout-private
@@ -252,13 +252,13 @@ byte-identical to the report emitted during the same invocation.
 
 That proves the current locked environment can execute the task, agent-control,
 scorer, replay, artifact, and report path coherently. It does not validate the
-archived Week 10 SFT/DPO artifact graph, reconstruct the Week 10 abstention
+stored Week 10 SFT/DPO artifact graph, reconstruct the Week 10 abstention
 decisions, compare against a checked-in canonical smoke result, rerun real-model
 inference, or rerun training.
 
 The Week 11 default must report the two claims separately:
 
-- archived-evidence verification reconstructs the designated Week 10 evidence,
+- stored-evidence verification reconstructs the designated Week 10 evidence,
   decisions, and canonical reports from stored artifacts;
 - deterministic harness smoke establishes that a small current executable path
   still works, without claiming to reproduce the Week 10 model result.
@@ -286,7 +286,7 @@ make its distinct suite/replay/report assertions executable. Existing control
 calibration remains the owner of repeated flake and public-check-idempotency
 measurement.
 
-## 2026-08-18 Checkpoint 5: Archived Policy-Selection Consumer
+## 2026-08-18 Checkpoint 5: Stored Policy-Selection Consumer
 
 Added one read-only composition boundary that accepts an eval-suite directory
 and returns the existing `PolicySelectionAnalysis`. It does not add a schema,
@@ -314,7 +314,7 @@ Focused failure coverage proves that changed config bytes and missing attempt
 evidence fail closed. A disposable two-policy suite reconstructs an abstained
 complete tie from two typed policy failures.
 
-The two archived Week 10 suites also reconstructed successfully:
+The two stored Week 10 suites also reconstructed successfully:
 
 ```text
 positive SFT comparison -> 24 cells, abstained, complete_tie, none
@@ -325,9 +325,9 @@ This checkpoint deliberately leaves the generic report renderer unchanged.
 The designated Week 10 reports already regenerate byte-for-byte; adding a new
 section would change the canonical bytes. The Level 1 verifier should therefore
 check the reconstructed policy decision and canonical report bytes as separate
-derived assertions over the same archived suite.
+derived assertions over the same stored suite.
 
-## 2026-08-18 Checkpoint 6: Level 1 Archived-Evidence Verifier
+## 2026-08-18 Checkpoint 6: Level 1 Stored-Evidence Verifier
 
 Added the CPU-only Level 1 composition. It validates the task pack and split
 lock, reconstructs all three designated training graphs, reconstructs both
@@ -341,11 +341,11 @@ economy gate:
 
 1. It uniquely owns which otherwise internally valid training runs, eval
    suites, reports, and expected decisions are the designated result.
-2. A repository maintainer writes it; the archived-evidence verifier consumes
+2. A repository maintainer writes it; the stored-evidence verifier consumes
    it.
 3. Existing manifests can prove internal consistency and lineage, but cannot
    identify themselves as the canonical experiment among multiple valid runs.
-4. Without the plan, a substituted but internally coherent archive could pass
+4. Without the plan, a substituted but internally coherent result could pass
    validation without reproducing the designated result.
 
 The plan intentionally does not copy internal task hashes, adapter hashes,
@@ -372,7 +372,32 @@ two regenerated report byte comparisons               PASS
 overall                                                PASS (11/11)
 ```
 
-Focused tests include the real designated archive and a synthetic report
+Focused tests include the real designated result and a synthetic report
 renderer drift. The drift leaves the canonical report hash valid but makes the
-regenerated-report check and overall result fail, proving that semantic archive
-validation cannot mask changed report bytes.
+regenerated-report check and overall result fail, proving that semantic
+stored-evidence validation cannot mask changed report bytes.
+
+## 2026-08-18 Checkpoint 7: Level 1 Command And Exit Semantics
+
+Added the thin command:
+
+```text
+uv run --frozen agentenv reproduce stored-evidence --out <fresh-directory>
+```
+
+The command delegates every check to the Level 1 verifier, writes
+`stored_evidence_verification.md`, prints the required-check count, and exits
+`1` when any required check fails. Invalid plans and unsafe or non-empty output
+directories fail before verification begins. The command adds no alternate
+validation or decision logic.
+
+Two real invocations against the canonical plan each returned:
+
+```text
+PASS stored-evidence checks=11/11
+```
+
+Their two regenerated reports and verification summaries were byte-identical.
+A real invocation with one deliberately wrong canonical report hash returned
+`FAIL`, reported `10/11`, wrote the failure summary, and exited `1`. Focused CLI
+tests independently cover both status-to-exit mappings.

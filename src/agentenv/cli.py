@@ -39,6 +39,10 @@ from agentenv.orchestrators.eval_run import (
 )
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.replay.runner import run_replay
+from agentenv.reproduction.stored_evidence import (
+    render_stored_evidence_verification,
+    verify_stored_evidence,
+)
 from agentenv.reporting.markdown import write_markdown_report
 from agentenv.rewards.export import run_and_persist_reward_hack_audit
 from agentenv.sandbox.docker_smoke import run_docker_smoke
@@ -98,6 +102,7 @@ sandbox_app = typer.Typer(no_args_is_help=True)
 scorers_app = typer.Typer(no_args_is_help=True)
 harness_app = typer.Typer(no_args_is_help=True)
 rewards_app = typer.Typer(no_args_is_help=True)
+reproduction_app = typer.Typer(no_args_is_help=True)
 local_model_app = typer.Typer(no_args_is_help=True)
 ollama_app = typer.Typer(no_args_is_help=True)
 app.add_typer(tasks_app, name="tasks")
@@ -111,6 +116,7 @@ app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(scorers_app, name="scorers")
 app.add_typer(harness_app, name="harness")
 app.add_typer(rewards_app, name="rewards")
+app.add_typer(reproduction_app, name="reproduce")
 app.add_typer(local_model_app, name="local-model")
 training_app.add_typer(training_candidates_app, name="candidates")
 training_app.add_typer(training_positive_sft_app, name="positive-sft")
@@ -118,6 +124,9 @@ training_app.add_typer(training_preferences_app, name="preferences")
 local_model_app.add_typer(ollama_app, name="ollama")
 
 console = Console()
+DEFAULT_STORED_EVIDENCE_PLAN = Path(
+    "configs/reproduction/posttraining_result.yaml"
+)
 
 
 def _build_training_authorization_override(
@@ -1539,6 +1548,42 @@ def report_run(
 ) -> None:
     report_path = write_markdown_report(artifact_dir, out)
     console.print(f"[green]wrote[/green] {report_path}")
+
+
+@reproduction_app.command("stored-evidence")
+def reproduce_stored_evidence(
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Fresh directory for regenerated reports and the verification summary.",
+    ),
+    plan: Path = typer.Option(
+        DEFAULT_STORED_EVIDENCE_PLAN,
+        "--plan",
+        help="Plan declaring the canonical stored evidence and expectations.",
+    ),
+) -> None:
+    try:
+        verification = verify_stored_evidence(plan, out)
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--plan") from exc
+
+    summary_path = verification.out_dir / "stored_evidence_verification.md"
+    summary_path.write_text(render_stored_evidence_verification(verification))
+    passed_count = sum(check.status == "PASS" for check in verification.checks)
+    style = "green" if verification.status == "PASS" else "red"
+    console.print(
+        f"[{style}]{verification.status}[/{style}] "
+        f"stored-evidence checks={passed_count}/{len(verification.checks)}"
+    )
+    for check in verification.checks:
+        if check.status == "FAIL":
+            console.print(f"[red]FAIL[/red] {check.check_id}: {check.detail}")
+    console.print(f"wrote {summary_path}", soft_wrap=True)
+    if verification.status == "FAIL":
+        raise typer.Exit(code=1)
 
 
 def _format_layer_counts(layer_counts: dict[str, dict[str, int]]) -> str:

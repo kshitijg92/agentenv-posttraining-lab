@@ -1,2 +1,1 @@
-"""CPU-only reconstruction of designated archived evidence."""
-
+"""CPU-only reconstruction of designated stored evidence."""

@@ -21,7 +21,7 @@ The learning objectives are:
 
 ```text
 reproduction as a scoped claim rather than a single vague command
-archived-artifact verification versus expensive experiment reruns
+stored-artifact verification versus expensive experiment reruns
 resume versus retry semantics
 typed operational failures rather than ambiguous partial success
 deterministic report regeneration
@@ -62,7 +62,7 @@ The strongest acceptable Week 11 claim is:
 
 ```text
 From a clean checkout with the declared Python environment, one documented
-CPU-only command can validate the task pack and archived Week 10 artifact
+CPU-only command can validate the task pack and stored Week 10 artifact
 graph, run deterministic fake-policy checks, regenerate designated reports,
 and produce an explicit pass/fail reproduction summary. Interrupted work is
 either resumed from validated completed units or rejected with a typed reason,
@@ -85,7 +85,7 @@ the default claim.
 Week 11 will use explicit levels so that "reproduce Week 10" cannot quietly
 mean different things in different contexts.
 
-### Level 1: Archived Evidence Verification
+### Level 1: Stored Evidence Verification
 
 Recompute and validate from repository artifacts:
 
@@ -240,7 +240,7 @@ Expected operations, subject to the inventory:
    failure.
 
 The path must write generated test output to an explicit temporary or requested
-directory. It must not silently mutate the Week 10 archive.
+directory. It must not silently mutate the stored Week 10 evidence.
 
 Focused tests should cover a successful clean run, a missing required input,
 and a mismatch between regenerated and canonical evidence before broadening the
@@ -468,10 +468,10 @@ routine refactors in `learnings.md`.
 
 ## Next Small Step
 
-Expose the passing Level 1 verifier through one thin command that writes its
-summary and exits nonzero if any required check fails. Then compose that
-command with the existing deterministic core smoke instead of introducing a
-second control-calibration path.
+Strengthen the existing deterministic core smoke so its distinct eval-suite,
+replay, and report expectations are executable failure conditions. Then
+compose that Level 2 path with `agentenv reproduce stored-evidence` instead of
+introducing a second control-calibration path.
 
 Do not add resume execution yet. The resume unit, terminal generation outcome,
 predeclared attempt set, strict identity matching, and corrupt-attempt scope are

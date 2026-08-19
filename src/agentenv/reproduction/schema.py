@@ -18,7 +18,7 @@ ContentHash = str
 TrainingArtifactKind = Literal["positive_sft_lora", "dpo_lora"]
 
 
-class ArchivedTrainingArtifactSpec(BaseModel):
+class StoredTrainingArtifactSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, pattern=r"^[a-z][a-z0-9_-]*$")
@@ -50,7 +50,7 @@ class ExpectedPolicySelection(BaseModel):
         return self
 
 
-class ArchivedComparisonSpec(BaseModel):
+class StoredComparisonSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, pattern=r"^[a-z][a-z0-9_-]*$")
@@ -68,13 +68,13 @@ class ArchivedComparisonSpec(BaseModel):
         return validate_relative_artifact_ref(value)
 
 
-class ArchivedReproductionPlan(BaseModel):
+class StoredEvidencePlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, pattern=r"^[a-z][a-z0-9_-]*$")
     task_pack: str = Field(min_length=1)
-    training_artifacts: tuple[ArchivedTrainingArtifactSpec, ...] = Field(min_length=1)
-    comparisons: tuple[ArchivedComparisonSpec, ...] = Field(min_length=1)
+    training_artifacts: tuple[StoredTrainingArtifactSpec, ...] = Field(min_length=1)
+    comparisons: tuple[StoredComparisonSpec, ...] = Field(min_length=1)
 
     @field_validator("task_pack")
     @classmethod
@@ -82,7 +82,7 @@ class ArchivedReproductionPlan(BaseModel):
         return validate_relative_artifact_ref(value)
 
     @model_validator(mode="after")
-    def validate_unique_declarations(self) -> "ArchivedReproductionPlan":
+    def validate_unique_declarations(self) -> "StoredEvidencePlan":
         _require_unique(
             (artifact.name for artifact in self.training_artifacts),
             "training artifact names",
@@ -106,14 +106,14 @@ class ArchivedReproductionPlan(BaseModel):
         return self
 
 
-def load_archived_reproduction_plan(path: Path) -> ArchivedReproductionPlan:
+def load_stored_evidence_plan(path: Path) -> StoredEvidencePlan:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
-        raise ValueError("Archived reproduction plan must contain a YAML object")
-    return ArchivedReproductionPlan.model_validate(raw)
+        raise ValueError("Stored-evidence plan must contain a YAML object")
+    return StoredEvidencePlan.model_validate(raw)
 
 
 def _require_unique(values: Iterable[str], label: str) -> None:
     frozen = tuple(values)
     if len(frozen) != len(set(frozen)):
-        raise ValueError(f"Archived reproduction plan requires unique {label}")
+        raise ValueError(f"Stored-evidence plan requires unique {label}")
