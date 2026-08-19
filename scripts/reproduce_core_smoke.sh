@@ -18,10 +18,8 @@ fi
 mkdir -p "$out_root"
 cd "$repo_root"
 
-uv run --frozen agentenv tasks validate \
-  data/task_packs/repo_patch_python_v0
-uv run --frozen agentenv tasks check-splits \
-  data/task_packs/repo_patch_python_v0/splits.lock.json
+uv run --frozen agentenv reproduce stored-evidence \
+  --out "$out_root/stored_evidence"
 
 uv run --frozen agentenv eval \
   --config configs/eval/eval_quality_gate_repo_patch_python_v0.yaml \
@@ -35,4 +33,4 @@ uv run --frozen agentenv report \
 
 cmp "$out_root/eval_report.md" "$out_root/eval_report_regenerated.md"
 
-echo "core reproduction smoke passed: $out_root"
+echo "stored evidence and deterministic core reproduction passed: $out_root"

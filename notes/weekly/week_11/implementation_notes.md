@@ -401,3 +401,62 @@ Their two regenerated reports and verification summaries were byte-identical.
 A real invocation with one deliberately wrong canonical report hash returned
 `FAIL`, reported `10/11`, wrote the failure summary, and exited `1`. Focused CLI
 tests independently cover both status-to-exit mappings.
+
+## 2026-08-18 Checkpoint 8: Executable Deterministic-Suite Gate
+
+Strengthened the existing all-policies eval workflow instead of adding another
+smoke command, manifest, or verifier artifact. The eval-suite manifest remains
+the declaration and coverage authority. The new consumer walks the completed
+suite and turns the already-declared control and replay expectations into the
+command's success condition.
+
+Implementation shape:
+
+- extracted the existing eval-suite/config/task/policy binding checks into one
+  reusable loader; policy selection and operational verification now use the
+  same declaration validation;
+- moved scorer-control and scripted-agent expectations into one shared module
+  used by control calibration, reporting, and operational verification;
+- for control policies, reconstructs each typed trajectory and requires the
+  expected scorer or agent/prompt-loop/nested-scorer outcome;
+- for every configured replay, validates the suite, child manifest, result,
+  source eval run, exact source-attempt coverage, artifact references, and
+  comparison records, then requires replay status `PASS`;
+- an all-policies eval exits nonzero when those operational checks fail, after
+  preserving its manifest and optional report for diagnosis;
+- ordinary agent-model success or failure remains eval evidence and does not
+  determine the command exit code unless a configured replay fails;
+- model-only suites with no configured replay do not pay for this additional
+  operational pass.
+
+The existing `scripts/reproduce_core_smoke.sh` now composes Level 1 before the
+same deterministic eval/replay/report path. It no longer repeats task-pack and
+split-lock commands because Level 1 already owns those checks. The final
+same-run report regeneration still uses byte comparison.
+
+Verified success path:
+
+```text
+stored Week 10 evidence                         PASS 11/11
+fresh deterministic control attempts           18
+configured fresh replays                         6
+control-plus-replay operational checks          PASS 24/24
+same-run regenerated eval report                byte-identical
+combined command exit                           0
+```
+
+A disposable run forced by the filesystem sandbox to use an empty dependency
+cache supplied useful failure-injection evidence. All runnable controls failed
+their public checks because their isolated task environments could not obtain
+locked dependencies, and five replays consequently mismatched. The eval
+artifacts and report were still
+written, but operational verification reported `4/24` and the command exited
+`1`. This is the exact gap in the earlier smoke: successful orchestration and
+two identical reports could describe the same broken control run without
+making the eval command fail.
+
+Focused tests cover expected scorer and scripted-agent outcomes, a valid but
+off-track control outcome, parent/child replay-result disagreement, successful
+real control-suite verification, and CLI failure status propagation. Ruff,
+Pyright, and the affected policy-selection, control, reporting, and CLI tests
+are part of the checkpoint verification.

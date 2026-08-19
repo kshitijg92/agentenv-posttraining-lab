@@ -43,6 +43,10 @@ from agentenv.reproduction.stored_evidence import (
     render_stored_evidence_verification,
     verify_stored_evidence,
 )
+from agentenv.reproduction.deterministic_suite import (
+    requires_operational_verification,
+    verify_eval_suite_operational_expectations,
+)
 from agentenv.reporting.markdown import write_markdown_report
 from agentenv.rewards.export import run_and_persist_reward_hack_audit
 from agentenv.sandbox.docker_smoke import run_docker_smoke
@@ -609,8 +613,28 @@ def run_eval(
         except ArtifactDirectoryError as exc:
             raise typer.BadParameter(str(exc), param_hint="--out") from exc
         layer_counts = _format_layer_counts(count_eval_matrix_layers(eval_matrix))
+        report_path = None
+        if report_out is not None:
+            report_path = write_markdown_report(eval_matrix.out_dir, report_out)
+
+        operational_verification = None
+        operational_error: OSError | ValueError | None = None
+        if requires_operational_verification(eval_matrix.config):
+            try:
+                operational_verification = (
+                    verify_eval_suite_operational_expectations(eval_matrix.out_dir)
+                )
+            except (OSError, ValueError) as exc:
+                operational_error = exc
+
+        operational_passed = operational_error is None and (
+            operational_verification is None
+            or operational_verification.status == "PASS"
+        )
+        style = "green" if operational_passed else "red"
+        label = "eval complete" if operational_passed else "eval verification failed"
         console.print(
-            f"[green]eval complete[/green] {eval_matrix.config.name} "
+            f"[{style}]{label}[/{style}] {eval_matrix.config.name} "
             f"policies={len(eval_matrix.policy_runs)} "
             f"attempts={sum(len(run.attempts) for run in eval_matrix.policy_runs)} "
             f"replays={len(eval_matrix.replay_runs)} "
@@ -620,9 +644,34 @@ def run_eval(
             f"wrote {eval_matrix.out_dir / MANIFEST_FILENAME}",
             soft_wrap=True,
         )
-        if report_out is not None:
-            report_path = write_markdown_report(eval_matrix.out_dir, report_out)
+        if report_path is not None:
             console.print(f"wrote {report_path}", soft_wrap=True)
+        if operational_error is not None:
+            console.print(
+                "[red]FAIL[/red] operational verification: "
+                f"{type(operational_error).__name__}: {operational_error}"
+            )
+        elif operational_verification is not None:
+            passed_count = sum(
+                check.status == "PASS"
+                for check in operational_verification.checks
+            )
+            verification_style = (
+                "green" if operational_verification.status == "PASS" else "red"
+            )
+            console.print(
+                f"[{verification_style}]"
+                f"{operational_verification.status}"
+                f"[/{verification_style}] operational checks="
+                f"{passed_count}/{len(operational_verification.checks)}"
+            )
+            for check in operational_verification.checks:
+                if check.status == "FAIL":
+                    console.print(
+                        f"[red]FAIL[/red] {check.check_id}: {check.detail}"
+                    )
+        if not operational_passed:
+            raise typer.Exit(code=1)
         return
 
     if policy is None:

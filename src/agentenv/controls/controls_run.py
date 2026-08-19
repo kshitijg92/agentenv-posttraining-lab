@@ -27,6 +27,10 @@ from agentenv.controls.agent_control_scripts import (
     ExpectedAgentControlResult,
     load_agent_control_script_case,
 )
+from agentenv.controls.expectations import (
+    ScorerControlExpectation,
+    expected_scorer_control_outcome,
+)
 from agentenv.controls.public_check_idempotency_runner import (
     DEFAULT_PUBLIC_CHECK_IDEMPOTENCY_REPEATS,
     run_declared_public_check_idempotency_calibrations,
@@ -43,7 +47,7 @@ from agentenv.orchestrators.agent_task_run import (
     AgentTaskRun,
     run_and_persist_agent_task_attempt_to_dir,
 )
-from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
+from agentenv.orchestrators.attempt import AttemptResult
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
 from agentenv.tasks.schema import TaskManifest
 from agentenv.tasks.hashing import build_eval_task_hashes
@@ -78,14 +82,6 @@ _PYTEST_TMP_SEGMENT_RE = re.compile(r"(?:(?<=/)|(?<=\.\.\.))pytest-\d+(?=/)")
 _PYTEST_TMP_ELLIPSIZED_SEGMENT_RE = re.compile(r"(?<=\.\.\.)ytest-\d+(?=/)")
 _SECONDS_DURATION_RE = re.compile(r"\bin \d+(?:\.\d+)?s\b")
 _MILLISECONDS_DURATION_RE = re.compile(r"\bin \d+ms\b")
-
-
-@dataclass(frozen=True)
-class ScorerControlExpectation:
-    control: ScorerControlName
-    expected_attempt_status: AttemptStatus
-    expected_public_status: CheckStatus
-    expected_hidden_status: CheckStatus
 
 
 @dataclass(frozen=True)
@@ -233,31 +229,6 @@ def run_controls(
     return control_run
 
 
-def expected_control_outcome(control: ScorerControlName) -> ScorerControlExpectation:
-    if control == "oracle":
-        return ScorerControlExpectation(
-            control=control,
-            expected_attempt_status="PASS",
-            expected_public_status="PASS",
-            expected_hidden_status="PASS",
-        )
-    if control == "bad.noop":
-        return ScorerControlExpectation(
-            control=control,
-            expected_attempt_status="HIDDEN_TEST_FAIL",
-            expected_public_status="PASS",
-            expected_hidden_status="FAIL",
-        )
-    if control == "bad.public_only":
-        return ScorerControlExpectation(
-            control=control,
-            expected_attempt_status="HIDDEN_TEST_FAIL",
-            expected_public_status="PASS",
-            expected_hidden_status="FAIL",
-        )
-    raise ValueError(f"Unknown control: {control}")
-
-
 def _run_scorer_control(
     *,
     task: ControlTask,
@@ -266,7 +237,7 @@ def _run_scorer_control(
     repeat_index: int,
     out_dir: Path,
 ) -> ControlRecord:
-    expectation = expected_control_outcome(control)
+    expectation = expected_scorer_control_outcome(control)
     artifact_dir = (
         out_dir
         / f"{task.task_id}__{_control_slug(control)}__repeat_{repeat_index + 1:03d}"
@@ -776,9 +747,9 @@ def _record_group(
 
 def _scorer_expected_json(expectation: ScorerControlExpectation) -> JsonObject:
     return {
-        "attempt_status": expectation.expected_attempt_status,
-        "public_status": expectation.expected_public_status,
-        "hidden_status": expectation.expected_hidden_status,
+        "attempt_status": expectation.attempt_status,
+        "public_status": expectation.public_status,
+        "hidden_status": expectation.hidden_status,
     }
 
 
@@ -798,9 +769,9 @@ def _scorer_match(
     result: AttemptResult,
 ) -> bool:
     return (
-        result.status == expectation.expected_attempt_status
-        and result.public_status == expectation.expected_public_status
-        and result.hidden_status == expectation.expected_hidden_status
+        result.status == expectation.attempt_status
+        and result.public_status == expectation.public_status
+        and result.hidden_status == expectation.hidden_status
     )
 
 

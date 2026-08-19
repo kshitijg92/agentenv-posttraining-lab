@@ -24,6 +24,13 @@ from agentenv.artifacts.payloads import (
     load_replay_comparison_records,
     load_replay_result,
 )
+from agentenv.controls.expectations import (
+    AgentControlExpectation,
+    ScorerControlExpectation,
+    expected_agent_control_outcome,
+    expected_scorer_control_outcome,
+)
+from agentenv.evals.schema import AgentControlName, ScorerControlName
 from agentenv.rewards.export import load_reward_hack_audit_artifact
 from agentenv.rewards.reporting import render_reward_hack_audit_report
 
@@ -894,16 +901,20 @@ def _scorer_expectation_row(summary: dict[str, object]) -> str:
             f"{_colored_label('NOT_CHECKED', 'gray')} |"
         )
 
-    final_count = _status_count(summary, "scorer_status_counts", expected["final"])
+    final_count = _status_count(
+        summary,
+        "scorer_status_counts",
+        expected.attempt_status,
+    )
     public_count = _status_count(
         summary,
         "scorer_public_status_counts",
-        expected["public"],
+        expected.public_status,
     )
     hidden_count = _status_count(
         summary,
         "scorer_hidden_status_counts",
-        expected["hidden"],
+        expected.hidden_status,
     )
     on_track = (
         final_count == attempt_count
@@ -917,21 +928,23 @@ def _scorer_expectation_row(summary: dict[str, object]) -> str:
     return (
         f"| {policy} "
         f"| {control_name} "
-        f"| {expected['final']} "
+        f"| {expected.attempt_status} "
         f"| {_count_rate(final_count, attempt_count)} "
-        f"| {expected['public']} "
+        f"| {expected.public_status} "
         f"| {_count_rate(public_count, attempt_count)} "
-        f"| {expected['hidden']} "
+        f"| {expected.hidden_status} "
         f"| {_count_rate(hidden_count, attempt_count)} "
         f"| {result} |"
     )
 
 
-def _scorer_control_expectation(control_name: str) -> dict[str, str] | None:
-    if control_name == "oracle":
-        return {"final": "PASS", "public": "PASS", "hidden": "PASS"}
-    if control_name in {"bad.noop", "bad.public_only"}:
-        return {"final": "HIDDEN_TEST_FAIL", "public": "PASS", "hidden": "FAIL"}
+def _scorer_control_expectation(
+    control_name: str,
+) -> ScorerControlExpectation | None:
+    if control_name in {"oracle", "bad.noop", "bad.public_only"}:
+        return expected_scorer_control_outcome(
+            cast(ScorerControlName, control_name)
+        )
     return None
 
 
@@ -961,12 +974,9 @@ def _agent_expectation_row(summary: dict[str, object]) -> str:
             f"{_colored_label('NOT_CHECKED', 'gray')} |"
         )
 
-    expected_agent_status = _required_expected_status(expected, "agent_status")
-    expected_prompt_loop_status = _required_expected_status(
-        expected,
-        "prompt_loop_status",
-    )
-    expected_nested_scorer_status = expected["nested_scorer_status"]
+    expected_agent_status = expected.agent_status
+    expected_prompt_loop_status = expected.prompt_loop_status
+    expected_nested_scorer_status = expected.nested_scorer_status
     agent_count = _status_count(
         summary,
         "agent_status_counts",
@@ -1000,32 +1010,21 @@ def _agent_expectation_row(summary: dict[str, object]) -> str:
     )
 
 
-def _agent_control_expectation(control_name: str) -> dict[str, str | None] | None:
-    if control_name in {"happy", "recoverable"}:
-        return {
-            "agent_status": "scored",
-            "prompt_loop_status": "completed",
-            "nested_scorer_status": "PASS",
-        }
-    if control_name == "malformed":
-        return {
-            "agent_status": "agent_loop_failed",
-            "prompt_loop_status": "invalid_model_output",
-            "nested_scorer_status": None,
-        }
+def _agent_control_expectation(
+    control_name: str,
+) -> AgentControlExpectation | None:
+    if control_name in {"happy", "malformed", "recoverable"}:
+        return expected_agent_control_outcome(cast(AgentControlName, control_name))
     return None
 
 
 def _agent_expectation_on_track(
     summary: dict[str, object],
-    expected: dict[str, str | None],
+    expected: AgentControlExpectation,
 ) -> bool:
     attempt_count = _required_int(summary, "attempt_count")
-    expected_agent_status = _required_expected_status(expected, "agent_status")
-    expected_prompt_loop_status = _required_expected_status(
-        expected,
-        "prompt_loop_status",
-    )
+    expected_agent_status = expected.agent_status
+    expected_prompt_loop_status = expected.prompt_loop_status
     agent_count = _status_count(
         summary,
         "agent_status_counts",
@@ -1038,7 +1037,7 @@ def _agent_expectation_on_track(
     )
     nested_scorer_count = _expected_nested_scorer_count(
         summary,
-        expected["nested_scorer_status"],
+        expected.nested_scorer_status,
         attempt_count,
     )
     return (
@@ -1062,16 +1061,6 @@ def _expected_nested_scorer_count(
 
 def _expected_nested_scorer_display(expected_status: str | None) -> str:
     return "not_run" if expected_status is None else expected_status
-
-
-def _required_expected_status(
-    expected: dict[str, str | None],
-    key: str,
-) -> str:
-    status = expected.get(key)
-    if not isinstance(status, str):
-        raise ValueError(f"Expected string status for {key!r}")
-    return status
 
 
 def _scorer_aggregate_rate_lines(summaries: list[dict[str, object]]) -> list[str]:

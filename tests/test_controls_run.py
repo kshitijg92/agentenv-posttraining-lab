@@ -5,7 +5,8 @@ from pathlib import Path
 from agentenv.artifacts.manifests import load_control_calibration_manifest
 from agentenv.artifacts.payloads import load_control_calibration_result_records
 from agentenv.controls import controls_run as controls_run_module
-from agentenv.controls.controls_run import expected_control_outcome, run_controls
+from agentenv.controls.controls_run import run_controls
+from agentenv.controls.expectations import expected_scorer_control_outcome
 from agentenv.tasks.validate import load_task_manifest
 
 
@@ -23,24 +24,24 @@ AGENT_CONTROL_NAMES = {
 
 
 def test_expected_control_outcome_is_inferred_from_control_name() -> None:
-    oracle = expected_control_outcome("oracle")
-    bad_noop = expected_control_outcome("bad.noop")
-    bad_public_only = expected_control_outcome("bad.public_only")
+    oracle = expected_scorer_control_outcome("oracle")
+    bad_noop = expected_scorer_control_outcome("bad.noop")
+    bad_public_only = expected_scorer_control_outcome("bad.public_only")
 
     assert (
-        oracle.expected_attempt_status,
-        oracle.expected_public_status,
-        oracle.expected_hidden_status,
+        oracle.attempt_status,
+        oracle.public_status,
+        oracle.hidden_status,
     ) == ("PASS", "PASS", "PASS")
     assert (
-        bad_noop.expected_attempt_status,
-        bad_noop.expected_public_status,
-        bad_noop.expected_hidden_status,
+        bad_noop.attempt_status,
+        bad_noop.public_status,
+        bad_noop.hidden_status,
     ) == ("HIDDEN_TEST_FAIL", "PASS", "FAIL")
     assert (
-        bad_public_only.expected_attempt_status,
-        bad_public_only.expected_public_status,
-        bad_public_only.expected_hidden_status,
+        bad_public_only.attempt_status,
+        bad_public_only.public_status,
+        bad_public_only.hidden_status,
     ) == ("HIDDEN_TEST_FAIL", "PASS", "FAIL")
 
 

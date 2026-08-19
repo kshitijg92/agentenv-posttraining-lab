@@ -10,6 +10,10 @@ from agentenv.audits.schema import (
     derive_harness_runtime_hash,
 )
 from agentenv.cli import app
+from agentenv.reproduction.deterministic_suite import (
+    EvalSuiteOperationalCheck,
+    EvalSuiteOperationalVerification,
+)
 
 
 def test_eval_cli_writes_optional_eval_report(tmp_path: Path) -> None:
@@ -331,9 +335,71 @@ def test_eval_cli_writes_optional_eval_matrix_report(tmp_path: Path) -> None:
     assert "wrote" in result.output
     assert "manifest.json" in result.output
     assert "eval_matrix.md" in result.output
+    assert "PASS operational checks=6/6" in result.output
     assert (out_dir / "manifest.json").is_file()
     assert report_path.is_file()
     assert "# Eval Suite Report" in report_path.read_text()
+
+
+def test_eval_cli_exits_nonzero_when_operational_verification_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    out_dir = tmp_path / "eval_matrix"
+    eval_matrix = SimpleNamespace(
+        config=SimpleNamespace(name="operational_failure_fixture"),
+        policy_runs=(),
+        replay_runs=(),
+        out_dir=out_dir,
+    )
+    verification = EvalSuiteOperationalVerification(
+        eval_suite_id="eval-suite-fixture",
+        checks=(
+            EvalSuiteOperationalCheck(
+                check_id="replay.oracle.repeat_0",
+                status="FAIL",
+                detail="configured replay status is MISMATCH",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "run_eval_config_all_policies",
+        lambda *args, **kwargs: eval_matrix,
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "count_eval_matrix_layers",
+        lambda matrix: {},
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "requires_operational_verification",
+        lambda config: True,
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "verify_eval_suite_operational_expectations",
+        lambda artifact_dir: verification,
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "eval",
+            "--config",
+            "fixture.yaml",
+            "--all-policies",
+            "--out",
+            str(out_dir),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "eval verification failed" in result.output
+    assert "operational checks=0/1" in result.output
+    assert "replay.oracle.repeat_0" in result.output
+    assert "configured replay status is MISMATCH" in result.output
 
 
 def test_eval_compare_task_hashes_cli_matches_and_writes_json(
