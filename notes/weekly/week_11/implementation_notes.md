@@ -326,3 +326,53 @@ The designated Week 10 reports already regenerate byte-for-byte; adding a new
 section would change the canonical bytes. The Level 1 verifier should therefore
 check the reconstructed policy decision and canonical report bytes as separate
 derived assertions over the same archived suite.
+
+## 2026-08-18 Checkpoint 6: Level 1 Archived-Evidence Verifier
+
+Added the CPU-only Level 1 composition. It validates the task pack and split
+lock, reconstructs all three designated training graphs, reconstructs both
+policy-selection decisions through the trajectory boundary, checks the pinned
+outer suite and report hashes, and regenerates both reports into a fresh output
+directory for byte comparison.
+
+The exact canonical set now lives in
+`configs/reproduction/posttraining_result.yaml`. This plan passed the artifact
+economy gate:
+
+1. It uniquely owns which otherwise internally valid training runs, eval
+   suites, reports, and expected decisions are the designated result.
+2. A repository maintainer writes it; the archived-evidence verifier consumes
+   it.
+3. Existing manifests can prove internal consistency and lineage, but cannot
+   identify themselves as the canonical experiment among multiple valid runs.
+4. Without the plan, a substituted but internally coherent archive could pass
+   validation without reproducing the designated result.
+
+The plan intentionally does not copy internal task hashes, adapter hashes,
+source membership, attempt identities, or runtime provenance. Their existing
+manifests and loaders remain authoritative. It pins only each top-level
+training/suite manifest, each canonical report, and the expected selection
+decision.
+
+The verifier returns one deterministic in-memory result containing 11 required
+checks. Evidence failures are captured per check so independent artifacts can
+still be inspected, while the overall result is `FAIL` if any required check
+fails. Invalid plan syntax or an unsafe/non-empty output location still fails
+before verification starts.
+
+Canonical probe:
+
+```text
+task pack structure and splits                         PASS
+three training artifact graphs                        PASS
+SFT comparison: 24 cells, abstained, complete_tie     PASS
+DPO comparison: 18 cells, abstained, complete_tie     PASS
+two canonical report hashes                           PASS
+two regenerated report byte comparisons               PASS
+overall                                                PASS (11/11)
+```
+
+Focused tests include the real designated archive and a synthetic report
+renderer drift. The drift leaves the canonical report hash valid but makes the
+regenerated-report check and overall result fail, proving that semantic archive
+validation cannot mask changed report bytes.

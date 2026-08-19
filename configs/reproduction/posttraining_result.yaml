@@ -1,0 +1,34 @@
+name: posttraining_result
+task_pack: data/task_packs/repo_patch_python_v0
+training_artifacts:
+  - name: positive_sft_raw
+    kind: positive_sft_lora
+    artifact_dir: experiments/models/week_10_positive_sft_raw_lora
+    expected_manifest_hash: xxh64:3828900162386f5c
+  - name: positive_sft_efficiency_filtered
+    kind: positive_sft_lora
+    artifact_dir: experiments/models/week_10_positive_sft_efficiency_filtered_lora
+    expected_manifest_hash: xxh64:024cb3a3d8a4facb
+  - name: exploratory_dpo
+    kind: dpo_lora
+    artifact_dir: experiments/models/week_10_dpo_lora_exploratory_full_pass
+    expected_manifest_hash: xxh64:a7b4da47350bdb08
+comparisons:
+  - name: positive_sft_policy_selection
+    eval_suite_dir: experiments/runs/week_10_positive_sft_policy_selection
+    expected_suite_manifest_hash: xxh64:6a46d6e79373889c
+    canonical_report: experiments/reports/week_10_policy_selection.md
+    expected_report_hash: xxh64:51fca6823174a8f4
+    expected_selection:
+      status: abstained
+      branch: complete_tie
+      selected_policy: null
+  - name: exploratory_dpo_policy_selection
+    eval_suite_dir: experiments/runs/week_10_dpo_exploratory_policy_evaluation_disjoint_v0
+    expected_suite_manifest_hash: xxh64:de5a948521bf8316
+    canonical_report: experiments/reports/week_10_dpo_exploratory_policy_evaluation_disjoint.md
+    expected_report_hash: xxh64:dc796e3f37e64f08
+    expected_selection:
+      status: abstained
+      branch: complete_tie
+      selected_policy: null

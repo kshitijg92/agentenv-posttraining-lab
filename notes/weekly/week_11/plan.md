@@ -468,10 +468,10 @@ routine refactors in `learnings.md`.
 
 ## Next Small Step
 
-Compose the Level 1 archived-evidence verifier from existing authoritative
-loaders and the suite-backed policy-selection consumer. Keep report rendering
-unchanged: regenerate each designated report in a disposable location and
-require both the reconstructed decision and exact report bytes to match.
+Expose the passing Level 1 verifier through one thin command that writes its
+summary and exits nonzero if any required check fails. Then compose that
+command with the existing deterministic core smoke instead of introducing a
+second control-calibration path.
 
 Do not add resume execution yet. The resume unit, terminal generation outcome,
 predeclared attempt set, strict identity matching, and corrupt-attempt scope are
