@@ -460,3 +460,54 @@ off-track control outcome, parent/child replay-result disagreement, successful
 real control-suite verification, and CLI failure status propagation. Ruff,
 Pyright, and the affected policy-selection, control, reporting, and CLI tests
 are part of the checkpoint verification.
+
+## 2026-08-19 Checkpoint 9: Pre-Execution Eval-Suite Declaration
+
+Added an atomically published, typed eval-suite declaration before the first
+attempt executes. This supersedes the completed suite manifest as the owner of
+planned membership while leaving the completed manifest as terminal evidence
+of what actually finished.
+
+The declaration passed the artifact economy gate:
+
+1. It uniquely owns the suite id, policy-run ids, complete task/attempt index
+   set, eval-attempt ids, artifact locations, and resolved semantic inputs
+   before terminal parent manifests exist.
+2. The all-policies orchestrator writes it; policy execution, completed-suite
+   validation, and the future resume workflow consume it.
+3. Those facts cannot be recovered safely from child manifests after an
+   interruption because unstarted attempts have no child artifacts and a
+   completed suite manifest has not yet been written.
+4. Without it, a resumed run could silently allocate new identities or shrink
+   the configured attempt set to whichever children happened to survive.
+
+Execution now consumes the preassigned eval-run and eval-attempt ids instead
+of allocating them as each policy or attempt is reached. Before any attempt is
+attributed to the suite, the runner requires the same eval-config bytes, task
+hashes, harness runtime, policy order, attempt coverage, and resolved model,
+decoding, and input-protocol provenance. Before publishing the terminal suite
+manifest, it reloads the declaration and requires exact policy-run and attempt
+coverage. Completed-suite consumers enforce the same relation before report,
+trajectory, policy-selection, or deterministic-suite work.
+
+An injected interruption after the first of six planned control attempts left:
+
+```text
+predeclared attempts          6
+completed child artifacts     1
+policy-run manifests          0
+terminal suite manifests      0
+```
+
+This proves that planned membership and identities survive interruption; it
+does not yet make the surviving child reusable. The agent-attempt artifact is
+still the terminal record for the whole agent-plus-scorer orchestration, so it
+cannot signal that model generation alone completed. The next checkpoint is a
+terminal agent-generation result bound to the declared eval attempt and
+written before downstream scoring. Resume can then reuse that generation
+result while rerunning the remaining orchestration.
+
+Historical Week 10 suites remain valid evidence but do not acquire a
+pre-execution declaration retroactively. Their bytes and hashes are unchanged;
+only newly executed suites make the stronger interruption claim. This
+checkpoint implements neither resume nor retry.

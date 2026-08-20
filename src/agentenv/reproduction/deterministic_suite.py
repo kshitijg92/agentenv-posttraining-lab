@@ -29,7 +29,7 @@ from agentenv.evals.schema import (
     EvalConfig,
     ScorerControlPatchPolicy,
 )
-from agentenv.evals.suite_validation import load_validated_eval_suite_declaration
+from agentenv.evals.suite_validation import load_validated_eval_suite
 from agentenv.trajectories.builder import build_trajectory_records_from_eval_suite
 from agentenv.trajectories.schema import TrajectoryRecord
 
@@ -68,11 +68,11 @@ def verify_eval_suite_operational_expectations(
 ) -> EvalSuiteOperationalVerification:
     """Require control outcomes and configured replays to match expectations."""
 
-    declaration = load_validated_eval_suite_declaration(eval_suite_dir)
+    validated_suite = load_validated_eval_suite(eval_suite_dir)
     trajectories = build_trajectory_records_from_eval_suite(
-        declaration.eval_suite_dir
+        validated_suite.eval_suite_dir
     )
-    if len(trajectories) != declaration.manifest.attempt_count:
+    if len(trajectories) != validated_suite.manifest.attempt_count:
         raise ValueError(
             "Eval suite trajectory count does not match declared attempt count"
         )
@@ -82,7 +82,7 @@ def verify_eval_suite_operational_expectations(
         for trajectory in trajectories
         if (
             check := _control_trajectory_check(
-                declaration.config,
+                validated_suite.config,
                 trajectory,
             )
         )
@@ -90,18 +90,18 @@ def verify_eval_suite_operational_expectations(
     ]
     policy_runs = {
         policy_run.policy: policy_run
-        for policy_run in declaration.manifest.policy_runs
+        for policy_run in validated_suite.manifest.policy_runs
     }
     checks.extend(
         _replay_run_check(
-            declaration.eval_suite_dir,
+            validated_suite.eval_suite_dir,
             policy_runs[replay_run.policy],
             replay_run,
         )
-        for replay_run in declaration.manifest.replay_runs
+        for replay_run in validated_suite.manifest.replay_runs
     )
     return EvalSuiteOperationalVerification(
-        eval_suite_id=declaration.manifest.eval_suite_id,
+        eval_suite_id=validated_suite.manifest.eval_suite_id,
         checks=tuple(checks),
     )
 

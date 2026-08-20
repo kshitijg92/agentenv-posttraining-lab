@@ -8,7 +8,7 @@ from typing import Literal, Sequence
 from agentenv.agents.schema import PromptLoopResult, PromptLoopStatus
 from agentenv.artifacts.payloads import load_prompt_loop_result
 from agentenv.evals.schema import AgentModelPolicy
-from agentenv.evals.suite_validation import load_validated_eval_suite_declaration
+from agentenv.evals.suite_validation import load_validated_eval_suite
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunStatus
 from agentenv.orchestrators.attempt import AttemptStatus
 from agentenv.trajectories.builder import (
@@ -150,10 +150,10 @@ def build_policy_selection_analysis_from_eval_suite(
 ) -> PolicySelectionAnalysis:
     """Validate one frozen policy-selection suite and reconstruct its decision."""
 
-    declaration = load_validated_eval_suite_declaration(eval_suite_dir)
-    eval_suite_dir = declaration.eval_suite_dir
-    suite_manifest = declaration.manifest
-    config = declaration.config
+    validated_suite = load_validated_eval_suite(eval_suite_dir)
+    eval_suite_dir = validated_suite.eval_suite_dir
+    suite_manifest = validated_suite.manifest
+    config = validated_suite.config
     if config.policy_selection_rule is None:
         raise ValueError("Eval suite config does not declare a policy-selection rule")
     if not all(

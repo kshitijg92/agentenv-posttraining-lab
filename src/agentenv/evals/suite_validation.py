@@ -4,10 +4,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agentenv.artifacts import MANIFEST_FILENAME
+from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import (
+    EvalRunManifest,
     EvalSuiteManifest,
     EvalSuitePolicyRunManifestRecord,
+    load_agent_attempt_manifest,
+    load_eval_run_manifest,
     load_eval_suite_manifest,
+)
+from agentenv.artifacts.payloads import (
+    load_decoding_config_provenance,
+    load_model_config_provenance,
 )
 from agentenv.evals.resolve import resolve_task_pack_path
 from agentenv.evals.schema import (
@@ -21,22 +29,28 @@ from agentenv.evals.schema import (
     EvalConfig,
     EvalPolicy,
 )
+from agentenv.evals.suite_declaration import (
+    EvalSuiteDeclaration,
+    PlannedEvalPolicyRun,
+    load_eval_suite_declaration,
+)
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.hashing import hash_file
 from agentenv.tasks.hashing import build_eval_task_hashes
 
 
 @dataclass(frozen=True)
-class ValidatedEvalSuiteDeclaration:
+class ValidatedEvalSuite:
     eval_suite_dir: Path
     manifest: EvalSuiteManifest
     config_path: Path
     config: EvalConfig
+    declaration: EvalSuiteDeclaration | None
 
 
-def load_validated_eval_suite_declaration(
+def load_validated_eval_suite(
     eval_suite_dir: Path,
-) -> ValidatedEvalSuiteDeclaration:
+) -> ValidatedEvalSuite:
     """Bind an eval-suite manifest to its current config and task bytes."""
 
     eval_suite_dir = eval_suite_dir.resolve()
@@ -52,12 +66,180 @@ def load_validated_eval_suite_declaration(
     config = load_eval_config(config_path)
     validate_eval_config_paths(config, config_path)
     _validate_suite_matches_config(manifest, config, config_path)
-    return ValidatedEvalSuiteDeclaration(
+    declaration = _load_optional_declaration(eval_suite_dir, manifest)
+    if declaration is not None:
+        _validate_completed_suite_matches_declaration(
+            eval_suite_dir,
+            manifest,
+            declaration,
+        )
+    return ValidatedEvalSuite(
         eval_suite_dir=eval_suite_dir,
         manifest=manifest,
         config_path=config_path,
         config=config,
+        declaration=declaration,
     )
+
+
+def _load_optional_declaration(
+    eval_suite_dir: Path,
+    manifest: EvalSuiteManifest,
+) -> EvalSuiteDeclaration | None:
+    declaration_ref = manifest.artifacts.get("declaration")
+    if declaration_ref is None:
+        return None
+    return load_eval_suite_declaration(
+        resolve_relative_artifact_ref(eval_suite_dir, declaration_ref)
+    )
+
+
+def _validate_completed_suite_matches_declaration(
+    eval_suite_dir: Path,
+    manifest: EvalSuiteManifest,
+    declaration: EvalSuiteDeclaration,
+) -> None:
+    compared_fields = (
+        ("eval_suite_id", declaration.eval_suite_id, manifest.eval_suite_id),
+        ("created_at", declaration.created_at, manifest.created_at),
+        (
+            "config_path",
+            Path(declaration.config_path).resolve(),
+            Path(manifest.config_path).resolve(),
+        ),
+        ("config_hash", declaration.config_hash, manifest.config_hash),
+        ("task_hashes", declaration.task_hashes, manifest.task_hashes),
+        (
+            "runtime_provenance",
+            declaration.runtime_provenance,
+            manifest.runtime_provenance,
+        ),
+    )
+    for field_name, declared, completed in compared_fields:
+        if declared != completed:
+            raise ValueError(
+                f"Completed eval suite {field_name} differs from its declaration"
+            )
+
+    if len(declaration.policy_runs) != len(manifest.policy_runs):
+        raise ValueError("Completed eval suite policy count differs from declaration")
+    for planned_policy_run, completed_policy_run in zip(
+        declaration.policy_runs,
+        manifest.policy_runs,
+        strict=True,
+    ):
+        _validate_completed_policy_run_matches_declaration(
+            eval_suite_dir,
+            planned_policy_run,
+            completed_policy_run,
+        )
+
+
+def _validate_completed_policy_run_matches_declaration(
+    eval_suite_dir: Path,
+    planned: PlannedEvalPolicyRun,
+    completed: EvalSuitePolicyRunManifestRecord,
+) -> None:
+    observed_policy_identity = (
+        completed.policy,
+        completed.eval_run_id,
+        completed.artifact_dir,
+    )
+    declared_policy_identity = (
+        planned.policy,
+        planned.eval_run_id,
+        planned.artifact_dir,
+    )
+    if observed_policy_identity != declared_policy_identity:
+        raise ValueError("Completed eval policy run differs from its declaration")
+
+    eval_run_manifest_path = resolve_relative_artifact_ref(
+        eval_suite_dir,
+        completed.manifest,
+    )
+    eval_run_manifest = load_eval_run_manifest(eval_run_manifest_path)
+    _validate_child_run_identity(completed, eval_run_manifest)
+    observed_attempts = [
+        (
+            attempt.eval_attempt_id,
+            attempt.task_id,
+            attempt.attempt_index,
+            attempt.artifact_dir,
+        )
+        for attempt in eval_run_manifest.attempts
+    ]
+    declared_attempts = [
+        (
+            attempt.eval_attempt_id,
+            attempt.task_id,
+            attempt.attempt_index,
+            attempt.artifact_dir,
+        )
+        for attempt in planned.planned_attempts
+    ]
+    if observed_attempts != declared_attempts:
+        raise ValueError(
+            "Completed eval attempts differ from the predeclared attempt set"
+        )
+    _validate_completed_model_inputs(
+        eval_run_manifest_path.parent,
+        planned,
+        eval_run_manifest,
+    )
+
+
+def _validate_child_run_identity(
+    suite_record: EvalSuitePolicyRunManifestRecord,
+    child_manifest: EvalRunManifest,
+) -> None:
+    compared_fields = (
+        ("eval_run_id", suite_record.eval_run_id, child_manifest.eval_run_id),
+        ("policy", suite_record.policy, child_manifest.policy),
+    )
+    for field_name, suite_value, child_value in compared_fields:
+        if suite_value != child_value:
+            raise ValueError(
+                "Eval suite policy run record does not match child manifest "
+                f"field {field_name!r}"
+            )
+
+
+def _validate_completed_model_inputs(
+    eval_run_dir: Path,
+    planned: PlannedEvalPolicyRun,
+    eval_run_manifest: EvalRunManifest,
+) -> None:
+    declared_model = planned.model_config_provenance
+    declared_decoding = planned.decoding_config_provenance
+    if declared_model is None and declared_decoding is None:
+        return
+    if declared_model is None or declared_decoding is None:
+        raise ValueError("Declared model input provenance is incomplete")
+
+    for attempt in eval_run_manifest.attempts:
+        attempt_dir = resolve_relative_artifact_ref(
+            eval_run_dir,
+            attempt.artifact_dir,
+        )
+        attempt_manifest = load_agent_attempt_manifest(
+            attempt_dir / MANIFEST_FILENAME
+        )
+        model_ref = attempt_manifest.artifacts.get("model_config")
+        if model_ref is None:
+            raise ValueError("Declared agent-model attempt is missing model config")
+        observed_model = load_model_config_provenance(
+            resolve_relative_artifact_ref(attempt_dir, model_ref)
+        )
+        decoding_ref = attempt_manifest.artifacts.get("decoding_config")
+        if decoding_ref is None:
+            raise ValueError("Declared agent-model attempt is missing decoding config")
+        observed_decoding = load_decoding_config_provenance(
+            resolve_relative_artifact_ref(attempt_dir, decoding_ref)
+        )
+        if observed_model != declared_model or observed_decoding != declared_decoding:
+            raise ValueError(
+                "Completed agent-model attempt inputs differ from suite declaration"
+            )
 
 
 def _validate_suite_matches_config(

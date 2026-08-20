@@ -19,7 +19,6 @@ from agentenv.artifacts.manifests import (
     ScorerAttemptManifest,
     load_attempt_manifest,
     load_eval_run_manifest,
-    load_eval_suite_manifest,
     load_scorer_attempt_manifest,
 )
 from agentenv.artifacts.payloads import (
@@ -33,6 +32,7 @@ from agentenv.artifacts.payloads import (
     load_prompt_loop_result,
 )
 from agentenv.evals.resolve import resolve_task_pack_path, select_policy
+from agentenv.evals.suite_validation import load_validated_eval_suite
 from agentenv.evals.validate import load_eval_config
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunResult
 from agentenv.orchestrators.attempt import AttemptResult
@@ -84,8 +84,7 @@ def build_trajectory_records_from_eval_suite(
     eval_suite_dir: Path,
 ) -> list[TrajectoryRecord]:
     eval_suite_dir = eval_suite_dir.resolve()
-    eval_suite_manifest_path = eval_suite_dir / MANIFEST_FILENAME
-    eval_suite_manifest = load_eval_suite_manifest(eval_suite_manifest_path)
+    eval_suite_manifest = load_validated_eval_suite(eval_suite_dir).manifest
 
     reward_hack_catalogue = load_reward_hack_check_catalogue(REWARD_HACK_CASE_ROOT)
     records: list[TrajectoryRecord] = []

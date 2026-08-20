@@ -31,6 +31,7 @@ from agentenv.controls.expectations import (
     expected_scorer_control_outcome,
 )
 from agentenv.evals.schema import AgentControlName, ScorerControlName
+from agentenv.evals.suite_validation import load_validated_eval_suite
 from agentenv.rewards.export import load_reward_hack_audit_artifact
 from agentenv.rewards.reporting import render_reward_hack_audit_report
 
@@ -43,6 +44,7 @@ def write_markdown_report(artifact_dir: Path, out_path: Path) -> Path:
     if isinstance(manifest_model, EvalRunManifest):
         markdown = render_eval_report(artifact_dir, manifest)
     elif isinstance(manifest_model, EvalSuiteManifest):
+        load_validated_eval_suite(artifact_dir)
         markdown = render_eval_matrix_report(artifact_dir, manifest)
     elif isinstance(manifest_model, ReplayRunManifest):
         markdown = render_replay_report(artifact_dir, manifest)

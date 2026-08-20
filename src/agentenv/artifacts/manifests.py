@@ -55,6 +55,7 @@ from agentenv.evals.schema import (
     PolicyFamily,
     PolicyType,
 )
+from agentenv.evals.suite_declaration import EVAL_SUITE_DECLARATION_FILENAME
 from agentenv.orchestrators.agent_task_schema import AgentTaskRunStatus
 from agentenv.orchestrators.attempt import (
     AttemptStatus,
@@ -176,6 +177,7 @@ EVAL_RUN_ARTIFACT_REFS = {
     "attempts": "attempts",
 }
 EVAL_SUITE_ARTIFACT_REFS = {
+    "declaration": EVAL_SUITE_DECLARATION_FILENAME,
     "policies": "policies",
     "replays": "replays",
 }

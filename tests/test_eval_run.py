@@ -11,6 +11,11 @@ from agentenv.artifacts.manifests import load_eval_suite_manifest
 from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
 from agentenv.artifacts.payloads import load_decoding_config_provenance
 from agentenv.evals.schema import AgentModelPolicy
+from agentenv.evals.suite_declaration import (
+    EVAL_SUITE_DECLARATION_FILENAME,
+    load_eval_suite_declaration,
+)
+from agentenv.evals.suite_validation import load_validated_eval_suite
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.models.config_schema import ModelConfig, OllamaGenerateModelConfig
 from agentenv.models.fake import FakeModelScriptStep, ScriptedFakeModelClient
@@ -919,6 +924,10 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
 
     matrix_manifest_path = tmp_path / "eval_matrix/manifest.json"
     matrix_manifest = json.loads(matrix_manifest_path.read_text())
+    declaration = load_eval_suite_declaration(
+        tmp_path / "eval_matrix" / EVAL_SUITE_DECLARATION_FILENAME
+    )
+    validated_suite = load_validated_eval_suite(tmp_path / "eval_matrix")
 
     assert eval_matrix.config.name == "scorer_control_policies"
     assert [run.policy for run in eval_matrix.policy_runs] == [
@@ -929,6 +938,8 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     assert matrix_manifest["artifact_type"] == "eval_suite"
     assert matrix_manifest["artifact_schema_version"] == "eval_suite_artifact_v0"
     assert matrix_manifest["eval_suite_id"].startswith("eval_suite_")
+    assert declaration.eval_suite_id == matrix_manifest["eval_suite_id"]
+    assert validated_suite.declaration == declaration
     assert "eval_matrix_id" not in matrix_manifest
     assert matrix_manifest["config_name"] == "scorer_control_policies"
     task_hashes = matrix_manifest["task_hashes"]
@@ -955,6 +966,7 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
         "scorer_status": {"HIDDEN_TEST_FAIL": 2, "PASS": 1},
     }
     assert matrix_manifest["artifacts"] == {
+        "declaration": "eval_suite_declaration.json",
         "policies": "policies",
         "replays": "replays",
     }
@@ -1024,6 +1036,230 @@ def test_run_eval_config_all_policies_writes_matrix_manifest(
     assert matrix_manifest["replay_run_count"] == 3
     assert matrix_manifest["replay_run_success_summary"] == "3/3"
     assert len(matrix_manifest["replay_runs"]) == 3
+    assert [policy_run.policy for policy_run in declaration.policy_runs] == [
+        "oracle",
+        "bad-noop",
+        "bad-public-only",
+    ]
+    assert [
+        planned.eval_run_id for planned in declaration.policy_runs
+    ] == [run.eval_run_id for run in eval_matrix.policy_runs]
+    assert [
+        planned_attempt.eval_attempt_id
+        for planned in declaration.policy_runs
+        for planned_attempt in planned.planned_attempts
+    ] == [
+        attempt.eval_attempt_id
+        for run in eval_matrix.policy_runs
+        for attempt in run.attempts
+    ]
+
+
+def test_eval_suite_declaration_survives_interruption_with_full_attempt_set(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "interrupted_eval.yaml"
+    config_path.write_text(
+        CONTROL_EVAL_CONFIG.read_text().replace("attempts: 1", "attempts: 2")
+    )
+    out_dir = tmp_path / "eval_matrix"
+    real_run_attempt = eval_run_module._run_scorer_eval_attempt
+    call_count = 0
+
+    def interrupt_after_first_attempt(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise RuntimeError("injected interruption")
+        return real_run_attempt(**kwargs)
+
+    monkeypatch.setattr(
+        eval_run_module,
+        "_run_scorer_eval_attempt",
+        interrupt_after_first_attempt,
+    )
+
+    with pytest.raises(RuntimeError, match="injected interruption"):
+        run_eval_config_all_policies(config_path, out_dir)
+
+    declaration_path = out_dir / EVAL_SUITE_DECLARATION_FILENAME
+    declaration = load_eval_suite_declaration(declaration_path)
+    assert declaration_path.is_file()
+    assert not (out_dir / f".{EVAL_SUITE_DECLARATION_FILENAME}.tmp").exists()
+    assert not (out_dir / "manifest.json").exists()
+    assert [policy_run.policy for policy_run in declaration.policy_runs] == [
+        "oracle",
+        "bad-noop",
+        "bad-public-only",
+    ]
+    assert sum(
+        len(policy_run.planned_attempts)
+        for policy_run in declaration.policy_runs
+    ) == 6
+    planned_attempt_ids = [
+        attempt.eval_attempt_id
+        for policy_run in declaration.policy_runs
+        for attempt in policy_run.planned_attempts
+    ]
+    assert len(planned_attempt_ids) == len(set(planned_attempt_ids))
+
+    first_policy = declaration.policy_runs[0]
+    first_attempt = first_policy.planned_attempts[0]
+    second_attempt = first_policy.planned_attempts[1]
+    assert (
+        out_dir
+        / first_policy.artifact_dir
+        / first_attempt.artifact_dir
+        / "manifest.json"
+    ).is_file()
+    assert not (
+        out_dir / first_policy.artifact_dir / second_attempt.artifact_dir
+    ).exists()
+    assert not (out_dir / first_policy.artifact_dir / "manifest.json").exists()
+
+
+def test_eval_suite_declaration_rejects_config_drift_before_first_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "drifted_eval.yaml"
+    config_path.write_text(CONTROL_EVAL_CONFIG.read_text())
+    out_dir = tmp_path / "eval_matrix"
+    real_write_declaration = eval_run_module._write_eval_suite_declaration
+
+    def write_declaration_then_drift_config(out, declaration):
+        path = real_write_declaration(out, declaration)
+        config_path.write_text(config_path.read_text() + "\n")
+        return path
+
+    monkeypatch.setattr(
+        eval_run_module,
+        "_write_eval_suite_declaration",
+        write_declaration_then_drift_config,
+    )
+
+    with pytest.raises(ValueError):
+        run_eval_config_all_policies(config_path, out_dir)
+
+    assert (out_dir / EVAL_SUITE_DECLARATION_FILENAME).is_file()
+    assert not (out_dir / "manifest.json").exists()
+    assert not list((out_dir / "policies").glob("**/attempt.json"))
+    assert not list((out_dir / "policies").glob("**/agent_task_run.json"))
+
+
+def test_eval_suite_declaration_rejects_runtime_drift_before_first_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = eval_run_module.capture_harness_runtime_provenance(
+        eval_run_module.harness_repo_root()
+    )
+    changed_runtime = runtime.model_copy(
+        update={"python_version": f"{runtime.python_version}-changed"}
+    )
+    captures = iter((runtime, runtime, changed_runtime))
+    monkeypatch.setattr(
+        eval_run_module,
+        "capture_harness_runtime_provenance",
+        lambda _repo_root: next(captures),
+    )
+    out_dir = tmp_path / "eval_matrix"
+
+    with pytest.raises(ValueError):
+        run_eval_config_all_policies(CONTROL_EVAL_CONFIG, out_dir)
+
+    assert (out_dir / EVAL_SUITE_DECLARATION_FILENAME).is_file()
+    assert not (out_dir / "manifest.json").exists()
+    assert not list((out_dir / "policies").glob("**/attempt.json"))
+
+
+def test_eval_suite_declaration_rejects_task_hash_drift_before_first_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_build_task_hashes = eval_run_module.build_eval_task_hashes
+    call_count = 0
+
+    def build_task_hashes_with_drift(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        task_hashes = real_build_task_hashes(*args, **kwargs)
+        if call_count >= 3:
+            return task_hashes.model_copy(
+                update={"selected_task_hash_set": "xxh64:0000000000000000"}
+            )
+        return task_hashes
+
+    monkeypatch.setattr(
+        eval_run_module,
+        "build_eval_task_hashes",
+        build_task_hashes_with_drift,
+    )
+    out_dir = tmp_path / "eval_matrix"
+
+    with pytest.raises(ValueError):
+        run_eval_config_all_policies(CONTROL_EVAL_CONFIG, out_dir)
+
+    assert (out_dir / EVAL_SUITE_DECLARATION_FILENAME).is_file()
+    assert not (out_dir / "manifest.json").exists()
+    assert not list((out_dir / "policies").glob("**/attempt.json"))
+
+
+def test_completed_eval_suite_rejects_changed_predeclared_attempt_id(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "eval_matrix"
+    run_eval_config_all_policies(CONTROL_EVAL_CONFIG, out_dir)
+    declaration_path = out_dir / EVAL_SUITE_DECLARATION_FILENAME
+    payload = json.loads(declaration_path.read_text())
+    payload["policy_runs"][0]["planned_attempts"][0][
+        "eval_attempt_id"
+    ] = "eval_attempt_changed_after_execution"
+    declaration_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(
+        ValueError,
+        match="Completed eval attempts differ from the predeclared attempt set",
+    ):
+        load_validated_eval_suite(out_dir)
+
+
+def test_eval_suite_declaration_freezes_resolved_model_inputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "agent_model_eval.yaml"
+    _write_agent_model_eval_config(config_path)
+    monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1")
+    monkeypatch.delenv("AGENTENV_MODEL_API_KEY", raising=False)
+
+    eval_matrix = run_eval_config_all_policies(
+        config_path,
+        tmp_path / "eval_matrix",
+    )
+
+    planned_policy = eval_matrix.declaration.policy_runs[0]
+    model_provenance = planned_policy.model_config_provenance
+    decoding_provenance = planned_policy.decoding_config_provenance
+    assert model_provenance is not None
+    assert decoding_provenance is not None
+    assert model_provenance.source_path.endswith(
+        "configs/models/openai_compatible_chat_placeholder.yaml"
+    )
+    assert model_provenance.source_hash.startswith("xxh64:")
+    assert model_provenance.provider_runtime is None
+    assert decoding_provenance.source_path is not None
+    assert decoding_provenance.source_path.endswith(
+        "configs/decoding/greedy_1024.yaml"
+    )
+    assert decoding_provenance.source_hash is not None
+    assert decoding_provenance.source_hash.startswith("xxh64:")
+    assert [
+        attempt.eval_attempt_id for attempt in planned_policy.planned_attempts
+    ] == [
+        attempt.eval_attempt_id for attempt in eval_matrix.policy_runs[0].attempts
+    ]
 
 
 def test_run_eval_config_all_policies_replays_configured_control_policies(
@@ -1039,6 +1275,7 @@ def test_run_eval_config_all_policies_replays_configured_control_policies(
 
     assert len(eval_matrix.replay_runs) == 3
     assert matrix_manifest["artifacts"] == {
+        "declaration": "eval_suite_declaration.json",
         "policies": "policies",
         "replays": "replays",
     }

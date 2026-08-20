@@ -11,6 +11,7 @@ from agentenv.artifacts import (
     ArtifactType,
     prepare_artifact_output_dir,
 )
+from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import AGENT_ATTEMPT_ARTIFACT_REFS
 from agentenv.artifacts.manifests import EVAL_RUN_ARTIFACT_REFS
 from agentenv.artifacts.manifests import EVAL_RUN_ARTIFACT_SCHEMA_VERSION
@@ -44,6 +45,14 @@ from agentenv.evals.schema import (
     SCORER_CONTROL_PATCH_POLICY_TYPE,
     AgentModelPolicy,
     EvalConfig,
+)
+from agentenv.evals.suite_declaration import (
+    EVAL_SUITE_DECLARATION_FILENAME,
+    EVAL_SUITE_DECLARATION_SCHEMA_VERSION,
+    EvalSuiteDeclaration,
+    PlannedEvalAttempt,
+    PlannedEvalPolicyRun,
+    load_eval_suite_declaration,
 )
 from agentenv.evals.resolve import (
     agent_control_script_path,
@@ -153,6 +162,7 @@ class EvalMatrixRun:
     runtime_provenance: HarnessRuntimeProvenance
     out_dir: Path
     created_at: str
+    declaration: EvalSuiteDeclaration
     policy_runs: list[EvalRun]
     replay_runs: list["EvalMatrixReplayRecord"]
 
@@ -184,6 +194,8 @@ def run_eval_config(
     *,
     overwrite: bool = False,
     runtime_provenance: HarnessRuntimeProvenance | None = None,
+    suite_declaration: EvalSuiteDeclaration | None = None,
+    agent_model_context: _AgentModelRunContext | None = None,
 ) -> EvalRun:
     config_path = config_path.resolve()
     config = load_eval_config(config_path)
@@ -194,7 +206,6 @@ def run_eval_config(
     task_hashes = build_eval_task_hashes(task_pack_path, config.tasks)
     if runtime_provenance is None:
         runtime_provenance = capture_harness_runtime_provenance(harness_repo_root())
-    eval_run_id = new_eval_run_id()
     created_at = _utc_now()
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
@@ -202,10 +213,49 @@ def run_eval_config(
     attempts_dir.mkdir(parents=True, exist_ok=True)
 
     resolved_tasks = resolve_eval_tasks(config, config_path)
-    agent_model_context = (
-        _load_agent_model_run_context(config_path, selected_policy)
-        if isinstance(selected_policy, AgentModelPolicy)
+    if isinstance(selected_policy, AgentModelPolicy):
+        if agent_model_context is None:
+            agent_model_context = _load_agent_model_run_context(
+                config_path,
+                selected_policy,
+            )
+    elif agent_model_context is not None:
+        raise ValueError("agent_model_context requires an agent-model policy")
+
+    planned_policy_run = (
+        _declared_policy_run(suite_declaration, policy)
+        if suite_declaration is not None
         else None
+    )
+    if planned_policy_run is None:
+        eval_run_id = new_eval_run_id()
+        planned_attempts = _new_planned_eval_attempts(
+            config.tasks,
+            attempts_per_task=selected_policy.attempts,
+        )
+    else:
+        if suite_declaration is None:
+            raise AssertionError("Declared policy run requires suite declaration")
+        _validate_declared_policy_execution(
+            suite_declaration=suite_declaration,
+            planned_policy_run=planned_policy_run,
+            config=config,
+            config_path=config_path,
+            config_hash=config_hash,
+            task_hashes=task_hashes,
+            runtime_provenance=runtime_provenance,
+            agent_model_context=agent_model_context,
+        )
+        eval_run_id = planned_policy_run.eval_run_id
+        planned_attempts = planned_policy_run.planned_attempts
+    planned_attempts_by_identity = {
+        (attempt.task_id, attempt.attempt_index): attempt
+        for attempt in planned_attempts
+    }
+    _validate_planned_attempt_coverage(
+        planned_attempts,
+        task_ids=config.tasks,
+        attempts_per_task=selected_policy.attempts,
     )
     trace_events: list[TraceEvent] = []
     base_provenance = _eval_provenance(
@@ -248,9 +298,13 @@ def run_eval_config(
         task_attempt_records: list[EvalAttemptRecord] = []
 
         for attempt_index in range(selected_policy.attempts):
-            eval_attempt_id = new_eval_attempt_id()
-            attempt_dir = (
-                attempts_dir / f"{task.task_id}__attempt_{attempt_index + 1:03d}"
+            planned_attempt = planned_attempts_by_identity[
+                (task.task_id, attempt_index)
+            ]
+            eval_attempt_id = planned_attempt.eval_attempt_id
+            attempt_dir = resolve_relative_artifact_ref(
+                out_dir,
+                planned_attempt.artifact_dir,
             )
             attempt_provenance = _eval_provenance(
                 eval_run_id,
@@ -446,6 +500,20 @@ def run_eval_config_all_policies(
     created_at = _utc_now()
 
     out_dir = prepare_artifact_output_dir(out_dir, overwrite=overwrite)
+    agent_model_contexts = _load_agent_model_contexts(config_path, config)
+    declaration = _build_eval_suite_declaration(
+        eval_suite_id=eval_suite_id,
+        created_at=created_at,
+        config=config,
+        config_path=config_path,
+        config_hash=config_hash,
+        task_hashes=task_hashes,
+        runtime_provenance=runtime_provenance,
+        agent_model_contexts=agent_model_contexts,
+    )
+    _require_current_declaration_inputs(declaration)
+    _write_eval_suite_declaration(out_dir, declaration)
+
     policies_dir = out_dir / EVAL_SUITE_ARTIFACT_REFS["policies"]
     policies_dir.mkdir(parents=True, exist_ok=True)
 
@@ -455,6 +523,8 @@ def run_eval_config_all_policies(
             policy,
             policies_dir / policy,
             runtime_provenance=runtime_provenance,
+            suite_declaration=declaration,
+            agent_model_context=agent_model_contexts.get(policy),
         )
         for policy in config.policies
     ]
@@ -468,12 +538,364 @@ def run_eval_config_all_policies(
         runtime_provenance=runtime_provenance,
         out_dir=out_dir,
         created_at=created_at,
+        declaration=declaration,
         policy_runs=policy_runs,
         replay_runs=replay_runs,
     )
     _require_unchanged_eval_runtime(eval_matrix.runtime_provenance)
+    _validate_eval_matrix_matches_declaration(eval_matrix)
     _write_eval_matrix_manifest(eval_matrix)
     return eval_matrix
+
+
+def _load_agent_model_contexts(
+    config_path: Path,
+    config: EvalConfig,
+) -> dict[str, _AgentModelRunContext]:
+    return {
+        policy_name: _load_agent_model_run_context(config_path, policy)
+        for policy_name, policy in config.policies.items()
+        if isinstance(policy, AgentModelPolicy)
+    }
+
+
+def _build_eval_suite_declaration(
+    *,
+    eval_suite_id: str,
+    created_at: str,
+    config: EvalConfig,
+    config_path: Path,
+    config_hash: str,
+    task_hashes: EvalTaskHashes,
+    runtime_provenance: HarnessRuntimeProvenance,
+    agent_model_contexts: dict[str, _AgentModelRunContext],
+) -> EvalSuiteDeclaration:
+    policy_runs: list[PlannedEvalPolicyRun] = []
+    for policy_name, policy in config.policies.items():
+        context = agent_model_contexts.get(policy_name)
+        if isinstance(policy, AgentModelPolicy):
+            if context is None:
+                raise ValueError(
+                    f"Missing prepared agent-model context for policy {policy_name!r}"
+                )
+            model_config_provenance = context.model_config_provenance
+            decoding_config_provenance = context.decoding_config_provenance
+        else:
+            if context is not None:
+                raise ValueError(
+                    f"Unexpected agent-model context for policy {policy_name!r}"
+                )
+            model_config_provenance = None
+            decoding_config_provenance = None
+
+        policy_runs.append(
+            PlannedEvalPolicyRun(
+                policy=policy_name,
+                eval_run_id=new_eval_run_id(),
+                artifact_dir=f"policies/{policy_name}",
+                model_config_provenance=model_config_provenance,
+                decoding_config_provenance=decoding_config_provenance,
+                planned_attempts=_new_planned_eval_attempts(
+                    config.tasks,
+                    attempts_per_task=policy.attempts,
+                ),
+            )
+        )
+
+    return EvalSuiteDeclaration(
+        schema_version=EVAL_SUITE_DECLARATION_SCHEMA_VERSION,
+        eval_suite_id=eval_suite_id,
+        created_at=created_at,
+        config_path=str(config_path),
+        config_hash=config_hash,
+        task_hashes=task_hashes,
+        runtime_provenance=runtime_provenance,
+        policy_runs=policy_runs,
+    )
+
+
+def _new_planned_eval_attempts(
+    task_ids: list[str],
+    *,
+    attempts_per_task: int,
+) -> list[PlannedEvalAttempt]:
+    return [
+        PlannedEvalAttempt(
+            eval_attempt_id=new_eval_attempt_id(),
+            task_id=task_id,
+            attempt_index=attempt_index,
+            artifact_dir=(
+                f"attempts/{task_id}__attempt_{attempt_index + 1:03d}"
+            ),
+        )
+        for task_id in task_ids
+        for attempt_index in range(attempts_per_task)
+    ]
+
+
+def _declared_policy_run(
+    declaration: EvalSuiteDeclaration,
+    policy: str,
+) -> PlannedEvalPolicyRun:
+    matching = [
+        policy_run
+        for policy_run in declaration.policy_runs
+        if policy_run.policy == policy
+    ]
+    if len(matching) != 1:
+        raise ValueError(
+            f"Eval suite declaration must contain exactly one policy {policy!r}"
+        )
+    return matching[0]
+
+
+def _validate_declared_policy_execution(
+    *,
+    suite_declaration: EvalSuiteDeclaration,
+    planned_policy_run: PlannedEvalPolicyRun,
+    config: EvalConfig,
+    config_path: Path,
+    config_hash: str,
+    task_hashes: EvalTaskHashes,
+    runtime_provenance: HarnessRuntimeProvenance,
+    agent_model_context: _AgentModelRunContext | None,
+) -> None:
+    _require_unchanged_eval_runtime(suite_declaration.runtime_provenance)
+    compared_suite_fields = (
+        ("config_path", Path(suite_declaration.config_path).resolve(), config_path),
+        ("config_hash", suite_declaration.config_hash, config_hash),
+        ("task_hashes", suite_declaration.task_hashes, task_hashes),
+        (
+            "runtime_provenance",
+            suite_declaration.runtime_provenance,
+            runtime_provenance,
+        ),
+        (
+            "policy_order",
+            tuple(policy_run.policy for policy_run in suite_declaration.policy_runs),
+            tuple(config.policies),
+        ),
+    )
+    for field_name, declared, observed in compared_suite_fields:
+        if declared != observed:
+            raise ValueError(
+                f"Eval suite declaration {field_name} changed before policy execution"
+            )
+
+    expected_policy_dir = f"policies/{planned_policy_run.policy}"
+    if planned_policy_run.artifact_dir != expected_policy_dir:
+        raise ValueError("Declared policy artifact directory is not canonical")
+    policy = config.policies[planned_policy_run.policy]
+    _validate_planned_attempt_coverage(
+        planned_policy_run.planned_attempts,
+        task_ids=config.tasks,
+        attempts_per_task=policy.attempts,
+    )
+    if isinstance(policy, AgentModelPolicy):
+        if agent_model_context is None:
+            raise ValueError("Declared agent-model policy is missing prepared context")
+        if (
+            planned_policy_run.model_config_provenance
+            != agent_model_context.model_config_provenance
+            or planned_policy_run.decoding_config_provenance
+            != agent_model_context.decoding_config_provenance
+        ):
+            raise ValueError(
+                "Declared model inputs changed before policy execution"
+            )
+        _require_live_model_inputs(
+            config_path,
+            policy,
+            planned_policy_run,
+        )
+    elif (
+        planned_policy_run.model_config_provenance is not None
+        or planned_policy_run.decoding_config_provenance is not None
+    ):
+        raise ValueError("Control policies cannot declare model input provenance")
+
+
+def _validate_planned_attempt_coverage(
+    planned_attempts: list[PlannedEvalAttempt],
+    *,
+    task_ids: list[str],
+    attempts_per_task: int,
+) -> None:
+    expected = [
+        (
+            task_id,
+            attempt_index,
+            f"attempts/{task_id}__attempt_{attempt_index + 1:03d}",
+        )
+        for task_id in task_ids
+        for attempt_index in range(attempts_per_task)
+    ]
+    observed = [
+        (attempt.task_id, attempt.attempt_index, attempt.artifact_dir)
+        for attempt in planned_attempts
+    ]
+    if observed != expected:
+        raise ValueError(
+            "Planned eval attempts must cover every configured task and attempt "
+            "index in config order"
+        )
+
+
+def _require_live_model_inputs(
+    config_path: Path,
+    policy: AgentModelPolicy,
+    planned_policy_run: PlannedEvalPolicyRun,
+) -> None:
+    model_provenance = planned_policy_run.model_config_provenance
+    decoding_provenance = planned_policy_run.decoding_config_provenance
+    if model_provenance is None or decoding_provenance is None:
+        raise ValueError("Agent-model policies require resolved input provenance")
+    if (
+        decoding_provenance.source_path is None
+        or decoding_provenance.source_hash is None
+    ):
+        raise ValueError("Agent-model policies require file-backed decoding config")
+
+    model_config_path = resolve_config_file_ref(
+        config_path,
+        policy.model_config_path,
+        field_name="model_config",
+    )
+    decoding_config_path = resolve_config_file_ref(
+        config_path,
+        policy.decoding_config_path,
+        field_name="decoding_config",
+    )
+    compared_paths = (
+        ("model config", Path(model_provenance.source_path), model_config_path),
+        (
+            "decoding config",
+            Path(decoding_provenance.source_path),
+            decoding_config_path,
+        ),
+    )
+    for label, declared_path, live_path in compared_paths:
+        if declared_path.resolve() != live_path:
+            raise ValueError(f"Declared {label} path changed")
+    if _hash_file(model_config_path) != model_provenance.source_hash:
+        raise ValueError("Declared model config bytes changed")
+    if _hash_file(decoding_config_path) != decoding_provenance.source_hash:
+        raise ValueError("Declared decoding config bytes changed")
+    input_protocol = model_provenance.model_input_protocol
+    if input_protocol is not None:
+        protocol_path = Path(input_protocol.source_path)
+        if _hash_file(protocol_path) != input_protocol.source_hash:
+            raise ValueError("Declared model input protocol bytes changed")
+
+
+def _require_current_declaration_inputs(
+    declaration: EvalSuiteDeclaration,
+) -> None:
+    config_path = Path(declaration.config_path).resolve()
+    if _hash_file(config_path) != declaration.config_hash:
+        raise ValueError("Eval config changed after suite declaration was prepared")
+    config = load_eval_config(config_path)
+    validate_eval_config_paths(config, config_path)
+    live_task_hashes = build_eval_task_hashes(
+        resolve_task_pack_path(config, config_path),
+        config.tasks,
+    )
+    if live_task_hashes != declaration.task_hashes:
+        raise ValueError("Task bytes changed after suite declaration was prepared")
+    _require_unchanged_eval_runtime(declaration.runtime_provenance)
+
+    declared_policy_order = tuple(
+        policy_run.policy for policy_run in declaration.policy_runs
+    )
+    if declared_policy_order != tuple(config.policies):
+        raise ValueError("Policy order changed after suite declaration was prepared")
+    for planned_policy_run in declaration.policy_runs:
+        policy = config.policies[planned_policy_run.policy]
+        _validate_planned_attempt_coverage(
+            planned_policy_run.planned_attempts,
+            task_ids=config.tasks,
+            attempts_per_task=policy.attempts,
+        )
+        if isinstance(policy, AgentModelPolicy):
+            _require_live_model_inputs(config_path, policy, planned_policy_run)
+        elif (
+            planned_policy_run.model_config_provenance is not None
+            or planned_policy_run.decoding_config_provenance is not None
+        ):
+            raise ValueError("Control policies cannot declare model input provenance")
+
+
+def _validate_eval_matrix_matches_declaration(
+    eval_matrix: EvalMatrixRun,
+) -> None:
+    declaration = eval_matrix.declaration
+    _require_current_declaration_inputs(declaration)
+    if load_eval_suite_declaration(
+        eval_matrix.out_dir / EVAL_SUITE_DECLARATION_FILENAME
+    ) != declaration:
+        raise ValueError("Persisted eval suite declaration changed during execution")
+
+    compared_suite_fields = (
+        ("eval_suite_id", declaration.eval_suite_id, eval_matrix.eval_suite_id),
+        ("created_at", declaration.created_at, eval_matrix.created_at),
+        ("config_path", Path(declaration.config_path), eval_matrix.config_path),
+        ("config_hash", declaration.config_hash, eval_matrix.config_hash),
+        ("task_hashes", declaration.task_hashes, eval_matrix.task_hashes),
+        (
+            "runtime_provenance",
+            declaration.runtime_provenance,
+            eval_matrix.runtime_provenance,
+        ),
+    )
+    for field_name, declared, observed in compared_suite_fields:
+        if declared != observed:
+            raise ValueError(
+                f"Completed eval suite {field_name} differs from its declaration"
+            )
+
+    if len(declaration.policy_runs) != len(eval_matrix.policy_runs):
+        raise ValueError("Completed eval suite policy count differs from declaration")
+    for planned_policy_run, policy_run in zip(
+        declaration.policy_runs,
+        eval_matrix.policy_runs,
+        strict=True,
+    ):
+        observed_policy_identity = (
+            policy_run.policy,
+            policy_run.eval_run_id,
+            str(policy_run.out_dir.relative_to(eval_matrix.out_dir)),
+        )
+        declared_policy_identity = (
+            planned_policy_run.policy,
+            planned_policy_run.eval_run_id,
+            planned_policy_run.artifact_dir,
+        )
+        if observed_policy_identity != declared_policy_identity:
+            raise ValueError(
+                "Completed eval policy run differs from its declaration"
+            )
+        observed_attempts = [
+            (
+                attempt.eval_attempt_id,
+                attempt.task_id,
+                attempt.attempt_index,
+                str(attempt.attempt_dir.relative_to(policy_run.out_dir)),
+            )
+            for attempt in policy_run.attempts
+        ]
+        declared_attempts = [
+            (
+                attempt.eval_attempt_id,
+                attempt.task_id,
+                attempt.attempt_index,
+                attempt.artifact_dir,
+            )
+            for attempt in planned_policy_run.planned_attempts
+        ]
+        if observed_attempts != declared_attempts:
+            raise ValueError(
+                "Completed eval attempts differ from the predeclared attempt set"
+            )
 
 
 def _replay_configured_policy_runs(
@@ -524,6 +946,26 @@ def _write_eval_run_manifest(eval_run: EvalRun) -> Path:
     return manifest_path
 
 
+def _write_eval_suite_declaration(
+    out_dir: Path,
+    declaration: EvalSuiteDeclaration,
+) -> Path:
+    declaration_path = out_dir / EVAL_SUITE_DECLARATION_FILENAME
+    temporary_path = out_dir / f".{EVAL_SUITE_DECLARATION_FILENAME}.tmp"
+    temporary_path.write_text(
+        json.dumps(
+            declaration.model_dump(mode="json"),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    temporary_path.replace(declaration_path)
+    if load_eval_suite_declaration(declaration_path) != declaration:
+        raise ValueError("Persisted eval suite declaration failed exact readback")
+    return declaration_path
+
+
 def _write_eval_matrix_manifest(eval_matrix: EvalMatrixRun) -> Path:
     manifest_path = eval_matrix.out_dir / MANIFEST_FILENAME
     manifest_path.write_text(
@@ -567,7 +1009,10 @@ def _build_eval_suite_manifest(eval_matrix: EvalMatrixRun) -> EvalSuiteManifest:
         policy_run.policy: len(policy_run.attempts)
         for policy_run in eval_matrix.policy_runs
     }
-    artifacts = {"policies": EVAL_SUITE_ARTIFACT_REFS["policies"]}
+    artifacts = {
+        "declaration": EVAL_SUITE_ARTIFACT_REFS["declaration"],
+        "policies": EVAL_SUITE_ARTIFACT_REFS["policies"],
+    }
     if eval_matrix.replay_runs:
         artifacts["replays"] = EVAL_SUITE_ARTIFACT_REFS["replays"]
 
