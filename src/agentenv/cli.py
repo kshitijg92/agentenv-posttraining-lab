@@ -47,6 +47,11 @@ from agentenv.reproduction.deterministic_suite import (
     requires_operational_verification,
     verify_eval_suite_operational_expectations,
 )
+from agentenv.reproduction.core import (
+    DEFAULT_DETERMINISTIC_EVAL_CONFIG,
+    DEFAULT_STORED_EVIDENCE_PLAN,
+    run_core_reproduction,
+)
 from agentenv.reporting.markdown import write_markdown_report
 from agentenv.rewards.export import run_and_persist_reward_hack_audit
 from agentenv.sandbox.docker_smoke import run_docker_smoke
@@ -128,9 +133,6 @@ training_app.add_typer(training_preferences_app, name="preferences")
 local_model_app.add_typer(ollama_app, name="ollama")
 
 console = Console()
-DEFAULT_STORED_EVIDENCE_PLAN = Path(
-    "configs/reproduction/posttraining_result.yaml"
-)
 
 
 def _build_training_authorization_override(
@@ -1632,6 +1634,46 @@ def reproduce_stored_evidence(
             console.print(f"[red]FAIL[/red] {check.check_id}: {check.detail}")
     console.print(f"wrote {summary_path}", soft_wrap=True)
     if verification.status == "FAIL":
+        raise typer.Exit(code=1)
+
+
+@reproduction_app.command("core")
+def reproduce_core(
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Fresh directory for the composed reproduction outputs and report.",
+    ),
+    plan: Path = typer.Option(
+        DEFAULT_STORED_EVIDENCE_PLAN,
+        "--plan",
+        help="Plan declaring the canonical stored evidence and expectations.",
+    ),
+    eval_config: Path = typer.Option(
+        DEFAULT_DETERMINISTIC_EVAL_CONFIG,
+        "--eval-config",
+        help="Deterministic control-suite config for fresh Level 2 execution.",
+    ),
+) -> None:
+    try:
+        result = run_core_reproduction(
+            out,
+            plan_path=plan,
+            eval_config_path=eval_config,
+        )
+    except ArtifactDirectoryError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out") from exc
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    passed_count = sum(check.status == "PASS" for check in result.checks)
+    style = "green" if result.status == "PASS" else "red"
+    console.print(
+        f"[{style}]{result.status}[/{style}] core reproduction "
+        f"checks={passed_count}/{len(result.checks)}"
+    )
+    console.print(f"wrote {result.report_path}", soft_wrap=True)
+    if result.status == "FAIL":
         raise typer.Exit(code=1)
 
 

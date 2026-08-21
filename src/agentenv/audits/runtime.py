@@ -11,7 +11,7 @@ from agentenv.audits.schema import (
     HarnessRuntimeProvenance,
     derive_harness_runtime_hash,
 )
-from agentenv.hashing import hash_directory, hash_file
+from agentenv.hashing import hash_bytes, hash_directory, hash_file
 
 
 def harness_repo_root() -> Path:
@@ -67,6 +67,32 @@ def git_sha_or_unknown(repo_root: Path) -> str:
     if result.returncode != 0 or not sha:
         return "unknown"
     return sha
+
+
+def git_worktree_state(repo_root: Path) -> tuple[bool, str]:
+    """Return whether tracked/untracked work exists and a hash of that state."""
+
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=repo_root.resolve(),
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+        diff = subprocess.run(
+            ["git", "diff", "--binary", "HEAD", "--"],
+            cwd=repo_root.resolve(),
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True, hash_bytes(b"git-worktree-state-unavailable")
+    if status.returncode != 0 or diff.returncode != 0:
+        return True, hash_bytes(b"git-worktree-state-unavailable")
+    payload = b"status\0" + status.stdout + b"\0diff\0" + diff.stdout
+    return bool(status.stdout.strip()), hash_bytes(payload)
 
 
 def utc_now_iso() -> str:

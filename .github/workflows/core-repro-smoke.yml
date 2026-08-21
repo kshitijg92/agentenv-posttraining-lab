@@ -28,5 +28,16 @@ jobs:
         run: uv run --frozen pyright
       - name: Test
         run: uv run --frozen pytest -n auto
-      - name: Reproduce deterministic core
-        run: scripts/reproduce_core_smoke.sh "$RUNNER_TEMP/agentenv-core-repro"
+      - name: Run deterministic Level 2 smoke
+        run: |
+          uv run --offline --frozen agentenv eval \
+            --config configs/eval/eval_quality_gate_repo_patch_python_v0.yaml \
+            --all-policies \
+            --out "$RUNNER_TEMP/agentenv-deterministic-eval" \
+            --report-out "$RUNNER_TEMP/agentenv-deterministic-eval.md"
+          uv run --offline --frozen agentenv report \
+            "$RUNNER_TEMP/agentenv-deterministic-eval" \
+            --out "$RUNNER_TEMP/agentenv-deterministic-eval-regenerated.md"
+          cmp \
+            "$RUNNER_TEMP/agentenv-deterministic-eval.md" \
+            "$RUNNER_TEMP/agentenv-deterministic-eval-regenerated.md"

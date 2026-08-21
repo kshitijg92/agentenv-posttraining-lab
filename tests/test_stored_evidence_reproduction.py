@@ -19,8 +19,15 @@ from agentenv.reproduction.stored_evidence import (
 
 
 CANONICAL_PLAN = Path("configs/reproduction/posttraining_result.yaml")
+CANONICAL_EVIDENCE_MANIFEST = Path(
+    "experiments/models/week_10_positive_sft_raw_lora/manifest.json"
+)
 
 
+@pytest.mark.skipif(
+    not CANONICAL_EVIDENCE_MANIFEST.is_file(),
+    reason="local canonical stored-evidence graph is unavailable",
+)
 def test_designated_stored_evidence_verifies(tmp_path: Path) -> None:
     verification = verify_stored_evidence(
         CANONICAL_PLAN,

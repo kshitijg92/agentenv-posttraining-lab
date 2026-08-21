@@ -5,7 +5,6 @@ import gc
 import os
 import platform
 from pathlib import Path
-import subprocess
 from typing import Any
 
 import accelerate
@@ -13,8 +12,12 @@ import peft
 import torch
 import transformers
 
-from agentenv.audits.runtime import git_sha_or_unknown, harness_repo_root
-from agentenv.hashing import hash_bytes, hash_directory, hash_json
+from agentenv.audits.runtime import (
+    git_sha_or_unknown,
+    git_worktree_state,
+    harness_repo_root,
+)
+from agentenv.hashing import hash_directory, hash_json
 from agentenv.training.lora.schema import (
     TrainingRuntimeConfig,
     TrainingRuntimeProvenance,
@@ -45,7 +48,7 @@ def capture_training_runtime_provenance(
         accelerator_name = platform.processor() or platform.machine() or "unknown"
         accelerator_total_memory_bytes = None
 
-    git_worktree_dirty, git_diff_hash = _git_worktree_state(repo_root)
+    git_worktree_dirty, git_diff_hash = git_worktree_state(repo_root)
     return TrainingRuntimeProvenance(
         python_version=platform.python_version(),
         platform=platform.platform(),
@@ -156,27 +159,3 @@ def release_accelerator_memory(device: torch.device) -> None:
 def notify_stage(callback: Callable[[str], None] | None, stage: str) -> None:
     if callback is not None:
         callback(stage)
-
-
-def _git_worktree_state(repo_root: Path) -> tuple[bool, str]:
-    try:
-        status = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=all"],
-            cwd=repo_root,
-            check=False,
-            capture_output=True,
-            timeout=10,
-        )
-        diff = subprocess.run(
-            ["git", "diff", "--binary", "HEAD", "--"],
-            cwd=repo_root,
-            check=False,
-            capture_output=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return True, hash_bytes(b"git-worktree-state-unavailable")
-    if status.returncode != 0 or diff.returncode != 0:
-        return True, hash_bytes(b"git-worktree-state-unavailable")
-    payload = b"status\0" + status.stdout + b"\0diff\0" + diff.stdout
-    return bool(status.stdout.strip()), hash_bytes(payload)

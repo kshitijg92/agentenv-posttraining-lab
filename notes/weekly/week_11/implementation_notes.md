@@ -810,3 +810,133 @@ fails closed and rejects that attempt rather than repairing or resampling it.
 This is safe but less recoverable than atomic terminal publication. Command
 exit-code mapping belongs to the later reproduction composition because resume
 currently has no standalone CLI surface.
+
+## 2026-08-20 Checkpoint 14: Metadata Audit And Composed Report
+
+Audited the required Week 11 metadata against the artifacts that naturally own
+each fact. No new global provenance manifest or copied metadata schema was
+justified.
+
+### Ownership Map
+
+| desired fact | existing authority | result |
+| --- | --- | --- |
+| Git SHA and dirty-state hash | each training result; current composed reproduction report for the current invocation | covered |
+| dependency/lock identity | eval `HarnessRuntimeProvenance` pins `pyproject.toml` and `uv.lock` hashes | covered |
+| Python and platform | eval harness runtime; training runtime for historical optimization | covered |
+| model repository/revision and adapter | SFT/DPO training manifests and adapter directory hashes | covered |
+| model provider/runtime | per-attempt model provenance pins configured and observed model digest plus server version | covered |
+| data lineage | training manifests pin every source materialization manifest and JSONL hash; selected steps pin source record hashes | covered |
+| task and scorer identity | suite task hashes plus full task-directory hashes; harness source hash covers scorer implementation | covered |
+| input protocol | training manifests and per-attempt model provenance pin protocol id/hash and record | covered |
+| seed and decoding | exact hash-pinned training configs own training seed; per-attempt decoding provenance owns strategy and optional inference seed | covered |
+| hardware | training runtime owns accelerator identity/memory/CUDA; deterministic eval owns platform architecture and requires no accelerator | covered |
+
+The generic labels "data hash," "reward hash," and "scorer hash" would be
+misleading as single global values. Different workflows already pin their
+exact source materializations, reward-hack catalogue/results, task bytes, and
+harness source at the boundary that consumes them.
+
+### Artifact Economy Gate
+
+The final human-facing reproduction report is justified, but another manifest
+is not:
+
+1. The report uniquely owns which reproduction levels were attempted, their
+   combined status, and the current invocation environment.
+2. The high-level core workflow writes it; the operator and CI diagnostics
+   consume it.
+3. No individual training, eval, or stored-evidence artifact can derive the
+   status of both Level 1 and the fresh Level 2 run.
+4. Without it, the shell exit code cannot preserve the scoped claim, skips,
+   canonical top-level identities, and non-claims as durable run evidence.
+
+The report cites upstream hashes and leaves their meaning with their existing
+typed authorities.
+
+### Composed Command
+
+Added the high-level command and retained the shell script as a thin alias:
+
+```text
+uv run --offline --frozen agentenv reproduce core --out <fresh-directory>
+scripts/reproduce_core_smoke.sh <fresh-directory>
+```
+
+The workflow runs the existing 11-check stored-evidence verifier, executes the
+fresh deterministic suite, converts its 24 control/replay expectations into
+required checks, regenerates the same-run report, writes
+`reproduction_report.md`, and exits nonzero if any required Level 1 or Level 2
+check fails. Levels 3 and 4 remain explicit skips. Failure injection remains a
+separate test claim and is not relabeled as passing merely because the core
+command ran.
+
+### Portability Finding
+
+The metadata audit exposed a distinction hidden by the successful local Level
+1 checks:
+
+```text
+declared top-level evidence files absent from Git       7
+repository-owned absolute refs in top-level manifests  30
+```
+
+The `experiments/` tree is ignored, and the historical graph contains absolute
+paths rooted at this checkout. The current result is therefore locally
+integrity-checked stored evidence, not a portable archive and not a clean-clone
+Level 1 reproduction. The final report detects and states both blockers.
+
+Changing loaders to guess a new root would be a compatibility shim and could
+silently redirect provenance. A future portable archive must rewrite the
+authoritative references to one explicit relocatable contract and publish the
+complete graph; this checkpoint records the limitation rather than pretending
+that hashes alone solve it.
+
+### Verification
+
+One real composed invocation completed:
+
+```text
+Level 1 stored-evidence checks             PASS 11/11
+Level 2 execution check                    PASS 1/1
+Level 2 control/replay operational checks  PASS 24/24
+Level 2 same-run report regeneration       PASS 1/1
+combined required checks                   PASS 37/37
+live model inference                       SKIP
+training rerun                             SKIP
+```
+
+The final local run is retained under
+`experiments/reproduction/core_smoke`. Its two same-run reports had the same
+`xxh64:d5857936a24da4f0` hash. Four
+focused core-workflow/CLI tests and eleven existing stored-evidence and
+deterministic-suite tests pass. Focused Ruff passes, Pyright reports zero
+errors and warnings, Bash syntax validation passes, and `git diff --check`
+passes. The full test suite remains intentionally deferred to Week 11
+closeout.
+
+The final targeted regression set expanded to 109 passing tests across core
+composition, stored evidence, deterministic operational verification, resume,
+eval execution, runtime/audit provenance, control reporting, and model-config
+validation. Repository-wide Ruff and Pyright pass; Pyright reports zero errors
+and zero warnings. The full pytest suite remains intentionally deferred.
+
+## 2026-08-20 Checkpoint 15: Clean-Tree CI Scope
+
+The portability audit showed that the existing CI workflow could not honestly
+run the combined command: a clean clone lacks the ignored Level 1 evidence.
+The workflow now runs only the tracked deterministic Level 2 path and labels it
+accordingly. Both eval and report regeneration use uv offline after the locked
+environment is installed.
+
+Evidence-backed tests now skip explicitly when their ignored local training
+manifests are absent. In a clean tracked-tree simulation, the focused core,
+stored-evidence, and model-config set reported `27 passed, 7 skipped`; the
+skips were exactly the local canonical graph and local LoRA package checks.
+Synthetic schema, failure, and CLI tests still ran.
+
+The same clean tree then created an offline environment from cached locked
+dependencies, executed all 18 deterministic attempts and six replays with
+`PASS 24/24` operational checks, and regenerated a byte-identical report. CI
+therefore covers the executable tracked harness claim while making no Level 1
+availability claim.

@@ -65,6 +65,22 @@ OLLAMA_F16_TRAINED_ADAPTER_CONFIGS = (
         Path("experiments/models/week_10_dpo_lora_exploratory_full_pass/adapter"),
     ),
 )
+LOCAL_OPERATIONAL_ADAPTER_MANIFEST = Path(
+    "experiments/models/"
+    "week_09_positive_sft_lora_smoke_qwen2_5_coder_3b/manifest.json"
+)
+LOCAL_TRAINED_ADAPTER_MANIFESTS = tuple(
+    adapter_dir.parent / "manifest.json"
+    for *_, adapter_dir in OLLAMA_F16_TRAINED_ADAPTER_CONFIGS
+)
+requires_local_operational_adapter = pytest.mark.skipif(
+    not LOCAL_OPERATIONAL_ADAPTER_MANIFEST.is_file(),
+    reason="local operational LoRA evidence is unavailable",
+)
+requires_local_trained_adapters = pytest.mark.skipif(
+    not all(path.is_file() for path in LOCAL_TRAINED_ADAPTER_MANIFESTS),
+    reason="local Week 10 LoRA evidence is unavailable",
+)
 QWEN2_5_OPENAI_COMPATIBLE_MODEL_CONFIGS = (
     Path("configs/models/ollama_qwen2_5_coder_7b.yaml"),
     Path("configs/models/ollama_qwen2_5_coder_14b.yaml"),
@@ -168,6 +184,7 @@ def test_load_ollama_f16_base_config_has_no_adapter() -> None:
     assert adapter_dir is None
 
 
+@requires_local_operational_adapter
 def test_load_ollama_adapter_config_validates_source_training_manifest() -> None:
     config = load_model_config(OLLAMA_F16_ADAPTER_CONFIG)
     assert isinstance(config, OllamaGenerateModelConfig)
@@ -207,6 +224,7 @@ def test_load_ollama_adapter_config_validates_source_training_manifest() -> None
     ),
     OLLAMA_F16_TRAINED_ADAPTER_CONFIGS,
 )
+@requires_local_trained_adapters
 def test_trained_lora_model_configs_validate_source_training_manifests(
     config_path: Path,
     expected_model_id: str,
@@ -232,6 +250,7 @@ def test_trained_lora_model_configs_validate_source_training_manifests(
     assert adapter_dir == expected_adapter_dir.resolve()
 
 
+@requires_local_operational_adapter
 def test_ollama_adapter_manifest_reference_rejects_hash_drift() -> None:
     config = load_model_config(OLLAMA_F16_ADAPTER_CONFIG)
     assert isinstance(config, OllamaGenerateModelConfig)
@@ -254,6 +273,7 @@ def test_ollama_adapter_manifest_reference_rejects_hash_drift() -> None:
         )
 
 
+@requires_local_operational_adapter
 def test_ollama_adapter_reference_rejects_failed_training_run(
     tmp_path: Path,
 ) -> None:
