@@ -12,7 +12,11 @@ from agentenv.artifacts import (
     prepare_artifact_output_dir,
 )
 from agentenv.artifacts.base import resolve_relative_artifact_ref
-from agentenv.artifacts.manifests import AGENT_ATTEMPT_ARTIFACT_REFS
+from agentenv.artifacts.manifests import (
+    AGENT_ATTEMPT_ARTIFACT_REFS,
+    AgentGenerationEvalAttemptReference,
+    load_agent_attempt_manifest,
+)
 from agentenv.artifacts.manifests import EVAL_RUN_ARTIFACT_REFS
 from agentenv.artifacts.manifests import EVAL_RUN_ARTIFACT_SCHEMA_VERSION
 from agentenv.artifacts.manifests import EVAL_SUITE_ARTIFACT_REFS
@@ -52,6 +56,7 @@ from agentenv.evals.suite_declaration import (
     EvalSuiteDeclaration,
     PlannedEvalAttempt,
     PlannedEvalPolicyRun,
+    hash_eval_suite_declaration,
     load_eval_suite_declaration,
 )
 from agentenv.evals.resolve import (
@@ -84,6 +89,9 @@ from agentenv.orchestrators.agent_task_run import (
     decoding_config_provenance_artifact,
     model_config_provenance_artifact,
     run_and_persist_agent_task_attempt_to_dir,
+)
+from agentenv.orchestrators.agent_generation import (
+    validate_agent_generation_for_eval_attempt,
 )
 from agentenv.orchestrators.attempt import AttemptResult, AttemptStatus, CheckStatus
 from agentenv.orchestrators.attempt_runner import run_and_persist_patch_attempt_to_dir
@@ -405,6 +413,18 @@ def run_eval_config(
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
                     max_turns_override=selected_policy.max_turns_override,
+                    generation_eval_attempt=(
+                        AgentGenerationEvalAttemptReference(
+                            eval_suite_id=suite_declaration.eval_suite_id,
+                            eval_run_id=eval_run_id,
+                            eval_attempt_id=eval_attempt_id,
+                            eval_suite_declaration_hash=(
+                                hash_eval_suite_declaration(suite_declaration)
+                            ),
+                        )
+                        if suite_declaration is not None
+                        else None
+                    ),
                 )
                 agent_attempt = _required_agent(attempt_record)
                 agent_attempt_id = agent_attempt.agent_attempt_id
@@ -896,6 +916,76 @@ def _validate_eval_matrix_matches_declaration(
             raise ValueError(
                 "Completed eval attempts differ from the predeclared attempt set"
             )
+        _validate_policy_generations_before_suite_completion(
+            declaration,
+            planned_policy_run,
+            policy_run,
+        )
+
+
+def _validate_policy_generations_before_suite_completion(
+    declaration: EvalSuiteDeclaration,
+    planned_policy_run: PlannedEvalPolicyRun,
+    policy_run: EvalRun,
+) -> None:
+    declared_model = planned_policy_run.model_config_provenance
+    declared_decoding = planned_policy_run.decoding_config_provenance
+    if declared_model is None and declared_decoding is None:
+        return
+    if declared_model is None or declared_decoding is None:
+        raise ValueError("Declared model input provenance is incomplete")
+
+    for attempt in policy_run.attempts:
+        if attempt.agent is None:
+            raise ValueError("Agent-model eval attempt is missing agent summary")
+        attempt_manifest = load_agent_attempt_manifest(
+            attempt.attempt_dir / MANIFEST_FILENAME
+        )
+        generation_ref = attempt_manifest.artifacts.get("generation")
+        if generation_ref is None:
+            raise ValueError(
+                "Declared agent-model attempt is missing terminal generation"
+            )
+        if attempt_manifest.prompt_loop_status is None:
+            raise ValueError(
+                "Declared agent-model attempt is missing prompt-loop status"
+            )
+        if attempt_manifest.task_id != attempt.task_id:
+            raise ValueError("Agent attempt and eval task ids differ")
+        if attempt_manifest.agent_attempt_id != attempt.agent.agent_attempt_id:
+            raise ValueError("Agent attempt and eval summary ids differ")
+        if attempt_manifest.status != attempt.agent.status:
+            raise ValueError("Agent attempt and eval summary statuses differ")
+        if attempt_manifest.prompt_loop_status != attempt.agent.prompt_loop_status:
+            raise ValueError(
+                "Agent attempt and eval summary prompt-loop statuses differ"
+            )
+
+        generation = validate_agent_generation_for_eval_attempt(
+            resolve_relative_artifact_ref(attempt.attempt_dir, generation_ref),
+            expected_eval_attempt=AgentGenerationEvalAttemptReference(
+                eval_suite_id=declaration.eval_suite_id,
+                eval_run_id=planned_policy_run.eval_run_id,
+                eval_attempt_id=attempt.eval_attempt_id,
+                eval_suite_declaration_hash=hash_eval_suite_declaration(
+                    declaration
+                ),
+            ),
+            expected_agent_attempt_id=attempt_manifest.agent_attempt_id,
+            expected_task_id=attempt.task_id,
+            expected_task_manifest_path=Path(attempt_manifest.task_manifest_path),
+            expected_prompt_loop_status=attempt_manifest.prompt_loop_status,
+            expected_candidate_patch_hash=attempt.agent.candidate_patch_hash,
+            expected_model_config_provenance=declared_model,
+            expected_decoding_config_provenance=declared_decoding,
+        )
+        for artifact_name in ("model_config", "decoding_config"):
+            if attempt_manifest.artifacts.get(artifact_name) != (
+                generation.manifest.artifacts[artifact_name]
+            ):
+                raise ValueError(
+                    "Agent attempt and generation input references differ"
+                )
 
 
 def _replay_configured_policy_runs(
@@ -1212,6 +1302,7 @@ def _run_agent_model_eval_attempt(
     attempt_index: int,
     attempt_dir: Path,
     max_turns_override: int | None,
+    generation_eval_attempt: AgentGenerationEvalAttemptReference | None,
 ) -> EvalAttemptRecord:
     agent_task_run = run_and_persist_agent_task_attempt_to_dir(
         task.manifest_path,
@@ -1221,6 +1312,7 @@ def _run_agent_model_eval_attempt(
         max_turns_override=max_turns_override,
         model_config_provenance=run_context.model_config_provenance,
         decoding_config_provenance=run_context.decoding_config_provenance,
+        eval_attempt=generation_eval_attempt,
     )
     artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
@@ -1297,6 +1389,10 @@ def _agent_eval_attempt_payload_refs(
             f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['decoding_config']}"
         ),
     }
+    if (attempt_dir / AGENT_ATTEMPT_ARTIFACT_REFS["generation"]).is_file():
+        payload_refs["generation"] = (
+            f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['generation']}"
+        )
     if (attempt_dir / AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_view"]).is_file():
         payload_refs["agent_task_view"] = (
             f"{artifact_dir_ref}/{AGENT_ATTEMPT_ARTIFACT_REFS['agent_task_view']}"

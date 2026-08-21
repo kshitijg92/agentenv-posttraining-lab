@@ -4,15 +4,21 @@ from pathlib import Path
 import pytest
 
 import agentenv.orchestrators.eval_run as eval_run_module
+import agentenv.orchestrators.agent_task_run as agent_task_run_module
 from agentenv.agents.prompts import AGENT_TASK_INITIAL_PROMPT_BUILDER_VERSION
 from agentenv.artifacts import ArtifactDirectoryError
-from agentenv.artifacts.manifests import load_eval_run_manifest
-from agentenv.artifacts.manifests import load_eval_suite_manifest
+from agentenv.artifacts.manifests import (
+    AGENT_GENERATION_MANIFEST_FILENAME,
+    load_agent_attempt_manifest,
+    load_eval_run_manifest,
+    load_eval_suite_manifest,
+)
 from agentenv.artifacts.payloads import DECODING_CONFIG_PROVENANCE_SCHEMA_VERSION
 from agentenv.artifacts.payloads import load_decoding_config_provenance
 from agentenv.evals.schema import AgentModelPolicy
 from agentenv.evals.suite_declaration import (
     EVAL_SUITE_DECLARATION_FILENAME,
+    hash_eval_suite_declaration,
     load_eval_suite_declaration,
 )
 from agentenv.evals.suite_validation import load_validated_eval_suite
@@ -26,6 +32,9 @@ from agentenv.orchestrators.eval_run import (
     run_eval_config,
     run_eval_config_all_policies,
     _validate_unique_eval_attempt_ids,
+)
+from agentenv.orchestrators.agent_generation import (
+    load_validated_agent_generation,
 )
 from agentenv.tracing.schema import EvalTraceProvenance
 from agentenv.tracing.validate import load_trace_events, validate_trace_file
@@ -108,6 +117,34 @@ def _write_ollama_lifecycle_eval_config(path: Path) -> None:
                 "",
             ]
         )
+    )
+
+
+def _install_final_answer_fake_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_client = ScriptedFakeModelClient(
+        model_id="declared-generation-test",
+        script=[
+            FakeModelScriptStep(
+                output_text=json.dumps(
+                    {"action": "final_answer", "text": "generation complete"}
+                )
+            )
+        ],
+    )
+
+    def fake_build_model_client(
+        config: ModelConfig,
+        *,
+        model_input_protocol: LoadedModelInputProtocol | None = None,
+        model_config_path: Path | None = None,
+    ) -> ScriptedFakeModelClient:
+        del config, model_input_protocol, model_config_path
+        return fake_client
+
+    monkeypatch.setattr(
+        eval_run_module,
+        "build_model_client",
+        fake_build_model_client,
     )
 
 
@@ -1260,6 +1297,120 @@ def test_eval_suite_declaration_freezes_resolved_model_inputs(
     ] == [
         attempt.eval_attempt_id for attempt in eval_matrix.policy_runs[0].attempts
     ]
+    first_attempt = eval_matrix.policy_runs[0].attempts[0]
+    attempt_manifest = load_agent_attempt_manifest(
+        first_attempt.attempt_dir / "manifest.json"
+    )
+    assert attempt_manifest.artifacts["generation"] == (
+        AGENT_GENERATION_MANIFEST_FILENAME
+    )
+    generation = load_validated_agent_generation(
+        first_attempt.attempt_dir / AGENT_GENERATION_MANIFEST_FILENAME
+    )
+    assert generation.manifest.artifact_type == "agent_generation"
+    assert generation.manifest.prompt_loop_status == "model_error"
+    assert generation.manifest.candidate_patch_hash is None
+    assert generation.candidate_patch is None
+    assert first_attempt.agent is not None
+    assert (
+        generation.manifest.agent_attempt_id
+        == first_attempt.agent.agent_attempt_id
+    )
+    assert generation.manifest.eval_attempt.eval_suite_id == (
+        eval_matrix.eval_suite_id
+    )
+    assert generation.manifest.eval_attempt.eval_run_id == (
+        eval_matrix.policy_runs[0].eval_run_id
+    )
+    assert generation.manifest.eval_attempt.eval_attempt_id == (
+        first_attempt.eval_attempt_id
+    )
+    assert generation.manifest.eval_attempt.eval_suite_declaration_hash == (
+        hash_eval_suite_declaration(eval_matrix.declaration)
+    )
+
+
+def test_agent_generation_is_terminal_before_scorer_interruption(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "agent_model_eval.yaml"
+    _write_agent_model_eval_config(config_path)
+    config_path.write_text(
+        config_path.read_text().replace("    attempts: 2", "    attempts: 1")
+    )
+    _install_final_answer_fake_model(monkeypatch)
+
+    def interrupt_scorer(*args, **kwargs):
+        del args, kwargs
+        raise KeyboardInterrupt("injected after generation")
+
+    monkeypatch.setattr(
+        agent_task_run_module,
+        "run_patch_attempt",
+        interrupt_scorer,
+    )
+    out_dir = tmp_path / "eval_matrix"
+
+    with pytest.raises(KeyboardInterrupt, match="injected after generation"):
+        run_eval_config_all_policies(config_path, out_dir)
+
+    declaration = load_eval_suite_declaration(
+        out_dir / EVAL_SUITE_DECLARATION_FILENAME
+    )
+    planned_policy = declaration.policy_runs[0]
+    planned_attempt = planned_policy.planned_attempts[0]
+    attempt_dir = (
+        out_dir / planned_policy.artifact_dir / planned_attempt.artifact_dir
+    )
+    generation_path = attempt_dir / AGENT_GENERATION_MANIFEST_FILENAME
+    generation = load_validated_agent_generation(generation_path)
+
+    assert generation.manifest.prompt_loop_status == "completed"
+    assert generation.candidate_patch == ""
+    assert generation.manifest.eval_attempt.eval_suite_id == (
+        declaration.eval_suite_id
+    )
+    assert generation.manifest.eval_attempt.eval_run_id == (
+        planned_policy.eval_run_id
+    )
+    assert generation.manifest.eval_attempt.eval_attempt_id == (
+        planned_attempt.eval_attempt_id
+    )
+    assert generation.manifest.eval_attempt.eval_suite_declaration_hash == (
+        hash_eval_suite_declaration(declaration)
+    )
+    assert not (
+        attempt_dir / f".{AGENT_GENERATION_MANIFEST_FILENAME}.tmp"
+    ).exists()
+    assert not (attempt_dir / "manifest.json").exists()
+    assert not (attempt_dir / "agent_task_run.json").exists()
+    assert not (attempt_dir / "attempt").exists()
+    assert not (out_dir / planned_policy.artifact_dir / "manifest.json").exists()
+    assert not (out_dir / "manifest.json").exists()
+
+
+def test_completed_eval_suite_rejects_changed_generation_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "agent_model_eval.yaml"
+    _write_agent_model_eval_config(config_path)
+    config_path.write_text(
+        config_path.read_text().replace("    attempts: 2", "    attempts: 1")
+    )
+    _install_final_answer_fake_model(monkeypatch)
+    out_dir = tmp_path / "eval_matrix"
+
+    eval_matrix = run_eval_config_all_policies(config_path, out_dir)
+    load_validated_eval_suite(out_dir)
+    candidate_path = eval_matrix.policy_runs[0].attempts[0].attempt_dir / (
+        "candidate.patch"
+    )
+    candidate_path.write_text(candidate_path.read_text() + "# changed\n")
+
+    with pytest.raises(ValueError, match="generation artifact hash mismatch"):
+        load_validated_eval_suite(out_dir)
 
 
 def test_run_eval_config_all_policies_replays_configured_control_policies(

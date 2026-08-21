@@ -154,7 +154,16 @@ SCORER_ATTEMPT_ARTIFACT_REFS = {
     "trace": "trace.jsonl",
     "final_diff": "final.diff",
 }
+AGENT_GENERATION_MANIFEST_FILENAME = "agent_generation_manifest.json"
+AGENT_GENERATION_ARTIFACT_REFS = {
+    "agent_task_view": "agent_task_view.json",
+    "prompt_loop_result": "prompt_loop_result.json",
+    "candidate_patch": "candidate.patch",
+    "decoding_config": "decoding_config.json",
+    "model_config": "model_config.json",
+}
 AGENT_ATTEMPT_ARTIFACT_REFS = {
+    "generation": AGENT_GENERATION_MANIFEST_FILENAME,
     "agent_task_run": "agent_task_run.json",
     "error": "error.txt",
     "decoding_config": "decoding_config.json",
@@ -166,6 +175,9 @@ AGENT_ATTEMPT_ARTIFACT_REFS = {
     "attempt": "attempt",
 }
 SCORER_ATTEMPT_REQUIRED_ARTIFACTS = frozenset(SCORER_ATTEMPT_ARTIFACT_REFS)
+AGENT_GENERATION_REQUIRED_ARTIFACTS = frozenset(
+    {"agent_task_view", "prompt_loop_result", "decoding_config", "model_config"}
+)
 AGENT_ATTEMPT_REQUIRED_ARTIFACTS = frozenset(
     {"agent_task_run", "error", "decoding_config"}
 )
@@ -310,6 +322,7 @@ HARNESS_AUDIT_REQUIRED_ARTIFACTS = frozenset(HARNESS_AUDIT_ARTIFACT_REFS)
 
 
 ScorerAttemptArtifactSchemaVersion = Literal["scorer_attempt_artifact_v0"]
+AgentGenerationArtifactSchemaVersion = Literal["agent_generation_artifact_v0"]
 AgentAttemptArtifactSchemaVersion = Literal["agent_attempt_artifact_v0"]
 EvalRunArtifactSchemaVersion = Literal["eval_run_artifact_v0"]
 EvalSuiteArtifactSchemaVersion = Literal["eval_suite_artifact_v0"]
@@ -356,6 +369,9 @@ TrajectoryReviewSourceArtifactType = Literal["trajectory_export"]
 
 SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION: ScorerAttemptArtifactSchemaVersion = (
     "scorer_attempt_artifact_v0"
+)
+AGENT_GENERATION_ARTIFACT_SCHEMA_VERSION: AgentGenerationArtifactSchemaVersion = (
+    "agent_generation_artifact_v0"
 )
 AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION: AgentAttemptArtifactSchemaVersion = (
     "agent_attempt_artifact_v0"
@@ -468,6 +484,63 @@ class ScorerAttemptManifest(ArtifactManifest):
         return self
 
 
+class AgentGenerationEvalAttemptReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    eval_suite_id: str = Field(min_length=1)
+    eval_run_id: str = Field(min_length=1)
+    eval_attempt_id: str = Field(min_length=1)
+    eval_suite_declaration_hash: ContentHash
+
+
+class AgentGenerationManifest(ArtifactManifest):
+    expected_artifact_type = ArtifactType.AGENT_GENERATION.value
+    expected_artifact_schema_version = AGENT_GENERATION_ARTIFACT_SCHEMA_VERSION
+
+    agent_attempt_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    task_manifest_path: str = Field(min_length=1)
+    eval_attempt: AgentGenerationEvalAttemptReference
+    prompt_loop_status: PromptLoopStatus
+    candidate_patch_hash: ContentHash | None
+    started_at: str = Field(min_length=1)
+    ended_at: str = Field(min_length=1)
+    duration_ms: NonNegativeInt
+    artifacts: dict[str, str]
+    artifact_hashes: dict[str, ContentHash]
+
+    @model_validator(mode="after")
+    def validate_generation_terminal_state(self) -> "AgentGenerationManifest":
+        self.validate_artifacts_map(self.artifacts)
+        _validate_artifact_ref_contract(
+            self.artifacts,
+            artifact_refs=AGENT_GENERATION_ARTIFACT_REFS,
+            owner="agent generation manifests",
+        )
+        _require_artifacts(
+            self.artifacts,
+            required_artifacts=AGENT_GENERATION_REQUIRED_ARTIFACTS,
+            owner="agent generation manifests",
+        )
+        if set(self.artifact_hashes) != set(self.artifacts):
+            raise ValueError(
+                "agent generation artifact_hashes must cover exactly its artifacts"
+            )
+
+        has_candidate = "candidate_patch" in self.artifacts
+        if self.prompt_loop_status == "completed":
+            if not has_candidate or self.candidate_patch_hash is None:
+                raise ValueError(
+                    "completed agent generation requires a candidate patch"
+                )
+            return self
+        if has_candidate or self.candidate_patch_hash is not None:
+            raise ValueError(
+                "failed agent generation cannot include a candidate patch"
+            )
+        return self
+
+
 class AgentTaskRunManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.AGENT_ATTEMPT.value
     expected_artifact_schema_version = AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION
@@ -494,6 +567,20 @@ class AgentTaskRunManifest(ArtifactManifest):
             required_artifacts=AGENT_ATTEMPT_REQUIRED_ARTIFACTS,
             owner="agent task run manifests",
         )
+        if "generation" in self.artifacts:
+            if "model_config" not in self.artifacts:
+                raise ValueError(
+                    "agent attempts with terminal generation require model config"
+                )
+            if "agent_control_script" in self.artifacts:
+                raise ValueError(
+                    "agent attempts with terminal model generation cannot use a "
+                    "control script"
+                )
+            if self.prompt_loop_status is None:
+                raise ValueError(
+                    "agent attempts with terminal generation require prompt status"
+                )
         if self.prompt_loop_status is not None:
             _require_artifacts(
                 self.artifacts,
@@ -2376,6 +2463,10 @@ class RewardHackAuditManifest(ArtifactManifest):
 
 def load_scorer_attempt_manifest(path: Path) -> ScorerAttemptManifest:
     return _validate_manifest(ScorerAttemptManifest, path)
+
+
+def load_agent_generation_manifest(path: Path) -> AgentGenerationManifest:
+    return _validate_manifest(AgentGenerationManifest, path)
 
 
 def load_agent_attempt_manifest(path: Path) -> AgentTaskRunManifest:

@@ -6,16 +6,13 @@ from pathlib import Path
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import (
+    AgentGenerationEvalAttemptReference,
     EvalRunManifest,
     EvalSuiteManifest,
     EvalSuitePolicyRunManifestRecord,
     load_agent_attempt_manifest,
     load_eval_run_manifest,
     load_eval_suite_manifest,
-)
-from agentenv.artifacts.payloads import (
-    load_decoding_config_provenance,
-    load_model_config_provenance,
 )
 from agentenv.evals.resolve import resolve_task_pack_path
 from agentenv.evals.schema import (
@@ -32,10 +29,14 @@ from agentenv.evals.schema import (
 from agentenv.evals.suite_declaration import (
     EvalSuiteDeclaration,
     PlannedEvalPolicyRun,
+    hash_eval_suite_declaration,
     load_eval_suite_declaration,
 )
 from agentenv.evals.validate import load_eval_config, validate_eval_config_paths
 from agentenv.hashing import hash_file
+from agentenv.orchestrators.agent_generation import (
+    validate_agent_generation_for_eval_attempt,
+)
 from agentenv.tasks.hashing import build_eval_task_hashes
 
 
@@ -130,6 +131,7 @@ def _validate_completed_suite_matches_declaration(
     ):
         _validate_completed_policy_run_matches_declaration(
             eval_suite_dir,
+            declaration,
             planned_policy_run,
             completed_policy_run,
         )
@@ -137,6 +139,7 @@ def _validate_completed_suite_matches_declaration(
 
 def _validate_completed_policy_run_matches_declaration(
     eval_suite_dir: Path,
+    declaration: EvalSuiteDeclaration,
     planned: PlannedEvalPolicyRun,
     completed: EvalSuitePolicyRunManifestRecord,
 ) -> None:
@@ -183,6 +186,7 @@ def _validate_completed_policy_run_matches_declaration(
         )
     _validate_completed_model_inputs(
         eval_run_manifest_path.parent,
+        declaration,
         planned,
         eval_run_manifest,
     )
@@ -206,6 +210,7 @@ def _validate_child_run_identity(
 
 def _validate_completed_model_inputs(
     eval_run_dir: Path,
+    declaration: EvalSuiteDeclaration,
     planned: PlannedEvalPolicyRun,
     eval_run_manifest: EvalRunManifest,
 ) -> None:
@@ -224,21 +229,53 @@ def _validate_completed_model_inputs(
         attempt_manifest = load_agent_attempt_manifest(
             attempt_dir / MANIFEST_FILENAME
         )
+        generation_ref = attempt_manifest.artifacts.get("generation")
+        if generation_ref is None:
+            raise ValueError(
+                "Declared agent-model attempt is missing terminal generation"
+            )
+        expected_eval_attempt = AgentGenerationEvalAttemptReference(
+            eval_suite_id=declaration.eval_suite_id,
+            eval_run_id=planned.eval_run_id,
+            eval_attempt_id=attempt.eval_attempt_id,
+            eval_suite_declaration_hash=hash_eval_suite_declaration(declaration),
+        )
+        if attempt.agent is None:
+            raise ValueError("Agent-model eval attempt is missing agent summary")
+        if attempt_manifest.prompt_loop_status is None:
+            raise ValueError(
+                "Declared agent-model attempt is missing prompt-loop status"
+            )
+        generation = validate_agent_generation_for_eval_attempt(
+            resolve_relative_artifact_ref(attempt_dir, generation_ref),
+            expected_eval_attempt=expected_eval_attempt,
+            expected_agent_attempt_id=attempt_manifest.agent_attempt_id,
+            expected_task_id=attempt.task_id,
+            expected_task_manifest_path=Path(attempt_manifest.task_manifest_path),
+            expected_prompt_loop_status=attempt_manifest.prompt_loop_status,
+            expected_candidate_patch_hash=attempt.agent.candidate_patch_hash,
+            expected_model_config_provenance=declared_model,
+            expected_decoding_config_provenance=declared_decoding,
+        )
+        if attempt.agent.agent_attempt_id != attempt_manifest.agent_attempt_id:
+            raise ValueError("Agent attempt and eval summary ids differ")
+        if attempt.agent.prompt_loop_status != attempt_manifest.prompt_loop_status:
+            raise ValueError(
+                "Agent attempt and eval summary prompt-loop statuses differ"
+            )
         model_ref = attempt_manifest.artifacts.get("model_config")
         if model_ref is None:
             raise ValueError("Declared agent-model attempt is missing model config")
-        observed_model = load_model_config_provenance(
-            resolve_relative_artifact_ref(attempt_dir, model_ref)
-        )
+        if model_ref != generation.manifest.artifacts["model_config"]:
+            raise ValueError(
+                "Agent attempt and generation model config references differ"
+            )
         decoding_ref = attempt_manifest.artifacts.get("decoding_config")
         if decoding_ref is None:
             raise ValueError("Declared agent-model attempt is missing decoding config")
-        observed_decoding = load_decoding_config_provenance(
-            resolve_relative_artifact_ref(attempt_dir, decoding_ref)
-        )
-        if observed_model != declared_model or observed_decoding != declared_decoding:
+        if decoding_ref != generation.manifest.artifacts["decoding_config"]:
             raise ValueError(
-                "Completed agent-model attempt inputs differ from suite declaration"
+                "Agent attempt and generation decoding config references differ"
             )
 
 

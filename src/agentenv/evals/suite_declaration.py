@@ -15,6 +15,7 @@ from agentenv.artifacts.payloads import (
     ModelConfigProvenance,
 )
 from agentenv.audits.schema import HarnessRuntimeProvenance
+from agentenv.hashing import hash_json
 
 
 EvalSuiteDeclarationSchemaVersion = Literal["eval_suite_declaration_v0"]
@@ -116,6 +117,10 @@ class EvalSuiteDeclaration(BaseModel):
 
 def load_eval_suite_declaration(path: Path) -> EvalSuiteDeclaration:
     return EvalSuiteDeclaration.model_validate(load_json_object(path))
+
+
+def hash_eval_suite_declaration(declaration: EvalSuiteDeclaration) -> str:
+    return hash_json(declaration.model_dump(mode="json"))
 
 
 def _require_unique(values: list[str], *, field_name: str) -> None:

@@ -20,6 +20,7 @@ from agentenv.artifacts import (
 from agentenv.artifacts.manifests import (
     AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
     AGENT_ATTEMPT_ARTIFACT_REFS,
+    AgentGenerationEvalAttemptReference,
     AgentTaskRunManifest,
 )
 from agentenv.artifacts.payloads import (
@@ -41,6 +42,7 @@ from agentenv.orchestrators.agent_task_schema import (
     AgentTaskRunResult,
     AgentTaskRunStatus,
 )
+from agentenv.orchestrators.agent_generation import write_agent_generation_artifact
 from agentenv.orchestrators.attempt import (
     AttemptResult,
     AttemptRun,
@@ -57,11 +59,32 @@ from agentenv.tasks.validate import load_task_manifest
 AGENT_TASK_RUN_ORCHESTRATOR_VERSION = "agent_task_run_orchestrator_v0"
 
 
+class AgentGenerationIncompleteError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class AgentTaskRunErrorDetails:
     error_class: str
     message: str
     traceback: str
+
+
+@dataclass(frozen=True)
+class _AgentGenerationRun:
+    agent_attempt_id: str
+    task_manifest_path: Path
+    task_id: str
+    started_at: str
+    started_timer: float
+    ended_at: str
+    duration_ms: int
+    run_root: Path
+    agent_task_view: AgentTaskView | None
+    prompt_loop_result: PromptLoopResult | None
+    candidate_patch: str
+    candidate_patch_path: Path | None
+    error_details: AgentTaskRunErrorDetails | None
 
 
 @dataclass(frozen=True)
@@ -97,6 +120,24 @@ def run_agent_task_attempt(
     *,
     max_turns_override: int | None = None,
 ) -> AgentTaskRun:
+    generation = _run_agent_generation(
+        task_manifest_path,
+        model_client,
+        decoding_config,
+        workspace_parent=workspace_parent,
+        max_turns_override=max_turns_override,
+    )
+    return _finish_agent_task_attempt(generation)
+
+
+def _run_agent_generation(
+    task_manifest_path: Path,
+    model_client: ModelClient,
+    decoding_config: DecodingConfig,
+    workspace_parent: Path | None = None,
+    *,
+    max_turns_override: int | None = None,
+) -> _AgentGenerationRun:
     if max_turns_override is not None and max_turns_override <= 0:
         raise ValueError("max_turns_override must be greater than zero")
     task_manifest_path = task_manifest_path.resolve()
@@ -109,7 +150,6 @@ def run_agent_task_attempt(
     prompt_loop_result: PromptLoopResult | None = None
     candidate_patch = ""
     candidate_patch_path: Path | None = None
-    attempt_run: AttemptRun | None = None
 
     try:
         manifest = load_task_manifest(task_manifest_path)
@@ -138,97 +178,176 @@ def run_agent_task_attempt(
             decoding_config,
             private_reference_guard=PrivateReferenceGuard.from_task_manifest(manifest),
         )
-
-        if prompt_loop_result.status != "completed":
-            run_status: AgentTaskRunStatus = (
-                "orchestrator_error"
-                if prompt_loop_result.status == "orchestrator_error"
-                else "agent_loop_failed"
+        if prompt_loop_result.status == "completed":
+            candidate_patch = render_directory_diff(
+                agent_interaction_workspace.task_dir / manifest.seed_workspace,
+                agent_interaction_workspace.path,
             )
-            return AgentTaskRun(
-                result=_result(
-                    agent_attempt_id=agent_attempt_id,
-                    task_id=manifest.id,
-                    task_manifest_path=task_manifest_path,
-                    status=run_status,
-                    prompt_loop_status=prompt_loop_result.status,
-                    candidate_patch_path=None,
-                    candidate_patch_hash=None,
-                    attempt_result=None,
-                    error_class=prompt_loop_result.error_class,
-                    error_message=prompt_loop_result.error_message,
-                    started_at=started_at,
-                    started_timer=started_timer,
-                ),
-                agent_task_view=agent_task_view,
-                prompt_loop_result=prompt_loop_result,
-                candidate_patch=candidate_patch,
-                attempt_run=None,
+            candidate_patch_path = (
+                run_root / AGENT_ATTEMPT_ARTIFACT_REFS["candidate_patch"]
             )
+            candidate_patch_path.write_text(candidate_patch)
 
-        candidate_patch = render_directory_diff(
-            agent_interaction_workspace.task_dir / manifest.seed_workspace,
-            agent_interaction_workspace.path,
-        )
-        candidate_patch_path = run_root / AGENT_ATTEMPT_ARTIFACT_REFS["candidate_patch"]
-        candidate_patch_path.write_text(candidate_patch)
-        attempt_run = run_patch_attempt(
-            task_manifest_path,
-            candidate_patch_path,
-            workspace_parent=run_root / "scoring_workspace",
-        )
-
-        return AgentTaskRun(
-            result=_result(
-                agent_attempt_id=agent_attempt_id,
-                task_id=manifest.id,
-                task_manifest_path=task_manifest_path,
-                status="scored",
-                prompt_loop_status=prompt_loop_result.status,
-                candidate_patch_path=candidate_patch_path,
-                candidate_patch_hash=hash_diff(candidate_patch),
-                attempt_result=attempt_run.result,
-                error_class=None,
-                error_message=None,
-                started_at=started_at,
-                started_timer=started_timer,
-            ),
+        ended_at = _utc_now()
+        duration_ms = int((perf_counter() - started_timer) * 1000)
+        return _AgentGenerationRun(
+            agent_attempt_id=agent_attempt_id,
+            task_manifest_path=task_manifest_path,
+            task_id=manifest.id,
+            started_at=started_at,
+            started_timer=started_timer,
+            ended_at=ended_at,
+            duration_ms=duration_ms,
+            run_root=run_root,
             agent_task_view=agent_task_view,
             prompt_loop_result=prompt_loop_result,
             candidate_patch=candidate_patch,
-            attempt_run=attempt_run,
+            candidate_patch_path=candidate_patch_path,
+            error_details=None,
         )
     except Exception as exc:
         task_id = (
             agent_task_view.task_id if agent_task_view is not None else "unknown_task"
         )
+        ended_at = _utc_now()
+        duration_ms = int((perf_counter() - started_timer) * 1000)
+        return _AgentGenerationRun(
+            agent_attempt_id=agent_attempt_id,
+            task_manifest_path=task_manifest_path,
+            task_id=task_id,
+            started_at=started_at,
+            started_timer=started_timer,
+            ended_at=ended_at,
+            duration_ms=duration_ms,
+            run_root=run_root,
+            agent_task_view=agent_task_view,
+            prompt_loop_result=prompt_loop_result,
+            candidate_patch=candidate_patch,
+            candidate_patch_path=candidate_patch_path,
+            error_details=_exception_details(exc),
+        )
+
+
+def _finish_agent_task_attempt(
+    generation: _AgentGenerationRun,
+    *,
+    candidate_patch_path: Path | None = None,
+) -> AgentTaskRun:
+    prompt_loop_result = generation.prompt_loop_result
+    if generation.error_details is not None:
         return AgentTaskRun(
             result=_result(
-                agent_attempt_id=agent_attempt_id,
-                task_id=task_id,
-                task_manifest_path=task_manifest_path,
+                agent_attempt_id=generation.agent_attempt_id,
+                task_id=generation.task_id,
+                task_manifest_path=generation.task_manifest_path,
                 status="orchestrator_error",
                 prompt_loop_status=(
                     prompt_loop_result.status
                     if prompt_loop_result is not None
                     else None
                 ),
-                candidate_patch_path=candidate_patch_path,
+                candidate_patch_path=generation.candidate_patch_path,
                 candidate_patch_hash=(
-                    hash_diff(candidate_patch)
-                    if candidate_patch_path is not None
+                    hash_diff(generation.candidate_patch)
+                    if generation.candidate_patch_path is not None
                     else None
                 ),
-                attempt_result=attempt_run.result if attempt_run is not None else None,
+                attempt_result=None,
+                error_class=generation.error_details.error_class,
+                error_message=generation.error_details.message,
+                started_at=generation.started_at,
+                started_timer=generation.started_timer,
+            ),
+            agent_task_view=generation.agent_task_view,
+            prompt_loop_result=prompt_loop_result,
+            candidate_patch=generation.candidate_patch,
+            attempt_run=None,
+            error_details=generation.error_details,
+        )
+
+    if prompt_loop_result is None:
+        raise AssertionError("Generation without an error requires a prompt result")
+    if prompt_loop_result.status != "completed":
+        run_status: AgentTaskRunStatus = (
+            "orchestrator_error"
+            if prompt_loop_result.status == "orchestrator_error"
+            else "agent_loop_failed"
+        )
+        return AgentTaskRun(
+            result=_result(
+                agent_attempt_id=generation.agent_attempt_id,
+                task_id=generation.task_id,
+                task_manifest_path=generation.task_manifest_path,
+                status=run_status,
+                prompt_loop_status=prompt_loop_result.status,
+                candidate_patch_path=None,
+                candidate_patch_hash=None,
+                attempt_result=None,
+                error_class=prompt_loop_result.error_class,
+                error_message=prompt_loop_result.error_message,
+                started_at=generation.started_at,
+                started_timer=generation.started_timer,
+            ),
+            agent_task_view=generation.agent_task_view,
+            prompt_loop_result=prompt_loop_result,
+            candidate_patch=generation.candidate_patch,
+            attempt_run=None,
+        )
+
+    scoring_patch_path = candidate_patch_path or generation.candidate_patch_path
+    if scoring_patch_path is None:
+        raise AssertionError("Completed generation requires a candidate patch path")
+    attempt_run: AttemptRun | None = None
+    try:
+        if hash_diff(scoring_patch_path.read_text()) != hash_diff(
+            generation.candidate_patch
+        ):
+            raise ValueError("Scoring candidate differs from generated candidate")
+        attempt_run = run_patch_attempt(
+            generation.task_manifest_path,
+            scoring_patch_path,
+            workspace_parent=generation.run_root / "scoring_workspace",
+        )
+        return AgentTaskRun(
+            result=_result(
+                agent_attempt_id=generation.agent_attempt_id,
+                task_id=generation.task_id,
+                task_manifest_path=generation.task_manifest_path,
+                status="scored",
+                prompt_loop_status=prompt_loop_result.status,
+                candidate_patch_path=scoring_patch_path,
+                candidate_patch_hash=hash_diff(generation.candidate_patch),
+                attempt_result=attempt_run.result,
+                error_class=None,
+                error_message=None,
+                started_at=generation.started_at,
+                started_timer=generation.started_timer,
+            ),
+            agent_task_view=generation.agent_task_view,
+            prompt_loop_result=prompt_loop_result,
+            candidate_patch=generation.candidate_patch,
+            attempt_run=attempt_run,
+        )
+    except Exception as exc:
+        return AgentTaskRun(
+            result=_result(
+                agent_attempt_id=generation.agent_attempt_id,
+                task_id=generation.task_id,
+                task_manifest_path=generation.task_manifest_path,
+                status="orchestrator_error",
+                prompt_loop_status=prompt_loop_result.status,
+                candidate_patch_path=scoring_patch_path,
+                candidate_patch_hash=hash_diff(generation.candidate_patch),
+                attempt_result=None,
                 error_class=type(exc).__name__,
                 error_message=str(exc),
-                started_at=started_at,
-                started_timer=started_timer,
+                started_at=generation.started_at,
+                started_timer=generation.started_timer,
             ),
-            agent_task_view=agent_task_view,
+            agent_task_view=generation.agent_task_view,
             prompt_loop_result=prompt_loop_result,
-            candidate_patch=candidate_patch,
-            attempt_run=attempt_run,
+            candidate_patch=generation.candidate_patch,
+            attempt_run=None,
             error_details=_exception_details(exc),
         )
 
@@ -243,20 +362,95 @@ def run_and_persist_agent_task_attempt_to_dir(
     model_config_provenance: ModelConfigProvenance | dict[str, Any] | None = None,
     decoding_config_provenance: DecodingConfigProvenance | dict[str, Any] | None = None,
     max_turns_override: int | None = None,
+    eval_attempt: AgentGenerationEvalAttemptReference | None = None,
 ) -> AgentTaskRun:
-    agent_task_run = run_agent_task_attempt(
+    if max_turns_override is not None and max_turns_override <= 0:
+        raise ValueError("max_turns_override must be greater than zero")
+    out_dir = prepare_artifact_output_dir(out_dir)
+    validated_agent_control_script = _validated_agent_control_script_artifact(
+        agent_control_script
+    )
+    validated_model_config_provenance = _validated_model_config_provenance_artifact(
+        model_config_provenance
+    )
+    validated_decoding_config_provenance = (
+        _validated_decoding_config_provenance_artifact(
+            decoding_config_provenance
+            if decoding_config_provenance is not None
+            else generated_decoding_config_provenance_artifact(decoding_config)
+        )
+    )
+    if eval_attempt is not None:
+        if validated_model_config_provenance is None:
+            raise ValueError(
+                "Declared eval agent generation requires model config provenance"
+            )
+        if validated_agent_control_script is not None:
+            raise ValueError(
+                "Declared model generation cannot use an agent control script"
+            )
+    generation = _run_agent_generation(
         task_manifest_path,
         model_client,
         decoding_config,
         max_turns_override=max_turns_override,
     )
-    write_agent_task_run_artifacts(
+    generation_manifest_path: Path | None = None
+    if eval_attempt is not None and not _is_terminal_generation(generation):
+        error_class = (
+            generation.error_details.error_class
+            if generation.error_details is not None
+            else "unknown"
+        )
+        raise AgentGenerationIncompleteError(
+            "Declared eval agent generation did not reach a terminal result: "
+            f"{error_class}"
+        )
+    if eval_attempt is not None:
+        if validated_model_config_provenance is None:
+            raise AssertionError("Model config provenance was not prepared")
+        if validated_decoding_config_provenance is None:
+            raise AssertionError("Decoding config provenance was not prepared")
+        if generation.agent_task_view is None or generation.prompt_loop_result is None:
+            raise AssertionError("Terminal generation requires prompt artifacts")
+        generation_manifest_path = write_agent_generation_artifact(
+            out_dir,
+            agent_attempt_id=generation.agent_attempt_id,
+            task_manifest_path=generation.task_manifest_path,
+            agent_task_view=generation.agent_task_view,
+            prompt_loop_result=generation.prompt_loop_result,
+            candidate_patch=(
+                generation.candidate_patch
+                if generation.prompt_loop_result.status == "completed"
+                else None
+            ),
+            started_at=generation.started_at,
+            ended_at=generation.ended_at,
+            duration_ms=generation.duration_ms,
+            eval_attempt=eval_attempt,
+            model_config_provenance=validated_model_config_provenance,
+            decoding_config_provenance=validated_decoding_config_provenance,
+        )
+    scoring_patch_path = (
+        out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["candidate_patch"]
+        if generation_manifest_path is not None
+        and generation.prompt_loop_result is not None
+        and generation.prompt_loop_result.status == "completed"
+        else None
+    )
+    agent_task_run = _finish_agent_task_attempt(
+        generation,
+        candidate_patch_path=scoring_patch_path,
+    )
+    _write_agent_task_run_artifacts_to_dir(
         agent_task_run,
         out_dir,
-        decoding_config=decoding_config,
-        agent_control_script=agent_control_script,
-        model_config_provenance=model_config_provenance,
-        decoding_config_provenance=decoding_config_provenance,
+        validated_agent_control_script=validated_agent_control_script,
+        validated_model_config_provenance=validated_model_config_provenance,
+        validated_decoding_config_provenance=(
+            validated_decoding_config_provenance
+        ),
+        generation_manifest_path=generation_manifest_path,
     )
     return agent_task_run
 
@@ -288,6 +482,37 @@ def write_agent_task_run_artifacts(
             )
         )
     )
+    return _write_agent_task_run_artifacts_to_dir(
+        agent_task_run,
+        out_dir,
+        validated_agent_control_script=validated_agent_control_script,
+        validated_model_config_provenance=validated_model_config_provenance,
+        validated_decoding_config_provenance=(
+            validated_decoding_config_provenance
+        ),
+        generation_manifest_path=None,
+    )
+
+
+def _write_agent_task_run_artifacts_to_dir(
+    agent_task_run: AgentTaskRun,
+    out_dir: Path,
+    *,
+    validated_agent_control_script: AgentControlScriptCase | None,
+    validated_model_config_provenance: ModelConfigProvenance | None,
+    validated_decoding_config_provenance: DecodingConfigProvenance | None,
+    generation_manifest_path: Path | None,
+) -> AgentTaskRunArtifactPaths:
+    generation_owns_payloads = generation_manifest_path is not None
+    if generation_manifest_path is not None:
+        expected_generation_path = (
+            out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["generation"]
+        ).resolve()
+        if generation_manifest_path.resolve() != expected_generation_path:
+            raise ValueError("Agent generation manifest path is not canonical")
+        if not generation_manifest_path.is_file():
+            raise ValueError("Agent generation manifest is missing")
+
     manifest_path = out_dir / MANIFEST_FILENAME
     agent_task_run_path = out_dir / AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_run"]
     decoding_config_path = (
@@ -328,14 +553,18 @@ def write_agent_task_run_artifacts(
     )
 
     agent_task_run_path.write_text(_redacted_model_json(agent_task_run.result))
-    if (
+    if not generation_owns_payloads and (
         decoding_config_path is not None
         and validated_decoding_config_provenance is not None
     ):
         decoding_config_path.write_text(
             _redacted_model_json(validated_decoding_config_provenance)
         )
-    if model_config_path is not None and validated_model_config_provenance is not None:
+    if (
+        not generation_owns_payloads
+        and model_config_path is not None
+        and validated_model_config_provenance is not None
+    ):
         model_config_path.write_text(
             _redacted_model_json(validated_model_config_provenance)
         )
@@ -347,12 +576,20 @@ def write_agent_task_run_artifacts(
             _redacted_model_json(validated_agent_control_script)
         )
     agent_task_view = agent_task_run.agent_task_view
-    if agent_task_view_path is not None and agent_task_view is not None:
+    if (
+        not generation_owns_payloads
+        and agent_task_view_path is not None
+        and agent_task_view is not None
+    ):
         agent_task_view_path.write_text(_redacted_model_json(agent_task_view))
     prompt_loop_result = agent_task_run.prompt_loop_result
-    if prompt_loop_result_path is not None and prompt_loop_result is not None:
+    if (
+        not generation_owns_payloads
+        and prompt_loop_result_path is not None
+        and prompt_loop_result is not None
+    ):
         prompt_loop_result_path.write_text(_redacted_model_json(prompt_loop_result))
-    if candidate_patch_path is not None:
+    if not generation_owns_payloads and candidate_patch_path is not None:
         candidate_patch_path.write_text(agent_task_run.candidate_patch)
     error_path.write_text(redact_secrets(_error_text(agent_task_run)))
 
@@ -367,6 +604,7 @@ def write_agent_task_run_artifacts(
             include_decoding_config=validated_decoding_config_provenance is not None,
             include_model_config=validated_model_config_provenance is not None,
             include_agent_control_script=validated_agent_control_script is not None,
+            include_generation=generation_manifest_path is not None,
         )
     )
 
@@ -483,6 +721,15 @@ def generated_decoding_config_provenance_artifact(
     )
 
 
+def _is_terminal_generation(generation: _AgentGenerationRun) -> bool:
+    prompt_loop_result = generation.prompt_loop_result
+    if generation.error_details is not None or prompt_loop_result is None:
+        return False
+    if prompt_loop_result.status != "completed":
+        return True
+    return generation.candidate_patch_path is not None
+
+
 def _run_root(workspace_parent: Path | None, agent_attempt_id: str) -> Path:
     if workspace_parent is None:
         return Path(tempfile.mkdtemp(prefix=f"agentenv-{agent_attempt_id}-")).resolve()
@@ -555,11 +802,14 @@ def _manifest_json(
     include_decoding_config: bool,
     include_model_config: bool,
     include_agent_control_script: bool,
+    include_generation: bool,
 ) -> str:
     artifacts: dict[str, str] = {
         "agent_task_run": AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_run"],
         "error": AGENT_ATTEMPT_ARTIFACT_REFS["error"],
     }
+    if include_generation:
+        artifacts["generation"] = AGENT_ATTEMPT_ARTIFACT_REFS["generation"]
     if include_decoding_config:
         artifacts["decoding_config"] = AGENT_ATTEMPT_ARTIFACT_REFS["decoding_config"]
     if include_model_config:

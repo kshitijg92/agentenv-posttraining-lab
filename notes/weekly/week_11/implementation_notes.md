@@ -511,3 +511,63 @@ Historical Week 10 suites remain valid evidence but do not acquire a
 pre-execution declaration retroactively. Their bytes and hashes are unchanged;
 only newly executed suites make the stronger interruption claim. This
 checkpoint implements neither resume nor retry.
+
+## 2026-08-19 Checkpoint 10: Terminal Agent-Generation Result
+
+Added an atomic terminal boundary between model generation and downstream
+scoring for predeclared agent-model eval attempts. The existing prompt-loop
+and candidate-patch files remain the detailed evidence; the new generation
+manifest is the authority that says their complete set was durably published
+for one declared eval attempt.
+
+The manifest passed the artifact economy gate:
+
+1. It uniquely owns the decision that generation reached a terminal result
+   before the full agent attempt or policy run completed.
+2. The agent-model orchestrator writes it immediately after prompt-loop output
+   and candidate capture; scoring, completed-suite validation, and the future
+   resume workflow consume it.
+3. A prompt-loop payload or candidate file alone cannot prove atomic
+   completion, bind itself to the predeclared attempt, or show that all
+   generation-owned payloads were written without interruption.
+4. Without the manifest, a scorer interruption leaves no safe way to
+   distinguish reusable model output from a partial write, so resume would
+   either resample the policy or trust ambiguous state.
+
+Each terminal generation pins:
+
+- the suite, policy-run, and eval-attempt ids plus the exact suite-declaration
+  hash;
+- the generated agent-attempt id and task identity;
+- prompt-loop status and generation timing;
+- model and decoding provenance;
+- the agent-visible task view and prompt-loop result;
+- the candidate patch for successful generation;
+- a content hash for every referenced generation payload.
+
+The scorer now consumes the persisted candidate owned by that manifest. The
+final agent-attempt manifest is written later and references the generation
+manifest; it remains the authority for the complete generation-plus-scoring
+attempt. Completed-suite validation requires the generation record to match
+the declaration, parent agent attempt, eval summary, model inputs, prompt
+status, candidate hash, and every pinned payload byte.
+
+Terminal prompt-loop failures such as model errors are preserved as generation
+results and must not be sampled again on resume. An infrastructure failure
+before a typed prompt-loop result or before candidate capture is not terminal
+generation: no generation manifest is published and the declared run stops.
+This preserves the difference between a policy outcome and incomplete
+orchestration.
+
+Focused failure evidence:
+
+```text
+typed model failure                  generation terminal, no candidate
+interruption after generation        generation terminal, no scorer/attempt/suite manifest
+changed candidate payload            completed suite rejected by content hash
+```
+
+This checkpoint does not implement resume. The next checkpoint can now inspect
+each predeclared attempt and safely distinguish a completed full attempt, a
+completed generation awaiting orchestration, and work with no reusable
+terminal result.

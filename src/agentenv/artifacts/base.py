@@ -11,6 +11,7 @@ JsonObject = dict[str, Any]
 
 class ArtifactType(StrEnum):
     SCORER_ATTEMPT = "scorer_attempt"
+    AGENT_GENERATION = "agent_generation"
     AGENT_ATTEMPT = "agent_attempt"
     EVAL_RUN = "eval_run"
     EVAL_SUITE = "eval_suite"
