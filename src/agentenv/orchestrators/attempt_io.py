@@ -11,6 +11,7 @@ from agentenv.artifacts import (
 )
 from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
 from agentenv.artifacts.manifests import SCORER_ATTEMPT_ARTIFACT_REFS
+from agentenv.artifacts.manifests import EvalAttemptReference
 from agentenv.artifacts.manifests import ScorerAttemptManifest
 from agentenv.orchestrators.attempt import AttemptCommand, AttemptResult, AttemptRun
 from agentenv.security.secrets import redact_jsonable, redact_secrets
@@ -41,7 +42,10 @@ def write_attempt_result(result: AttemptResult, out_dir: Path) -> Path:
 
 
 def write_attempt_artifacts(
-    attempt_run: AttemptRun, out_dir: Path
+    attempt_run: AttemptRun,
+    out_dir: Path,
+    *,
+    eval_attempt: EvalAttemptReference | None = None,
 ) -> AttemptArtifactPaths:
     out_dir = prepare_artifact_output_dir(out_dir)
     manifest_path = out_dir / MANIFEST_FILENAME
@@ -71,11 +75,16 @@ def write_attempt_artifacts(
     error_path.write_text(redact_secrets(_error_text(attempt_run)))
     trace_path.write_text(_trace_jsonl(attempt_run))
     final_diff_path.write_text(attempt_run.final_diff)
+    manifest = _build_scorer_attempt_manifest(
+        attempt_run,
+        eval_attempt=eval_attempt,
+    )
+    manifest_payload = manifest.model_dump(mode="json")
+    if eval_attempt is None:
+        manifest_payload.pop("eval_attempt")
     manifest_path.write_text(
         json.dumps(
-            redact_jsonable(
-                _build_scorer_attempt_manifest(attempt_run).model_dump(mode="json")
-            ),
+            redact_jsonable(manifest_payload),
             indent=2,
             sort_keys=True,
         )
@@ -235,7 +244,11 @@ def _attempt_provenance(result: AttemptResult) -> dict[str, object]:
     }
 
 
-def _build_scorer_attempt_manifest(attempt_run: AttemptRun) -> ScorerAttemptManifest:
+def _build_scorer_attempt_manifest(
+    attempt_run: AttemptRun,
+    *,
+    eval_attempt: EvalAttemptReference | None = None,
+) -> ScorerAttemptManifest:
     return ScorerAttemptManifest(
         artifact_type=ArtifactType.SCORER_ATTEMPT,
         artifact_schema_version=SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
@@ -244,6 +257,7 @@ def _build_scorer_attempt_manifest(attempt_run: AttemptRun) -> ScorerAttemptMani
         task_id=attempt_run.result.task_id,
         task_manifest_path=attempt_run.result.task_manifest_path,
         submission_path=attempt_run.result.submission_path,
+        eval_attempt=eval_attempt,
         status=attempt_run.result.status,
         artifacts=dict(SCORER_ATTEMPT_ARTIFACT_REFS),
     )

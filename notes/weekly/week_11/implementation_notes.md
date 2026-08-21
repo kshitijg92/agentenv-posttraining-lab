@@ -571,3 +571,112 @@ This checkpoint does not implement resume. The next checkpoint can now inspect
 each predeclared attempt and safely distinguish a completed full attempt, a
 completed generation awaiting orchestration, and work with no reusable
 terminal result.
+
+## 2026-08-20 Checkpoint 11: Resume Inventory And Attempt Lineage
+
+Added a read-only resume inventory that derives one decision for every planned
+eval attempt in the pre-execution declaration. It does not write a resume
+manifest, alter artifacts, call a policy, or continue execution.
+
+The inventory returns four actions:
+
+```text
+reuse_completed_attempt      terminal attempt and all required evidence validate
+reuse_completed_generation   terminal model generation validates; downstream work absent
+run_attempt                  attempt is untouched or has no terminal result
+reject_attempt               terminal evidence exists but is invalid or ambiguous
+```
+
+The action set preserves the complete declared attempt list and its order. An
+invalid attempt becomes one rejected decision; valid siblings remain reusable
+and unstarted siblings remain runnable. By contrast, config, task, harness, or
+declared model-input drift invalidates continuation of the whole declared run,
+because those are shared semantic inputs rather than evidence local to one
+attempt.
+
+### Terminal Attempt Lineage
+
+Inspection exposed one missing invariant: the generation result named its
+declared eval attempt, but terminal scorer-control and scripted-agent-control
+attempts did not. A completed orphan control could therefore be valid in
+isolation without proving that it belonged to this declaration.
+
+The existing terminal attempt manifests now carry the same suite id, eval-run
+id, eval-attempt id, and declaration hash used by terminal generation. This is
+an optional relation because standalone attempt artifacts legitimately have no
+eval-suite parent; newly declared suites require it on every terminal attempt.
+Completed-suite validation checks the relation for control and model policies.
+The common reference replaced the generation-specific reference rather than
+adding a parallel identity type or another artifact.
+
+This field-level change passes the artifact economy gate. The relationship is
+owned naturally by the terminal attempt manifest, and no new persisted resume
+record owns a fact that cannot be derived from the declaration plus terminal
+artifacts. The in-memory inventory itself is deliberately not serialized.
+
+### Validation Boundary
+
+Before classifying children, the inventory requires the declaration's current
+config bytes, selected task hashes, harness runtime, policy order, attempt
+coverage, and file-backed model/decoding/protocol inputs to remain unchanged.
+For a reusable completed attempt it then validates:
+
+- exact declared attempt identity, task identity, task-manifest path, and
+  policy-owned control input;
+- typed terminal manifest and result payloads;
+- every referenced agent or scorer artifact, scorer trace, candidate hash, and
+  final-diff hash where one exists;
+- nested scorer identity and result consistency for scored agent attempts;
+- exact terminal-generation hashes, model/decoding provenance, prompt status,
+  candidate identity, and parent agent-attempt identity for model policies.
+
+If a final attempt manifest exists but fails these checks, the inventory does
+not fall back to an otherwise valid generation result. That would let damaged
+or selectively removed final evidence silently become a rescore. It rejects
+that attempt. If no terminal attempt or generation manifest was ever
+published, partial files are classified as incomplete and the declared attempt
+may run again under the previously chosen semantics.
+
+Replay comparison now excludes the declaration reference from result
+equivalence. A fresh replay is not the original planned eval attempt and must
+not claim its identity; the source attempt's eval-run relation is checked before
+replay, and its full declaration relation is validated at the completed-suite
+boundary instead.
+
+### Focused Failure Evidence
+
+```text
+interruption after first control attempt
+  -> 1 reusable completed attempt, 1 incomplete attempt, 4 untouched attempts
+
+interruption after model generation
+  -> reusable terminal generation, no second policy call
+
+changed generation-owned candidate
+  -> only that attempt rejected
+
+corrupt completed control payload
+  -> corrupt attempt rejected, two valid siblings reusable
+
+changed harness runtime, task hashes, or config bytes
+  -> whole resume inventory rejected before child reuse
+```
+
+The four resume tests pass, as do the affected replay and attempt-I/O modules
+and focused scorer-control, agent-control, declaration, generation, and
+completed-suite regression cases. Ruff and Pyright pass for the changed
+surfaces. The full test suite was intentionally not run at this checkpoint.
+
+### Limitation And Next Checkpoint
+
+Terminal absence is the authority for rerunning incomplete work. A deliberate
+deletion of a terminal manifest can therefore imitate an interruption; this
+filesystem is not an append-only evidence store. A present but corrupt
+terminal manifest fails closed, which prevents silent replacement of an
+observed policy result.
+
+The next checkpoint is the resume executor. It should consume these decisions,
+reuse complete attempts or terminal generations without another policy call,
+rerun only the required downstream orchestration, preserve rejected attempts
+as rejected outcomes, and rebuild policy/suite/replay/report artifacts from the
+unchanged declaration.

@@ -20,7 +20,7 @@ from agentenv.artifacts import (
 from agentenv.artifacts.manifests import (
     AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
     AGENT_ATTEMPT_ARTIFACT_REFS,
-    AgentGenerationEvalAttemptReference,
+    EvalAttemptReference,
     AgentTaskRunManifest,
 )
 from agentenv.artifacts.payloads import (
@@ -362,7 +362,7 @@ def run_and_persist_agent_task_attempt_to_dir(
     model_config_provenance: ModelConfigProvenance | dict[str, Any] | None = None,
     decoding_config_provenance: DecodingConfigProvenance | dict[str, Any] | None = None,
     max_turns_override: int | None = None,
-    eval_attempt: AgentGenerationEvalAttemptReference | None = None,
+    eval_attempt: EvalAttemptReference | None = None,
 ) -> AgentTaskRun:
     if max_turns_override is not None and max_turns_override <= 0:
         raise ValueError("max_turns_override must be greater than zero")
@@ -380,15 +380,20 @@ def run_and_persist_agent_task_attempt_to_dir(
             else generated_decoding_config_provenance_artifact(decoding_config)
         )
     )
-    if eval_attempt is not None:
-        if validated_model_config_provenance is None:
+    declared_model_generation = (
+        eval_attempt is not None and validated_model_config_provenance is not None
+    )
+    if eval_attempt is not None and not declared_model_generation:
+        if validated_agent_control_script is None:
             raise ValueError(
-                "Declared eval agent generation requires model config provenance"
+                "Declared eval agent attempt requires model provenance or a "
+                "control script"
             )
-        if validated_agent_control_script is not None:
-            raise ValueError(
-                "Declared model generation cannot use an agent control script"
-            )
+    if (
+        validated_model_config_provenance is not None
+        and validated_agent_control_script is not None
+    ):
+        raise ValueError("Agent attempts cannot combine a model config and control script")
     generation = _run_agent_generation(
         task_manifest_path,
         model_client,
@@ -396,7 +401,7 @@ def run_and_persist_agent_task_attempt_to_dir(
         max_turns_override=max_turns_override,
     )
     generation_manifest_path: Path | None = None
-    if eval_attempt is not None and not _is_terminal_generation(generation):
+    if declared_model_generation and not _is_terminal_generation(generation):
         error_class = (
             generation.error_details.error_class
             if generation.error_details is not None
@@ -406,7 +411,9 @@ def run_and_persist_agent_task_attempt_to_dir(
             "Declared eval agent generation did not reach a terminal result: "
             f"{error_class}"
         )
-    if eval_attempt is not None:
+    if declared_model_generation:
+        if eval_attempt is None:
+            raise AssertionError("Declared model generation requires eval identity")
         if validated_model_config_provenance is None:
             raise AssertionError("Model config provenance was not prepared")
         if validated_decoding_config_provenance is None:
@@ -451,6 +458,7 @@ def run_and_persist_agent_task_attempt_to_dir(
             validated_decoding_config_provenance
         ),
         generation_manifest_path=generation_manifest_path,
+        eval_attempt=eval_attempt,
     )
     return agent_task_run
 
@@ -491,6 +499,7 @@ def write_agent_task_run_artifacts(
             validated_decoding_config_provenance
         ),
         generation_manifest_path=None,
+        eval_attempt=None,
     )
 
 
@@ -502,6 +511,7 @@ def _write_agent_task_run_artifacts_to_dir(
     validated_model_config_provenance: ModelConfigProvenance | None,
     validated_decoding_config_provenance: DecodingConfigProvenance | None,
     generation_manifest_path: Path | None,
+    eval_attempt: EvalAttemptReference | None,
 ) -> AgentTaskRunArtifactPaths:
     generation_owns_payloads = generation_manifest_path is not None
     if generation_manifest_path is not None:
@@ -605,6 +615,7 @@ def _write_agent_task_run_artifacts_to_dir(
             include_model_config=validated_model_config_provenance is not None,
             include_agent_control_script=validated_agent_control_script is not None,
             include_generation=generation_manifest_path is not None,
+            eval_attempt=eval_attempt,
         )
     )
 
@@ -803,6 +814,7 @@ def _manifest_json(
     include_model_config: bool,
     include_agent_control_script: bool,
     include_generation: bool,
+    eval_attempt: EvalAttemptReference | None,
 ) -> str:
     artifacts: dict[str, str] = {
         "agent_task_run": AGENT_ATTEMPT_ARTIFACT_REFS["agent_task_run"],
@@ -836,12 +848,16 @@ def _manifest_json(
         agent_attempt_id=agent_task_run.result.agent_attempt_id,
         task_id=agent_task_run.result.task_id,
         task_manifest_path=agent_task_run.result.task_manifest_path,
+        eval_attempt=eval_attempt,
         status=agent_task_run.result.status,
         prompt_loop_status=agent_task_run.result.prompt_loop_status,
         attempt_status=_attempt_status(agent_task_run.result.attempt_result),
         artifacts=artifacts,
     )
-    return _redacted_model_json(manifest)
+    payload = manifest.model_dump(mode="json")
+    if eval_attempt is None:
+        payload.pop("eval_attempt")
+    return json.dumps(redact_jsonable(payload), indent=2) + "\n"
 
 
 def _attempt_status(attempt_result: AttemptResult | None) -> AttemptStatus | None:

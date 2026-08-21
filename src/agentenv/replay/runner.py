@@ -75,6 +75,7 @@ VOLATILE_JSON_KEYS = {
     "stdout_bytes",
     "stderr_bytes",
 }
+SOURCE_ONLY_REPLAY_JSON_KEYS = {"eval_attempt"}
 
 
 @dataclass(frozen=True)
@@ -228,6 +229,7 @@ def _replay_eval_run_attempts(
     attempts = source_manifest.get("attempts")
     if not isinstance(attempts, list):
         raise ValueError("Source eval run manifest is missing attempts list")
+    source_eval_run_id = _required_str(source_manifest, "eval_run_id")
 
     comparisons: list[ReplayComparison] = []
     replay_attempts_dir = out_dir / REPLAY_RUN_ARTIFACT_REFS["attempts"]
@@ -242,6 +244,7 @@ def _replay_eval_run_attempts(
             replay_attempts_dir,
             raw_attempt,
             trace_events,
+            source_eval_run_id=source_eval_run_id,
         )
         comparisons.append(comparison)
     return comparisons
@@ -253,6 +256,8 @@ def _replay_one_eval_attempt_artifact(
     replay_attempts_dir: Path,
     source_attempt_record: dict[str, object],
     trace_events: list[dict[str, object]],
+    *,
+    source_eval_run_id: str,
 ) -> ReplayComparison:
     artifact_dir = _required_str(source_attempt_record, "artifact_dir")
     source_eval_attempt_id = _required_str(
@@ -277,6 +282,7 @@ def _replay_one_eval_attempt_artifact(
         source_artifact_manifest_model,
         artifact_dir=artifact_dir,
         parent_artifact_type=parent_artifact_type,
+        parent_eval_run_id=source_eval_run_id,
     )
     if artifact_type == ArtifactType.AGENT_ATTEMPT.value:
         if not isinstance(source_artifact_manifest_model, AgentTaskRunManifest):
@@ -340,6 +346,7 @@ def _validate_eval_child_manifest_matches_parent(
     *,
     artifact_dir: str,
     parent_artifact_type: str,
+    parent_eval_run_id: str,
 ) -> None:
     if child_manifest.artifact_type != parent_artifact_type:
         raise ValueError(
@@ -364,6 +371,20 @@ def _validate_eval_child_manifest_matches_parent(
             f"{parent_task_id!r} and child manifest {child_manifest.task_id!r} "
             f"for {artifact_dir}"
         )
+    eval_attempt = child_manifest.eval_attempt
+    if eval_attempt is not None:
+        parent_eval_attempt_id = _required_str(
+            parent_attempt_record,
+            "eval_attempt_id",
+        )
+        if (
+            eval_attempt.eval_run_id != parent_eval_run_id
+            or eval_attempt.eval_attempt_id != parent_eval_attempt_id
+        ):
+            raise ValueError(
+                "Eval run child declared identity does not match its parent "
+                f"attempt for {artifact_dir}"
+            )
     if isinstance(child_manifest, ScorerAttemptManifest):
         _validate_scorer_manifest_matches_eval_parent(
             child_manifest,
@@ -1068,6 +1089,8 @@ def _normalize_json_value(value: object, *, repo_roots: tuple[Path, ...]) -> obj
     if isinstance(value, dict):
         normalized: dict[str, object] = {}
         for key, raw_value in value.items():
+            if key in SOURCE_ONLY_REPLAY_JSON_KEYS:
+                continue
             if key in VOLATILE_JSON_KEYS:
                 normalized[key] = f"<{key.upper()}>"
             else:

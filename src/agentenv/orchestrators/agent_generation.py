@@ -13,8 +13,8 @@ from agentenv.artifacts.manifests import (
     AGENT_GENERATION_ARTIFACT_REFS,
     AGENT_GENERATION_ARTIFACT_SCHEMA_VERSION,
     AGENT_GENERATION_MANIFEST_FILENAME,
-    AgentGenerationEvalAttemptReference,
     AgentGenerationManifest,
+    EvalAttemptReference,
     load_agent_generation_manifest,
 )
 from agentenv.artifacts.payloads import (
@@ -51,7 +51,7 @@ def write_agent_generation_artifact(
     started_at: str,
     ended_at: str,
     duration_ms: int,
-    eval_attempt: AgentGenerationEvalAttemptReference,
+    eval_attempt: EvalAttemptReference,
     model_config_provenance: ModelConfigProvenance,
     decoding_config_provenance: DecodingConfigProvenance,
 ) -> Path:
@@ -193,7 +193,7 @@ def load_validated_agent_generation(
 def validate_agent_generation_for_eval_attempt(
     manifest_path: Path,
     *,
-    expected_eval_attempt: AgentGenerationEvalAttemptReference,
+    expected_eval_attempt: EvalAttemptReference,
     expected_agent_attempt_id: str,
     expected_task_id: str,
     expected_task_manifest_path: Path,

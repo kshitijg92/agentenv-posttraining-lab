@@ -6,11 +6,12 @@ from pathlib import Path
 from agentenv.artifacts import MANIFEST_FILENAME
 from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import (
-    AgentGenerationEvalAttemptReference,
+    EvalAttemptReference,
     EvalRunManifest,
     EvalSuiteManifest,
     EvalSuitePolicyRunManifestRecord,
     load_agent_attempt_manifest,
+    load_attempt_manifest,
     load_eval_run_manifest,
     load_eval_suite_manifest,
 )
@@ -184,12 +185,43 @@ def _validate_completed_policy_run_matches_declaration(
         raise ValueError(
             "Completed eval attempts differ from the predeclared attempt set"
         )
+    _validate_completed_attempt_bindings(
+        eval_run_manifest_path.parent,
+        declaration,
+        planned,
+        eval_run_manifest,
+    )
     _validate_completed_model_inputs(
         eval_run_manifest_path.parent,
         declaration,
         planned,
         eval_run_manifest,
     )
+
+
+def _validate_completed_attempt_bindings(
+    eval_run_dir: Path,
+    declaration: EvalSuiteDeclaration,
+    planned: PlannedEvalPolicyRun,
+    eval_run_manifest: EvalRunManifest,
+) -> None:
+    declaration_hash = hash_eval_suite_declaration(declaration)
+    for attempt in eval_run_manifest.attempts:
+        attempt_dir = resolve_relative_artifact_ref(
+            eval_run_dir,
+            attempt.artifact_dir,
+        )
+        attempt_manifest = load_attempt_manifest(attempt_dir / MANIFEST_FILENAME)
+        expected = EvalAttemptReference(
+            eval_suite_id=declaration.eval_suite_id,
+            eval_run_id=planned.eval_run_id,
+            eval_attempt_id=attempt.eval_attempt_id,
+            eval_suite_declaration_hash=declaration_hash,
+        )
+        if attempt_manifest.eval_attempt != expected:
+            raise ValueError(
+                "Completed attempt does not match its declared eval identity"
+            )
 
 
 def _validate_child_run_identity(
@@ -234,7 +266,7 @@ def _validate_completed_model_inputs(
             raise ValueError(
                 "Declared agent-model attempt is missing terminal generation"
             )
-        expected_eval_attempt = AgentGenerationEvalAttemptReference(
+        expected_eval_attempt = EvalAttemptReference(
             eval_suite_id=declaration.eval_suite_id,
             eval_run_id=planned.eval_run_id,
             eval_attempt_id=attempt.eval_attempt_id,

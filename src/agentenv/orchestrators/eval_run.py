@@ -14,7 +14,8 @@ from agentenv.artifacts import (
 from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import (
     AGENT_ATTEMPT_ARTIFACT_REFS,
-    AgentGenerationEvalAttemptReference,
+    EvalAttemptReference,
+    load_attempt_manifest,
     load_agent_attempt_manifest,
 )
 from agentenv.artifacts.manifests import EVAL_RUN_ARTIFACT_REFS
@@ -310,6 +311,18 @@ def run_eval_config(
                 (task.task_id, attempt_index)
             ]
             eval_attempt_id = planned_attempt.eval_attempt_id
+            eval_attempt_ref = (
+                EvalAttemptReference(
+                    eval_suite_id=suite_declaration.eval_suite_id,
+                    eval_run_id=eval_run_id,
+                    eval_attempt_id=eval_attempt_id,
+                    eval_suite_declaration_hash=hash_eval_suite_declaration(
+                        suite_declaration
+                    ),
+                )
+                if suite_declaration is not None
+                else None
+            )
             attempt_dir = resolve_relative_artifact_ref(
                 out_dir,
                 planned_attempt.artifact_dir,
@@ -349,6 +362,7 @@ def run_eval_config(
                     eval_attempt_id=eval_attempt_id,
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
+                    eval_attempt=eval_attempt_ref,
                 )
                 scorer_attempt_id = _required_scorer(attempt_record).scorer_attempt_id
                 payload_refs = {
@@ -378,6 +392,7 @@ def run_eval_config(
                     eval_attempt_id=eval_attempt_id,
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
+                    eval_attempt=eval_attempt_ref,
                 )
                 agent_attempt = _required_agent(attempt_record)
                 agent_attempt_id = agent_attempt.agent_attempt_id
@@ -413,18 +428,7 @@ def run_eval_config(
                     attempt_index=attempt_index,
                     attempt_dir=attempt_dir,
                     max_turns_override=selected_policy.max_turns_override,
-                    generation_eval_attempt=(
-                        AgentGenerationEvalAttemptReference(
-                            eval_suite_id=suite_declaration.eval_suite_id,
-                            eval_run_id=eval_run_id,
-                            eval_attempt_id=eval_attempt_id,
-                            eval_suite_declaration_hash=(
-                                hash_eval_suite_declaration(suite_declaration)
-                            ),
-                        )
-                        if suite_declaration is not None
-                        else None
-                    ),
+                    eval_attempt=eval_attempt_ref,
                 )
                 agent_attempt = _required_agent(attempt_record)
                 agent_attempt_id = agent_attempt.agent_attempt_id
@@ -531,7 +535,7 @@ def run_eval_config_all_policies(
         runtime_provenance=runtime_provenance,
         agent_model_contexts=agent_model_contexts,
     )
-    _require_current_declaration_inputs(declaration)
+    validate_current_eval_suite_declaration(declaration)
     _write_eval_suite_declaration(out_dir, declaration)
 
     policies_dir = out_dir / EVAL_SUITE_ARTIFACT_REFS["policies"]
@@ -808,7 +812,7 @@ def _require_live_model_inputs(
             raise ValueError("Declared model input protocol bytes changed")
 
 
-def _require_current_declaration_inputs(
+def validate_current_eval_suite_declaration(
     declaration: EvalSuiteDeclaration,
 ) -> None:
     config_path = Path(declaration.config_path).resolve()
@@ -849,7 +853,7 @@ def _validate_eval_matrix_matches_declaration(
     eval_matrix: EvalMatrixRun,
 ) -> None:
     declaration = eval_matrix.declaration
-    _require_current_declaration_inputs(declaration)
+    validate_current_eval_suite_declaration(declaration)
     if load_eval_suite_declaration(
         eval_matrix.out_dir / EVAL_SUITE_DECLARATION_FILENAME
     ) != declaration:
@@ -916,11 +920,38 @@ def _validate_eval_matrix_matches_declaration(
             raise ValueError(
                 "Completed eval attempts differ from the predeclared attempt set"
             )
+        _validate_policy_attempt_bindings_before_suite_completion(
+            declaration,
+            planned_policy_run,
+            policy_run,
+        )
         _validate_policy_generations_before_suite_completion(
             declaration,
             planned_policy_run,
             policy_run,
         )
+
+
+def _validate_policy_attempt_bindings_before_suite_completion(
+    declaration: EvalSuiteDeclaration,
+    planned_policy_run: PlannedEvalPolicyRun,
+    policy_run: EvalRun,
+) -> None:
+    declaration_hash = hash_eval_suite_declaration(declaration)
+    for attempt in policy_run.attempts:
+        attempt_manifest = load_attempt_manifest(
+            attempt.attempt_dir / MANIFEST_FILENAME
+        )
+        expected = EvalAttemptReference(
+            eval_suite_id=declaration.eval_suite_id,
+            eval_run_id=planned_policy_run.eval_run_id,
+            eval_attempt_id=attempt.eval_attempt_id,
+            eval_suite_declaration_hash=declaration_hash,
+        )
+        if attempt_manifest.eval_attempt != expected:
+            raise ValueError(
+                "Completed attempt does not match its declared eval identity"
+            )
 
 
 def _validate_policy_generations_before_suite_completion(
@@ -963,7 +994,7 @@ def _validate_policy_generations_before_suite_completion(
 
         generation = validate_agent_generation_for_eval_attempt(
             resolve_relative_artifact_ref(attempt.attempt_dir, generation_ref),
-            expected_eval_attempt=AgentGenerationEvalAttemptReference(
+            expected_eval_attempt=EvalAttemptReference(
                 eval_suite_id=declaration.eval_suite_id,
                 eval_run_id=planned_policy_run.eval_run_id,
                 eval_attempt_id=attempt.eval_attempt_id,
@@ -1242,11 +1273,13 @@ def _run_scorer_eval_attempt(
     eval_attempt_id: str,
     attempt_index: int,
     attempt_dir: Path,
+    eval_attempt: EvalAttemptReference | None,
 ) -> EvalAttemptRecord:
     attempt_run = run_and_persist_patch_attempt_to_dir(
         task.manifest_path,
         submission_path,
         attempt_dir,
+        eval_attempt=eval_attempt,
     )
     artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
@@ -1268,6 +1301,7 @@ def _run_agent_control_eval_attempt(
     eval_attempt_id: str,
     attempt_index: int,
     attempt_dir: Path,
+    eval_attempt: EvalAttemptReference | None,
 ) -> EvalAttemptRecord:
     model_client = ScriptedFakeModelClient(
         model_id="agent-control-scripted-v0",
@@ -1280,6 +1314,7 @@ def _run_agent_control_eval_attempt(
         decoding_config,
         attempt_dir,
         agent_control_script=control_case,
+        eval_attempt=eval_attempt,
     )
     artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(
@@ -1302,7 +1337,7 @@ def _run_agent_model_eval_attempt(
     attempt_index: int,
     attempt_dir: Path,
     max_turns_override: int | None,
-    generation_eval_attempt: AgentGenerationEvalAttemptReference | None,
+    eval_attempt: EvalAttemptReference | None,
 ) -> EvalAttemptRecord:
     agent_task_run = run_and_persist_agent_task_attempt_to_dir(
         task.manifest_path,
@@ -1312,7 +1347,7 @@ def _run_agent_model_eval_attempt(
         max_turns_override=max_turns_override,
         model_config_provenance=run_context.model_config_provenance,
         decoding_config_provenance=run_context.decoding_config_provenance,
-        eval_attempt=generation_eval_attempt,
+        eval_attempt=eval_attempt,
     )
     artifact_identity = _child_artifact_identity(attempt_dir)
     return EvalAttemptRecord(

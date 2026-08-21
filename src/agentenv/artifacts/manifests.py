@@ -456,6 +456,15 @@ class ArtifactManifest(BaseModel):
         return self
 
 
+class EvalAttemptReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    eval_suite_id: str = Field(min_length=1)
+    eval_run_id: str = Field(min_length=1)
+    eval_attempt_id: str = Field(min_length=1)
+    eval_suite_declaration_hash: ContentHash
+
+
 class ScorerAttemptManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.SCORER_ATTEMPT.value
     expected_artifact_schema_version = SCORER_ATTEMPT_ARTIFACT_SCHEMA_VERSION
@@ -465,6 +474,7 @@ class ScorerAttemptManifest(ArtifactManifest):
     task_id: str = Field(min_length=1)
     task_manifest_path: str = Field(min_length=1)
     submission_path: str = Field(min_length=1)
+    eval_attempt: EvalAttemptReference | None = None
     status: AttemptStatus
     artifacts: dict[str, str]
 
@@ -484,15 +494,6 @@ class ScorerAttemptManifest(ArtifactManifest):
         return self
 
 
-class AgentGenerationEvalAttemptReference(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    eval_suite_id: str = Field(min_length=1)
-    eval_run_id: str = Field(min_length=1)
-    eval_attempt_id: str = Field(min_length=1)
-    eval_suite_declaration_hash: ContentHash
-
-
 class AgentGenerationManifest(ArtifactManifest):
     expected_artifact_type = ArtifactType.AGENT_GENERATION.value
     expected_artifact_schema_version = AGENT_GENERATION_ARTIFACT_SCHEMA_VERSION
@@ -500,7 +501,7 @@ class AgentGenerationManifest(ArtifactManifest):
     agent_attempt_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     task_manifest_path: str = Field(min_length=1)
-    eval_attempt: AgentGenerationEvalAttemptReference
+    eval_attempt: EvalAttemptReference
     prompt_loop_status: PromptLoopStatus
     candidate_patch_hash: ContentHash | None
     started_at: str = Field(min_length=1)
@@ -549,6 +550,7 @@ class AgentTaskRunManifest(ArtifactManifest):
     agent_attempt_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     task_manifest_path: str = Field(min_length=1)
+    eval_attempt: EvalAttemptReference | None = None
     status: AgentTaskRunStatus
     prompt_loop_status: PromptLoopStatus | None
     attempt_status: AttemptStatus | None
