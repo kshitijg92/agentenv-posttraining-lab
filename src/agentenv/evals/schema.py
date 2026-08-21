@@ -98,6 +98,17 @@ class EvalConfig(BaseModel):
     trace: TraceCaptureConfig
 
     @model_validator(mode="after")
+    def validate_unique_tasks(self) -> "EvalConfig":
+        duplicates = sorted(
+            {task_id for task_id in self.tasks if self.tasks.count(task_id) > 1}
+        )
+        if duplicates:
+            raise ValueError(
+                "Duplicate eval task id value(s): " + ", ".join(duplicates)
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_policy_selection_contract(self) -> "EvalConfig":
         if self.policy_selection_rule is None:
             return self

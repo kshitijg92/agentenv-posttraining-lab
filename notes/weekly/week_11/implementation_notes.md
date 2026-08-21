@@ -756,3 +756,57 @@ reports remain natural downstream consumers of the rebuilt terminal suite and
 belong to the later reproduction/failure-injection composition. The executor
 also assumes one writer owns a suite directory; concurrent resume processes are
 not supported.
+
+## 2026-08-20 Checkpoint 13: Failure-Injection Matrix
+
+Exercised the resume contract against the Week 11 failure list. No failure
+manifest or parallel status model was added: the eval config, suite
+declaration, terminal attempt/generation records, and in-memory resume result
+already own the relevant facts.
+
+One source-level invariant was missing. `EvalConfig` now rejects duplicate task
+ids directly. Previously, duplicate configured tasks happened to fail later
+when their derived attempt paths collided during declaration construction.
+Rejecting them at the config boundary identifies the actual ambiguity before an
+output directory or declaration is created.
+
+### Observed Matrix
+
+| injected condition | observed behavior | resume/retry meaning | suite effect |
+| --- | --- | --- | --- |
+| interruption between attempts | valid terminal children are reused; an incomplete directory with no terminal marker is replaced and run under its predeclared id | resume permitted; this is not another configured attempt | suite can become terminal after exact declared coverage completes |
+| missing payload referenced by a terminal attempt manifest | attempt is `reject_attempt`; missing evidence is not regenerated | resume cannot repair it; a fresh attempt belongs to a new run or configured attempt | rejected policy and suite receive no terminal manifest |
+| corrupt terminal attempt payload | only that attempt is rejected; valid and runnable siblings continue | no fallback to generation or silent rescore | suite cannot claim a complete valid comparison |
+| duplicate task id in eval config | config validation raises before suite creation | fix the config and start a new declaration | no suite directory or declared work |
+| duplicate eval-attempt id in the stored declaration | declaration loading rejects the ambiguity | no attempt is selected by file order | no child execution or suite completion |
+| model response timeout | typed `model_error` generation is terminal, then becomes `agent_loop_failed` without a scorer child | generation is reused and the model is not sampled again | structural suite completion is allowed while the model failure remains visible |
+| scorer public-check timeout | terminal scorer attempt remains `TIMEOUT`; its bytes and scorer-attempt id are reused while the pending sibling runs | no automatic retry of the timed-out scorer attempt | terminal suite records both `TIMEOUT=1` and `PASS=1`; completion does not mean all outcomes passed |
+| hidden validator removed after declaration | current task validation fails before any attempt executes | resume is blocked unless the exact declared task bytes are restored | declaration remains, but no terminal policy or suite manifest is written |
+| bad eval-config path | `FileNotFoundError` occurs before output preparation | there is no run to resume | no suite directory or attributed work |
+| changed config, task hashes, or harness runtime | declaration validation rejects the whole continuation before child reuse | changed inputs require a new run; restoring exact inputs can make resume valid again | no stale work is combined with changed semantics |
+
+The timeout cases preserve a critical distinction: `completed` in the resume
+executor means that the declared artifact graph reached a terminal structural
+state. It does not mean the policy/scorer outcomes passed. The reproduction
+workflow's operational verification must still map `TIMEOUT`, scorer errors,
+replay mismatches, and a `rejected` resume result to a nonzero command exit.
+Library-level global input failures already raise; attempt-local corruption is
+returned as `status="rejected"` so callers cannot mistake it for completion.
+
+### Verification
+
+The fourteen resume tests pass, including the six new failure injections. The
+three lower-level scorer timeout-phase tests, task-pack validation, and the
+control, agent-control, and agent-model config-load checks also pass: 21 focused
+tests total. Repository-wide Ruff passes, and Pyright reports zero errors and
+zero warnings. The full test suite is intentionally excluded.
+
+### Remaining Limitation
+
+The matrix assumes one writer and injection at filesystem-observable
+boundaries. A process interruption while a non-atomic terminal manifest itself
+is being written can leave present but corrupt evidence; the current contract
+fails closed and rejects that attempt rather than repairing or resampling it.
+This is safe but less recoverable than atomic terminal publication. Command
+exit-code mapping belongs to the later reproduction composition because resume
+currently has no standalone CLI surface.

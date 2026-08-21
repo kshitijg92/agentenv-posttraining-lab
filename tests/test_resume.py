@@ -1,12 +1,19 @@
 import json
 import shutil
 from pathlib import Path
+from subprocess import TimeoutExpired
 
 import pytest
 
 import agentenv.orchestrators.agent_task_run as agent_task_run_module
+import agentenv.orchestrators.attempt as attempt_module
 import agentenv.orchestrators.eval_run as eval_run_module
-from agentenv.artifacts.manifests import AgentTaskRunManifest, load_attempt_manifest
+import agentenv.runners.resume as resume_module
+from agentenv.artifacts.manifests import (
+    AgentTaskRunManifest,
+    ScorerAttemptManifest,
+    load_attempt_manifest,
+)
 from agentenv.evals.suite_declaration import (
     EVAL_SUITE_DECLARATION_FILENAME,
     load_eval_suite_declaration,
@@ -31,6 +38,39 @@ def _write_control_eval_config(
         CONTROL_EVAL_CONFIG.read_text()
         .replace("attempts: 1", f"attempts: {attempts}")
         .replace("repeats: 1", f"repeats: {replay_repeats}")
+    )
+
+
+def _write_oracle_eval_config(
+    path: Path,
+    *,
+    attempts: int = 1,
+    task_ids: tuple[str, ...] = ("toy_python_fix_001",),
+    task_pack: str = "data/task_packs/repo_patch_python_v0",
+) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "name: resume_failure_injection",
+                f"task_pack: {json.dumps(task_pack)}",
+                "tasks:",
+                *(f"  - {json.dumps(task_id)}" for task_id in task_ids),
+                "split: practice",
+                "policies:",
+                "  oracle:",
+                "    type: scorer_control_patch",
+                "    control: oracle",
+                f"    attempts: {attempts}",
+                "    replay:",
+                "      repeats: 0",
+                "trace:",
+                "  version: trace_v0",
+                "  capture_stdout: true",
+                "  capture_stderr: true",
+                "  capture_diff: true",
+                "",
+            ]
+        )
     )
 
 
@@ -396,7 +436,7 @@ def test_resume_executor_finishes_generation_without_another_model_call(
     )
 
 
-def test_resume_executor_keeps_typed_model_failure_terminal(
+def test_resume_executor_keeps_typed_model_timeout_terminal(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -405,12 +445,12 @@ def test_resume_executor_keeps_typed_model_failure_terminal(
     monkeypatch.setenv("AGENTENV_MODEL_BASE_URL", "https://provider.test/v1")
     monkeypatch.delenv("AGENTENV_MODEL_API_KEY", raising=False)
     failed_client = ScriptedFakeModelClient(
-        model_id="resume-terminal-failure-test",
+        model_id="resume-terminal-timeout-test",
         script=[
             FakeModelScriptStep(
                 output_text="",
-                finish_reason="error",
-                error_class="InjectedModelError",
+                finish_reason="timeout",
+                error_class="InjectedModelTimeout",
             )
         ],
     )
@@ -440,6 +480,11 @@ def test_resume_executor_keeps_typed_model_failure_terminal(
         (attempt_dir / "agent_generation_manifest.json").read_text()
     )
     assert generation_payload["prompt_loop_status"] == "model_error"
+    prompt_loop_payload = json.loads(
+        (attempt_dir / "prompt_loop_result.json").read_text()
+    )
+    assert prompt_loop_payload["error_class"] == "InjectedModelTimeout"
+    assert prompt_loop_payload["model_responses"][0]["finish_reason"] == "timeout"
     monkeypatch.setattr(
         agent_task_run_module,
         "_finish_agent_task_attempt",
@@ -448,7 +493,7 @@ def test_resume_executor_keeps_typed_model_failure_terminal(
 
     def fail_if_model_is_built(*args, **kwargs):
         del args, kwargs
-        raise AssertionError("terminal model failure must not be resampled")
+        raise AssertionError("terminal model timeout must not be resampled")
 
     monkeypatch.setattr(
         eval_run_module,
@@ -502,3 +547,215 @@ def test_resume_executor_rejects_corruption_but_continues_siblings(
     assert not (rejected_policy_dir / "manifest.json").exists()
     assert not (rejected_policy_dir / "trace.jsonl").exists()
     assert len(resumed.policy_runs) == 2
+
+
+def test_eval_config_rejects_duplicate_task_ids_before_declaring_suite(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "duplicate_tasks.yaml"
+    _write_oracle_eval_config(
+        config_path,
+        task_ids=("toy_python_fix_001", "toy_python_fix_001"),
+    )
+    out_dir = tmp_path / "eval_suite"
+
+    with pytest.raises(ValueError, match="Duplicate eval task id"):
+        run_eval_config_all_policies(config_path, out_dir)
+
+    assert not out_dir.exists()
+
+
+def test_resume_rejects_duplicate_predeclared_attempt_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "duplicate_attempt.yaml"
+    _write_oracle_eval_config(config_path, attempts=2)
+    out_dir = tmp_path / "eval_suite"
+
+    def interrupt_before_first_attempt(**kwargs):
+        del kwargs
+        raise RuntimeError("injected before first attempt")
+
+    monkeypatch.setattr(
+        eval_run_module,
+        "_run_scorer_eval_attempt",
+        interrupt_before_first_attempt,
+    )
+    with pytest.raises(RuntimeError, match="injected before first attempt"):
+        run_eval_config_all_policies(config_path, out_dir)
+
+    declaration_path = out_dir / EVAL_SUITE_DECLARATION_FILENAME
+    declaration_payload = json.loads(declaration_path.read_text())
+    planned_attempts = declaration_payload["policy_runs"][0]["planned_attempts"]
+    planned_attempts[1]["eval_attempt_id"] = planned_attempts[0]["eval_attempt_id"]
+    declaration_path.write_text(
+        json.dumps(declaration_payload, indent=2, sort_keys=True) + "\n"
+    )
+
+    with pytest.raises(ValueError, match="Duplicate eval_attempt_id"):
+        classify_eval_suite_resume(out_dir)
+
+    assert not (out_dir / "manifest.json").exists()
+
+
+def test_resume_rejects_attempt_with_missing_terminal_payload(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "missing_payload.yaml"
+    _write_oracle_eval_config(config_path)
+    out_dir = tmp_path / "eval_suite"
+    run_eval_config_all_policies(config_path, out_dir)
+    clean_inventory = classify_eval_suite_resume(out_dir)
+    attempt_dir = clean_inventory.decisions[0].attempt_dir
+
+    (out_dir / "manifest.json").unlink()
+    missing_result_path = attempt_dir / "attempt.json"
+    missing_result_path.unlink()
+
+    inventory = classify_eval_suite_resume(out_dir)
+    assert inventory.decisions[0].action == "reject_attempt"
+    assert inventory.decisions[0].reason == "invalid_completed_attempt"
+    assert "artifact is missing" in (inventory.decisions[0].detail or "")
+
+    resumed = resume_eval_suite(out_dir)
+
+    assert resumed.status == "rejected"
+    assert resumed.inventory_after.decisions[0].action == "reject_attempt"
+    assert not missing_result_path.exists()
+    assert not (out_dir / "manifest.json").exists()
+    assert not (attempt_dir.parent.parent / "manifest.json").exists()
+
+
+def test_resume_reuses_terminal_scorer_timeout_without_retrying_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "scorer_timeout.yaml"
+    _write_oracle_eval_config(config_path, attempts=2)
+    out_dir = tmp_path / "eval_suite"
+    real_public_checks = attempt_module.run_public_checks
+    real_eval_attempt = eval_run_module._run_scorer_eval_attempt
+    call_count = 0
+
+    def raise_timeout(*args, **kwargs):
+        del args, kwargs
+        raise TimeoutExpired(cmd="pytest public", timeout=1)
+
+    def timeout_then_interrupt(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise RuntimeError("injected after timeout attempt")
+        return real_eval_attempt(**kwargs)
+
+    monkeypatch.setattr(attempt_module, "run_public_checks", raise_timeout)
+    monkeypatch.setattr(
+        eval_run_module,
+        "_run_scorer_eval_attempt",
+        timeout_then_interrupt,
+    )
+    with pytest.raises(RuntimeError, match="injected after timeout attempt"):
+        run_eval_config_all_policies(config_path, out_dir)
+
+    inventory_before = classify_eval_suite_resume(out_dir)
+    timeout_attempt = inventory_before.decisions[0]
+    pending_attempt = inventory_before.decisions[1]
+    timeout_manifest_before = load_attempt_manifest(
+        timeout_attempt.attempt_dir / "manifest.json"
+    )
+    assert isinstance(timeout_manifest_before, ScorerAttemptManifest)
+    assert timeout_manifest_before.status == "TIMEOUT"
+    timeout_result_bytes = (timeout_attempt.attempt_dir / "attempt.json").read_bytes()
+
+    monkeypatch.setattr(attempt_module, "run_public_checks", real_public_checks)
+    real_resume_attempt = resume_module.run_and_persist_patch_attempt_to_dir
+    resumed_attempt_dirs: list[Path] = []
+
+    def track_resumed_attempt(
+        task_manifest_path,
+        submission_path,
+        attempt_dir,
+        *,
+        eval_attempt=None,
+    ):
+        assert attempt_dir.resolve() != timeout_attempt.attempt_dir
+        resumed_attempt_dirs.append(attempt_dir.resolve())
+        return real_resume_attempt(
+            task_manifest_path,
+            submission_path,
+            attempt_dir,
+            eval_attempt=eval_attempt,
+        )
+
+    monkeypatch.setattr(
+        resume_module,
+        "run_and_persist_patch_attempt_to_dir",
+        track_resumed_attempt,
+    )
+    resumed = resume_eval_suite(out_dir)
+
+    assert resumed.status == "completed"
+    assert resumed_attempt_dirs == [pending_attempt.attempt_dir]
+    assert (timeout_attempt.attempt_dir / "attempt.json").read_bytes() == (
+        timeout_result_bytes
+    )
+    assert (
+        load_attempt_manifest(timeout_attempt.attempt_dir / "manifest.json")
+        == timeout_manifest_before
+    )
+    scorer_summaries = [attempt.scorer for attempt in resumed.policy_runs[0].attempts]
+    assert [summary.status for summary in scorer_summaries if summary is not None] == [
+        "TIMEOUT",
+        "PASS",
+    ]
+    suite_manifest = json.loads((out_dir / "manifest.json").read_text())
+    assert suite_manifest["layer_counts"]["scorer_status"] == {
+        "PASS": 1,
+        "TIMEOUT": 1,
+    }
+
+
+def test_resume_rejects_missing_hidden_validator_before_attempt_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task_pack = tmp_path / "task_pack"
+    shutil.copytree(Path("data/task_packs/repo_patch_python_v0"), task_pack)
+    config_path = tmp_path / "missing_hidden_validator.yaml"
+    _write_oracle_eval_config(config_path, task_pack=str(task_pack))
+    out_dir = tmp_path / "eval_suite"
+
+    def interrupt_before_first_attempt(**kwargs):
+        del kwargs
+        raise RuntimeError("injected before first attempt")
+
+    monkeypatch.setattr(
+        eval_run_module,
+        "_run_scorer_eval_attempt",
+        interrupt_before_first_attempt,
+    )
+    with pytest.raises(RuntimeError, match="injected before first attempt"):
+        run_eval_config_all_policies(config_path, out_dir)
+
+    shutil.rmtree(task_pack / "tasks/toy_python_fix/hidden_tests")
+
+    with pytest.raises(
+        ValueError,
+        match="Missing hidden validator behavior_pytest",
+    ):
+        resume_eval_suite(out_dir)
+
+    assert (out_dir / EVAL_SUITE_DECLARATION_FILENAME).is_file()
+    assert not (out_dir / "manifest.json").exists()
+    assert not list((out_dir / "policies").glob("**/manifest.json"))
+
+
+def test_bad_eval_config_path_fails_before_suite_creation(tmp_path: Path) -> None:
+    missing_config = tmp_path / "missing_eval.yaml"
+    out_dir = tmp_path / "eval_suite"
+
+    with pytest.raises(FileNotFoundError, match="missing_eval.yaml"):
+        run_eval_config_all_policies(missing_config, out_dir)
+
+    assert not out_dir.exists()
