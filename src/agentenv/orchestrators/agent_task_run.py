@@ -1,4 +1,5 @@
 import json
+import shutil
 import tempfile
 import traceback
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from agentenv.artifacts import (
     ArtifactType,
     prepare_artifact_output_dir,
 )
+from agentenv.artifacts.base import resolve_relative_artifact_ref
 from agentenv.artifacts.manifests import (
     AGENT_ATTEMPT_ARTIFACT_SCHEMA_VERSION,
     AGENT_ATTEMPT_ARTIFACT_REFS,
@@ -42,7 +44,10 @@ from agentenv.orchestrators.agent_task_schema import (
     AgentTaskRunResult,
     AgentTaskRunStatus,
 )
-from agentenv.orchestrators.agent_generation import write_agent_generation_artifact
+from agentenv.orchestrators.agent_generation import (
+    load_validated_agent_generation,
+    write_agent_generation_artifact,
+)
 from agentenv.orchestrators.attempt import (
     AttemptResult,
     AttemptRun,
@@ -393,7 +398,9 @@ def run_and_persist_agent_task_attempt_to_dir(
         validated_model_config_provenance is not None
         and validated_agent_control_script is not None
     ):
-        raise ValueError("Agent attempts cannot combine a model config and control script")
+        raise ValueError(
+            "Agent attempts cannot combine a model config and control script"
+        )
     generation = _run_agent_generation(
         task_manifest_path,
         model_client,
@@ -454,11 +461,68 @@ def run_and_persist_agent_task_attempt_to_dir(
         out_dir,
         validated_agent_control_script=validated_agent_control_script,
         validated_model_config_provenance=validated_model_config_provenance,
-        validated_decoding_config_provenance=(
-            validated_decoding_config_provenance
-        ),
+        validated_decoding_config_provenance=(validated_decoding_config_provenance),
         generation_manifest_path=generation_manifest_path,
         eval_attempt=eval_attempt,
+    )
+    return agent_task_run
+
+
+def finish_and_persist_agent_task_attempt_from_generation(
+    generation_manifest_path: Path,
+) -> AgentTaskRun:
+    """Finish downstream orchestration without invoking the model again."""
+
+    generation = load_validated_agent_generation(generation_manifest_path)
+    out_dir = generation.manifest_path.parent
+    final_manifest_path = out_dir / MANIFEST_FILENAME
+    if final_manifest_path.exists():
+        raise ValueError(
+            "Cannot finish terminal generation after a final attempt manifest exists"
+        )
+    _clear_incomplete_downstream_artifacts(
+        out_dir,
+        generation_owned_refs={
+            generation.manifest_path.name,
+            *generation.manifest.artifacts.values(),
+        },
+    )
+
+    candidate_patch_path = (
+        resolve_relative_artifact_ref(
+            out_dir,
+            generation.manifest.artifacts["candidate_patch"],
+        )
+        if generation.prompt_loop_result.status == "completed"
+        else None
+    )
+    generation_run = _AgentGenerationRun(
+        agent_attempt_id=generation.manifest.agent_attempt_id,
+        task_manifest_path=Path(generation.manifest.task_manifest_path).resolve(),
+        task_id=generation.manifest.task_id,
+        started_at=generation.manifest.started_at,
+        started_timer=perf_counter() - (generation.manifest.duration_ms / 1000),
+        ended_at=generation.manifest.ended_at,
+        duration_ms=generation.manifest.duration_ms,
+        run_root=_run_root(None, generation.manifest.agent_attempt_id),
+        agent_task_view=generation.agent_task_view,
+        prompt_loop_result=generation.prompt_loop_result,
+        candidate_patch=generation.candidate_patch or "",
+        candidate_patch_path=candidate_patch_path,
+        error_details=None,
+    )
+    agent_task_run = _finish_agent_task_attempt(
+        generation_run,
+        candidate_patch_path=candidate_patch_path,
+    )
+    _write_agent_task_run_artifacts_to_dir(
+        agent_task_run,
+        out_dir,
+        validated_agent_control_script=None,
+        validated_model_config_provenance=generation.model_config_provenance,
+        validated_decoding_config_provenance=(generation.decoding_config_provenance),
+        generation_manifest_path=generation.manifest_path,
+        eval_attempt=generation.manifest.eval_attempt,
     )
     return agent_task_run
 
@@ -495,9 +559,7 @@ def write_agent_task_run_artifacts(
         out_dir,
         validated_agent_control_script=validated_agent_control_script,
         validated_model_config_provenance=validated_model_config_provenance,
-        validated_decoding_config_provenance=(
-            validated_decoding_config_provenance
-        ),
+        validated_decoding_config_provenance=(validated_decoding_config_provenance),
         generation_manifest_path=None,
         eval_attempt=None,
     )
@@ -632,6 +694,21 @@ def _write_agent_task_run_artifacts_to_dir(
         attempt_dir=attempt_dir,
         attempt_artifacts=attempt_artifacts,
     )
+
+
+def _clear_incomplete_downstream_artifacts(
+    out_dir: Path,
+    *,
+    generation_owned_refs: set[str],
+) -> None:
+    for artifact_ref in AGENT_ATTEMPT_ARTIFACT_REFS.values():
+        if artifact_ref in generation_owned_refs:
+            continue
+        artifact_path = out_dir / artifact_ref
+        if artifact_path.is_symlink() or artifact_path.is_file():
+            artifact_path.unlink()
+        elif artifact_path.is_dir():
+            shutil.rmtree(artifact_path)
 
 
 def _json_artifact(value: BaseModel | dict[str, Any]) -> str:

@@ -680,3 +680,79 @@ reuse complete attempts or terminal generations without another policy call,
 rerun only the required downstream orchestration, preserve rejected attempts
 as rejected outcomes, and rebuild policy/suite/replay/report artifacts from the
 unchanged declaration.
+
+## 2026-08-20 Checkpoint 12: Resume Executor
+
+Implemented an in-process resume executor over the read-only inventory. It
+adds no resume config, manifest, registry, or CLI surface: the suite declaration
+and terminal child artifacts remain the only persisted authorities, while the
+executor result is an in-memory account of what it found and completed.
+
+Execution follows the previously settled boundary:
+
+```text
+valid terminal attempt       -> preserve and reuse it byte-for-byte
+valid terminal generation    -> preserve its agent id and model result;
+                                rerun downstream scoring only
+no terminal result           -> remove incomplete owned output and run the
+                                already-declared attempt identity
+invalid terminal evidence    -> retain and reject that attempt; continue
+                                independent runnable siblings
+```
+
+The model context is prepared only for an agent-model policy with at least one
+attempt that genuinely has no terminal result. A policy whose attempts are all
+complete or have reusable terminal generations does not construct a model
+client. This makes “no second policy call” an executable invariant rather than
+an intention. Typed prompt-loop failures such as `model_error` follow the same
+generation-reuse path and become final `agent_loop_failed` attempts without
+sampling the model again.
+
+After child execution, the executor inventories the same declaration again.
+For policies whose complete declared attempt set validates, it regenerates the
+policy manifest and trace from the child records and reruns configured replay.
+If every attempt is valid, it validates exact declaration coverage and writes
+the terminal suite manifest. If one attempt remains rejected, that policy has
+no terminal policy manifest and the suite has no terminal suite manifest; valid
+sibling policies may still finish and replay. Thus rejection remains local to
+the bad attempt while the suite is prevented from claiming a complete valid
+comparison.
+
+The regenerated policy trace explicitly records `execution_mode: resume` and
+the counts of inventory actions seen before execution. It does not pretend that
+every child policy call occurred during the resumed process. Calling resume on
+a suite that already has its terminal suite manifest is refused; this executor
+is for continuing an interrupted declaration, not rerunning a completed suite.
+
+### Focused Failure Evidence
+
+```text
+interruption after one of six control attempts
+  -> first terminal child unchanged; partial directory replaced; five declared
+     attempts completed; three configured replays PASS; suite becomes terminal
+
+interruption after successful model generation
+  -> generation and agent id reused; model construction forced to raise if
+     attempted; downstream scorer and suite completion succeed
+
+interruption after typed model_error generation
+  -> failed generation reused; no model construction; final attempt remains
+     agent_loop_failed/model_error with no scorer child
+
+corrupt first attempt plus missing sibling in the same policy
+  -> corrupt bytes retained and attempt rejected; missing sibling completes;
+     two other policies complete; no rejected-policy or suite terminal manifest
+```
+
+The eight resume tests pass. Fourteen focused regressions covering agent task
+artifacts, scorer persistence, suite declarations, terminal generation,
+completed-suite generation validation, configured replay, and agent/scorer
+replay also pass. The full test suite was intentionally not run.
+
+### Remaining Boundary
+
+This checkpoint regenerates eval policy, suite, and replay artifacts. Human
+reports remain natural downstream consumers of the rebuilt terminal suite and
+belong to the later reproduction/failure-injection composition. The executor
+also assumes one writer owns a suite directory; concurrent resume processes are
+not supported.
