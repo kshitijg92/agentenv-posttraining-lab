@@ -466,14 +466,8 @@ Use `learnings.md` only for durable conceptual lessons such as:
 Do not put helper placement, script naming, exception wording, CI syntax, or
 routine refactors in `learnings.md`.
 
-## Next Small Step
+## Closure Status
 
-Strengthen the existing deterministic core smoke so its distinct eval-suite,
-replay, and report expectations are executable failure conditions. Then
-compose that Level 2 path with `agentenv reproduce stored-evidence` instead of
-introducing a second control-calibration path.
-
-Do not add resume execution yet. The resume unit, terminal generation outcome,
-predeclared attempt set, strict identity matching, and corrupt-attempt scope are
-now decided; they should be implemented only after the required Level 1 path is
-working.
+Week 11 is closed. The implementation, verification evidence, scoped
+reproduction claims, portability blockers, and Week 12 handoff are recorded in
+`notes/weekly/week_11/closure_audit.md`.

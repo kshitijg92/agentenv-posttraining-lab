@@ -391,5 +391,5 @@ def test_policy_selection_analysis_rejects_missing_attempt_evidence(
     )
     prompt_loop_path.unlink()
 
-    with pytest.raises(FileNotFoundError, match="prompt_loop_result.json"):
+    with pytest.raises(ValueError, match="Agent generation artifact is missing"):
         build_policy_selection_analysis_from_eval_suite(suite_dir)

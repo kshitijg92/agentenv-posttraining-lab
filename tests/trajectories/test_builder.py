@@ -155,7 +155,10 @@ def test_build_trajectory_records_from_eval_suite_rejects_child_run_mismatch(
     child_manifest["eval_run_id"] = "eval_run_wrong"
     child_manifest_path.write_text(json.dumps(child_manifest, indent=2) + "\n")
 
-    with pytest.raises(ValueError, match="eval_run_id mismatch"):
+    with pytest.raises(
+        ValueError,
+        match="policy run record does not match child manifest field 'eval_run_id'",
+    ):
         build_trajectory_records_from_eval_suite(eval_suite.out_dir)
 
 

@@ -940,3 +940,26 @@ dependencies, executed all 18 deterministic attempts and six replays with
 `PASS 24/24` operational checks, and regenerated a byte-identical report. CI
 therefore covers the executable tracked harness claim while making no Level 1
 availability claim.
+
+## 2026-08-20 Checkpoint 16: Week 11 Closeout
+
+The first repository-wide closeout run reported 1,289 passing tests and two
+failures from stale assertion expectations. Both readers now route through the
+shared validated-suite boundary: a missing generation-owned payload is
+reported as a generation validation error, and child-run identity drift uses
+the common suite/child mismatch message. The fail-closed runtime behavior was
+already correct; only the two tests still expected the older exception
+surface.
+
+After updating those assertions, the focused pair passed and the full offline,
+frozen suite completed:
+
+```text
+uv run --offline --frozen pytest -n auto
+  -> 1,291 passed in 298.74s
+```
+
+Repository-wide Ruff, Pyright, and `git diff --check` also pass. The Week 11
+closure audit records the scoped local Level 1 claim, clean-tree Level 2 claim,
+resume/failure semantics, negative Week 10 result, limitations, and Week 12
+handoff. No implementation-only entry was added to `learnings.md`.
