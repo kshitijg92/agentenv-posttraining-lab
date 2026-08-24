@@ -1,8 +1,10 @@
 # Week 12 Plan
 
-Status: ready to start. Week 11 is closed with a split reproducibility claim,
-and Week 12 will synthesize the existing evidence without reopening model
-selection, heldout evaluation, or post-training.
+Status: closed. The claim/evidence map, final report, exhaustive control index,
+README alignment, full verification, closure audit, and learnings are complete.
+The user approved the six-task task/eval calibration ladder as the next
+technical bet. Model selection, heldout evaluation, and post-training remained
+closed throughout Week 12.
 
 ## Theme
 
@@ -131,36 +133,56 @@ Before adding any of these, answer the repository's artifact-economy questions:
 
 If those answers are not concrete, do not add the surface.
 
-## Design Checkpoint 1: Freeze The Headline Claim
+## Design Checkpoint 1: Headline Claim (Resolved)
 
-This is the first collaborative design checkpoint. Before drafting the final
-report, ask the user:
+The user's first-pass claim was:
 
 ```text
-What is the strongest claim the final lab artifact should make, and which
-counterevidence must appear beside it so that the claim remains truthful?
+With the limited number of tasks and under this harness and eval setup,
+positive SFT and DPO did not improve task success.
 ```
 
-Do not silently choose the final wording. Record the user's first-pass claim,
-then pressure-test it against:
+The evidence supports that direction, but the final wording must make clear
+that this is an observed result rather than a claim of policy equivalence or
+general algorithmic ineffectiveness. The settled claim target is:
 
-- the exact narrow task distribution;
-- hidden-scorer and control evidence;
-- zero successes in both Week 10 canonical comparisons;
-- SFT selection abstention;
-- the contaminated initial DPO comparison and corrected replacement;
-- prompt-copying DPO collapse;
-- one deterministic rollout per policy-task cell;
-- the absence of training-seed and sampling variance estimates;
-- the local-only Level 1 evidence graph;
-- Level 3 and Level 4 reproduction skips;
-- unopened heldout-private model outcomes.
+```text
+Within the frozen, limited development comparisons and under the pinned
+harness, hidden scorer, model/serving protocol, deterministic greedy decoding,
+and one rollout per policy-task cell, neither positive-SFT treatment nor the
+exploratory DPO continuation improved observed nested task success. Base, raw
+SFT, and efficiency-filtered SFT each succeeded on 0/8 tasks; in the corrected
+DPO-lineage-disjoint comparison, base, efficiency-filtered SFT, and DPO each
+succeeded on 0/6 tasks. The correct decisions were therefore to abstain from
+SFT selection and to report no observed DPO benefit in this experiment.
+```
 
-The final claim should become narrower after this pressure test. If a clause
-cannot be tied to authoritative evidence and its counterevidence, remove or
-qualify it.
+Counterevidence and qualifications that must appear beside this claim:
 
-## Checkpoint 2: Build A Read-Only Claim/Evidence Map
+- both comparisons sit at a zero-success floor, so they cannot establish that
+  the policies are equivalent or estimate a useful effect size;
+- the SFT comparison contains eight development tasks and the corrected DPO
+  comparison contains six different lineage-disjoint development tasks;
+- each policy-task cell has one deterministic greedy rollout, with no sampling
+  variance or training-seed variance estimate;
+- the task distribution is narrow, local, Python-only, and coupled to a strict
+  JSON-action interaction protocol;
+- no SFT policy won selection, so DPO used a designated exploratory parent
+  rather than a selected SFT winner;
+- the first DPO matrix was contaminated and is diagnostic only; the 0/6 claim
+  must use the corrected lineage-disjoint matrix;
+- DPO's prompt-copying and turn-budget exhaustion are evidence of behavioral
+  regression in this experiment, not evidence that DPO is generally harmful;
+- the unopened heldout-private tasks provide no support for generalization;
+- passing controls show that the observed zeroes were not explained by an
+  obvious known scorer, orchestration, replay, or flake failure, but controls
+  do not prove that task difficulty or protocol difficulty was well calibrated
+  for this 3B model.
+
+If final prose drops any of these scope conditions, it has widened the claim
+beyond the evidence.
+
+## Checkpoint 2: Build A Read-Only Claim/Evidence Map (Completed)
 
 Before creating the final report, map every required section and table to the
 artifact that already owns its facts.
@@ -171,7 +193,13 @@ At minimum, inventory these relationships:
 | --- | --- | --- |
 | task distribution and split counts | task-pack manifest, split lock, task hashes | stale copied counts or heldout ambiguity |
 | scoring contract | typed attempt status and scoring documentation | public success mislabeled as task success |
-| controls, audits, and flakes | control, scorer-audit, agent-audit, replay artifacts | mixing expected controls with model capability |
+| control evidence index | every retained control, audit, flake, replay, reward-hack, leakage, and failure-injection report | silently omitting a failed or superseded control surface |
+| canonical harness audit | Week 9 aggregate scorer and agent audit | treating expected audit cases as model capability |
+| full-pack control calibration and flakes | Week 9 control report and manifest | summing repeats as independent task evidence |
+| replay and deterministic execution | canonical eval/replay artifacts and Week 11 Level 2 report | equating deterministic controls with live-model reproducibility |
+| reward-hack and leakage controls | canonical Week 8 reward-hack report and source evidence | claiming broad reward robustness from authored cases |
+| sandbox and workspace invariants | sandbox-invariant documentation and focused tests | claiming hostile-code security from local isolation checks |
+| resume and failure injection | Week 11 closure evidence and focused tests | reporting unexecuted injections as part of the core command |
 | traces and reward evidence | trajectory records, review records, reward-hack audit | treating observability as reward validity |
 | SFT population and filtering | positive-SFT records, embedded review, training manifests | duplicate filtering authority or stale totals |
 | SFT comparison | canonical eval suite and comparison decision | efficiency tie-break over an empty success set |
@@ -187,7 +215,36 @@ Done when every proposed numerical statement, result, and claim in the final
 report has one named source of authority and any conflicting or limiting
 evidence is identified.
 
-## Checkpoint 3: Freeze The Report Contract
+### Required Control-Evidence Coverage
+
+The final report must include an exhaustive control-evidence index and a
+compact measurement-trust table. "All controls" means every distinct retained
+control category is represented, not that every per-task row is copied into
+the final report.
+
+The initial canonical inventory is:
+
+| control category | canonical evidence | result to verify before reporting |
+| --- | --- | --- |
+| aggregate harness audit | `experiments/harness_audit/week_09_closeout/harness_audit.md` and manifests | overall PASS; agent 21/21 with zero mismatches; scorer 12/12 with zero mismatches |
+| scorer controls | `experiments/runs/week_09_closeout_control_calibration/control_report.md` and manifest | 234/234 expected outcomes across oracle, no-op, and public-only controls |
+| agent controls | the same Week 9 control report and manifest | 234/234 expected outcomes across happy, malformed, and recoverable scripts |
+| flake detection | the same Week 9 control report and manifest | 468/468 records matched; 156 groups checked; zero drifted groups |
+| public-check idempotency | Week 9 control manifest and closure audit | 26/26 tasks idempotent at repeat count two |
+| task/split/provenance identity | task-pack manifest, split lock, task-hash report, and selected-task hashes | 26 tasks accounted for exactly once; heldout freeze and selected task identities intact |
+| control replay and fresh deterministic execution | `experiments/reproduction/core_smoke/reproduction_report.md` and its fresh eval artifacts | Level 2 PASS on 26/26 required checks and 24/24 expected control/replay outcomes |
+| reward-hack controls | `experiments/reports/reward_hack_audit_week_08_v1.md` and source artifacts | 16/16 cases passed; mechanisms detected and neutralized; zero private-content exposures; zero exploit traces training-allowed |
+| workspace, hidden-validator, control-file, canary, and reset isolation | `docs/sandbox_invariants_v0.md` and focused tests | each invariant remains enforced, with the explicit non-claim that this is not a hostile-code sandbox |
+| resume, retry, corruption, duplicate-id, timeout, missing-validator, and drift controls | `notes/weekly/week_11/closure_audit.md` and `tests/test_resume.py` | each injected condition retains its typed fail-closed outcome |
+
+During the read-only inventory, enumerate historical control reports as well as
+these latest canonical reports. Classify each as `canonical`, `historical`,
+`superseded`, or `duplicate view`, and retain a link plus status in the final
+control-evidence index. Use only the latest applicable canonical report for
+headline counts. Do not add counts across historical reruns or present passing
+scripted controls as additional model-policy trials.
+
+## Checkpoint 3: Freeze The Report Contract (Completed)
 
 After the headline claim is settled, freeze the final report outline and its
 claim/evidence rows before writing narrative prose.
@@ -214,7 +271,10 @@ Required tables should be included only once and should cover:
 
 ```text
 task and split inventory
-control, replay, and flake evidence
+measurement-trust summary covering harness audit, scorer controls, agent
+controls, flake detection, public-check idempotency, replay, leakage/isolation,
+reward-hack controls, and failure injection
+control-evidence index covering every retained report and its authority status
 reward-hack outcomes
 SFT filtering and treatment accounting
 base versus raw SFT versus filtered SFT
@@ -241,7 +301,7 @@ Freeze these interpretation rules before drafting:
   optimization reproduction;
 - limitations must appear in the same section or row as the claims they bound.
 
-## Checkpoint 4: Draft The Final Spike Report
+## Checkpoint 4: Draft The Final Spike Report (Completed)
 
 Create `experiments/reports/week12_spike_report.md` from the frozen evidence
 map.
@@ -270,7 +330,7 @@ relocatable Level 1 reproduction
 Do not copy entire closure audits into the report. Summarize the evidence,
 identify its authority, and link to the detailed records.
 
-## Checkpoint 5: Select One Next Technical Bet
+## Checkpoint 5: Select One Next Technical Bet (Completed)
 
 Choose the next bet only after the evidence map makes the dominant uncertainty
 explicit.
@@ -307,7 +367,7 @@ The likely decision boundary to resolve is whether the next phase should first
 improve task/eval calibration or improve post-training examples. That choice
 must follow from the failure evidence; it is not settled by this plan.
 
-## Checkpoint 6: Align The README And Operator Path
+## Checkpoint 6: Align The README And Operator Path (Completed)
 
 Inspect `README.md` only after the report is stable. Make the smallest update
 needed so a new reader can find:
@@ -322,7 +382,7 @@ needed so a new reader can find:
 Do not turn the README into a second final report. Detailed evidence belongs in
 the spike report and authoritative run artifacts.
 
-## Checkpoint 7: Verification And Closure
+## Checkpoint 7: Verification And Closure (Completed)
 
 Run read-only validation and regeneration before claiming completion. Use a
 fresh caller-selected output directory for the core reproduction command and
@@ -439,12 +499,10 @@ Week 12 is complete when:
 - `closure_audit.md` and `learnings.md` record the final evidence and durable
   conceptual lessons.
 
-## First Next Step
+## Next-Phase Handoff
 
-Resolve Design Checkpoint 1 with the user before drafting the evidence map or
-the final report:
-
-```text
-What is the strongest claim the final lab artifact should make, and which
-counterevidence must appear beside it so that the claim remains truthful?
-```
+The user approved the six-task development calibration ladder on 2026-08-23.
+The next phase should implement that frozen design beginning with task
+authorship and pre-model controls. It must not inspect heldout outcomes, revise
+task bytes after natural-model results, or begin training before the declared
+base calibration selects the appropriate redirect branch.

@@ -50,7 +50,7 @@ uv run agentenv tasks check-splits data/task_packs/repo_patch_python_v0/splits.l
 Expected current output:
 
 ```text
-valid repo_patch_python_v0 tasks=4 practice=1 dev=3 heldout_private=0 public_calibration=0
+valid repo_patch_python_v0 tasks=26 practice=1 dev=19 heldout_private=6 public_calibration=0
 ```
 
 This checks that:

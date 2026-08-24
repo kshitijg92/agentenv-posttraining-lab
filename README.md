@@ -67,9 +67,32 @@ This repository does not claim:
 - broad coding-agent capability;
 - large-scale RLHF, RL, or post-training infrastructure;
 - secure sandboxing beyond the specific tested invariants;
-- model improvement from a smoke SFT export;
+- general model improvement from the limited Week 10 SFT/DPO comparisons;
 - benchmark-comparable results;
 - validity outside the small local task distribution in this repo.
+
+## Current Result And Limits
+
+The final development result is negative and deliberately narrow. Under the
+pinned Week 10 harness, hidden scorer, model protocol, greedy decoding, and one
+rollout per policy-task cell:
+
+- base, raw positive SFT, and efficiency-filtered positive SFT each achieved
+  0/8 nested task successes;
+- on the corrected lineage-disjoint comparison, base, filtered SFT, and
+  exploratory DPO each achieved 0/6 nested task successes;
+- both selection rules abstained, and heldout-private model outcomes remain
+  unopened.
+
+This shows no observed improvement in these limited development comparisons.
+It does not show policy equivalence or general ineffectiveness of SFT or DPO.
+The task family is synthetic and Python-only, every model cell has one greedy
+rollout, all compared policies sit at a zero-success floor, and the strict JSON
+action protocol is part of the measured construct.
+
+The full evidence, controls, failed diagnostics, limitations, and selected next
+technical bet are in the
+[`Week 12 spike report`](experiments/reports/week12_spike_report.md).
 
 ## Repository Map
 
@@ -131,6 +154,20 @@ uv run pyright
 
 ## Quick Start
 
+Run the CPU-only, no-model-server core reproduction in a disposable directory:
+
+```bash
+repro_root="$(mktemp -d)"
+uv run --offline --frozen agentenv reproduce core \
+  --out "$repro_root/core"
+```
+
+This validates the retained Week 10 evidence at its original local paths and
+runs the tracked deterministic control, hidden-scorer, replay, and report path.
+It does not rerun live model inference or training. See
+[`docs/reproducibility.md`](docs/reproducibility.md) for the exact Level 1-4
+boundaries.
+
 Validate the current task pack:
 
 ```bash
@@ -153,22 +190,35 @@ uv run agentenv attempt run \
   --out experiments/runs/manual_oracle_attempt
 ```
 
-Run the baseline eval suite:
+Run the one-task deterministic scorer-control eval (no model server):
 
 ```bash
-uv run agentenv eval \
+toy_eval_root="$(mktemp -d)"
+uv run --offline --frozen agentenv eval \
+  --config configs/eval/scorer_control_policies.yaml \
+  --all-policies \
+  --out "$toy_eval_root/run" \
+  --report-out "$toy_eval_root/report.md"
+```
+
+Run the three-task deterministic small eval with scorer and scripted-agent
+controls:
+
+```bash
+small_eval_root="$(mktemp -d)"
+uv run --offline --frozen agentenv eval \
   --config configs/eval/dev_baseline.yaml \
   --all-policies \
-  --out experiments/runs/dev_baseline \
-  --report-out experiments/reports/eval_suites/dev_baseline.md
+  --out "$small_eval_root/run" \
+  --report-out "$small_eval_root/report.md"
 ```
 
 Regenerate a report from an artifact directory:
 
 ```bash
-uv run agentenv report \
-  experiments/runs/dev_baseline \
-  --out experiments/reports/eval_suites/dev_baseline.md
+uv run --offline --frozen agentenv report \
+  "$small_eval_root/run" \
+  --out "$small_eval_root/report-regenerated.md"
 ```
 
 ## Reward-Hack Audit

@@ -22,4 +22,7 @@ build/
 *.egg-info/
 
 # Generated experiment artifacts
-experiments/
+experiments/*
+!experiments/reports/
+experiments/reports/*
+!experiments/reports/week12_spike_report.md
