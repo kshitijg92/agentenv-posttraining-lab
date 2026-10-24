@@ -1,10 +1,7 @@
 # Agentenv CLI Examples
 
-Run these from the repo root:
-
-```bash
-cd /home/kshitij/agentenv-posttraining-lab
-```
+Run these from the repo root (the directory containing `pyproject.toml`).
+Each command's `--help` output is authoritative if an example here drifts.
 
 ## Help
 
@@ -265,8 +262,6 @@ review artifact:
 uv run agentenv training candidates export \
   --trajectories experiments/runs/dev_baseline_trajectory_export \
   --reviews experiments/runs/dev_baseline_trajectory_review \
-  --harness-audit experiments/harness_audit/current \
-  --control-calibration experiments/runs/control_calibration \
   --out experiments/runs/dev_baseline_training_candidates
 ```
 
@@ -277,21 +272,30 @@ experiments/runs/dev_baseline_training_candidates/manifest.json
 experiments/runs/dev_baseline_training_candidates/training_candidates.jsonl
 ```
 
-This export validates the trajectory/review join and then fails closed unless
-the aggregate harness audit is `PASS`, the control calibration has matching
-outcomes and stable flake evidence, both artifacts bind the current harness
-runtime, every declared idempotent public check has an `IDEMPOTENT`
-calibration, and the calibrated composite task hashes cover the trajectory
-tasks. Only after those gates pass does it build and persist candidate records.
-It is not an SFT dataset or a preference dataset.
+This export validates the trajectory/review join and the source hashes, then
+builds and persists candidate records with their eligibility decisions. Its
+manifest records `training_authorization: not_authorized`. It is not an SFT
+dataset or a preference dataset. The harness-audit and control-calibration
+trust checks live in `src/agentenv/training/release/trust.py` and are tested,
+but they are not wired into this command; the dataset-release step that would
+enforce them is planned, not built.
 
 ## Export Positive SFT Examples
 
-Create a positive-SFT artifact from a training-candidate export:
+Initialize and validate the positive-SFT prefix review, then create a
+positive-SFT artifact from the training-candidate export and that review:
 
 ```bash
-uv run agentenv training sft export \
+uv run agentenv training positive-sft review-init \
   --candidates experiments/runs/dev_baseline_training_candidates \
+  --out experiments/runs/dev_baseline_positive_sft_review
+
+uv run agentenv training positive-sft review-validate \
+  --reviews experiments/runs/dev_baseline_positive_sft_review
+
+uv run agentenv training positive-sft export \
+  --candidates experiments/runs/dev_baseline_training_candidates \
+  --reviews experiments/runs/dev_baseline_positive_sft_review \
   --out experiments/runs/dev_baseline_positive_sft
 ```
 

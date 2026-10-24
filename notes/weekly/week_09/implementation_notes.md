@@ -2231,7 +2231,7 @@ that model.
 Continued autonomous foundation work in the isolated worktree:
 
 ```text
-/home/kshitij/agentenv-posttraining-foundation-wt
+~/agentenv-posttraining-foundation-wt
 branch: codex/acquisition-foundation
 ```
 

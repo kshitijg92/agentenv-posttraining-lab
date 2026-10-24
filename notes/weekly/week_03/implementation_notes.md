@@ -455,7 +455,7 @@ Full `pytest` and Ruff passed.
 ### Failure Or Surprise
 
 Running `uv` inside the managed sandbox hit the known cache-write issue under
-`/home/kshitij/.cache/uv`. The command succeeded after using the approved
+`~/.cache/uv`. The command succeeded after using the approved
 `uv run` escalation rule.
 
 ### Next Small Step

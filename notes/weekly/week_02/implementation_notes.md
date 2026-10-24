@@ -75,7 +75,7 @@ uv run agentenv eval --config configs/eval/control_policies.yaml --policy bad-pu
 
 ### Failure Or Surprise
 
-Running `uv` inside the managed sandbox could not write to `/home/kshitij/.cache/uv`.
+Running `uv` inside the managed sandbox could not write to `~/.cache/uv`.
 The tests and CLI were rerun with sandbox approval for `uv` commands.
 
 `pyright` initially scanned task fixtures under `data/` and failed on imports that
