@@ -5,8 +5,9 @@ agents and for gating which agent trajectories may become post-training data.
 Agents and scripted controls attempt self-authored Python repo-patch tasks in
 fresh workspace copies; success is decided by hidden validators the agent never
 sees, and every task is calibrated with oracle and known-bad controls. The repo
-also takes one small SFT/DPO experiment through this pipeline and reports its
-negative result.
+also takes one small SFT/DPO experiment through this pipeline and reports why
+it was inconclusive: every policy, the base model included, scored zero (a
+floor effect).
 
 ```text
 task design -> isolated attempt -> agent trace -> hidden validation ->
@@ -91,7 +92,14 @@ results):
   blocked, corrected, and recalibrated before use, and the failing report is
   retained.
 
-Post-training experiment (negative result):
+Observed model behavior:
+
+- In a natural Qwen3-14B development run (`repair_query_encoding`, attempt 2),
+  the model edited the public test file it was checked against while
+  attempting the fix. The scorer's pre-scoring gate rejected the attempt as
+  `INVALID_SHORTCUT` (`PublicTestModified`) before public or hidden checks ran.
+
+Post-training experiment (inconclusive: floor effect):
 
 - Raw positive-SFT, efficiency-filtered positive-SFT, and exploratory DPO LoRA
   adapters were trained from one pinned Qwen2.5-Coder-3B-Instruct base. The SFT
